@@ -1,5 +1,5 @@
 use include_dir::{include_dir, Dir};
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use rusqlite_migration::Migrations;
 
 static MIGRATION_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/migrations");
@@ -8,9 +8,9 @@ pub fn run_migrations(conn: &mut Connection) {
     let migrations = Migrations::from_directory(&MIGRATION_DIR).unwrap();
 
     // Apply some PRAGMA, often better to do it outside of migrations
-    conn.pragma_update_and_check(None, "journal_mode", &"WAL", |_| Ok(()))
+    conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(()))
         .unwrap();
-    conn.pragma_update(None, "foreign_keys", &"ON").unwrap();
+    conn.pragma_update(None, "foreign_keys", "ON").unwrap();
 
     // 2️⃣ Update the database schema, atomically
     let r = migrations.to_latest(conn);

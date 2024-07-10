@@ -1,6 +1,5 @@
 use std::fmt::*;
 
-use crate::calculate_hash;
 use crate::models;
 use rusqlite::{params_from_iter, Connection};
 use sha2::{Digest, Sha256};
@@ -30,8 +29,7 @@ impl Collection {
                 })
             })
             .unwrap();
-        let node = rows.next().unwrap().unwrap();
-        return node;
+        rows.next().unwrap().unwrap()
     }
 
     pub fn bulk_create(
@@ -52,7 +50,7 @@ impl Collection {
                 })
             })
             .unwrap();
-        return rows.map(|row| row.unwrap()).collect();
+        rows.map(|row| row.unwrap()).collect()
     }
 }
 
@@ -77,10 +75,9 @@ impl SequenceCollection {
     pub fn create(conn: &mut Connection, collection_id: i32, sequence_id: i32) -> i32 {
         let mut stmt   = conn.prepare("INSERT INTO sequence_collection (sequence_id, collection_id) VALUES (?1, ?2) RETURNING (id)").unwrap();
         let mut rows = stmt
-            .query_map((sequence_id, collection_id), |row| Ok(row.get(0)?))
+            .query_map((sequence_id, collection_id), |row| row.get(0))
             .unwrap();
-        let obj_id = rows.next().unwrap().unwrap();
-        return obj_id;
+        rows.next().unwrap().unwrap()
     }
 }
 
@@ -110,7 +107,7 @@ impl Sequence {
         let mut hasher = Sha256::new();
         hasher.update(&name);
         hasher.update(&r#type);
-        hasher.update(&sequence);
+        hasher.update(sequence);
         let hash = format!("{:x}", hasher.finalize());
         let mut obj_id = match conn.query_row(
             "SELECT id from sequence where hash = ?1",
@@ -119,21 +116,21 @@ impl Sequence {
         ) {
             Ok(res) => res,
             Err(rusqlite::Error::QueryReturnedNoRows) => 0,
-            Err(e) => {
+            Err(_e) => {
                 panic!("something bad happened querying the database")
             }
         };
-        if (obj_id == 0) {
+        if obj_id == 0 {
             let mut stmt = conn.prepare("INSERT INTO sequence (hash, type, name, sequence, length, circular) VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING (id)").unwrap();
             let mut rows = stmt
                 .query_map(
                     (hash, r#type, name, sequence, sequence.len(), circular),
-                    |row| Ok(row.get(0)?),
+                    |row| row.get(0),
                 )
                 .unwrap();
             obj_id = rows.next().unwrap().unwrap();
         }
-        return obj_id;
+        obj_id
     }
 }
 
@@ -173,7 +170,7 @@ impl Path {
         for block in blocks {
             sequence.push_str(&block.unwrap().sequence);
         }
-        return sequence;
+        sequence
     }
 
     pub fn create(
@@ -187,11 +184,10 @@ impl Path {
         let mut stmt   = conn.prepare("INSERT INTO sequence (type, name, sequence, length, circular) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING (id)").unwrap();
         let mut rows = stmt
             .query_map((r#type, name, sequence, sequence.len(), circular), |row| {
-                Ok(row.get(0)?)
+                row.get(0)
             })
             .unwrap();
-        let obj_id = rows.next().unwrap().unwrap();
-        return obj_id;
+        rows.next().unwrap().unwrap()
     }
 }
 
@@ -244,7 +240,7 @@ impl Node {
                 base: node.base,
             });
         }
-        return nodes;
+        nodes
     }
 }
 
@@ -288,7 +284,8 @@ impl Edge {
                 .unwrap();
             results.push(result);
         }
-        tx.commit();
-        return results;
+        tx.commit()
+            .unwrap_or_else(|_| panic!("failed to commit changes."));
+        results
     }
 }

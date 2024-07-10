@@ -11,7 +11,7 @@ pub fn get_connection(db_path: &str) -> Connection {
     let mut conn =
         Connection::open(db_path).unwrap_or_else(|_| panic!("Error connecting to {}", db_path));
     run_migrations(&mut conn);
-    return conn;
+    conn
 }
 
 pub fn calculate_hash(t: &str) -> String {
@@ -31,7 +31,7 @@ mod tests {
         let mut conn = Connection::open_in_memory()
             .unwrap_or_else(|_| panic!("Error opening in memory test db"));
         run_migrations(&mut conn);
-        return conn;
+        conn
     }
 
     // #[test]
