@@ -1,0 +1,17 @@
+repos:
+  - repo: local
+    hooks:
+      - id: rustfmt
+        name: rustfmt
+        description: Check if all files follow the rustfmt style
+        entry: cargo fmt --all -- 
+        language: system
+        types: [file, rust]
+        pass_filenames: true
+      - id: rust-clippy
+        name: Rust clippy
+        description: Run cargo clippy on files included in the commit. clippy should be installed before-hand.
+        entry: cargo clippy --all-targets --all-features
+        pass_filenames: false
+        types: [file, rust]
+        language: system
