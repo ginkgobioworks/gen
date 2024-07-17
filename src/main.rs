@@ -1,46 +1,186 @@
+use clap::{Parser, Subcommand};
+use std::fmt::Debug;
+use std::path::PathBuf;
+
 use bio::io::fasta;
-use clap::Parser;
 use gen::get_connection;
 use gen::migrations::run_migrations;
-use gen::models;
+use gen::models::{self};
+use noodles::vcf;
+use noodles::vcf::variant::record::samples::series::Value;
+use noodles::vcf::variant::record::samples::{Sample, Series};
+use noodles::vcf::variant::record::{AlternateBases, Samples};
+use noodles::vcf::variant::Record;
+use rusqlite::Connection;
+use std::io;
 
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(version, about, long_about = None)]
-struct Args {
-    #[arg(short, long)]
-    fasta: String,
-    name: String,
-    db: String,
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
 }
 
-fn main() {
-    let args = Args::parse();
-    let fasta = args.fasta;
-    let name = args.name;
-    let db = args.db;
+#[derive(Subcommand)]
+enum Commands {
+    /// Import a new sequence collection.
+    Import {
+        /// Fasta file path
+        #[arg(short, long)]
+        fasta: String,
+        /// The name of the collection to store the entry under
+        #[arg(short, long)]
+        name: String,
+        /// The path to the database you wish to utilize
+        #[arg(short, long)]
+        db: String,
+    },
+    /// Update a sequence collection with new data
+    Update {
+        /// The name of the collection to update
+        #[arg(short, long)]
+        name: String,
+        /// The path to the database you wish to utilize
+        #[arg(short, long)]
+        db: String,
+        /// A fasta file to insert
+        #[arg(short, long)]
+        fasta: Option<String>,
+        /// A VCF file to incorporate
+        #[arg(short, long)]
+        vcf: String,
+    },
+}
 
+fn import_fasta(fasta: &String, name: &String, conn: &mut Connection) {
     let mut reader = fasta::Reader::from_file(fasta).unwrap();
 
-    let mut conn = get_connection(&db);
-    run_migrations(&mut conn);
+    run_migrations(conn);
 
-    if !models::Collection::exists(&mut conn, &name) {
-        let collection = models::Collection::create(&mut conn, &name);
+    if !models::Collection::exists(conn, name) {
+        let collection = models::Collection::create(conn, name);
 
         for result in reader.records() {
             let record = result.expect("Error during fasta record parsing");
-            let seq_id = models::Sequence::create(
-                &mut conn,
-                collection.id,
-                "DNA".to_string(),
-                record.id().to_string(),
-                &String::from_utf8(record.seq().to_vec()).unwrap(),
-                false,
-            );
-            let sc_id = models::SequenceCollection::create(&mut conn, collection.id, seq_id);
+            let sequence = String::from_utf8(record.seq().to_vec()).unwrap();
+            let seq_hash = models::Sequence::create(conn, "DNA".to_string(), &sequence);
+            let block =
+                models::Block::create(conn, &seq_hash, 0, (sequence.len() as i32), "1".to_string());
+            let edge = models::Edge::create(conn, block.id, None);
+            let path = models::Path::create(conn, &record.id().to_string(), edge.id, None);
+            models::PathCollection::create(conn, &collection.name, path.id, None);
         }
         println!("Created it");
     } else {
         println!("Collection {:1} already exists", name);
+    }
+}
+
+fn update_with_vcf(vcf_path: &String, name: &String, conn: &mut Connection) {
+    run_migrations(conn);
+
+    let mut reader = vcf::io::reader::Builder::default()
+        .build_from_path(vcf_path)
+        .expect("Unable to parse");
+    let header = reader.read_header().unwrap();
+    let sample_names = header.sample_names();
+    for name in sample_names {
+        models::Sample::create(conn, name);
+    }
+    for result in reader.records() {
+        let record = result.unwrap();
+        let seq_name = record.reference_sequence_name().to_string();
+        let ref_allele = record.reference_bases();
+        let ref_start = record.variant_start().unwrap().unwrap().get() - 1;
+        let ref_end = record.variant_end(&header).unwrap().get() - 1;
+        let alt_bases = record.alternate_bases();
+        let alt_alleles: Vec<_> = alt_bases.iter().collect::<io::Result<_>>().unwrap();
+        for (sample_index, sample) in record.samples().iter().enumerate() {
+            let genotype = sample.get(&header, "GT");
+            if genotype.is_some() {
+                if let Value::Genotype(genotypes) = genotype.unwrap().unwrap().unwrap() {
+                    for gt in genotypes.iter() {
+                        if gt.is_ok() {
+                            let (haplotype, phasing) = gt.unwrap();
+                            let haplotype = haplotype.unwrap();
+                            if haplotype != 0 {
+                                let alt_seq = alt_alleles[haplotype - 1];
+                                // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
+                                let new_sequence_hash = models::Sequence::create(
+                                    conn,
+                                    "DNA".to_string(),
+                                    &alt_seq.to_string(),
+                                );
+                                models::Path::insert_change(
+                                    conn,
+                                    name,
+                                    &sample_names[sample_index],
+                                    &seq_name,
+                                    haplotype as i32,
+                                    ref_start as i32,
+                                    ref_end as i32,
+                                    &new_sequence_hash,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn main() {
+    let cli = Cli::parse();
+
+    match &cli.command {
+        Some(Commands::Import { fasta, name, db }) => {
+            import_fasta(fasta, name, &mut get_connection(db))
+        }
+        Some(Commands::Update {
+            name,
+            db,
+            fasta,
+            vcf,
+        }) => update_with_vcf(vcf, name, &mut get_connection(db)),
+        None => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::Connection;
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+    use gen::migrations::run_migrations;
+
+    fn get_connection() -> Connection {
+        let mut conn = Connection::open_in_memory()
+            .unwrap_or_else(|_| panic!("Error opening in memory test db"));
+        run_migrations(&mut conn);
+        conn
+    }
+
+    #[test]
+    fn test_add_fasta() {
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &"test".to_string(),
+            &mut get_connection(),
+        );
+    }
+
+    #[test]
+    fn test_update_fasta_with_vcf() {
+        let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        vcf_path.push("fixtures/simple.vcf");
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let conn = &mut get_connection();
+        let collection = "test".to_string();
+        import_fasta(&fasta_path.to_str().unwrap().to_string(), &collection, conn);
+        update_with_vcf(&vcf_path.to_str().unwrap().to_string(), &collection, conn);
     }
 }
