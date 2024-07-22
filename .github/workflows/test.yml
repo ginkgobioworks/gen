@@ -16,9 +16,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
-      continue-on-error: true
     - name: Run tests
       run: cargo test --verbose
       continue-on-error: true
