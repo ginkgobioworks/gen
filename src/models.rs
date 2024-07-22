@@ -326,7 +326,7 @@ impl Path {
             Ok(res) => res,
             Err(rusqlite::Error::QueryReturnedNoRows) => 0,
             Err(_e) => {
-                panic!("something bad happened querying the database {_e:?}")
+                panic!("Error querying the database: {_e}");
             }
         };
         println!("here {path_id}");

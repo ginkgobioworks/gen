@@ -113,7 +113,7 @@ mod tests {
     // }
 
     #[test]
-    fn it_hases() {
+    fn it_hashes() {
         assert_eq!(
             calculate_hash("a test"),
             "a82639b6f8c3a6e536d8cc562c3b86ff4b012c84ab230c1e5be649aa9ad26d21"
@@ -121,13 +121,13 @@ mod tests {
     }
 
     #[test]
-    fn xx() {
+    fn it_queries() {
         let mut conn = get_connection();
-        let obj_id: i32 = conn
-            .query_row("SELECT id from sequence where hash = 'foo'", [], |row| {
+        let sequence_count: i32 = conn
+            .query_row("SELECT count(*) from sequence where hash = 'foo'", [], |row| {
                 row.get(0)
             })
             .unwrap();
-        println!("{:?}", obj_id);
+	assert_eq!(sequence_count, 0);
     }
 }

@@ -45,4 +45,3 @@ CREATE TABLE edges (
 );
 
 CREATE UNIQUE INDEX edge_uidx ON edges(source_id, target_id);
-
