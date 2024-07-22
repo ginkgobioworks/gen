@@ -237,9 +237,9 @@ impl Path {
             })
         }) {
             Ok(path) => path,
-            Err(rusqlite::Error::SqliteFailure(err, aa)) => {
+            Err(rusqlite::Error::SqliteFailure(err, details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
-                    println!("{err:?} {aa:?}");
+                    println!("{err:?} {details:?}");
                     Path {
                         id: conn
                             .query_row(
