@@ -124,10 +124,12 @@ mod tests {
     fn it_queries() {
         let mut conn = get_connection();
         let sequence_count: i32 = conn
-            .query_row("SELECT count(*) from sequence where hash = 'foo'", [], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT count(*) from sequence where hash = 'foo'",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
-	assert_eq!(sequence_count, 0);
+        assert_eq!(sequence_count, 0);
     }
 }

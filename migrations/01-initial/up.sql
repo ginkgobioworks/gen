@@ -13,6 +13,17 @@ CREATE TABLE sequence (
   "length" INTEGER NOT NULL
 );
 
+CREATE TABLE path (
+  id INTEGER PRIMARY KEY NOT NULL,
+  collection_name TEXT NOT NULL,
+  sample_name TEXT,
+  name TEXT NOT NULL,
+  path_index INTEGER NOT NULL DEFAULT 0,
+  FOREIGN KEY(collection_name) REFERENCES collection(name),
+  FOREIGN KEY(sample_name) REFERENCES sample(name)
+);
+CREATE UNIQUE INDEX path_uidx ON path(collection_name, sample_name, name, path_index);
+
 CREATE TABLE block (
   id INTEGER PRIMARY KEY NOT NULL,
   sequence_hash TEXT NOT NULL,
@@ -34,21 +45,3 @@ CREATE TABLE edges (
 );
 
 CREATE UNIQUE INDEX edge_uidx ON edges(source_id, target_id);
-
-CREATE TABLE path (
-  id INTEGER PRIMARY KEY NOT NULL,
-  name TEXT NOT NULL,
-  path_index INTEGER NOT NULL DEFAULT 0
-);
-CREATE UNIQUE INDEX path_uidx ON path(name, path_index);
-
-CREATE TABLE path_collection (
-  id INTEGER PRIMARY KEY NOT NULL,
-  collection_name TEXT NOT NULL,
-  path_id INTEGER NOT NULL,
-  sample_name TEXT,
-  FOREIGN KEY(collection_name) REFERENCES collection(name),
-  FOREIGN KEY(path_id) REFERENCES path(id)
-  FOREIGN KEY(sample_name) REFERENCES sample(name)
-);
-CREATE UNIQUE INDEX path_collection_uidx ON path_collection(collection_name, sample_name, path_id);

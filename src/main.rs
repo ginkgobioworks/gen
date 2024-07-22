@@ -64,7 +64,8 @@ fn import_fasta(fasta: &String, name: &String, conn: &mut Connection) {
             let record = result.expect("Error during fasta record parsing");
             let sequence = String::from_utf8(record.seq().to_vec()).unwrap();
             let seq_hash = models::Sequence::create(conn, "DNA".to_string(), &sequence);
-            let path = models::Path::create(conn, &record.id().to_string(), None);
+            let path =
+                models::Path::create(conn, &collection.name, None, &record.id().to_string(), None);
             let block = models::Block::create(
                 conn,
                 &seq_hash,
@@ -74,7 +75,6 @@ fn import_fasta(fasta: &String, name: &String, conn: &mut Connection) {
                 "1".to_string(),
             );
             let edge = models::Edge::create(conn, block.id, None);
-            models::PathCollection::create(conn, &collection.name, path.id, None);
         }
         println!("Created it");
     } else {
