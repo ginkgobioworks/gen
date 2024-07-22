@@ -35,6 +35,7 @@ CREATE TABLE block (
   FOREIGN KEY(path_id) REFERENCES path(id),
   constraint chk_strand check (strand in ('-1', '1', '0', '.', '?'))
 );
+CREATE UNIQUE INDEX block_uidx ON block(sequence_hash, path_id, start, end, strand);
 
 CREATE TABLE edges (
   id INTEGER PRIMARY KEY NOT NULL,

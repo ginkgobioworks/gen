@@ -1,3 +1,4 @@
+#![allow(warnings)]
 use clap::{Parser, Subcommand};
 use std::fmt::Debug;
 use std::path::PathBuf;
@@ -5,7 +6,7 @@ use std::path::PathBuf;
 use bio::io::fasta;
 use gen::get_connection;
 use gen::migrations::run_migrations;
-use gen::models::{self};
+use gen::models::{self, Block};
 use noodles::vcf;
 use noodles::vcf::variant::record::samples::series::Value;
 use noodles::vcf::variant::record::samples::{Sample, Series};
@@ -66,13 +67,13 @@ fn import_fasta(fasta: &String, name: &String, conn: &mut Connection) {
             let seq_hash = models::Sequence::create(conn, "DNA".to_string(), &sequence);
             let path =
                 models::Path::create(conn, &collection.name, None, &record.id().to_string(), None);
-            let block = models::Block::create(
+            let block = Block::create(
                 conn,
                 &seq_hash,
                 path.id,
                 0,
                 (sequence.len() as i32),
-                "1".to_string(),
+                &"1".to_string(),
             );
             let edge = models::Edge::create(conn, block.id, None);
         }
@@ -117,20 +118,27 @@ fn update_with_vcf(vcf_path: &String, name: &String, conn: &mut Connection) {
                                     "DNA".to_string(),
                                     &alt_seq.to_string(),
                                 );
-                                let (parent_path_id, haplotype_path_id) =
-                                    models::Path::get_or_create_sample_path(
-                                        conn,
-                                        name,
-                                        &sample_names[sample_index],
-                                        &seq_name,
-                                        haplotype as i32,
-                                    );
+                                let sample_path_id = models::Path::get_or_create_sample_path(
+                                    conn,
+                                    name,
+                                    &sample_names[sample_index],
+                                    &seq_name,
+                                    haplotype as i32,
+                                );
+                                let new_block_id = Block::create(
+                                    conn,
+                                    &new_sequence_hash,
+                                    sample_path_id,
+                                    0,
+                                    (ref_end - ref_start) as i32,
+                                    &"1".to_string(),
+                                );
                                 models::Path::insert_change(
                                     conn,
-                                    haplotype_path_id,
+                                    sample_path_id,
                                     ref_start as i32,
                                     ref_end as i32,
-                                    &new_sequence_hash,
+                                    new_block_id.id,
                                 );
                             }
                         }

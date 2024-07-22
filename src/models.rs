@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry::Vacant;
 use std::collections::HashMap;
 use std::fmt::*;
 
@@ -134,13 +135,13 @@ impl Block {
         path_id: i32,
         start: i32,
         end: i32,
-        strand: String,
+        strand: &String,
     ) -> Block {
         let mut stmt = conn
             .prepare_cached("INSERT INTO block (sequence_hash, path_id, start, end, strand) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING *")
             .unwrap();
-        stmt.query_row((hash, path_id, start, end, strand), |row| {
-            Ok(models::Block {
+        match stmt.query_row((hash, path_id, start, end, strand), |row| {
+            Ok(Block {
                 id: row.get(0)?,
                 sequence_hash: row.get(1)?,
                 path_id: row.get(2)?,
@@ -148,8 +149,33 @@ impl Block {
                 end: row.get(4)?,
                 strand: row.get(5)?,
             })
-        })
-        .unwrap()
+        }) {
+            Ok(res) => res,
+            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+                if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                    // println!("{err:?} {details:?}");
+                    Block {
+                        id: conn
+                            .query_row(
+                                "select id from block where sequence_hash = ?1 AND path_id = ?2 AND start = ?3 AND end = ?4 AND strand = ?5;",
+                                (hash, path_id, start, end, strand),
+                                |row| row.get(0),
+                            )
+                            .unwrap(),
+                        sequence_hash: hash.clone(),
+                        path_id,
+                        start,
+                        end,
+                        strand: strand.clone(),
+                    }
+                } else {
+                    panic!("something bad happened querying the database")
+                }
+            }
+            Err(_e) => {
+                panic!("failure in making block {_e}")
+            }
+        }
     }
 }
 
@@ -278,36 +304,34 @@ impl Path {
             let hash: String = block.get(1).unwrap();
             let start = block.get(2).unwrap();
             let end = block.get(3).unwrap();
-            let strand = block.get(4).unwrap();
-            let new_block = Block::create(conn, &hash, target_path_id, start, end, strand);
+            let strand: String = block.get(4).unwrap();
+            let new_block = Block::create(conn, &hash, target_path_id, start, end, &strand);
             block_map.insert(block_id, new_block.id);
             row = it.next().unwrap();
         }
 
-        let mut stmt = conn.prepare_cached("SELECT source_id, target_id from edges where source_id IN rarray(?1) OR target_id IN rarray(?1)").unwrap();
-        let mut it = stmt
-            .query(params_from_iter(Vec::from_iter(block_map.keys())))
+        // todo: figure out rusqlite's rarray
+        let mut stmt = conn
+            .prepare_cached("SELECT source_id, target_id from edges where source_id IN (?1)")
             .unwrap();
+        let block_keys = block_map
+            .keys()
+            .map(|k| format!("{k}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut it = stmt.query([block_keys]).unwrap();
         let mut row = it.next().unwrap();
         while row.is_some() {
             let edge = row.unwrap();
             let source_id: i32 = edge.get(0).unwrap();
             let target_id: Option<i32> = edge.get(1).unwrap();
-            Edge::create(conn, *block_map.get(&source_id).unwrap_or(&source_id), None);
+            Edge::create(
+                conn,
+                *block_map.get(&source_id).unwrap_or(&source_id),
+                target_id,
+            );
+            row = it.next().unwrap();
         }
-
-        // for b in blocks {
-        //
-        // }
-        // println!("{block_map:?}");
-        // let create_blocks = "INSERT into block (sequence_hash, path_id, start, end, strand) SELECT sb.sequence_hash, ?1, sb.start, sb.end, sb.strand from block sb where sb.path_id = ?2";
-        // let mut stmt = conn.prepare(create_blocks).unwrap();
-        // let mut it = stmt.query([target_path_id, source_path_id]).unwrap();
-        // println!("{v:?}", v=it.next());
-        // println!("{v:?}", v=it.next());
-        // println!("{v:?}", v=it.next());
-        // println!("{v:?}", v=it.next());
-        // tx.commit().unwrap();
     }
 
     pub fn get_or_create_sample_path(
@@ -316,8 +340,7 @@ impl Path {
         sample_name: &String,
         path_name: &String,
         new_path_index: i32,
-    ) -> (i32, i32) {
-        println!("lookup {collection_name} {path_name} {new_path_index}");
+    ) -> i32 {
         let mut path_id : i32 = match conn.query_row(
             "select id from path where collection_name = ?1 AND sample_name = ?2 AND name = ?3 AND path_index = ?4",
             (collection_name, sample_name, path_name, new_path_index),
@@ -329,9 +352,8 @@ impl Path {
                 panic!("Error querying the database: {_e}");
             }
         };
-        println!("here {path_id}");
         if path_id != 0 {
-            return (path_id, path_id);
+            return path_id;
         } else {
             // no path exists, so make it first -- check if we have a reference path for this sample first
             path_id = match conn.query_row(
@@ -371,8 +393,7 @@ impl Path {
         // clone parent blocks/edges
         Path::clone(conn, path_id, new_path_id.id);
 
-        println!("made new one {path_id} {new_path_id:?}");
-        (path_id, new_path_id.id)
+        new_path_id.id
     }
 
     #[allow(clippy::ptr_arg)]
@@ -382,7 +403,7 @@ impl Path {
         path_id: i32,
         start: i32,
         end: i32,
-        new_sequence_hash: &String,
+        new_block_id: i32,
     ) {
         // todo:
         // 1. get blocks where start-> end overlap
@@ -395,6 +416,48 @@ impl Path {
         //  change that goes over multiple blocks
         //  change that hits just start/end boundry, e.g. block is 1,5 and change is 3,5 or 1,3.
         //  change that deletes block boundry
+        let mut stmt = conn.prepare_cached("select b.id, b.sequence_hash, b.path_id, b.start, b.end, b.strand, e.id as edge_id, e.source_id, e.target_id from block b left join edges e on (e.source_id = b.id or e.target_id = b.id) where b.path_id = ?1 AND b.start <= ?2 AND b.end > ?3;").unwrap();
+        let mut block_edges: HashMap<i32, Vec<Edge>> = HashMap::new();
+        let mut blocks: HashMap<i32, Block> = HashMap::new();
+        let mut it = stmt.query([path_id, start, end]).unwrap();
+        let mut row = it.next().unwrap();
+        while row.is_some() {
+            let entry = row.unwrap();
+            let block_id = entry.get(0).unwrap();
+            blocks.insert(
+                block_id,
+                Block {
+                    id: block_id,
+                    sequence_hash: entry.get(1).unwrap(),
+                    path_id: entry.get(2).unwrap(),
+                    start: entry.get(3).unwrap(),
+                    end: entry.get(4).unwrap(),
+                    strand: entry.get(5).unwrap(),
+                },
+            );
+            if let Vacant(e) = block_edges.entry(block_id) {
+                e.insert(vec![Edge {
+                    id: entry.get(6).unwrap(),
+                    source_id: entry.get(7).unwrap(),
+                    target_id: entry.get(8).unwrap(),
+                }]);
+            } else {
+                block_edges.get_mut(&block_id).unwrap().push(Edge {
+                    id: entry.get(6).unwrap(),
+                    source_id: entry.get(7).unwrap(),
+                    target_id: entry.get(8).unwrap(),
+                });
+            }
+            row = it.next().unwrap();
+        }
+
+        struct SplitBlock {
+            id: i32,
+            left: Block,
+            right: Block,
+        }
+
+        for (block_id, block) in blocks {}
     }
 }
 
