@@ -16,10 +16,12 @@ CREATE TABLE sequence (
 CREATE TABLE block (
   id INTEGER PRIMARY KEY NOT NULL,
   sequence_hash TEXT NOT NULL,
+  path_id INTEGER NOT NULL,
   "start" INTEGER NOT NULL,
   "end" INTEGER NOT NULL,
   strand TEXT NOT NULL DEFAULT "1",
   FOREIGN KEY(sequence_hash) REFERENCES sequence(hash),
+  FOREIGN KEY(path_id) REFERENCES path(id),
   constraint chk_strand check (strand in ('-1', '1', '0', '.', '?'))
 );
 
@@ -36,11 +38,9 @@ CREATE UNIQUE INDEX edge_uidx ON edges(source_id, target_id);
 CREATE TABLE path (
   id INTEGER PRIMARY KEY NOT NULL,
   name TEXT NOT NULL,
-  start_edge_id INTEGER NOT NULL,
-  path_index INTEGER NOT NULL DEFAULT 0,
-  FOREIGN KEY(start_edge_id) REFERENCES edges(id)
+  path_index INTEGER NOT NULL DEFAULT 0
 );
-CREATE UNIQUE INDEX path_uidx ON path(name start_edge_id, path_index);
+CREATE UNIQUE INDEX path_uidx ON path(name, path_index);
 
 CREATE TABLE path_collection (
   id INTEGER PRIMARY KEY NOT NULL,

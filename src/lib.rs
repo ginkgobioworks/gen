@@ -10,6 +10,7 @@ use sha2::{Digest, Sha256};
 pub fn get_connection(db_path: &str) -> Connection {
     let mut conn =
         Connection::open(db_path).unwrap_or_else(|_| panic!("Error connecting to {}", db_path));
+    rusqlite::vtab::array::load_module(&conn).unwrap();
     run_migrations(&mut conn);
     conn
 }

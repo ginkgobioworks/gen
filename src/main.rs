@@ -64,10 +64,16 @@ fn import_fasta(fasta: &String, name: &String, conn: &mut Connection) {
             let record = result.expect("Error during fasta record parsing");
             let sequence = String::from_utf8(record.seq().to_vec()).unwrap();
             let seq_hash = models::Sequence::create(conn, "DNA".to_string(), &sequence);
-            let block =
-                models::Block::create(conn, &seq_hash, 0, (sequence.len() as i32), "1".to_string());
+            let path = models::Path::create(conn, &record.id().to_string(), None);
+            let block = models::Block::create(
+                conn,
+                &seq_hash,
+                path.id,
+                0,
+                (sequence.len() as i32),
+                "1".to_string(),
+            );
             let edge = models::Edge::create(conn, block.id, None);
-            let path = models::Path::create(conn, &record.id().to_string(), edge.id, None);
             models::PathCollection::create(conn, &collection.name, path.id, None);
         }
         println!("Created it");
@@ -111,12 +117,17 @@ fn update_with_vcf(vcf_path: &String, name: &String, conn: &mut Connection) {
                                     "DNA".to_string(),
                                     &alt_seq.to_string(),
                                 );
+                                let (parent_path_id, haplotype_path_id) =
+                                    models::Path::get_or_create_sample_path(
+                                        conn,
+                                        name,
+                                        &sample_names[sample_index],
+                                        &seq_name,
+                                        haplotype as i32,
+                                    );
                                 models::Path::insert_change(
                                     conn,
-                                    name,
-                                    &sample_names[sample_index],
-                                    &seq_name,
-                                    haplotype as i32,
+                                    haplotype_path_id,
                                     ref_start as i32,
                                     ref_end as i32,
                                     &new_sequence_hash,
@@ -157,6 +168,7 @@ mod tests {
     fn get_connection() -> Connection {
         let mut conn = Connection::open_in_memory()
             .unwrap_or_else(|_| panic!("Error opening in memory test db"));
+        rusqlite::vtab::array::load_module(&conn).unwrap();
         run_migrations(&mut conn);
         conn
     }
