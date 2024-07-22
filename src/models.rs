@@ -210,34 +210,47 @@ impl Edge {
 #[derive(Debug)]
 pub struct Path {
     pub id: i32,
+    pub collection_name: String,
+    pub sample_name: Option<String>,
     pub name: String,
     pub path_index: i32,
 }
 
 impl Path {
-    pub fn create(conn: &mut Connection, name: &String, path_index: Option<i32>) -> Path {
-        let query = "INSERT INTO path (name, path_index) VALUES (?1, ?2) RETURNING *";
+    pub fn create(
+        conn: &mut Connection,
+        collection_name: &String,
+        sample_name: Option<&String>,
+        path_name: &String,
+        path_index: Option<i32>,
+    ) -> Path {
+        let query = "INSERT INTO path (collection_name, sample_name, name, path_index) VALUES (?1, ?2, ?3, ?4) RETURNING *";
         let mut stmt = conn.prepare(query).unwrap();
         let index = path_index.unwrap_or(0);
-        match stmt.query_row((name, index), |row| {
+        match stmt.query_row((collection_name, sample_name, path_name, index), |row| {
             Ok(Path {
                 id: row.get(0)?,
-                name: row.get(1)?,
-                path_index: row.get(2)?,
+                collection_name: row.get(1)?,
+                sample_name: row.get(2)?,
+                name: row.get(3)?,
+                path_index: row.get(4)?,
             })
         }) {
             Ok(path) => path,
-            Err(rusqlite::Error::SqliteFailure(err, _)) => {
+            Err(rusqlite::Error::SqliteFailure(err, aa)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                    println!("{err:?} {aa:?}");
                     Path {
                         id: conn
                             .query_row(
-                                "select id from path where name = ?1 and path_index = ?2",
-                                (name, index),
+                                "select id from path where collection_name = ?1 and sample_name is null and name = ?2 and path_index = ?3",
+                                (collection_name, path_name, index),
                                 |row| row.get(0),
                             )
                             .unwrap(),
-                        name: name.clone(),
+                        collection_name: collection_name.clone(),
+                        sample_name: sample_name.map(|s| s.to_string()),
+                        name: path_name.clone(),
                         path_index: index,
                     }
                 } else {
@@ -306,14 +319,14 @@ impl Path {
     ) -> (i32, i32) {
         println!("lookup {collection_name} {path_name} {new_path_index}");
         let mut path_id : i32 = match conn.query_row(
-            "select path.id from path left join path_collection pc on (pc.path_id = path.id) where pc.collection_name = ?1 AND pc.sample_name = ?2 AND path.name = ?3 AND path_index = ?4",
+            "select id from path where collection_name = ?1 AND sample_name = ?2 AND name = ?3 AND path_index = ?4",
             (collection_name, sample_name, path_name, new_path_index),
             |row| row.get(0),
         ) {
             Ok(res) => res,
             Err(rusqlite::Error::QueryReturnedNoRows) => 0,
             Err(_e) => {
-                panic!("something bad happened querying the database")
+                panic!("something bad happened querying the database {_e:?}")
             }
         };
         println!("here {path_id}");
@@ -322,7 +335,7 @@ impl Path {
         } else {
             // no path exists, so make it first -- check if we have a reference path for this sample first
             path_id = match conn.query_row(
-            "select path.id from path left join path_collection pc on (pc.path_id = path.id) where pc.collection_name = ?1 AND pc.sample_name = ?2 AND path.name = ?3 AND path_index = 0",
+            "select id from path where collection_name = ?1 AND sample_name = ?2 AND name = ?3 AND path_index = 0",
             (collection_name, sample_name, path_name),
             |row| row.get(0),
             ) {
@@ -336,7 +349,7 @@ impl Path {
         if path_id == 0 {
             // use the base reference bath if it exists since there is no base sample path
             path_id = match conn.query_row(
-            "select path.id from path left join path_collection pc on (pc.path_id = path.id) where pc.collection_name = ?1 AND pc.sample_name IS null AND path.name = ?2 AND path_index = 0",
+            "select path.id from path where collection_name = ?1 AND sample_name IS null AND name = ?2 AND path_index = 0",
             (collection_name, path_name),
             |row| row.get(0),
             ) {
@@ -347,8 +360,13 @@ impl Path {
                 }
             }
         }
-        let new_path_id = Path::create(conn, path_name, Some(new_path_index));
-        PathCollection::create(conn, collection_name, new_path_id.id, Some(sample_name));
+        let new_path_id = Path::create(
+            conn,
+            collection_name,
+            Some(sample_name),
+            path_name,
+            Some(new_path_index),
+        );
 
         // clone parent blocks/edges
         Path::clone(conn, path_id, new_path_id.id);
@@ -377,46 +395,6 @@ impl Path {
         //  change that goes over multiple blocks
         //  change that hits just start/end boundry, e.g. block is 1,5 and change is 3,5 or 1,3.
         //  change that deletes block boundry
-    }
-}
-
-#[derive(Debug)]
-pub struct PathCollection {
-    pub id: i32,
-    pub collection_name: String,
-    pub path_id: i32,
-    pub sample_name: Option<String>,
-}
-
-impl PathCollection {
-    pub fn create(
-        conn: &mut Connection,
-        collection_name: &String,
-        path_id: i32,
-        sample_name: Option<&String>,
-    ) -> PathCollection {
-        let mut query;
-        let mut placeholders: Vec<rusqlite::types::Value> = vec![];
-        if sample_name.is_some() {
-            query = "INSERT INTO path_collection (collection_name, path_id, sample_name) VALUES (?1, ?2, ?3) RETURNING *";
-            placeholders.push((*collection_name).clone().into());
-            placeholders.push(path_id.into());
-            placeholders.push((*sample_name.unwrap()).clone().into());
-        } else {
-            query = "INSERT INTO path_collection (collection_name, path_id) VALUES (?1, ?2) RETURNING *";
-            placeholders.push((*collection_name).clone().into());
-            placeholders.push(path_id.into());
-        }
-        let mut stmt = conn.prepare(query).unwrap();
-        stmt.query_row(params_from_iter(placeholders), |row| {
-            Ok(models::PathCollection {
-                id: row.get(0)?,
-                collection_name: row.get(1)?,
-                path_id: row.get(2)?,
-                sample_name: row.get(3)?,
-            })
-        })
-        .unwrap()
     }
 }
 
