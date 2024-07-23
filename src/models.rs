@@ -189,24 +189,45 @@ pub struct Edge {
 impl Edge {
     pub fn create(conn: &Connection, source_id: i32, target_id: Option<i32>) -> Edge {
         let mut query;
+        let mut id_query;
         let mut placeholders = vec![];
         if target_id.is_some() {
             query = "INSERT INTO edges (source_id, target_id) VALUES (?1, ?2) RETURNING *";
+            id_query = "select id from edges where source_id = ?1 and target_id = ?2";
             placeholders.push(source_id);
             placeholders.push(target_id.unwrap());
         } else {
+            id_query = "select id from edges where source_id = ?1 and target_id is null";
             query = "INSERT INTO edges (source_id) VALUES (?1) RETURNING *";
             placeholders.push(source_id);
         }
         let mut stmt = conn.prepare(query).unwrap();
-        stmt.query_row(params_from_iter(placeholders), |row| {
-            Ok(models::Edge {
+        match stmt.query_row(params_from_iter(&placeholders), |row| {
+            Ok(Edge {
                 id: row.get(0)?,
                 source_id: row.get(1)?,
                 target_id: row.get(2)?,
             })
-        })
-        .unwrap()
+        }) {
+            Ok(edge) => edge,
+            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+                if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                    println!("{err:?} {details:?}");
+                    Edge {
+                        id: conn
+                            .query_row(id_query, params_from_iter(&placeholders), |row| row.get(0))
+                            .unwrap(),
+                        source_id,
+                        target_id,
+                    }
+                } else {
+                    panic!("something bad happened querying the database")
+                }
+            }
+            Err(_) => {
+                panic!("something bad happened querying the database")
+            }
+        }
     }
 
     // pub fn bulk_create(conn: &mut Connection, edges: &Vec<Edge>) -> Vec<Edge> {
@@ -405,6 +426,7 @@ impl Path {
         end: i32,
         new_block_id: i32,
     ) {
+        println!("change is {path_id} {start} {end} {new_block_id}");
         // todo:
         // 1. get blocks where start-> end overlap
         // 2. split old blocks at boundry points, make new block for left/right side
@@ -416,14 +438,16 @@ impl Path {
         //  change that goes over multiple blocks
         //  change that hits just start/end boundry, e.g. block is 1,5 and change is 3,5 or 1,3.
         //  change that deletes block boundry
-        let mut stmt = conn.prepare_cached("select b.id, b.sequence_hash, b.path_id, b.start, b.end, b.strand, e.id as edge_id, e.source_id, e.target_id from block b left join edges e on (e.source_id = b.id or e.target_id = b.id) where b.path_id = ?1 AND b.start <= ?2 AND b.end > ?3;").unwrap();
+        // https://stackoverflow.com/questions/3269434/whats-the-most-efficient-way-to-test-if-two-ranges-overlap
+        let mut stmt = conn.prepare_cached("select b.id, b.sequence_hash, b.path_id, b.start, b.end, b.strand, e.id as edge_id, e.source_id, e.target_id from block b left join edges e on (e.source_id = b.id or e.target_id = b.id) where b.path_id = ?1 AND b.start <= ?3 AND ?2 <= b.end AND b.id != ?4;").unwrap();
         let mut block_edges: HashMap<i32, Vec<Edge>> = HashMap::new();
         let mut blocks: HashMap<i32, Block> = HashMap::new();
-        let mut it = stmt.query([path_id, start, end]).unwrap();
+        let mut it = stmt.query([path_id, start, end, new_block_id]).unwrap();
         let mut row = it.next().unwrap();
         while row.is_some() {
             let entry = row.unwrap();
             let block_id = entry.get(0).unwrap();
+            let edge_id: Option<i32> = entry.get(6).unwrap();
             blocks.insert(
                 block_id,
                 Block {
@@ -435,29 +459,214 @@ impl Path {
                     strand: entry.get(5).unwrap(),
                 },
             );
-            if let Vacant(e) = block_edges.entry(block_id) {
-                e.insert(vec![Edge {
-                    id: entry.get(6).unwrap(),
-                    source_id: entry.get(7).unwrap(),
-                    target_id: entry.get(8).unwrap(),
-                }]);
+            if edge_id.is_some() {
+                if let Vacant(e) = block_edges.entry(block_id) {
+                    e.insert(vec![Edge {
+                        id: edge_id.unwrap(),
+                        source_id: entry.get(7).unwrap(),
+                        target_id: entry.get(8).unwrap(),
+                    }]);
+                } else {
+                    block_edges.get_mut(&block_id).unwrap().push(Edge {
+                        id: entry.get(6).unwrap(),
+                        source_id: entry.get(7).unwrap(),
+                        target_id: entry.get(8).unwrap(),
+                    });
+                }
             } else {
-                block_edges.get_mut(&block_id).unwrap().push(Edge {
-                    id: entry.get(6).unwrap(),
-                    source_id: entry.get(7).unwrap(),
-                    target_id: entry.get(8).unwrap(),
-                });
+                println!("empty eid {row:?}");
             }
             row = it.next().unwrap();
         }
 
-        struct SplitBlock {
+        #[derive(Debug)]
+        struct ReplacementEdge {
             id: i32,
-            left: Block,
-            right: Block,
+            new_source_id: Option<i32>,
+            new_target_id: Option<i32>,
+        }
+        let mut replacement_edges: Vec<ReplacementEdge> = vec![];
+        let mut new_edges: Vec<(i32, i32)> = vec![];
+
+        for (block_id, block) in &blocks {
+            let contains_start = block.start <= start && start < block.end;
+            let contains_end = block.start <= end && end < block.end;
+
+            if contains_start && contains_end {
+                // our range is fully contained w/in the block
+                //      |----block------|
+                //        |----range---|
+                let left_block = Block::create(
+                    conn,
+                    &block.sequence_hash,
+                    path_id,
+                    block.start,
+                    end,
+                    &block.strand,
+                );
+                let right_block = Block::create(
+                    conn,
+                    &block.sequence_hash,
+                    path_id,
+                    end,
+                    block.end,
+                    &block.strand,
+                );
+                new_edges.push((left_block.id, new_block_id));
+                new_edges.push((new_block_id, right_block.id));
+                // what stuff went to this block?
+                for edges in block_edges.get(block_id) {
+                    for edge in edges {
+                        println!("block {block_id} on edge {edge:?}");
+                        let mut new_source_id = None;
+                        let mut new_target_id = None;
+                        if edge.source_id == *block_id {
+                            new_source_id = Some(right_block.id);
+                        }
+                        if edge.target_id.is_some() && edge.target_id.unwrap() == *block_id {
+                            new_target_id = Some(left_block.id);
+                        }
+                        replacement_edges.push(ReplacementEdge {
+                            id: edge.id,
+                            new_source_id,
+                            new_target_id,
+                        });
+                        println!("new res {replacement_edges:?}");
+                    }
+                }
+            } else if contains_start {
+                // our range is overlapping the end of the block
+                // |----block---|
+                //        |----range---|
+                let left_block = Block::create(
+                    conn,
+                    &block.sequence_hash,
+                    path_id,
+                    block.start,
+                    end,
+                    &block.strand,
+                );
+                new_edges.push((left_block.id, new_block_id));
+                // what stuff went to this block?
+                for edges in block_edges.get(block_id) {
+                    for edge in edges {
+                        let mut new_source_id = None;
+                        let mut new_target_id = None;
+                        if edge.source_id == *block_id {
+                            new_source_id = Some(new_block_id);
+                        }
+                        if edge.target_id.is_some() && edge.target_id.unwrap() == *block_id {
+                            new_target_id = Some(left_block.id);
+                        }
+                        replacement_edges.push(ReplacementEdge {
+                            id: edge.id,
+                            new_source_id,
+                            new_target_id,
+                        });
+                    }
+                }
+            } else if contains_end {
+                // our range is overlapping the beginning of the block
+                //              |----block---|
+                //        |----range---|
+                let right_block = Block::create(
+                    conn,
+                    &block.sequence_hash,
+                    path_id,
+                    end,
+                    block.end,
+                    &block.strand,
+                );
+                // what stuff went to this block?
+                new_edges.push((new_block_id, right_block.id));
+                for edges in block_edges.get(block_id) {
+                    for edge in edges {
+                        let mut new_source_id = None;
+                        let mut new_target_id = None;
+                        if edge.source_id == *block_id {
+                            new_source_id = Some(right_block.id);
+                        }
+                        if edge.target_id.is_some() && edge.target_id.unwrap() == *block_id {
+                            new_target_id = Some(new_block_id);
+                        }
+                        replacement_edges.push(ReplacementEdge {
+                            id: edge.id,
+                            new_source_id,
+                            new_target_id,
+                        })
+                    }
+                }
+            } else {
+                // our range is the whole block, get rid of it
+                //          |--block---|
+                //        |-----range------|
+                // what stuff went to this block?
+                for edges in block_edges.get(block_id) {
+                    for edge in edges {
+                        let mut new_source_id = None;
+                        let mut new_target_id = None;
+                        if edge.source_id == *block_id {
+                            new_source_id = Some(new_block_id);
+                        }
+                        if edge.target_id.is_some() && edge.target_id.unwrap() == *block_id {
+                            new_target_id = Some(new_block_id);
+                        }
+                        replacement_edges.push(ReplacementEdge {
+                            id: edge.id,
+                            new_source_id,
+                            new_target_id,
+                        })
+                    }
+                }
+            }
         }
 
-        for (block_id, block) in blocks {}
+        for replacement_edge in replacement_edges {
+            let mut exist_query;
+            let mut update_query;
+            let mut placeholders: Vec<i32> = vec![];
+            if replacement_edge.new_source_id.is_some() && replacement_edge.new_target_id.is_some()
+            {
+                exist_query = "select id from edges where source_id = ?1 and target_id = ?2;";
+                update_query = "update edges set source_id = ?1 AND target_id = ?2 where id = ?3";
+                placeholders.push(replacement_edge.new_source_id.unwrap());
+                placeholders.push(replacement_edge.new_target_id.unwrap());
+            } else if replacement_edge.new_source_id.is_some() {
+                exist_query = "select id from edges where source_id = ?1 and target_id is null;";
+                update_query = "update edges set source_id = ?1 where id = ?2";
+                placeholders.push(replacement_edge.new_source_id.unwrap());
+            } else if replacement_edge.new_target_id.is_some() {
+                exist_query = "select id from edges where source_id is null and target_id = ?1;";
+                update_query = "update edges set target_id = ?1 where id = ?2";
+                placeholders.push(replacement_edge.new_target_id.unwrap());
+            } else {
+                continue;
+            }
+            println!("{exist_query:?} {update_query} {placeholders:?}");
+
+            let mut stmt = conn.prepare_cached(exist_query).unwrap();
+            if !stmt.exists(params_from_iter(&placeholders)).unwrap() {
+                placeholders.push(replacement_edge.id);
+                println!("updating {exist_query:?} {update_query} {placeholders:?}");
+                let mut stmt = conn.prepare_cached(update_query).unwrap();
+                stmt.execute(params_from_iter(&placeholders)).unwrap();
+            } else {
+                println!("edge exists");
+            }
+        }
+        for new_edge in new_edges {
+            Edge::create(conn, new_edge.0, Some(new_edge.1));
+        }
+
+        let block_keys = blocks
+            .keys()
+            .map(|k| format!("{k}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut stmt = conn
+            .prepare_cached("DELETE from block where id IN (?1)")
+            .unwrap();
+        stmt.execute([block_keys]).unwrap();
     }
 }
 

@@ -1,5 +1,6 @@
 #![allow(warnings)]
 use clap::{Parser, Subcommand};
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::path::PathBuf;
 
@@ -104,13 +105,14 @@ fn update_with_vcf(vcf_path: &String, name: &String, conn: &mut Connection) {
         let alt_alleles: Vec<_> = alt_bases.iter().collect::<io::Result<_>>().unwrap();
         for (sample_index, sample) in record.samples().iter().enumerate() {
             let genotype = sample.get(&header, "GT");
+            let mut seen_haplotypes: HashSet<i32> = HashSet::new();
             if genotype.is_some() {
                 if let Value::Genotype(genotypes) = genotype.unwrap().unwrap().unwrap() {
                     for gt in genotypes.iter() {
                         if gt.is_ok() {
                             let (haplotype, phasing) = gt.unwrap();
                             let haplotype = haplotype.unwrap();
-                            if haplotype != 0 {
+                            if haplotype != 0 && !seen_haplotypes.contains(&(haplotype as i32)) {
                                 let alt_seq = alt_alleles[haplotype - 1];
                                 // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
                                 let new_sequence_hash = models::Sequence::create(
@@ -141,6 +143,7 @@ fn update_with_vcf(vcf_path: &String, name: &String, conn: &mut Connection) {
                                     new_block_id.id,
                                 );
                             }
+                            seen_haplotypes.insert(haplotype as i32);
                         }
                     }
                 }
