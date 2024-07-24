@@ -1,15 +1,17 @@
+#![allow(warnings)]
 use clap::{Parser, Subcommand};
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::path::PathBuf;
 
 use bio::io::fasta;
 use gen::get_connection;
 use gen::migrations::run_migrations;
-use gen::models::{self};
+use gen::models::{self, Block, Path};
 use noodles::vcf;
 use noodles::vcf::variant::record::samples::series::Value;
 use noodles::vcf::variant::record::samples::{Sample, Series};
-use noodles::vcf::variant::record::{AlternateBases, Samples};
+use noodles::vcf::variant::record::{AlternateBases, ReferenceBases, Samples};
 use noodles::vcf::variant::Record;
 use rusqlite::Connection;
 use std::io;
@@ -34,6 +36,9 @@ enum Commands {
         /// The path to the database you wish to utilize
         #[arg(short, long)]
         db: String,
+        /// Don't store the sequence in the database, instead store the filename
+        #[arg(short, long, action)]
+        shallow: bool,
     },
     /// Update a sequence collection with new data
     Update {
@@ -52,7 +57,7 @@ enum Commands {
     },
 }
 
-fn import_fasta(fasta: &String, name: &String, conn: &mut Connection) {
+fn import_fasta(fasta: &String, name: &String, shallow: bool, conn: &mut Connection) {
     let mut reader = fasta::Reader::from_file(fasta).unwrap();
 
     run_migrations(conn);
@@ -63,16 +68,16 @@ fn import_fasta(fasta: &String, name: &String, conn: &mut Connection) {
         for result in reader.records() {
             let record = result.expect("Error during fasta record parsing");
             let sequence = String::from_utf8(record.seq().to_vec()).unwrap();
-            let seq_hash = models::Sequence::create(conn, "DNA".to_string(), &sequence);
+            let seq_hash = models::Sequence::create(conn, "DNA".to_string(), &sequence, !shallow);
             let path =
                 models::Path::create(conn, &collection.name, None, &record.id().to_string(), None);
-            let block = models::Block::create(
+            let block = Block::create(
                 conn,
                 &seq_hash,
                 path.id,
                 0,
                 (sequence.len() as i32),
-                "1".to_string(),
+                &"1".to_string(),
             );
             let edge = models::Edge::create(conn, block.id, None);
         }
@@ -82,7 +87,7 @@ fn import_fasta(fasta: &String, name: &String, conn: &mut Connection) {
     }
 }
 
-fn update_with_vcf(vcf_path: &String, name: &String, conn: &mut Connection) {
+fn update_with_vcf(vcf_path: &String, collection_name: &String, conn: &mut Connection) {
     run_migrations(conn);
 
     let mut reader = vcf::io::reader::Builder::default()
@@ -97,42 +102,53 @@ fn update_with_vcf(vcf_path: &String, name: &String, conn: &mut Connection) {
         let record = result.unwrap();
         let seq_name = record.reference_sequence_name().to_string();
         let ref_allele = record.reference_bases();
+        // this converts the coordinates to be zero based, start inclusive, end exclusive
         let ref_start = record.variant_start().unwrap().unwrap().get() - 1;
-        let ref_end = record.variant_end(&header).unwrap().get() - 1;
+        let ref_end = record.variant_end(&header).unwrap().get();
         let alt_bases = record.alternate_bases();
         let alt_alleles: Vec<_> = alt_bases.iter().collect::<io::Result<_>>().unwrap();
         for (sample_index, sample) in record.samples().iter().enumerate() {
             let genotype = sample.get(&header, "GT");
+            let mut seen_haplotypes: HashSet<i32> = HashSet::new();
             if genotype.is_some() {
                 if let Value::Genotype(genotypes) = genotype.unwrap().unwrap().unwrap() {
                     for gt in genotypes.iter() {
                         if gt.is_ok() {
                             let (haplotype, phasing) = gt.unwrap();
                             let haplotype = haplotype.unwrap();
-                            if haplotype != 0 {
+                            if haplotype != 0 && !seen_haplotypes.contains(&(haplotype as i32)) {
                                 let alt_seq = alt_alleles[haplotype - 1];
                                 // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
                                 let new_sequence_hash = models::Sequence::create(
                                     conn,
                                     "DNA".to_string(),
                                     &alt_seq.to_string(),
+                                    true,
                                 );
-                                let (parent_path_id, haplotype_path_id) =
-                                    models::Path::get_or_create_sample_path(
-                                        conn,
-                                        name,
-                                        &sample_names[sample_index],
-                                        &seq_name,
-                                        haplotype as i32,
-                                    );
-                                models::Path::insert_change(
+                                let sample_path_id = models::Path::get_or_create_sample_path(
                                     conn,
-                                    haplotype_path_id,
+                                    collection_name,
+                                    &sample_names[sample_index],
+                                    &seq_name,
+                                    haplotype as i32,
+                                );
+                                let new_block_id = Block::create(
+                                    conn,
+                                    &new_sequence_hash,
+                                    sample_path_id,
+                                    0,
+                                    alt_seq.len() as i32,
+                                    &"1".to_string(),
+                                );
+                                Path::insert_change(
+                                    conn,
+                                    sample_path_id,
                                     ref_start as i32,
                                     ref_end as i32,
-                                    &new_sequence_hash,
+                                    new_block_id.id,
                                 );
                             }
+                            seen_haplotypes.insert(haplotype as i32);
                         }
                     }
                 }
@@ -145,9 +161,12 @@ fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
-        Some(Commands::Import { fasta, name, db }) => {
-            import_fasta(fasta, name, &mut get_connection(db))
-        }
+        Some(Commands::Import {
+            fasta,
+            name,
+            db,
+            shallow,
+        }) => import_fasta(fasta, name, *shallow, &mut get_connection(db)),
         Some(Commands::Update {
             name,
             db,
@@ -180,6 +199,7 @@ mod tests {
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &"test".to_string(),
+            false,
             &mut get_connection(),
         );
     }
@@ -192,7 +212,16 @@ mod tests {
         fasta_path.push("fixtures/simple.fa");
         let conn = &mut get_connection();
         let collection = "test".to_string();
-        import_fasta(&fasta_path.to_str().unwrap().to_string(), &collection, conn);
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+        );
         update_with_vcf(&vcf_path.to_str().unwrap().to_string(), &collection, conn);
+        assert_eq!(
+            Path::sequence(conn, &collection, Some(&"foo".to_string()), "m123", 1),
+            "ATCATCGATCGATCGATCGGGAACACACAGAGA"
+        );
     }
 }

@@ -1,7 +1,8 @@
+use std::collections::hash_map::Entry::Vacant;
 use std::collections::HashMap;
 use std::fmt::*;
 
-use rusqlite::{params, params_from_iter, Connection};
+use rusqlite::{params_from_iter, Connection};
 use sha2::{Digest, Sha256};
 
 use crate::models;
@@ -9,10 +10,6 @@ use crate::models;
 #[derive(Debug)]
 pub struct Collection {
     pub name: String,
-}
-
-pub enum QueryCollection {
-    name(String),
 }
 
 impl Collection {
@@ -73,22 +70,13 @@ pub struct Sequence {
     pub length: i32,
 }
 
-pub struct OptionSequence {
-    pub hash: Option<String>,
-    pub sequence_type: Option<String>,
-    pub sequence: Option<String>,
-    pub length: Option<i32>,
-}
-
-pub enum QuerySequence {
-    hash(String),
-    sequence_type(String),
-    sequence(String),
-    length(i32),
-}
-
 impl Sequence {
-    pub fn create(conn: &mut Connection, sequence_type: String, sequence: &String) -> String {
+    pub fn create(
+        conn: &mut Connection,
+        sequence_type: String,
+        sequence: &String,
+        store: bool,
+    ) -> String {
         let mut hasher = Sha256::new();
         hasher.update(&sequence_type);
         hasher.update(sequence);
@@ -107,9 +95,15 @@ impl Sequence {
         if obj_hash.is_empty() {
             let mut stmt = conn.prepare("INSERT INTO sequence (hash, sequence_type, sequence, length) VALUES (?1, ?2, ?3, ?4) RETURNING (hash);").unwrap();
             let mut rows = stmt
-                .query_map((hash, sequence_type, sequence, sequence.len()), |row| {
-                    row.get(0)
-                })
+                .query_map(
+                    (
+                        hash,
+                        sequence_type,
+                        if store { sequence } else { "" },
+                        sequence.len(),
+                    ),
+                    |row| row.get(0),
+                )
                 .unwrap();
             obj_hash = rows.next().unwrap().unwrap();
         }
@@ -134,13 +128,13 @@ impl Block {
         path_id: i32,
         start: i32,
         end: i32,
-        strand: String,
+        strand: &String,
     ) -> Block {
         let mut stmt = conn
             .prepare_cached("INSERT INTO block (sequence_hash, path_id, start, end, strand) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING *")
             .unwrap();
-        stmt.query_row((hash, path_id, start, end, strand), |row| {
-            Ok(models::Block {
+        match stmt.query_row((hash, path_id, start, end, strand), |row| {
+            Ok(Block {
                 id: row.get(0)?,
                 sequence_hash: row.get(1)?,
                 path_id: row.get(2)?,
@@ -148,8 +142,33 @@ impl Block {
                 end: row.get(4)?,
                 strand: row.get(5)?,
             })
-        })
-        .unwrap()
+        }) {
+            Ok(res) => res,
+            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+                if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                    // println!("{err:?} {details:?}");
+                    Block {
+                        id: conn
+                            .query_row(
+                                "select id from block where sequence_hash = ?1 AND path_id = ?2 AND start = ?3 AND end = ?4 AND strand = ?5;",
+                                (hash, path_id, start, end, strand),
+                                |row| row.get(0),
+                            )
+                            .unwrap(),
+                        sequence_hash: hash.clone(),
+                        path_id,
+                        start,
+                        end,
+                        strand: strand.clone(),
+                    }
+                } else {
+                    panic!("something bad happened querying the database")
+                }
+            }
+            Err(_e) => {
+                panic!("failure in making block {_e}")
+            }
+        }
     }
 }
 
@@ -163,48 +182,46 @@ pub struct Edge {
 impl Edge {
     pub fn create(conn: &Connection, source_id: i32, target_id: Option<i32>) -> Edge {
         let mut query;
+        let mut id_query;
         let mut placeholders = vec![];
         if target_id.is_some() {
             query = "INSERT INTO edges (source_id, target_id) VALUES (?1, ?2) RETURNING *";
+            id_query = "select id from edges where source_id = ?1 and target_id = ?2";
             placeholders.push(source_id);
             placeholders.push(target_id.unwrap());
         } else {
+            id_query = "select id from edges where source_id = ?1 and target_id is null";
             query = "INSERT INTO edges (source_id) VALUES (?1) RETURNING *";
             placeholders.push(source_id);
         }
         let mut stmt = conn.prepare(query).unwrap();
-        stmt.query_row(params_from_iter(placeholders), |row| {
-            Ok(models::Edge {
+        match stmt.query_row(params_from_iter(&placeholders), |row| {
+            Ok(Edge {
                 id: row.get(0)?,
                 source_id: row.get(1)?,
                 target_id: row.get(2)?,
             })
-        })
-        .unwrap()
+        }) {
+            Ok(edge) => edge,
+            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+                if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                    println!("{err:?} {details:?}");
+                    Edge {
+                        id: conn
+                            .query_row(id_query, params_from_iter(&placeholders), |row| row.get(0))
+                            .unwrap(),
+                        source_id,
+                        target_id,
+                    }
+                } else {
+                    panic!("something bad happened querying the database")
+                }
+            }
+            Err(_) => {
+                panic!("something bad happened querying the database")
+            }
+        }
     }
-
-    // pub fn bulk_create(conn: &mut Connection, edges: &Vec<Edge>) -> Vec<Edge> {
-    //     let tx = conn.transaction().unwrap();
-    //     let mut results = vec![];
-    //     for edge in edges {
-    //         let mut stmt = tx
-    //             .prepare("INSERT INTO edges (source_id, target_id) VALUES (?1, ?2) RETURNING *")
-    //             .unwrap();
-    //         let result = stmt
-    //             .query_row([edge.source_id, edge.target_id], |row| {
-    //                 Ok(models::Edge {
-    //                     id: row.get(0)?,
-    //                     source_id: row.get(1)?,
-    //                     target_id: row.get(2)?,
-    //                 })
-    //             })
-    //             .unwrap();
-    //         results.push(result);
-    //     }
-    //     tx.commit()
-    //         .unwrap_or_else(|_| panic!("failed to commit changes."));
-    //     results
-    // }
 }
 
 #[derive(Debug)]
@@ -278,36 +295,34 @@ impl Path {
             let hash: String = block.get(1).unwrap();
             let start = block.get(2).unwrap();
             let end = block.get(3).unwrap();
-            let strand = block.get(4).unwrap();
-            let new_block = Block::create(conn, &hash, target_path_id, start, end, strand);
+            let strand: String = block.get(4).unwrap();
+            let new_block = Block::create(conn, &hash, target_path_id, start, end, &strand);
             block_map.insert(block_id, new_block.id);
             row = it.next().unwrap();
         }
 
-        let mut stmt = conn.prepare_cached("SELECT source_id, target_id from edges where source_id IN rarray(?1) OR target_id IN rarray(?1)").unwrap();
-        let mut it = stmt
-            .query(params_from_iter(Vec::from_iter(block_map.keys())))
+        // todo: figure out rusqlite's rarray
+        let mut stmt = conn
+            .prepare_cached("SELECT source_id, target_id from edges where source_id IN (?1)")
             .unwrap();
+        let block_keys = block_map
+            .keys()
+            .map(|k| format!("{k}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut it = stmt.query([block_keys]).unwrap();
         let mut row = it.next().unwrap();
         while row.is_some() {
             let edge = row.unwrap();
             let source_id: i32 = edge.get(0).unwrap();
             let target_id: Option<i32> = edge.get(1).unwrap();
-            Edge::create(conn, *block_map.get(&source_id).unwrap_or(&source_id), None);
+            Edge::create(
+                conn,
+                *block_map.get(&source_id).unwrap_or(&source_id),
+                target_id,
+            );
+            row = it.next().unwrap();
         }
-
-        // for b in blocks {
-        //
-        // }
-        // println!("{block_map:?}");
-        // let create_blocks = "INSERT into block (sequence_hash, path_id, start, end, strand) SELECT sb.sequence_hash, ?1, sb.start, sb.end, sb.strand from block sb where sb.path_id = ?2";
-        // let mut stmt = conn.prepare(create_blocks).unwrap();
-        // let mut it = stmt.query([target_path_id, source_path_id]).unwrap();
-        // println!("{v:?}", v=it.next());
-        // println!("{v:?}", v=it.next());
-        // println!("{v:?}", v=it.next());
-        // println!("{v:?}", v=it.next());
-        // tx.commit().unwrap();
     }
 
     pub fn get_or_create_sample_path(
@@ -316,8 +331,7 @@ impl Path {
         sample_name: &String,
         path_name: &String,
         new_path_index: i32,
-    ) -> (i32, i32) {
-        println!("lookup {collection_name} {path_name} {new_path_index}");
+    ) -> i32 {
         let mut path_id : i32 = match conn.query_row(
             "select id from path where collection_name = ?1 AND sample_name = ?2 AND name = ?3 AND path_index = ?4",
             (collection_name, sample_name, path_name, new_path_index),
@@ -329,9 +343,8 @@ impl Path {
                 panic!("Error querying the database: {_e}");
             }
         };
-        println!("here {path_id}");
         if path_id != 0 {
-            return (path_id, path_id);
+            return path_id;
         } else {
             // no path exists, so make it first -- check if we have a reference path for this sample first
             path_id = match conn.query_row(
@@ -371,8 +384,7 @@ impl Path {
         // clone parent blocks/edges
         Path::clone(conn, path_id, new_path_id.id);
 
-        println!("made new one {path_id} {new_path_id:?}");
-        (path_id, new_path_id.id)
+        new_path_id.id
     }
 
     #[allow(clippy::ptr_arg)]
@@ -382,8 +394,9 @@ impl Path {
         path_id: i32,
         start: i32,
         end: i32,
-        new_sequence_hash: &String,
+        new_block_id: i32,
     ) {
+        println!("change is {path_id} {start} {end} {new_block_id}");
         // todo:
         // 1. get blocks where start-> end overlap
         // 2. split old blocks at boundry points, make new block for left/right side
@@ -395,115 +408,282 @@ impl Path {
         //  change that goes over multiple blocks
         //  change that hits just start/end boundry, e.g. block is 1,5 and change is 3,5 or 1,3.
         //  change that deletes block boundry
+        // https://stackoverflow.com/questions/3269434/whats-the-most-efficient-way-to-test-if-two-ranges-overlap
+        let mut stmt = conn.prepare_cached("select b.id, b.sequence_hash, b.path_id, b.start, b.end, b.strand, e.id as edge_id, e.source_id, e.target_id from block b left join edges e on (e.source_id = b.id or e.target_id = b.id) where b.path_id = ?1 AND b.start <= ?3 AND ?2 <= b.end AND b.id != ?4;").unwrap();
+        let mut block_edges: HashMap<i32, Vec<Edge>> = HashMap::new();
+        let mut blocks: HashMap<i32, Block> = HashMap::new();
+        let mut it = stmt.query([path_id, start, end, new_block_id]).unwrap();
+        let mut row = it.next().unwrap();
+        while row.is_some() {
+            let entry = row.unwrap();
+            let block_id = entry.get(0).unwrap();
+            let edge_id: Option<i32> = entry.get(6).unwrap();
+            blocks.insert(
+                block_id,
+                Block {
+                    id: block_id,
+                    sequence_hash: entry.get(1).unwrap(),
+                    path_id: entry.get(2).unwrap(),
+                    start: entry.get(3).unwrap(),
+                    end: entry.get(4).unwrap(),
+                    strand: entry.get(5).unwrap(),
+                },
+            );
+            if edge_id.is_some() {
+                if let Vacant(e) = block_edges.entry(block_id) {
+                    e.insert(vec![Edge {
+                        id: edge_id.unwrap(),
+                        source_id: entry.get(7).unwrap(),
+                        target_id: entry.get(8).unwrap(),
+                    }]);
+                } else {
+                    block_edges.get_mut(&block_id).unwrap().push(Edge {
+                        id: entry.get(6).unwrap(),
+                        source_id: entry.get(7).unwrap(),
+                        target_id: entry.get(8).unwrap(),
+                    });
+                }
+            } else {
+                println!("empty eid {row:?}");
+            }
+            row = it.next().unwrap();
+        }
+
+        #[derive(Debug)]
+        struct ReplacementEdge {
+            id: i32,
+            new_source_id: Option<i32>,
+            new_target_id: Option<i32>,
+        }
+        let mut replacement_edges: Vec<ReplacementEdge> = vec![];
+        let mut new_edges: Vec<(i32, i32)> = vec![];
+
+        for (block_id, block) in &blocks {
+            let contains_start = block.start <= start && start < block.end;
+            let contains_end = block.start <= end && end < block.end;
+
+            if contains_start && contains_end {
+                // our range is fully contained w/in the block
+                //      |----block------|
+                //        |----range---|
+                let left_block = Block::create(
+                    conn,
+                    &block.sequence_hash,
+                    path_id,
+                    block.start,
+                    start,
+                    &block.strand,
+                );
+                let right_block = Block::create(
+                    conn,
+                    &block.sequence_hash,
+                    path_id,
+                    end,
+                    block.end,
+                    &block.strand,
+                );
+                println!("lb {left_block:?} {right_block:?}");
+                new_edges.push((left_block.id, new_block_id));
+                new_edges.push((new_block_id, right_block.id));
+                // what stuff went to this block?
+                for edges in block_edges.get(block_id) {
+                    for edge in edges {
+                        println!("block {block_id} on edge {edge:?}");
+                        let mut new_source_id = None;
+                        let mut new_target_id = None;
+                        if edge.source_id == *block_id {
+                            new_source_id = Some(right_block.id);
+                        }
+                        if edge.target_id.is_some() && edge.target_id.unwrap() == *block_id {
+                            new_target_id = Some(left_block.id);
+                        }
+                        replacement_edges.push(ReplacementEdge {
+                            id: edge.id,
+                            new_source_id,
+                            new_target_id,
+                        });
+                        println!("new res {replacement_edges:?}");
+                    }
+                }
+            } else if contains_start {
+                // our range is overlapping the end of the block
+                // |----block---|
+                //        |----range---|
+                let left_block = Block::create(
+                    conn,
+                    &block.sequence_hash,
+                    path_id,
+                    block.start,
+                    start,
+                    &block.strand,
+                );
+                new_edges.push((left_block.id, new_block_id));
+                // what stuff went to this block?
+                for edges in block_edges.get(block_id) {
+                    for edge in edges {
+                        let mut new_source_id = None;
+                        let mut new_target_id = None;
+                        if edge.source_id == *block_id {
+                            new_source_id = Some(new_block_id);
+                        }
+                        if edge.target_id.is_some() && edge.target_id.unwrap() == *block_id {
+                            new_target_id = Some(left_block.id);
+                        }
+                        replacement_edges.push(ReplacementEdge {
+                            id: edge.id,
+                            new_source_id,
+                            new_target_id,
+                        });
+                    }
+                }
+            } else if contains_end {
+                // our range is overlapping the beginning of the block
+                //              |----block---|
+                //        |----range---|
+                let right_block = Block::create(
+                    conn,
+                    &block.sequence_hash,
+                    path_id,
+                    end,
+                    block.end,
+                    &block.strand,
+                );
+                // what stuff went to this block?
+                new_edges.push((new_block_id, right_block.id));
+                for edges in block_edges.get(block_id) {
+                    for edge in edges {
+                        let mut new_source_id = None;
+                        let mut new_target_id = None;
+                        if edge.source_id == *block_id {
+                            new_source_id = Some(right_block.id);
+                        }
+                        if edge.target_id.is_some() && edge.target_id.unwrap() == *block_id {
+                            new_target_id = Some(new_block_id);
+                        }
+                        replacement_edges.push(ReplacementEdge {
+                            id: edge.id,
+                            new_source_id,
+                            new_target_id,
+                        })
+                    }
+                }
+            } else {
+                // our range is the whole block, get rid of it
+                //          |--block---|
+                //        |-----range------|
+                // what stuff went to this block?
+                for edges in block_edges.get(block_id) {
+                    for edge in edges {
+                        let mut new_source_id = None;
+                        let mut new_target_id = None;
+                        if edge.source_id == *block_id {
+                            new_source_id = Some(new_block_id);
+                        }
+                        if edge.target_id.is_some() && edge.target_id.unwrap() == *block_id {
+                            new_target_id = Some(new_block_id);
+                        }
+                        replacement_edges.push(ReplacementEdge {
+                            id: edge.id,
+                            new_source_id,
+                            new_target_id,
+                        })
+                    }
+                }
+            }
+        }
+
+        for replacement_edge in replacement_edges {
+            let mut exist_query;
+            let mut update_query;
+            let mut placeholders: Vec<i32> = vec![];
+            if replacement_edge.new_source_id.is_some() && replacement_edge.new_target_id.is_some()
+            {
+                exist_query = "select id from edges where source_id = ?1 and target_id = ?2;";
+                update_query = "update edges set source_id = ?1 AND target_id = ?2 where id = ?3";
+                placeholders.push(replacement_edge.new_source_id.unwrap());
+                placeholders.push(replacement_edge.new_target_id.unwrap());
+            } else if replacement_edge.new_source_id.is_some() {
+                exist_query = "select id from edges where source_id = ?1 and target_id is null;";
+                update_query = "update edges set source_id = ?1 where id = ?2";
+                placeholders.push(replacement_edge.new_source_id.unwrap());
+            } else if replacement_edge.new_target_id.is_some() {
+                exist_query = "select id from edges where source_id is null and target_id = ?1;";
+                update_query = "update edges set target_id = ?1 where id = ?2";
+                placeholders.push(replacement_edge.new_target_id.unwrap());
+            } else {
+                continue;
+            }
+            println!("{exist_query:?} {update_query} {placeholders:?}");
+
+            let mut stmt = conn.prepare_cached(exist_query).unwrap();
+            if !stmt.exists(params_from_iter(&placeholders)).unwrap() {
+                placeholders.push(replacement_edge.id);
+                println!("updating {exist_query:?} {update_query} {placeholders:?}");
+                let mut stmt = conn.prepare_cached(update_query).unwrap();
+                stmt.execute(params_from_iter(&placeholders)).unwrap();
+            } else {
+                println!("edge exists");
+            }
+        }
+        for new_edge in new_edges {
+            Edge::create(conn, new_edge.0, Some(new_edge.1));
+        }
+
+        let block_keys = blocks
+            .keys()
+            .map(|k| format!("{k}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut stmt = conn
+            .prepare_cached("DELETE from block where id IN (?1)")
+            .unwrap();
+        stmt.execute([block_keys]).unwrap();
     }
-}
 
-#[derive(Debug)]
-pub struct OptionPath {
-    pub id: Option<i32>,
-    pub name: Option<String>,
-    pub collection_id: Option<i32>,
-}
+    pub fn sequence(
+        conn: &mut Connection,
+        collection_name: &str,
+        sample_name: Option<&String>,
+        path_name: &str,
+        path_index: i32,
+    ) -> String {
+        struct SequenceBlock {
+            sequence: String,
+            strand: String,
+        }
+        let mut query;
+        let mut placeholders: Vec<rusqlite::types::Value> =
+            vec![collection_name.to_string().into()];
 
-pub enum QueryPath {
-    id(i32),
-    name(String),
-    CollectionId(i32),
-    StartEdgeId(i32),
-}
-
-impl Path {
-    // pub fn get(conn: &mut Connection, filters: Vec<QueryPath>, to_fetch: Vec<&str>) -> OptionPath {
-    //     let mut clauses = vec![];
-    //     let mut placeholders: Vec<rusqlite::types::Value> = vec![];
-    //     for (index, filter) in filters.iter().enumerate() {
-    //         let prefix = match filter {
-    //             QueryPath::id(value) => {
-    //                 placeholders.push((*value).into());
-    //                 "id"
-    //             }
-    //             QueryPath::name(value) => {
-    //                 placeholders.push((*value).clone().into());
-    //                 "name"
-    //             }
-    //             QueryPath::CollectionId(value) => {
-    //                 placeholders.push((*value).into());
-    //                 "collection_id"
-    //             }
-    //             QueryPath::StartEdgeId(value) => {
-    //                 placeholders.push((*value).into());
-    //                 "start_edge_id"
-    //             }
-    //         };
-    //         clauses.push(format!("{prefix} = ?{index}", index = index + 1));
-    //     }
-    //     let mut return_columns: Vec<&str> = vec![];
-    //     let mut column_map: HashMap<&str, i32> = HashMap::new();
-    //     let mut index = 0;
-    //     for entry in ["id", "name", "collection_id"] {
-    //         if to_fetch.contains(&entry) {
-    //             column_map.insert(entry, index);
-    //             return_columns.push(entry);
-    //             index += 1;
-    //         }
-    //     }
-    //     let mut stmt = conn
-    //         .prepare(&format!(
-    //             "select {columns} from sequence where {clauses}",
-    //             columns = return_columns.join(","),
-    //             clauses = clauses.join(" AND ")
-    //         ))
-    //         .expect("Unable to prepare given SQL statement");
-    //     stmt.query_row(params_from_iter(placeholders), |row| {
-    //         Ok(OptionPath {
-    //             id: row.get(0)?,
-    //             collection_id: row.get(0)?,
-    //             name: row.get(0)?,
-    //         })
-    //     })
-    //     .expect("Unable to find collection with id.")
-    // }
-
-    // pub fn sequence(conn: &mut Connection, collection_id: i32, path_name: String) -> String {
-    //     struct SequenceBlock {
-    //         sequence: String,
-    //         strand: String,
-    //     }
-    //
-    //     let mut stmt = conn.prepare("WITH RECURSIVE traverse(x) AS (
-    //       SELECT edges.source_id FROM path left join edges on (edges.id = path.start_edge_id) WHERE path.collection_id = ?1 AND path.name = ?2
-    //       UNION
-    //       SELECT id FROM block JOIN traverse ON id = x
-    //       UNION
-    //       SELECT target_id FROM edges JOIN traverse ON source_id = x
-    //     ) select substr(seq.sequence, b.start, b.end), b.strand from block b left join sequence_collection sc on (b.sequence_collection_id = sc.id) left join sequence seq on (sc.sequence_id = seq.id) where b.id IN (SELECT x FROM traverse);").unwrap();
-    //     let mut blocks = stmt
-    //         .query_map((collection_id, path_name), |row| {
-    //             Ok(SequenceBlock {
-    //                 sequence: row.get(0)?,
-    //                 strand: row.get(1)?,
-    //             })
-    //         })
-    //         .unwrap();
-    //     let mut sequence = "".to_string();
-    //     for block in blocks {
-    //         sequence.push_str(&block.unwrap().sequence);
-    //     }
-    //     sequence
-    // }
-
-    // pub fn create(
-    //     conn: &mut Connection,
-    //     collection_id: i32,
-    //     sample_id: Option<i32>,
-    //     name: String,
-    // ) -> i32 {
-    //     let mut stmt   = conn.prepare("INSERT INTO sequence (type, name, sequence, length, circular) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING (id)").unwrap();
-    //     let mut rows = stmt
-    //         .query_map((r#type, name, sequence, sequence.len(), circular), |row| {
-    //             row.get(0)
-    //         })
-    //         .unwrap();
-    //     rows.next().unwrap().unwrap()
-    // }
+        if sample_name.is_some() {
+            query = "WITH RECURSIVE traverse(block_id, block_sequence, block_start, block_end, block_strand, depth) AS (
+          SELECT edges.source_id, substr(seq.sequence, block.start + 1, block.end - block.start), block.start, block.end, block.strand, 0 as depth FROM path left join block on (path.id = block.path_id) left join sequence seq on (seq.hash = block.sequence_hash) left join edges on (block.id = edges.source_id or block.id = edges.target_id) WHERE path.collection_name = ?1 AND path.sample_name = ?2 AND path.name = ?3 AND path.path_index = ?4 and edges.target_id is null
+          UNION
+          SELECT e2.source_id, substr(seq2.sequence, b2.start + 1, b2.end - b2.start), b2.start, b2.end, b2.strand, depth + 1 FROM edges e2 left join block b2 on (b2.id = e2.source_id) left join sequence seq2 on (seq2.hash = b2.sequence_hash) JOIN traverse t2 ON e2.target_id = t2.block_id
+        ) SELECT block_sequence as sequence, block_strand as strand FROM traverse order by depth desc;";
+            placeholders.push(sample_name.unwrap().clone().into());
+        } else {
+            query = "WITH RECURSIVE traverse(block_id, block_sequence, block_start, block_end, block_strand, depth) AS (
+          SELECT edges.source_id, substr(seq.sequence, block.start + 1, block.end - block.start), block.start, block.end, block.strand, 0 as depth FROM path left join block on (path.id = block.path_id) left join sequence seq on (seq.hash = block.sequence_hash) left join edges on (block.id = edges.source_id or block.id = edges.target_id) WHERE path.collection_name = ?1 AND path.sample_name is null AND path.name = ?2 AND path.path_index = ?3 and edges.target_id is null
+          UNION
+          SELECT e2.source_id, substr(seq2.sequence, b2.start + 1, b2.end - b2.start), b2.start, b2.end, b2.strand, depth + 1 FROM edges e2 left join block b2 on (b2.id = e2.source_id) left join sequence seq2 on (seq2.hash = b2.sequence_hash) JOIN traverse t2 ON e2.target_id = t2.block_id
+        ) SELECT block_sequence as sequence, block_strand as strand FROM traverse order by depth desc;"
+        }
+        placeholders.push(path_name.to_string().into());
+        placeholders.push(path_index.into());
+        let mut stmt = conn.prepare(query).unwrap();
+        let mut blocks = stmt
+            .query_map(params_from_iter(placeholders), |row| {
+                Ok(SequenceBlock {
+                    sequence: row.get(0)?,
+                    strand: row.get(1)?,
+                })
+            })
+            .unwrap();
+        let mut sequence = "".to_string();
+        for block in blocks {
+            sequence.push_str(&block.unwrap().sequence);
+        }
+        sequence
+    }
 }
