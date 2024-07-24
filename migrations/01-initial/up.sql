@@ -9,7 +9,7 @@ CREATE TABLE sample (
 CREATE TABLE sequence (
   hash TEXT PRIMARY KEY NOT NULL,
   sequence_type TEXT NOT NULL,
-  sequence TEXT NOT NULL,
+  sequence TEXT,
   "length" INTEGER NOT NULL
 );
 

@@ -2,7 +2,7 @@ use std::collections::hash_map::Entry::Vacant;
 use std::collections::HashMap;
 use std::fmt::*;
 
-use rusqlite::{params, params_from_iter, Connection};
+use rusqlite::{params, params_from_iter, Connection, MappedRows};
 use sha2::{Digest, Sha256};
 
 use crate::models;
@@ -89,7 +89,12 @@ pub enum QuerySequence {
 }
 
 impl Sequence {
-    pub fn create(conn: &mut Connection, sequence_type: String, sequence: &String) -> String {
+    pub fn create(
+        conn: &mut Connection,
+        sequence_type: String,
+        sequence: &String,
+        store: bool,
+    ) -> String {
         let mut hasher = Sha256::new();
         hasher.update(&sequence_type);
         hasher.update(sequence);
@@ -108,9 +113,15 @@ impl Sequence {
         if obj_hash.is_empty() {
             let mut stmt = conn.prepare("INSERT INTO sequence (hash, sequence_type, sequence, length) VALUES (?1, ?2, ?3, ?4) RETURNING (hash);").unwrap();
             let mut rows = stmt
-                .query_map((hash, sequence_type, sequence, sequence.len()), |row| {
-                    row.get(0)
-                })
+                .query_map(
+                    (
+                        hash,
+                        sequence_type,
+                        if store { sequence } else { "" },
+                        sequence.len(),
+                    ),
+                    |row| row.get(0),
+                )
                 .unwrap();
             obj_hash = rows.next().unwrap().unwrap();
         }
@@ -501,7 +512,7 @@ impl Path {
                     &block.sequence_hash,
                     path_id,
                     block.start,
-                    end,
+                    start,
                     &block.strand,
                 );
                 let right_block = Block::create(
@@ -512,6 +523,7 @@ impl Path {
                     block.end,
                     &block.strand,
                 );
+                println!("lb {left_block:?} {right_block:?}");
                 new_edges.push((left_block.id, new_block_id));
                 new_edges.push((new_block_id, right_block.id));
                 // what stuff went to this block?
@@ -543,7 +555,7 @@ impl Path {
                     &block.sequence_hash,
                     path_id,
                     block.start,
-                    end,
+                    start,
                     &block.strand,
                 );
                 new_edges.push((left_block.id, new_block_id));
@@ -668,114 +680,51 @@ impl Path {
             .unwrap();
         stmt.execute([block_keys]).unwrap();
     }
-}
 
-#[derive(Debug)]
-pub struct OptionPath {
-    pub id: Option<i32>,
-    pub name: Option<String>,
-    pub collection_id: Option<i32>,
-}
+    pub fn sequence(
+        conn: &mut Connection,
+        collection_name: &str,
+        sample_name: Option<&String>,
+        path_name: &str,
+        path_index: i32,
+    ) -> String {
+        struct SequenceBlock {
+            sequence: String,
+            strand: String,
+        }
+        let mut query;
+        let mut placeholders: Vec<rusqlite::types::Value> =
+            vec![collection_name.to_string().into()];
 
-pub enum QueryPath {
-    id(i32),
-    name(String),
-    CollectionId(i32),
-    StartEdgeId(i32),
-}
-
-impl Path {
-    // pub fn get(conn: &mut Connection, filters: Vec<QueryPath>, to_fetch: Vec<&str>) -> OptionPath {
-    //     let mut clauses = vec![];
-    //     let mut placeholders: Vec<rusqlite::types::Value> = vec![];
-    //     for (index, filter) in filters.iter().enumerate() {
-    //         let prefix = match filter {
-    //             QueryPath::id(value) => {
-    //                 placeholders.push((*value).into());
-    //                 "id"
-    //             }
-    //             QueryPath::name(value) => {
-    //                 placeholders.push((*value).clone().into());
-    //                 "name"
-    //             }
-    //             QueryPath::CollectionId(value) => {
-    //                 placeholders.push((*value).into());
-    //                 "collection_id"
-    //             }
-    //             QueryPath::StartEdgeId(value) => {
-    //                 placeholders.push((*value).into());
-    //                 "start_edge_id"
-    //             }
-    //         };
-    //         clauses.push(format!("{prefix} = ?{index}", index = index + 1));
-    //     }
-    //     let mut return_columns: Vec<&str> = vec![];
-    //     let mut column_map: HashMap<&str, i32> = HashMap::new();
-    //     let mut index = 0;
-    //     for entry in ["id", "name", "collection_id"] {
-    //         if to_fetch.contains(&entry) {
-    //             column_map.insert(entry, index);
-    //             return_columns.push(entry);
-    //             index += 1;
-    //         }
-    //     }
-    //     let mut stmt = conn
-    //         .prepare(&format!(
-    //             "select {columns} from sequence where {clauses}",
-    //             columns = return_columns.join(","),
-    //             clauses = clauses.join(" AND ")
-    //         ))
-    //         .expect("Unable to prepare given SQL statement");
-    //     stmt.query_row(params_from_iter(placeholders), |row| {
-    //         Ok(OptionPath {
-    //             id: row.get(0)?,
-    //             collection_id: row.get(0)?,
-    //             name: row.get(0)?,
-    //         })
-    //     })
-    //     .expect("Unable to find collection with id.")
-    // }
-
-    // pub fn sequence(conn: &mut Connection, collection_id: i32, path_name: String) -> String {
-    //     struct SequenceBlock {
-    //         sequence: String,
-    //         strand: String,
-    //     }
-    //
-    //     let mut stmt = conn.prepare("WITH RECURSIVE traverse(x) AS (
-    //       SELECT edges.source_id FROM path left join edges on (edges.id = path.start_edge_id) WHERE path.collection_id = ?1 AND path.name = ?2
-    //       UNION
-    //       SELECT id FROM block JOIN traverse ON id = x
-    //       UNION
-    //       SELECT target_id FROM edges JOIN traverse ON source_id = x
-    //     ) select substr(seq.sequence, b.start, b.end), b.strand from block b left join sequence_collection sc on (b.sequence_collection_id = sc.id) left join sequence seq on (sc.sequence_id = seq.id) where b.id IN (SELECT x FROM traverse);").unwrap();
-    //     let mut blocks = stmt
-    //         .query_map((collection_id, path_name), |row| {
-    //             Ok(SequenceBlock {
-    //                 sequence: row.get(0)?,
-    //                 strand: row.get(1)?,
-    //             })
-    //         })
-    //         .unwrap();
-    //     let mut sequence = "".to_string();
-    //     for block in blocks {
-    //         sequence.push_str(&block.unwrap().sequence);
-    //     }
-    //     sequence
-    // }
-
-    // pub fn create(
-    //     conn: &mut Connection,
-    //     collection_id: i32,
-    //     sample_id: Option<i32>,
-    //     name: String,
-    // ) -> i32 {
-    //     let mut stmt   = conn.prepare("INSERT INTO sequence (type, name, sequence, length, circular) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING (id)").unwrap();
-    //     let mut rows = stmt
-    //         .query_map((r#type, name, sequence, sequence.len(), circular), |row| {
-    //             row.get(0)
-    //         })
-    //         .unwrap();
-    //     rows.next().unwrap().unwrap()
-    // }
+        if sample_name.is_some() {
+            query = "WITH RECURSIVE traverse(block_id, block_sequence, block_start, block_end, block_strand, depth) AS (
+          SELECT edges.source_id, substr(seq.sequence, block.start + 1, block.end - block.start), block.start, block.end, block.strand, 0 as depth FROM path left join block on (path.id = block.path_id) left join sequence seq on (seq.hash = block.sequence_hash) left join edges on (block.id = edges.source_id or block.id = edges.target_id) WHERE path.collection_name = ?1 AND path.sample_name = ?2 AND path.name = ?3 AND path.path_index = ?4 and edges.target_id is null
+          UNION
+          SELECT e2.source_id, substr(seq2.sequence, b2.start + 1, b2.end - b2.start), b2.start, b2.end, b2.strand, depth + 1 FROM edges e2 left join block b2 on (b2.id = e2.source_id) left join sequence seq2 on (seq2.hash = b2.sequence_hash) JOIN traverse t2 ON e2.target_id = t2.block_id
+        ) SELECT block_sequence as sequence, block_strand as strand FROM traverse order by depth desc;";
+            placeholders.push(sample_name.unwrap().clone().into());
+        } else {
+            query = "WITH RECURSIVE traverse(block_id, block_sequence, block_start, block_end, block_strand, depth) AS (
+          SELECT edges.source_id, substr(seq.sequence, block.start + 1, block.end - block.start), block.start, block.end, block.strand, 0 as depth FROM path left join block on (path.id = block.path_id) left join sequence seq on (seq.hash = block.sequence_hash) left join edges on (block.id = edges.source_id or block.id = edges.target_id) WHERE path.collection_name = ?1 AND path.sample_name is null AND path.name = ?2 AND path.path_index = ?3 and edges.target_id is null
+          UNION
+          SELECT e2.source_id, substr(seq2.sequence, b2.start + 1, b2.end - b2.start), b2.start, b2.end, b2.strand, depth + 1 FROM edges e2 left join block b2 on (b2.id = e2.source_id) left join sequence seq2 on (seq2.hash = b2.sequence_hash) JOIN traverse t2 ON e2.target_id = t2.block_id
+        ) SELECT block_sequence as sequence, block_strand as strand FROM traverse order by depth desc;"
+        }
+        placeholders.push(path_name.to_string().into());
+        placeholders.push(path_index.into());
+        let mut stmt = conn.prepare(query).unwrap();
+        let mut blocks = stmt
+            .query_map(params_from_iter(placeholders), |row| {
+                Ok(SequenceBlock {
+                    sequence: row.get(0)?,
+                    strand: row.get(1)?,
+                })
+            })
+            .unwrap();
+        let mut sequence = "".to_string();
+        for block in blocks {
+            sequence.push_str(&block.unwrap().sequence);
+        }
+        sequence
+    }
 }
