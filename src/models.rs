@@ -2,7 +2,7 @@ use std::collections::hash_map::Entry::Vacant;
 use std::collections::HashMap;
 use std::fmt::*;
 
-use rusqlite::{params, params_from_iter, Connection, MappedRows};
+use rusqlite::{params_from_iter, Connection};
 use sha2::{Digest, Sha256};
 
 use crate::models;
@@ -10,10 +10,6 @@ use crate::models;
 #[derive(Debug)]
 pub struct Collection {
     pub name: String,
-}
-
-pub enum QueryCollection {
-    name(String),
 }
 
 impl Collection {
@@ -72,20 +68,6 @@ pub struct Sequence {
     pub sequence_type: String,
     pub sequence: String,
     pub length: i32,
-}
-
-pub struct OptionSequence {
-    pub hash: Option<String>,
-    pub sequence_type: Option<String>,
-    pub sequence: Option<String>,
-    pub length: Option<i32>,
-}
-
-pub enum QuerySequence {
-    hash(String),
-    sequence_type(String),
-    sequence(String),
-    length(i32),
 }
 
 impl Sequence {
@@ -240,29 +222,6 @@ impl Edge {
             }
         }
     }
-
-    // pub fn bulk_create(conn: &mut Connection, edges: &Vec<Edge>) -> Vec<Edge> {
-    //     let tx = conn.transaction().unwrap();
-    //     let mut results = vec![];
-    //     for edge in edges {
-    //         let mut stmt = tx
-    //             .prepare("INSERT INTO edges (source_id, target_id) VALUES (?1, ?2) RETURNING *")
-    //             .unwrap();
-    //         let result = stmt
-    //             .query_row([edge.source_id, edge.target_id], |row| {
-    //                 Ok(models::Edge {
-    //                     id: row.get(0)?,
-    //                     source_id: row.get(1)?,
-    //                     target_id: row.get(2)?,
-    //                 })
-    //             })
-    //             .unwrap();
-    //         results.push(result);
-    //     }
-    //     tx.commit()
-    //         .unwrap_or_else(|_| panic!("failed to commit changes."));
-    //     results
-    // }
 }
 
 #[derive(Debug)]
