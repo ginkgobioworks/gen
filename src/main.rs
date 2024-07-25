@@ -110,19 +110,23 @@ fn import_gfa(gfa_path: &String, collection_name: &String, conn: &mut Connection
         }
     }
 
+    let mut source_block_ids: HashSet<i32> = HashSet::new();
+    let mut target_block_ids: HashSet<i32> = HashSet::new();
+
     for link in &gfa.links {
         let source_name = String::from_utf8(link.from_segment.clone()).unwrap();
         let target_name = String::from_utf8(link.to_segment.clone()).unwrap();
         let source_block = created_blocks_by_segment_name.get(&source_name).unwrap();
         let target_block = created_blocks_by_segment_name.get(&target_name).unwrap();
         models::Edge::create(conn, source_block.id, Some(target_block.id));
+        source_block_ids.insert(source_block.id);
+        target_block_ids.insert(target_block.id);
     }
 
-    if !gfa.links.is_empty() {
-        let last_link = gfa.links.last().unwrap();
-        let source_name = String::from_utf8(last_link.to_segment.clone()).unwrap();
-        let source_block = created_blocks_by_segment_name.get(&source_name).unwrap();
-        models::Edge::create(conn, source_block.id, None);
+    let end_block_ids = target_block_ids.difference(&source_block_ids);
+
+    for end_block_id in end_block_ids {
+        models::Edge::create(conn, *end_block_id, None);
     }
 }
 
