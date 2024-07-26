@@ -1,6 +1,6 @@
 #![allow(warnings)]
 use clap::{Parser, Subcommand};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::PathBuf;
 
@@ -8,6 +8,7 @@ use bio::io::fasta;
 use gen::get_connection;
 use gen::migrations::run_migrations;
 use gen::models::{self, Block, Path};
+use gfa_reader::Gfa;
 use noodles::vcf;
 use noodles::vcf::variant::record::samples::series::Value;
 use noodles::vcf::variant::record::samples::{Sample, Series};
@@ -157,6 +158,94 @@ fn update_with_vcf(vcf_path: &String, collection_name: &String, conn: &mut Conne
     }
 }
 
+fn import_gfa(gfa_path: &str, collection_name: &String, conn: &mut Connection) {
+    run_migrations(conn);
+
+    let gfa: Gfa<u64, (), ()> = Gfa::parse_gfa_file(gfa_path);
+
+    let collection = models::Collection::create(conn, collection_name);
+
+    let mut blocks_by_segment_id: HashMap<u64, Block> = HashMap::new();
+
+    for segment in &gfa.segments {
+        let sequence = segment.sequence.get_string(&gfa.sequence);
+        let seq_hash =
+            models::Sequence::create(conn, "DNA".to_string(), &sequence.to_string(), true);
+        let block = Block {
+            id: 0,
+            path_id: 0,
+            sequence_hash: seq_hash,
+            start: 0,
+            end: (sequence.len() as i32),
+            strand: "1".to_string(),
+        };
+        let segment_id = segment.id;
+        blocks_by_segment_id.insert(segment_id, block);
+    }
+
+    let mut created_blocks_by_segment_id: HashMap<u64, Block> = HashMap::new();
+
+    for input_path in &gfa.paths {
+        let path_name = &input_path.name;
+        // TODO: Fix Some(1)
+        let path = models::Path::create(conn, &collection.name, None, path_name, Some(1));
+        for segment_id in input_path.nodes.iter() {
+            let block = blocks_by_segment_id.get(segment_id).unwrap();
+            let created_block = Block::create(
+                conn,
+                &block.sequence_hash,
+                path.id,
+                block.start,
+                block.end,
+                &block.strand,
+            );
+            created_blocks_by_segment_id.insert(*segment_id, created_block);
+        }
+    }
+
+    for input_walk in &gfa.walk {
+        // TODO: Is this what we want to use for the path name?
+        let walk_id = &input_walk.sample_id;
+        // TODO: Fix Some(1)
+        let path = models::Path::create(conn, &collection.name, None, walk_id, Some(1));
+        for segment_id in input_walk.walk_id.iter() {
+            let block = blocks_by_segment_id.get(segment_id).unwrap();
+            let created_block = Block::create(
+                conn,
+                &block.sequence_hash,
+                path.id,
+                block.start,
+                block.end,
+                &block.strand,
+            );
+            created_blocks_by_segment_id.insert(*segment_id, created_block);
+        }
+    }
+
+    let mut source_block_ids: HashSet<i32> = HashSet::new();
+    let mut target_block_ids: HashSet<i32> = HashSet::new();
+
+    for link in &gfa.links {
+        let source_segment_id = link.from;
+        let target_segment_id = link.to;
+        let source_block = created_blocks_by_segment_id
+            .get(&source_segment_id)
+            .unwrap();
+        let target_block = created_blocks_by_segment_id
+            .get(&target_segment_id)
+            .unwrap();
+        models::Edge::create(conn, source_block.id, Some(target_block.id));
+        source_block_ids.insert(source_block.id);
+        target_block_ids.insert(target_block.id);
+    }
+
+    let end_block_ids = target_block_ids.difference(&source_block_ids);
+
+    for end_block_id in end_block_ids {
+        models::Edge::create(conn, *end_block_id, None);
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -223,5 +312,31 @@ mod tests {
             Path::sequence(conn, &collection, Some(&"foo".to_string()), "m123", 1),
             "ATCATCGATCGATCGATCGGGAACACACAGAGA"
         );
+    }
+
+    #[test]
+    fn test_import_simple_gfa() {
+        let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        gfa_path.push("fixtures/simple.gfa");
+
+        let collection_name = "test".to_string();
+        let conn = &mut get_connection();
+        import_gfa(gfa_path.to_str().unwrap(), &collection_name, conn);
+
+        let result = Path::sequence(conn, &collection_name, None, "124", 1);
+        assert_eq!(result, "ATGGCATATTCGCAGCT");
+    }
+
+    #[test]
+    fn test_import_gfa_with_walk() {
+        let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        gfa_path.push("fixtures/walk.gfa");
+
+        let collection_name = "walk".to_string();
+        let conn = &mut get_connection();
+        import_gfa(gfa_path.to_str().unwrap(), &collection_name, conn);
+
+        let result = Path::sequence(conn, &collection_name, None, "291344", 1);
+        assert_eq!(result, "ACCTACAAATTCAAAC");
     }
 }
