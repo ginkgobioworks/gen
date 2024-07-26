@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.5.8", features = ["derive"] }
-gfa = "0.10.1"
+gfa-reader = { git = "https://github.com/MoinSebi/gfa-reader", branch = "master" }
 include_dir = "0.7.4"
 intervaltree = "0.2.7"
 itertools = "0.13.0"
