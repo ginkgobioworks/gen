@@ -15,27 +15,32 @@ CREATE TABLE sequence (
 
 CREATE TABLE path (
   id INTEGER PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  path_index INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE block_group (
+  id INTEGER PRIMARY KEY NOT NULL,
   collection_name TEXT NOT NULL,
   sample_name TEXT,
   name TEXT NOT NULL,
-  path_index INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY(collection_name) REFERENCES collection(name),
   FOREIGN KEY(sample_name) REFERENCES sample(name)
 );
-CREATE UNIQUE INDEX path_uidx ON path(collection_name, sample_name, name, path_index);
+CREATE UNIQUE INDEX block_group_uidx ON block_group(collection_name, sample_name, name);
 
 CREATE TABLE block (
   id INTEGER PRIMARY KEY NOT NULL,
   sequence_hash TEXT NOT NULL,
-  path_id INTEGER NOT NULL,
+  block_group_id INTEGER NOT NULL,
   "start" INTEGER NOT NULL,
   "end" INTEGER NOT NULL,
   strand TEXT NOT NULL DEFAULT "1",
   FOREIGN KEY(sequence_hash) REFERENCES sequence(hash),
-  FOREIGN KEY(path_id) REFERENCES path(id),
+  FOREIGN KEY(block_group_id) REFERENCES block_group(id),
   constraint chk_strand check (strand in ('-1', '1', '0', '.', '?'))
 );
-CREATE UNIQUE INDEX block_uidx ON block(sequence_hash, path_id, start, end, strand);
+CREATE UNIQUE INDEX block_uidx ON block(sequence_hash, block_group_id, start, end, strand);
 
 CREATE TABLE edges (
   id INTEGER PRIMARY KEY NOT NULL,

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use bio::io::fasta;
 use gen::get_connection;
 use gen::migrations::run_migrations;
-use gen::models::{self, Block, Path};
+use gen::models::{self, Block, BlockGroup, Path};
 use noodles::vcf;
 use noodles::vcf::variant::record::samples::series::Value;
 use noodles::vcf::variant::record::samples::{Sample, Series};
@@ -69,12 +69,12 @@ fn import_fasta(fasta: &String, name: &String, shallow: bool, conn: &mut Connect
             let record = result.expect("Error during fasta record parsing");
             let sequence = String::from_utf8(record.seq().to_vec()).unwrap();
             let seq_hash = models::Sequence::create(conn, "DNA".to_string(), &sequence, !shallow);
-            let path =
-                models::Path::create(conn, &collection.name, None, &record.id().to_string(), None);
+            let block_group =
+                BlockGroup::create(conn, &collection.name, None, &record.id().to_string());
             let block = Block::create(
                 conn,
                 &seq_hash,
-                path.id,
+                block_group.id,
                 0,
                 (sequence.len() as i32),
                 &"1".to_string(),
@@ -125,12 +125,11 @@ fn update_with_vcf(vcf_path: &String, collection_name: &String, conn: &mut Conne
                                     &alt_seq.to_string(),
                                     true,
                                 );
-                                let sample_path_id = models::Path::get_or_create_sample_path(
+                                let sample_path_id = BlockGroup::get_or_create_sample_block_group(
                                     conn,
                                     collection_name,
                                     &sample_names[sample_index],
                                     &seq_name,
-                                    haplotype as i32,
                                 );
                                 let new_block_id = Block::create(
                                     conn,
@@ -140,7 +139,7 @@ fn update_with_vcf(vcf_path: &String, collection_name: &String, conn: &mut Conne
                                     alt_seq.len() as i32,
                                     &"1".to_string(),
                                 );
-                                Path::insert_change(
+                                BlockGroup::insert_change(
                                     conn,
                                     sample_path_id,
                                     ref_start as i32,
@@ -220,7 +219,7 @@ mod tests {
         );
         update_with_vcf(&vcf_path.to_str().unwrap().to_string(), &collection, conn);
         assert_eq!(
-            Path::sequence(conn, &collection, Some(&"foo".to_string()), "m123", 1),
+            BlockGroup::sequence(conn, &collection, Some(&"foo".to_string()), "m123"),
             "ATCATCGATCGATCGATCGGGAACACACAGAGA"
         );
     }
