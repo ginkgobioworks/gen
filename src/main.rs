@@ -7,8 +7,9 @@ use std::path::PathBuf;
 use bio::io::fasta;
 use gen::get_connection;
 use gen::migrations::run_migrations;
-use gen::models::{self, Block, BlockGroup, Path};
+use gen::models::{self, Block, BlockGroup, Sequence};
 use noodles::vcf;
+use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use noodles::vcf::variant::record::samples::series::Value;
 use noodles::vcf::variant::record::samples::{Sample, Series};
 use noodles::vcf::variant::record::{AlternateBases, ReferenceBases, Samples};
@@ -79,7 +80,7 @@ fn import_fasta(fasta: &String, name: &String, shallow: bool, conn: &mut Connect
                 (sequence.len() as i32),
                 &"1".to_string(),
             );
-            let edge = models::Edge::create(conn, block.id, None);
+            let edge = models::Edge::create(conn, block.id, None, 0, 0);
         }
         println!("Created it");
     } else {
@@ -109,45 +110,53 @@ fn update_with_vcf(vcf_path: &String, collection_name: &String, conn: &mut Conne
         let alt_alleles: Vec<_> = alt_bases.iter().collect::<io::Result<_>>().unwrap();
         for (sample_index, sample) in record.samples().iter().enumerate() {
             let genotype = sample.get(&header, "GT");
-            let mut seen_haplotypes: HashSet<i32> = HashSet::new();
+            let mut seen_alleles: HashSet<i32> = HashSet::new();
             if genotype.is_some() {
                 if let Value::Genotype(genotypes) = genotype.unwrap().unwrap().unwrap() {
-                    for gt in genotypes.iter() {
+                    for (chromosome_index, gt) in genotypes.iter().enumerate() {
                         if gt.is_ok() {
-                            let (haplotype, phasing) = gt.unwrap();
-                            let haplotype = haplotype.unwrap();
-                            if haplotype != 0 && !seen_haplotypes.contains(&(haplotype as i32)) {
-                                let alt_seq = alt_alleles[haplotype - 1];
+                            let (allele, phasing) = gt.unwrap();
+                            let phased = match phasing {
+                                Phasing::Phased => 1,
+                                Phasing::Unphased => 0,
+                            };
+                            let allele = allele.unwrap();
+                            if allele != 0 && !seen_alleles.contains(&(allele as i32)) {
+                                let alt_seq = alt_alleles[allele - 1];
                                 // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
-                                let new_sequence_hash = models::Sequence::create(
+                                let new_sequence_hash = Sequence::create(
                                     conn,
                                     "DNA".to_string(),
                                     &alt_seq.to_string(),
                                     true,
                                 );
-                                let sample_path_id = BlockGroup::get_or_create_sample_block_group(
+                                let sample_bg_id = BlockGroup::get_or_create_sample_block_group(
                                     conn,
                                     collection_name,
                                     &sample_names[sample_index],
                                     &seq_name,
+                                    chromosome_index as i32,
+                                    phased,
                                 );
                                 let new_block_id = Block::create(
                                     conn,
                                     &new_sequence_hash,
-                                    sample_path_id,
+                                    sample_bg_id,
                                     0,
                                     alt_seq.len() as i32,
                                     &"1".to_string(),
                                 );
                                 BlockGroup::insert_change(
                                     conn,
-                                    sample_path_id,
+                                    sample_bg_id,
                                     ref_start as i32,
                                     ref_end as i32,
                                     new_block_id.id,
+                                    chromosome_index as i32,
+                                    phased,
                                 );
                             }
-                            seen_haplotypes.insert(haplotype as i32);
+                            seen_alleles.insert(allele as i32);
                         }
                     }
                 }

@@ -177,22 +177,34 @@ pub struct Edge {
     pub id: i32,
     pub source_id: i32,
     pub target_id: Option<i32>,
+    pub chromosome_index: i32,
+    pub phased: i32,
 }
 
 impl Edge {
-    pub fn create(conn: &Connection, source_id: i32, target_id: Option<i32>) -> Edge {
+    pub fn create(
+        conn: &Connection,
+        source_id: i32,
+        target_id: Option<i32>,
+        chromosome_index: i32,
+        phased: i32,
+    ) -> Edge {
         let mut query;
         let mut id_query;
         let mut placeholders = vec![];
         if target_id.is_some() {
-            query = "INSERT INTO edges (source_id, target_id) VALUES (?1, ?2) RETURNING *";
+            query = "INSERT INTO edges (source_id, target_id, chromosome_index, phased) VALUES (?1, ?2, ?3, ?4) RETURNING *";
             id_query = "select id from edges where source_id = ?1 and target_id = ?2";
             placeholders.push(source_id);
             placeholders.push(target_id.unwrap());
+            placeholders.push(chromosome_index);
+            placeholders.push(phased);
         } else {
-            id_query = "select id from edges where source_id = ?1 and target_id is null";
-            query = "INSERT INTO edges (source_id) VALUES (?1) RETURNING *";
+            id_query = "select id from edges where source_id = ?1 and target_id is null and chromosome_index = ?2 and phased = ?3";
+            query = "INSERT INTO edges (source_id, chromosome_index, phased) VALUES (?1, ?2, ?3) RETURNING *";
             placeholders.push(source_id);
+            placeholders.push(chromosome_index);
+            placeholders.push(phased);
         }
         let mut stmt = conn.prepare(query).unwrap();
         match stmt.query_row(params_from_iter(&placeholders), |row| {
@@ -200,6 +212,8 @@ impl Edge {
                 id: row.get(0)?,
                 source_id: row.get(1)?,
                 target_id: row.get(2)?,
+                chromosome_index: row.get(3)?,
+                phased: row.get(4)?,
             })
         }) {
             Ok(edge) => edge,
@@ -212,6 +226,8 @@ impl Edge {
                             .unwrap(),
                         source_id,
                         target_id,
+                        chromosome_index,
+                        phased,
                     }
                 } else {
                     panic!("something bad happened querying the database")
@@ -739,7 +755,13 @@ impl BlockGroup {
         }
     }
 
-    pub fn clone(conn: &mut Connection, source_id: i32, target_id: i32) {
+    pub fn clone(
+        conn: &mut Connection,
+        source_id: i32,
+        target_id: i32,
+        chromosome_index: i32,
+        phased: i32,
+    ) {
         let mut stmt = conn
             .prepare_cached(
                 "SELECT id, sequence_hash, start, end, strand from block where block_group_id = ?1",
@@ -779,6 +801,8 @@ impl BlockGroup {
                 conn,
                 *block_map.get(&source_id).unwrap_or(&source_id),
                 target_id,
+                chromosome_index,
+                phased,
             );
             row = it.next().unwrap();
         }
@@ -789,6 +813,8 @@ impl BlockGroup {
         collection_name: &String,
         sample_name: &String,
         group_name: &String,
+        chromosome_index: i32,
+        phased: i32,
     ) -> i32 {
         let mut bg_id : i32 = match conn.query_row(
             "select id from block_group where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
@@ -820,7 +846,7 @@ impl BlockGroup {
         let new_bg_id = BlockGroup::create(conn, collection_name, Some(sample_name), group_name);
 
         // clone parent blocks/edges
-        BlockGroup::clone(conn, bg_id, new_bg_id.id);
+        BlockGroup::clone(conn, bg_id, new_bg_id.id, chromosome_index, phased);
 
         new_bg_id.id
     }
@@ -833,6 +859,8 @@ impl BlockGroup {
         start: i32,
         end: i32,
         new_block_id: i32,
+        chromosome_index: i32,
+        phased: i32,
     ) {
         println!("change is {block_group_id} {start} {end} {new_block_id}");
         // todo:
@@ -847,7 +875,7 @@ impl BlockGroup {
         //  change that hits just start/end boundry, e.g. block is 1,5 and change is 3,5 or 1,3.
         //  change that deletes block boundry
         // https://stackoverflow.com/questions/3269434/whats-the-most-efficient-way-to-test-if-two-ranges-overlap
-        let mut stmt = conn.prepare_cached("select b.id, b.sequence_hash, b.block_group_id, b.start, b.end, b.strand, e.id as edge_id, e.source_id, e.target_id from block b left join edges e on (e.source_id = b.id or e.target_id = b.id) where b.block_group_id = ?1 AND b.start <= ?3 AND ?2 <= b.end AND b.id != ?4;").unwrap();
+        let mut stmt = conn.prepare_cached("select b.id, b.sequence_hash, b.block_group_id, b.start, b.end, b.strand, e.id as edge_id, e.source_id, e.target_id, e.chromosome_index, e.phased from block b left join edges e on (e.source_id = b.id or e.target_id = b.id) where b.block_group_id = ?1 AND b.start <= ?3 AND ?2 <= b.end AND b.id != ?4;").unwrap();
         let mut block_edges: HashMap<i32, Vec<Edge>> = HashMap::new();
         let mut blocks: HashMap<i32, Block> = HashMap::new();
         let mut it = stmt
@@ -875,12 +903,16 @@ impl BlockGroup {
                         id: edge_id.unwrap(),
                         source_id: entry.get(7).unwrap(),
                         target_id: entry.get(8).unwrap(),
+                        chromosome_index: entry.get(9).unwrap(),
+                        phased: entry.get(10).unwrap(),
                     }]);
                 } else {
                     block_edges.get_mut(&block_id).unwrap().push(Edge {
                         id: entry.get(6).unwrap(),
                         source_id: entry.get(7).unwrap(),
                         target_id: entry.get(8).unwrap(),
+                        chromosome_index: entry.get(9).unwrap(),
+                        phased: entry.get(10).unwrap(),
                     });
                 }
             } else {
@@ -1066,7 +1098,7 @@ impl BlockGroup {
             }
         }
         for new_edge in new_edges {
-            Edge::create(conn, new_edge.0, Some(new_edge.1));
+            Edge::create(conn, new_edge.0, Some(new_edge.1), chromosome_index, phased);
         }
 
         let block_keys = blocks
