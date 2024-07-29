@@ -755,13 +755,7 @@ impl BlockGroup {
         }
     }
 
-    pub fn clone(
-        conn: &mut Connection,
-        source_id: i32,
-        target_id: i32,
-        chromosome_index: i32,
-        phased: i32,
-    ) {
+    pub fn clone(conn: &mut Connection, source_id: i32, target_id: i32) {
         let mut stmt = conn
             .prepare_cached(
                 "SELECT id, sequence_hash, start, end, strand from block where block_group_id = ?1",
@@ -801,8 +795,8 @@ impl BlockGroup {
                 conn,
                 *block_map.get(&source_id).unwrap_or(&source_id),
                 target_id,
-                chromosome_index,
-                phased,
+                0,
+                0,
             );
             row = it.next().unwrap();
         }
@@ -813,8 +807,6 @@ impl BlockGroup {
         collection_name: &String,
         sample_name: &String,
         group_name: &String,
-        chromosome_index: i32,
-        phased: i32,
     ) -> i32 {
         let mut bg_id : i32 = match conn.query_row(
             "select id from block_group where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
@@ -846,7 +838,7 @@ impl BlockGroup {
         let new_bg_id = BlockGroup::create(conn, collection_name, Some(sample_name), group_name);
 
         // clone parent blocks/edges
-        BlockGroup::clone(conn, bg_id, new_bg_id.id, chromosome_index, phased);
+        BlockGroup::clone(conn, bg_id, new_bg_id.id);
 
         new_bg_id.id
     }
@@ -875,7 +867,7 @@ impl BlockGroup {
         //  change that hits just start/end boundry, e.g. block is 1,5 and change is 3,5 or 1,3.
         //  change that deletes block boundry
         // https://stackoverflow.com/questions/3269434/whats-the-most-efficient-way-to-test-if-two-ranges-overlap
-        let mut stmt = conn.prepare_cached("select b.id, b.sequence_hash, b.block_group_id, b.start, b.end, b.strand, e.id as edge_id, e.source_id, e.target_id, e.chromosome_index, e.phased from block b left join edges e on (e.source_id = b.id or e.target_id = b.id) where b.block_group_id = ?1 AND b.start <= ?3 AND ?2 <= b.end AND b.id != ?4;").unwrap();
+        let mut stmt = conn.prepare_cached("select b.id, b.sequence_hash, b.block_group_id, b.start, b.end, b.strand, e.id as edge_id, e.source_id, e.target_id, e.chromosome_index, e.phased from block b left join edges e on (e.source_id = b.id or e.target_id = b.id) where b.block_group_id = ?1 AND b.start <= ?3 AND ?2 <= b.end AND b.id != ?4 AND e.chromosome_index = 0;").unwrap();
         let mut block_edges: HashMap<i32, Vec<Edge>> = HashMap::new();
         let mut blocks: HashMap<i32, Block> = HashMap::new();
         let mut it = stmt

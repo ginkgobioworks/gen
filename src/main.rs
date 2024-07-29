@@ -1,6 +1,6 @@
 #![allow(warnings)]
 use clap::{Parser, Subcommand};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::PathBuf;
 
@@ -108,9 +108,10 @@ fn update_with_vcf(vcf_path: &String, collection_name: &String, conn: &mut Conne
         let ref_end = record.variant_end(&header).unwrap().get();
         let alt_bases = record.alternate_bases();
         let alt_alleles: Vec<_> = alt_bases.iter().collect::<io::Result<_>>().unwrap();
+        let mut created: HashSet<i32> = HashSet::new();
         for (sample_index, sample) in record.samples().iter().enumerate() {
             let genotype = sample.get(&header, "GT");
-            let mut seen_alleles: HashSet<i32> = HashSet::new();
+            let mut allele_blocks: HashMap<i32, i32> = HashMap::new();
             if genotype.is_some() {
                 if let Value::Genotype(genotypes) = genotype.unwrap().unwrap().unwrap() {
                     for (chromosome_index, gt) in genotypes.iter().enumerate() {
@@ -121,7 +122,7 @@ fn update_with_vcf(vcf_path: &String, collection_name: &String, conn: &mut Conne
                                 Phasing::Unphased => 0,
                             };
                             let allele = allele.unwrap();
-                            if allele != 0 && !seen_alleles.contains(&(allele as i32)) {
+                            if allele != 0 {
                                 let alt_seq = alt_alleles[allele - 1];
                                 // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
                                 let new_sequence_hash = Sequence::create(
@@ -135,8 +136,6 @@ fn update_with_vcf(vcf_path: &String, collection_name: &String, conn: &mut Conne
                                     collection_name,
                                     &sample_names[sample_index],
                                     &seq_name,
-                                    chromosome_index as i32,
-                                    phased,
                                 );
                                 let new_block_id = Block::create(
                                     conn,
@@ -146,6 +145,7 @@ fn update_with_vcf(vcf_path: &String, collection_name: &String, conn: &mut Conne
                                     alt_seq.len() as i32,
                                     &"1".to_string(),
                                 );
+                                println!("{sample_bg_id} {new_block_id:?} {chromosome_index} {phased} {allele}");
                                 BlockGroup::insert_change(
                                     conn,
                                     sample_bg_id,
@@ -156,7 +156,6 @@ fn update_with_vcf(vcf_path: &String, collection_name: &String, conn: &mut Conne
                                     phased,
                                 );
                             }
-                            seen_alleles.insert(allele as i32);
                         }
                     }
                 }
