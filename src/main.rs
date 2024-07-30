@@ -1,14 +1,15 @@
 #![allow(warnings)]
 use clap::{Parser, Subcommand};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::PathBuf;
 
 use bio::io::fasta;
 use gen::get_connection;
 use gen::migrations::run_migrations;
-use gen::models::{self, Block, Path};
+use gen::models::{self, Block, BlockGroup, Sequence};
 use noodles::vcf;
+use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use noodles::vcf::variant::record::samples::series::Value;
 use noodles::vcf::variant::record::samples::{Sample, Series};
 use noodles::vcf::variant::record::{AlternateBases, ReferenceBases, Samples};
@@ -69,17 +70,17 @@ fn import_fasta(fasta: &String, name: &String, shallow: bool, conn: &mut Connect
             let record = result.expect("Error during fasta record parsing");
             let sequence = String::from_utf8(record.seq().to_vec()).unwrap();
             let seq_hash = models::Sequence::create(conn, "DNA".to_string(), &sequence, !shallow);
-            let path =
-                models::Path::create(conn, &collection.name, None, &record.id().to_string(), None);
+            let block_group =
+                BlockGroup::create(conn, &collection.name, None, &record.id().to_string());
             let block = Block::create(
                 conn,
                 &seq_hash,
-                path.id,
+                block_group.id,
                 0,
                 (sequence.len() as i32),
                 &"1".to_string(),
             );
-            let edge = models::Edge::create(conn, block.id, None);
+            let edge = models::Edge::create(conn, block.id, None, 0, 0);
         }
         println!("Created it");
     } else {
@@ -107,48 +108,54 @@ fn update_with_vcf(vcf_path: &String, collection_name: &String, conn: &mut Conne
         let ref_end = record.variant_end(&header).unwrap().get();
         let alt_bases = record.alternate_bases();
         let alt_alleles: Vec<_> = alt_bases.iter().collect::<io::Result<_>>().unwrap();
+        let mut created: HashSet<i32> = HashSet::new();
         for (sample_index, sample) in record.samples().iter().enumerate() {
             let genotype = sample.get(&header, "GT");
-            let mut seen_haplotypes: HashSet<i32> = HashSet::new();
+            let mut allele_blocks: HashMap<i32, i32> = HashMap::new();
             if genotype.is_some() {
                 if let Value::Genotype(genotypes) = genotype.unwrap().unwrap().unwrap() {
-                    for gt in genotypes.iter() {
+                    for (chromosome_index, gt) in genotypes.iter().enumerate() {
                         if gt.is_ok() {
-                            let (haplotype, phasing) = gt.unwrap();
-                            let haplotype = haplotype.unwrap();
-                            if haplotype != 0 && !seen_haplotypes.contains(&(haplotype as i32)) {
-                                let alt_seq = alt_alleles[haplotype - 1];
+                            let (allele, phasing) = gt.unwrap();
+                            let phased = match phasing {
+                                Phasing::Phased => 1,
+                                Phasing::Unphased => 0,
+                            };
+                            let allele = allele.unwrap();
+                            if allele != 0 {
+                                let alt_seq = alt_alleles[allele - 1];
                                 // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
-                                let new_sequence_hash = models::Sequence::create(
+                                let new_sequence_hash = Sequence::create(
                                     conn,
                                     "DNA".to_string(),
                                     &alt_seq.to_string(),
                                     true,
                                 );
-                                let sample_path_id = models::Path::get_or_create_sample_path(
+                                let sample_bg_id = BlockGroup::get_or_create_sample_block_group(
                                     conn,
                                     collection_name,
                                     &sample_names[sample_index],
                                     &seq_name,
-                                    haplotype as i32,
                                 );
                                 let new_block_id = Block::create(
                                     conn,
                                     &new_sequence_hash,
-                                    sample_path_id,
+                                    sample_bg_id,
                                     0,
                                     alt_seq.len() as i32,
                                     &"1".to_string(),
                                 );
-                                Path::insert_change(
+                                println!("{sample_bg_id} {new_block_id:?} {chromosome_index} {phased} {allele}");
+                                BlockGroup::insert_change(
                                     conn,
-                                    sample_path_id,
+                                    sample_bg_id,
                                     ref_start as i32,
                                     ref_end as i32,
                                     new_block_id.id,
+                                    chromosome_index as i32,
+                                    phased,
                                 );
                             }
-                            seen_haplotypes.insert(haplotype as i32);
                         }
                     }
                 }
@@ -220,7 +227,7 @@ mod tests {
         );
         update_with_vcf(&vcf_path.to_str().unwrap().to_string(), &collection, conn);
         assert_eq!(
-            Path::sequence(conn, &collection, Some(&"foo".to_string()), "m123", 1),
+            BlockGroup::sequence(conn, &collection, Some(&"foo".to_string()), "m123"),
             "ATCATCGATCGATCGATCGGGAACACACAGAGA"
         );
     }
