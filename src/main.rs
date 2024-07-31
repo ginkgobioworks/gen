@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use bio::io::fasta;
 use gen::get_connection;
 use gen::migrations::run_migrations;
-use gen::models::{self, Block, BlockGroup, Sequence};
+use gen::models::{self, block::Block, edge::Edge, sequence::Sequence, BlockGroup};
 use noodles::vcf;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use noodles::vcf::variant::record::samples::series::Value;
@@ -69,7 +69,7 @@ fn import_fasta(fasta: &String, name: &String, shallow: bool, conn: &mut Connect
         for result in reader.records() {
             let record = result.expect("Error during fasta record parsing");
             let sequence = String::from_utf8(record.seq().to_vec()).unwrap();
-            let seq_hash = models::Sequence::create(conn, "DNA".to_string(), &sequence, !shallow);
+            let seq_hash = Sequence::create(conn, "DNA".to_string(), &sequence, !shallow);
             let block_group =
                 BlockGroup::create(conn, &collection.name, None, &record.id().to_string());
             let block = Block::create(
@@ -80,7 +80,7 @@ fn import_fasta(fasta: &String, name: &String, shallow: bool, conn: &mut Connect
                 (sequence.len() as i32),
                 &"1".to_string(),
             );
-            let edge = models::Edge::create(conn, block.id, None, 0, 0);
+            let edge = Edge::create(conn, block.id, None, 0, 0);
         }
         println!("Created it");
     } else {
