@@ -3,9 +3,13 @@ use std::collections::HashMap;
 use std::fmt::*;
 
 use rusqlite::{params_from_iter, Connection};
-use sha2::{Digest, Sha256};
 
+pub mod block;
+pub mod edge;
+pub mod sequence;
 use crate::models;
+use crate::models::block::Block;
+use crate::models::edge::Edge;
 
 #[derive(Debug)]
 pub struct Collection {
@@ -59,184 +63,6 @@ impl Sample {
             .query_map((name,), |row| Ok(Sample { name: row.get(0)? }))
             .unwrap();
         rows.next().unwrap().unwrap()
-    }
-}
-
-#[derive(Debug)]
-pub struct Sequence {
-    pub hash: String,
-    pub sequence_type: String,
-    pub sequence: String,
-    pub length: i32,
-}
-
-impl Sequence {
-    pub fn create(
-        conn: &mut Connection,
-        sequence_type: String,
-        sequence: &String,
-        store: bool,
-    ) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(&sequence_type);
-        hasher.update(sequence);
-        let hash = format!("{:x}", hasher.finalize());
-        let mut obj_hash: String = match conn.query_row(
-            "SELECT hash from sequence where hash = ?1;",
-            [hash.clone()],
-            |row| row.get(0),
-        ) {
-            Ok(res) => res,
-            Err(rusqlite::Error::QueryReturnedNoRows) => "".to_string(),
-            Err(_e) => {
-                panic!("something bad happened querying the database")
-            }
-        };
-        if obj_hash.is_empty() {
-            let mut stmt = conn.prepare("INSERT INTO sequence (hash, sequence_type, sequence, length) VALUES (?1, ?2, ?3, ?4) RETURNING (hash);").unwrap();
-            let mut rows = stmt
-                .query_map(
-                    (
-                        hash,
-                        sequence_type,
-                        if store { sequence } else { "" },
-                        sequence.len(),
-                    ),
-                    |row| row.get(0),
-                )
-                .unwrap();
-            obj_hash = rows.next().unwrap().unwrap();
-        }
-        obj_hash
-    }
-}
-
-#[derive(Debug)]
-pub struct Block {
-    pub id: i32,
-    pub sequence_hash: String,
-    pub block_group_id: i32,
-    pub start: i32,
-    pub end: i32,
-    pub strand: String,
-}
-
-impl Block {
-    pub fn create(
-        conn: &Connection,
-        hash: &String,
-        block_group_id: i32,
-        start: i32,
-        end: i32,
-        strand: &String,
-    ) -> Block {
-        let mut stmt = conn
-            .prepare_cached("INSERT INTO block (sequence_hash, block_group_id, start, end, strand) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING *")
-            .unwrap();
-        match stmt.query_row((hash, block_group_id, start, end, strand), |row| {
-            Ok(Block {
-                id: row.get(0)?,
-                sequence_hash: row.get(1)?,
-                block_group_id: row.get(2)?,
-                start: row.get(3)?,
-                end: row.get(4)?,
-                strand: row.get(5)?,
-            })
-        }) {
-            Ok(res) => res,
-            Err(rusqlite::Error::SqliteFailure(err, details)) => {
-                if err.code == rusqlite::ErrorCode::ConstraintViolation {
-                    // println!("{err:?} {details:?}");
-                    Block {
-                        id: conn
-                            .query_row(
-                                "select id from block where sequence_hash = ?1 AND block_group_id = ?2 AND start = ?3 AND end = ?4 AND strand = ?5;",
-                                (hash, block_group_id, start, end, strand),
-                                |row| row.get(0),
-                            )
-                            .unwrap(),
-                        sequence_hash: hash.clone(),
-                        block_group_id,
-                        start,
-                        end,
-                        strand: strand.clone(),
-                    }
-                } else {
-                    panic!("something bad happened querying the database")
-                }
-            }
-            Err(_e) => {
-                panic!("failure in making block {_e}")
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Edge {
-    pub id: i32,
-    pub source_id: i32,
-    pub target_id: Option<i32>,
-    pub chromosome_index: i32,
-    pub phased: i32,
-}
-
-impl Edge {
-    pub fn create(
-        conn: &Connection,
-        source_id: i32,
-        target_id: Option<i32>,
-        chromosome_index: i32,
-        phased: i32,
-    ) -> Edge {
-        let mut query;
-        let mut id_query;
-        let mut placeholders = vec![];
-        if target_id.is_some() {
-            query = "INSERT INTO edges (source_id, target_id, chromosome_index, phased) VALUES (?1, ?2, ?3, ?4) RETURNING *";
-            id_query = "select id from edges where source_id = ?1 and target_id = ?2";
-            placeholders.push(source_id);
-            placeholders.push(target_id.unwrap());
-            placeholders.push(chromosome_index);
-            placeholders.push(phased);
-        } else {
-            id_query = "select id from edges where source_id = ?1 and target_id is null and chromosome_index = ?2 and phased = ?3";
-            query = "INSERT INTO edges (source_id, chromosome_index, phased) VALUES (?1, ?2, ?3) RETURNING *";
-            placeholders.push(source_id);
-            placeholders.push(chromosome_index);
-            placeholders.push(phased);
-        }
-        let mut stmt = conn.prepare(query).unwrap();
-        match stmt.query_row(params_from_iter(&placeholders), |row| {
-            Ok(Edge {
-                id: row.get(0)?,
-                source_id: row.get(1)?,
-                target_id: row.get(2)?,
-                chromosome_index: row.get(3)?,
-                phased: row.get(4)?,
-            })
-        }) {
-            Ok(edge) => edge,
-            Err(rusqlite::Error::SqliteFailure(err, details)) => {
-                if err.code == rusqlite::ErrorCode::ConstraintViolation {
-                    println!("{err:?} {details:?}");
-                    Edge {
-                        id: conn
-                            .query_row(id_query, params_from_iter(&placeholders), |row| row.get(0))
-                            .unwrap(),
-                        source_id,
-                        target_id,
-                        chromosome_index,
-                        phased,
-                    }
-                } else {
-                    panic!("something bad happened querying the database")
-                }
-            }
-            Err(_) => {
-                panic!("something bad happened querying the database")
-            }
-        }
     }
 }
 
