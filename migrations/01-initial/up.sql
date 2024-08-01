@@ -38,15 +38,13 @@ CREATE UNIQUE INDEX block_uidx ON block(sequence_hash, block_group_id, start, en
 
 CREATE TABLE edges (
   id INTEGER PRIMARY KEY NOT NULL,
-  source_id INTEGER NOT NULL,
+  source_id INTEGER,
   target_id INTEGER,
-  origin INTEGER NOT NULL,
   chromosome_index INTEGER NOT NULL,
   phased INTEGER NOT NULL,
   FOREIGN KEY(source_id) REFERENCES block(id),
   FOREIGN KEY(target_id) REFERENCES block(id),
   constraint chk_phased check (phased in (0, 1))
-  constraint chk_origin check (origin in (0, 1))
 );
 CREATE UNIQUE INDEX edge_uidx ON edges(source_id, target_id, chromosome_index, phased);
 

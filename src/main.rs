@@ -80,7 +80,7 @@ fn import_fasta(fasta: &String, name: &String, shallow: bool, conn: &mut Connect
                 (sequence.len() as i32),
                 &"1".to_string(),
             );
-            let edge = models::Edge::create(conn, block.id, None, 1, 0, 0);
+            let edge = models::Edge::create(conn, Some(block.id), None, 0, 0);
         }
         println!("Created it");
     } else {
