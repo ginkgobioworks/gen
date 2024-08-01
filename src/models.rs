@@ -362,6 +362,7 @@ impl BlockGroup {
         ) SELECT sequence, block_start, block_end, block_strand, depth FROM traverse;";
         let mut stmt = conn.prepare_cached(blocks_query).unwrap();
         let mut sequences = vec![];
+        let mut current_sequence = vec![];
         let rows = stmt
             .query_map([block_group_id], |row| {
                 Ok((
@@ -373,16 +374,21 @@ impl BlockGroup {
                 ))
             })
             .unwrap();
-        let mut seq_index = 0;
+        let mut last_depth = 0;
         for row in rows {
             let (seq, start, end, strand, depth): (String, usize, usize, String, u32) =
                 row.unwrap();
-            if depth == 0 {
-                seq_index = sequences.len();
-                sequences.push("".to_string());
+            let mut new_seq = "".to_string();
+            seq[start..end].clone_into(&mut new_seq);
+            if depth < last_depth {
+                sequences.push(current_sequence.join(""));
+                current_sequence.truncate(depth as usize);
             }
-            sequences[seq_index].push_str(&seq[start..end]);
+            current_sequence.push(new_seq);
+            // println!("{last_depth} {depth} {new_seq} {current_sequence:?} {sequences:?}");
+            last_depth = depth;
         }
+        sequences.push(current_sequence.join(""));
         sequences
     }
 
@@ -509,7 +515,7 @@ impl BlockGroup {
                     conn,
                     &block.sequence_hash,
                     block_group_id,
-                    path_end - end,
+                    end - path_start,
                     block.end,
                     &block.strand,
                 );
@@ -655,6 +661,25 @@ mod tests {
                 "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG",
                 "AAAAAAANNNNTTTTTCCCCCCCCCCGGGGGGGGGG"
             ]
-        )
+        );
+
+        let deletion_sequence =
+            Sequence::create(&mut conn, "DNA".to_string(), &"".to_string(), true);
+        let deletion = Block::create(
+            &conn,
+            &deletion_sequence,
+            block_group_id,
+            0,
+            0,
+            &"1".to_string(),
+        );
+
+        // take out an entire block. Note we don't need to take into account the unequal swap of the above change
+        // because paths are immutable
+        BlockGroup::insert_change(&mut conn, path_id, 19, 31, deletion.id, 1, 0);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
+        assert!(all_sequences.contains(&"AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()));
+        assert!(all_sequences.contains(&"AAAAAAANNNNTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()));
+        assert!(all_sequences.contains(&"AAAAAAAAAATTTTTTTTTGGGGGGGGG".to_string()));
     }
 }
