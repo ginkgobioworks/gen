@@ -131,8 +131,7 @@ impl Block {
         phased: i32,
     ) -> Option<(Block, Block)> {
         if coordinate < block.start || coordinate >= block.end {
-            println!("Coordinate is out of block bounds");
-            return None;
+            panic!("Coordinate {coordinate} is out of block bounds");
         }
         let new_left_block = Block::create(
             conn,
@@ -207,6 +206,62 @@ impl Block {
             objs.push(row.unwrap());
         }
         objs
+    }
+
+    pub fn create_prefix_block(conn: &Connection, block: Block, coordinate: i32) -> Block {
+        if coordinate < block.start || coordinate >= block.end {
+            panic!("Coordinate {coordinate} is out of block bounds");
+        }
+        let prefix_block = Block::create(
+            conn,
+            &block.sequence_hash,
+            block.block_group_id,
+            block.start,
+            coordinate,
+            &block.strand,
+        );
+
+        let edges_into = Block::edges_into(conn, block.id);
+
+        for edge in edges_into.iter() {
+            Edge::create(
+                conn,
+                edge.source_id,
+                Some(prefix_block.id),
+                edge.chromosome_index,
+                edge.phased,
+            );
+        }
+
+        prefix_block
+    }
+
+    pub fn create_suffix_block(conn: &Connection, block: Block, coordinate: i32) -> Block {
+        if coordinate < block.start || coordinate >= block.end {
+            panic!("Coordinate {coordinate} is out of block bounds");
+        }
+        let suffix_block = Block::create(
+            conn,
+            &block.sequence_hash,
+            block.block_group_id,
+            coordinate,
+            block.end,
+            &block.strand,
+        );
+
+        let edges_out_of = Block::edges_out_of(conn, block.id);
+
+        for edge in edges_out_of.iter() {
+            Edge::create(
+                conn,
+                Some(suffix_block.id),
+                edge.target_id,
+                edge.chromosome_index,
+                edge.phased,
+            );
+        }
+
+        suffix_block
     }
 }
 
@@ -508,6 +563,7 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn test_split_block_bad_coordinate() {
         let conn = &mut get_connection();
         Collection::create(conn, &"test collection".to_string());
@@ -540,5 +596,139 @@ mod tests {
         );
         let result = Block::split(conn, &block2, 100, 0, 0);
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_create_prefix_block() {
+        let conn = &mut get_connection();
+        Collection::create(conn, &"test collection".to_string());
+        let block_group = BlockGroup::create(
+            conn,
+            &"test collection".to_string(),
+            None,
+            &"test block group".to_string(),
+        );
+        let sequence1_hash =
+            Sequence::create(conn, "DNA".to_string(), &"ATCGATCG".to_string(), true);
+        let block1 = Block::create(
+            conn,
+            &sequence1_hash,
+            block_group.id,
+            0,
+            8,
+            &"+".to_string(),
+        );
+        let sequence2_hash =
+            Sequence::create(conn, "DNA".to_string(), &"AAAAAAAA".to_string(), true);
+        let block2 = Block::create(
+            conn,
+            &sequence2_hash,
+            block_group.id,
+            1,
+            8,
+            &"+".to_string(),
+        );
+        let sequence3_hash =
+            Sequence::create(conn, "DNA".to_string(), &"CCCCCCCC".to_string(), true);
+        let block3 = Block::create(
+            conn,
+            &sequence3_hash,
+            block_group.id,
+            1,
+            8,
+            &"+".to_string(),
+        );
+        let sequence4_hash =
+            Sequence::create(conn, "DNA".to_string(), &"GGGGGGGG".to_string(), true);
+        let block4 = Block::create(
+            conn,
+            &sequence4_hash,
+            block_group.id,
+            1,
+            8,
+            &"+".to_string(),
+        );
+        let edge1 = Edge::create(conn, Some(block1.id), Some(block3.id), 0, 0);
+        let edge2 = Edge::create(conn, Some(block2.id), Some(block3.id), 0, 0);
+        let edge3 = Edge::create(conn, Some(block3.id), Some(block4.id), 0, 0);
+
+        let prefix_block = Block::create_prefix_block(conn, block3, 4);
+
+        let edges_into_prefix_block = Block::edges_into(conn, prefix_block.id);
+        assert_eq!(edges_into_prefix_block.len(), 2);
+
+        let mut actual_previous_block_ids = HashSet::new();
+        actual_previous_block_ids.insert(edges_into_prefix_block[0].source_id.unwrap());
+        actual_previous_block_ids.insert(edges_into_prefix_block[1].source_id.unwrap());
+        let mut expected_previous_block_ids = HashSet::new();
+        expected_previous_block_ids.insert(block1.id);
+        expected_previous_block_ids.insert(block2.id);
+        assert_eq!(actual_previous_block_ids, expected_previous_block_ids);
+
+        let edges_out_of_prefix_block = Block::edges_out_of(conn, prefix_block.id);
+        assert_eq!(edges_out_of_prefix_block.len(), 0);
+    }
+    #[test]
+    fn test_create_suffix_block() {
+        let conn = &mut get_connection();
+        Collection::create(conn, &"test collection".to_string());
+        let block_group = BlockGroup::create(
+            conn,
+            &"test collection".to_string(),
+            None,
+            &"test block group".to_string(),
+        );
+        let sequence1_hash =
+            Sequence::create(conn, "DNA".to_string(), &"ATCGATCG".to_string(), true);
+        let block1 = Block::create(
+            conn,
+            &sequence1_hash,
+            block_group.id,
+            0,
+            8,
+            &"+".to_string(),
+        );
+        let sequence2_hash =
+            Sequence::create(conn, "DNA".to_string(), &"AAAAAAAA".to_string(), true);
+        let block2 = Block::create(
+            conn,
+            &sequence2_hash,
+            block_group.id,
+            1,
+            8,
+            &"+".to_string(),
+        );
+        let sequence3_hash =
+            Sequence::create(conn, "DNA".to_string(), &"CCCCCCCC".to_string(), true);
+        let block3 = Block::create(
+            conn,
+            &sequence3_hash,
+            block_group.id,
+            1,
+            8,
+            &"+".to_string(),
+        );
+        let sequence4_hash =
+            Sequence::create(conn, "DNA".to_string(), &"GGGGGGGG".to_string(), true);
+        let block4 = Block::create(
+            conn,
+            &sequence4_hash,
+            block_group.id,
+            1,
+            8,
+            &"+".to_string(),
+        );
+        let edge1 = Edge::create(conn, Some(block1.id), Some(block3.id), 0, 0);
+        let edge2 = Edge::create(conn, Some(block2.id), Some(block3.id), 0, 0);
+        let edge3 = Edge::create(conn, Some(block3.id), Some(block4.id), 0, 0);
+
+        let suffix_block = Block::create_suffix_block(conn, block3, 4);
+
+        let edges_into_suffix_block = Block::edges_into(conn, suffix_block.id);
+        assert_eq!(edges_into_suffix_block.len(), 0);
+
+        let edges_out_of_suffix_block = Block::edges_out_of(conn, suffix_block.id);
+        assert_eq!(edges_out_of_suffix_block.len(), 1);
+        assert_eq!(edges_out_of_suffix_block[0].target_id.unwrap(), block4.id);
     }
 }
