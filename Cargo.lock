@@ -26,7 +26,11 @@ dependencies = [
  "cfg-if",
  "once_cell",
  "version_check",
+<<<<<<< HEAD
  "zerocopy",
+=======
+ "zerocopy 0.7.35",
+>>>>>>> 451892c (Add non-destructive block splitting)
 ]
 
 [[package]]
@@ -502,9 +506,15 @@ checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 
 [[package]]
 name = "flate2"
+<<<<<<< HEAD
 version = "1.0.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f211bbe8e69bbd0cfdea405084f128ae8b4aaa6b0b522fc8f2b009084797920"
+=======
+version = "1.0.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f54427cfd1c7829e2a139fcefea601bf088ebca651d2bf53ebc600eac295dae"
+>>>>>>> 451892c (Add non-destructive block splitting)
 dependencies = [
  "crc32fast",
  "miniz_oxide",
@@ -1226,11 +1236,19 @@ checksum = "d231b230927b5e4ad203db57bbcbee2802f6bce620b1e4a9024a07d94e2907ec"
 
 [[package]]
 name = "ppv-lite86"
+<<<<<<< HEAD
 version = "0.2.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77957b295656769bb8ad2b6a6b09d897d94f05c41b069aede1fcdaa675eaea04"
 dependencies = [
  "zerocopy",
+=======
+version = "0.2.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dee4364d9f3b902ef14fab8a1ddffb783a1cb6b4bba3bfc1fa3922732c7de97f"
+dependencies = [
+ "zerocopy 0.6.6",
+>>>>>>> 451892c (Add non-destructive block splitting)
 ]
 
 [[package]]
@@ -1695,12 +1713,40 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
+<<<<<<< HEAD
+=======
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "854e949ac82d619ee9a14c66a1b674ac730422372ccb759ce0c39cabcf2bf8e6"
+dependencies = [
+ "byteorder",
+ "zerocopy-derive 0.6.6",
+]
+
+[[package]]
+name = "zerocopy"
+>>>>>>> 451892c (Add non-destructive block splitting)
 version = "0.7.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b9b4fd18abc82b8136838da5d50bae7bdea537c574d8dc1a34ed098d6c166f0"
 dependencies = [
+<<<<<<< HEAD
  "byteorder",
  "zerocopy-derive",
+=======
+ "zerocopy-derive 0.7.35",
+]
+
+[[package]]
+name = "zerocopy-derive"
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "125139de3f6b9d625c39e2efdd73d41bdac468ccd556556440e322be0e1bbd91"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+>>>>>>> 451892c (Add non-destructive block splitting)
 ]
 
 [[package]]
