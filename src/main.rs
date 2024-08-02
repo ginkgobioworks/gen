@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use bio::io::fasta;
 use gen::get_connection;
 use gen::migrations::run_migrations;
-use gen::models::{self, block::Block, edge::Edge, sequence::Sequence, BlockGroup, Path};
+use gen::models::{self, block::Block, edge::Edge, path::Path, sequence::Sequence, BlockGroup};
 use noodles::vcf;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use noodles::vcf::variant::record::samples::series::Value;
