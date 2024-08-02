@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::models::Path;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};

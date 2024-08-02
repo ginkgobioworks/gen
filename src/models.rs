@@ -84,16 +84,10 @@ pub struct Path {
 
 impl Path {
     pub fn create(conn: &Connection, name: &str, block_group_id: i32, edges: Vec<i32>) -> Path {
-        let query =
-            "INSERT INTO path (name, block_group_id, edges) VALUES (?1, ?2, ?3) RETURNING (id)";
+        let query = "INSERT INTO path (name, block_group_id) VALUES (?1, ?2) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
-        let edge_str = edges
-            .iter()
-            .map(|k| format!("{k}"))
-            .collect::<Vec<_>>()
-            .join(",");
         let mut rows = stmt
-            .query_map((name, block_group_id, &edge_str), |row| {
+            .query_map((name, block_group_id), |row| {
                 Ok(Path {
                     id: row.get(0)?,
                     name: name.to_string(),
@@ -102,23 +96,30 @@ impl Path {
                 })
             })
             .unwrap();
-        rows.next().unwrap().unwrap()
+        let path = rows.next().unwrap().unwrap();
+
+        for (index, edge) in edges.iter().enumerate() {
+            let next_edge = edges.get(index + 1);
+            if let Some(v) = next_edge {
+                PathEdge::create(conn, path.id, Some(*edge), Some(*v));
+            } else {
+                PathEdge::create(conn, path.id, Some(*edge), None);
+            }
+        }
+
+        path
     }
 
     pub fn get(conn: &mut Connection, path_id: i32) -> Path {
-        let query = "SELECT id, block_group_id, name, edges from path where id = ?1;";
+        let query = "SELECT id, block_group_id, name from path where id = ?1;";
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
             .query_map((path_id,), |row| {
-                let mut edge_str: String = row.get(3).unwrap();
                 Ok(Path {
                     id: row.get(0)?,
                     block_group_id: row.get(1)?,
                     name: row.get(2)?,
-                    edges: edge_str
-                        .split(',')
-                        .map(|v| v.parse::<i32>().unwrap())
-                        .collect::<Vec<i32>>(),
+                    edges: PathEdge::get_edges(conn, path_id),
                 })
             })
             .unwrap();
@@ -129,15 +130,12 @@ impl Path {
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
             .query_map(params_from_iter(placeholders), |row| {
-                let mut edge_str: String = row.get(3).unwrap();
+                let path_id = row.get(0).unwrap();
                 Ok(Path {
-                    id: row.get(0)?,
+                    id: path_id,
                     block_group_id: row.get(1)?,
                     name: row.get(2)?,
-                    edges: edge_str
-                        .split(',')
-                        .map(|v| v.parse::<i32>().unwrap())
-                        .collect::<Vec<i32>>(),
+                    edges: PathEdge::get_edges(conn, path_id),
                 })
             })
             .unwrap();
@@ -148,7 +146,118 @@ impl Path {
         paths
     }
 
-    pub fn edges_to_graph(conn: &mut Connection, edges: &Vec<i32>) -> DiGraphMap<(u32), ()> {
+    // pub fn edges_to_graph(conn: &mut Connection, edges: &Vec<i32>) -> DiGraphMap<(u32), ()> {
+    //     let edge_str = (*edges)
+    //         .iter()
+    //         .map(|v| format!("{v}"))
+    //         .collect::<Vec<_>>()
+    //         .join(",");
+    //     let query = format!("SELECT source_id, target_id from edges where id IN ({edge_str});");
+    //     let mut stmt = conn.prepare(&query).unwrap();
+    //     let mut rows = stmt
+    //         .query_map([], |row| {
+    //             let source_id: Option<u32> = row.get(0).unwrap();
+    //             let target_id: Option<u32> = row.get(1).unwrap();
+    //             Ok((source_id, target_id))
+    //         })
+    //         .unwrap();
+    //     let mut graph = DiGraphMap::new();
+    //     for edge in rows {
+    //         let (source, target) = edge.unwrap();
+    //         println!("edg eis {source:?} {target:?}");
+    //         if let Some(source_value) = source {
+    //             graph.add_node(source_value);
+    //             if let Some(target_value) = target {
+    //                 graph.add_edge(source_value, target_value, ());
+    //             }
+    //         }
+    //         if let Some(target_value) = target {
+    //             graph.add_node(target_value);
+    //         }
+    //     }
+    //     graph
+    // }
+}
+
+#[derive(Debug)]
+pub struct PathEdge {
+    pub id: i32,
+    pub path_id: i32,
+    pub source_edge_id: Option<i32>,
+    pub target_edge_id: Option<i32>,
+}
+
+impl PathEdge {
+    pub fn create(
+        conn: &Connection,
+        path_id: i32,
+        source_edge_id: Option<i32>,
+        target_edge_id: Option<i32>,
+    ) -> PathEdge {
+        let query =
+            "INSERT INTO path_edges (path_id, source_edge_id, target_edge_id) VALUES (?1, ?2, ?3) RETURNING (id)";
+        let mut stmt = conn.prepare(query).unwrap();
+        let mut rows = stmt
+            .query_map((path_id, source_edge_id, target_edge_id), |row| {
+                Ok(PathEdge {
+                    id: row.get(0)?,
+                    path_id,
+                    source_edge_id,
+                    target_edge_id,
+                })
+            })
+            .unwrap();
+        rows.next().unwrap().unwrap()
+    }
+
+    pub fn get_edges(conn: &Connection, path_id: i32) -> Vec<i32> {
+        let mut edges = vec![];
+        let query = "SELECT source_edge_id, target_edge_id from path_edges where path_id = ?1;";
+        let mut stmt = conn.prepare_cached(query).unwrap();
+        let mut rows = stmt
+            .query_map((path_id,), |row| {
+                let source_id: Option<u32> = row.get(0).unwrap();
+                let target_id: Option<u32> = row.get(1).unwrap();
+                Ok((source_id, target_id))
+            })
+            .unwrap();
+        let mut edge_graph = DiGraphMap::new();
+        for row in rows {
+            let (source, target) = row.unwrap();
+            if let Some(v) = source {
+                edge_graph.add_node(v);
+            }
+            if let Some(v) = target {
+                edge_graph.add_node(v);
+            }
+            if let Some(source_v) = source {
+                if let Some(target_v) = target {
+                    edge_graph.add_edge(source_v, target_v, ());
+                }
+            }
+        }
+        let mut start_edge = None;
+        for node in edge_graph.nodes() {
+            let has_incoming = edge_graph
+                .neighbors_directed(node, Direction::Incoming)
+                .next();
+            if has_incoming.is_none() {
+                start_edge = Some(node);
+                break;
+            }
+        }
+        if start_edge.is_none() {
+            panic!("No starting edge found in path {path_id}");
+        }
+        let mut dfs = Dfs::new(&edge_graph, start_edge.unwrap());
+        while let Some(nx) = dfs.next(&edge_graph) {
+            edges.push(nx as i32);
+        }
+        edges
+    }
+
+    pub fn edges_to_graph(conn: &Connection, path_id: i32) -> DiGraphMap<(u32), ()> {
+        let edges = PathEdge::get_edges(conn, path_id);
         let edge_str = (*edges)
             .iter()
             .map(|v| format!("{v}"))
@@ -502,7 +611,7 @@ impl BlockGroup {
 
         let path = Path::get(conn, path_id);
         let block_group_id = path.block_group_id;
-        let graph = Path::edges_to_graph(conn, &path.edges);
+        let graph = PathEdge::edges_to_graph(conn, path.id);
         println!("{path:?} {graph:?}");
         let query = format!("SELECT id, sequence_hash, block_group_id, start, end, strand from block where id in ({block_ids})", block_ids = graph.nodes().map(|k| format!("{k}")).collect::<Vec<_>>().join(","));
         let mut stmt = conn.prepare(&query).unwrap();

@@ -183,7 +183,7 @@ impl Block {
 
         Edge::bulk_update(conn, replacement_edges);
 
-        // TODO: Delete existing block?
+        // TODO: Delete existing block? -- leave to caller atm
 
         Some((new_left_block, new_right_block))
     }
