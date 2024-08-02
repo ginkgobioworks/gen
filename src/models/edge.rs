@@ -1,3 +1,4 @@
+use crate::models::Path;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 
@@ -139,7 +140,7 @@ impl Edge {
         let row = it.next().unwrap();
         if row.is_some() {
             let edge = row.unwrap();
-            let source_id: i32 = edge.get(1).unwrap();
+            let source_id: Option<i32> = edge.get(1).unwrap();
             let target_id: Option<i32> = edge.get(2).unwrap();
             Some(Edge {
                 id: edge.get(0).unwrap(),
@@ -151,6 +152,43 @@ impl Edge {
         } else {
             None
         }
+    }
+
+    pub fn get(conn: &Connection, id: i32) -> Edge {
+        let query = "SELECT * from edges where id = ?1;";
+        let mut stmt = conn.prepare(query).unwrap();
+        let mut rows = stmt
+            .query_map((id,), |row| {
+                Ok(Edge {
+                    id: row.get(0)?,
+                    source_id: row.get(1)?,
+                    target_id: row.get(2)?,
+                    chromosome_index: row.get(3)?,
+                    phased: row.get(4)?,
+                })
+            })
+            .unwrap();
+        rows.next().unwrap().unwrap()
+    }
+
+    pub fn get_edges(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Edge> {
+        let mut stmt = conn.prepare_cached(query).unwrap();
+        let mut rows = stmt
+            .query_map(params_from_iter(placeholders), |row| {
+                Ok(Edge {
+                    id: row.get(0)?,
+                    source_id: row.get(1)?,
+                    target_id: row.get(2)?,
+                    chromosome_index: row.get(3)?,
+                    phased: row.get(4)?,
+                })
+            })
+            .unwrap();
+        let mut objs = vec![];
+        for row in rows {
+            objs.push(row.unwrap());
+        }
+        objs
     }
 }
 
