@@ -32,7 +32,7 @@ CREATE TABLE block (
   strand TEXT NOT NULL DEFAULT "1",
   FOREIGN KEY(sequence_hash) REFERENCES sequence(hash),
   FOREIGN KEY(block_group_id) REFERENCES block_group(id),
-  constraint chk_strand check (strand in ('-1', '1', '0', '.', '?'))
+  constraint chk_strand check (strand in ('-1', '1', '0', '.', '?', '+', '-'))
 );
 CREATE UNIQUE INDEX block_uidx ON block(sequence_hash, block_group_id, start, end, strand);
 
