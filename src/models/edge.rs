@@ -1,9 +1,13 @@
+use std::collections::HashMap;
+
+use crate::models::Path;
+use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 
 #[derive(Debug)]
 pub struct Edge {
     pub id: i32,
-    pub source_id: i32,
+    pub source_id: Option<i32>,
     pub target_id: Option<i32>,
     pub chromosome_index: i32,
     pub phased: i32,
@@ -12,27 +16,33 @@ pub struct Edge {
 impl Edge {
     pub fn create(
         conn: &Connection,
-        source_id: i32,
+        source_id: Option<i32>,
         target_id: Option<i32>,
         chromosome_index: i32,
         phased: i32,
     ) -> Edge {
-        let query;
-        let id_query;
-        let mut placeholders = vec![];
-        if target_id.is_some() {
+        let mut query;
+        let mut id_query;
+        let mut placeholders: Vec<Value> = vec![];
+        if target_id.is_some() && source_id.is_some() {
             query = "INSERT INTO edges (source_id, target_id, chromosome_index, phased) VALUES (?1, ?2, ?3, ?4) RETURNING *";
-            id_query = "select id from edges where source_id = ?1 and target_id = ?2";
-            placeholders.push(source_id);
-            placeholders.push(target_id.unwrap());
-            placeholders.push(chromosome_index);
-            placeholders.push(phased);
+            id_query = "select id from edges where source_id = ?1 and target_id = ?2 and chromosome_index = ?3 and phased = ?4";
+            placeholders.push(Value::from(source_id));
+            placeholders.push(target_id.unwrap().into());
+            placeholders.push(chromosome_index.into());
+            placeholders.push(phased.into());
+        } else if target_id.is_some() {
+            id_query = "select id from edges where target_id = ?1 and source_id is null and chromosome_index = ?2 and phased = ?3";
+            query = "INSERT INTO edges (target_id, chromosome_index, phased) VALUES (?1, ?2, ?3) RETURNING *";
+            placeholders.push(target_id.into());
+            placeholders.push(chromosome_index.into());
+            placeholders.push(phased.into());
         } else {
             id_query = "select id from edges where source_id = ?1 and target_id is null and chromosome_index = ?2 and phased = ?3";
             query = "INSERT INTO edges (source_id, chromosome_index, phased) VALUES (?1, ?2, ?3) RETURNING *";
-            placeholders.push(source_id);
-            placeholders.push(chromosome_index);
-            placeholders.push(phased);
+            placeholders.push(source_id.into());
+            placeholders.push(chromosome_index.into());
+            placeholders.push(phased.into());
         }
         let mut stmt = conn.prepare(query).unwrap();
         match stmt.query_row(params_from_iter(&placeholders), |row| {
@@ -132,7 +142,7 @@ impl Edge {
         let row = it.next().unwrap();
         if row.is_some() {
             let edge = row.unwrap();
-            let source_id: i32 = edge.get(1).unwrap();
+            let source_id: Option<i32> = edge.get(1).unwrap();
             let target_id: Option<i32> = edge.get(2).unwrap();
             Some(Edge {
                 id: edge.get(0).unwrap(),
@@ -144,6 +154,43 @@ impl Edge {
         } else {
             None
         }
+    }
+
+    pub fn get(conn: &Connection, id: i32) -> Edge {
+        let query = "SELECT * from edges where id = ?1;";
+        let mut stmt = conn.prepare(query).unwrap();
+        let mut rows = stmt
+            .query_map((id,), |row| {
+                Ok(Edge {
+                    id: row.get(0)?,
+                    source_id: row.get(1)?,
+                    target_id: row.get(2)?,
+                    chromosome_index: row.get(3)?,
+                    phased: row.get(4)?,
+                })
+            })
+            .unwrap();
+        rows.next().unwrap().unwrap()
+    }
+
+    pub fn get_edges(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Edge> {
+        let mut stmt = conn.prepare_cached(query).unwrap();
+        let mut rows = stmt
+            .query_map(params_from_iter(placeholders), |row| {
+                Ok(Edge {
+                    id: row.get(0)?,
+                    source_id: row.get(1)?,
+                    target_id: row.get(2)?,
+                    chromosome_index: row.get(3)?,
+                    phased: row.get(4)?,
+                })
+            })
+            .unwrap();
+        let mut objs = vec![];
+        for row in rows {
+            objs.push(row.unwrap());
+        }
+        objs
     }
 }
 

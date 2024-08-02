@@ -7,14 +7,14 @@ use std::path::PathBuf;
 use bio::io::fasta;
 use gen::get_connection;
 use gen::migrations::run_migrations;
-use gen::models::{self, block::Block, edge::Edge, sequence::Sequence, BlockGroup};
+use gen::models::{self, block::Block, edge::Edge, path::Path, sequence::Sequence, BlockGroup};
 use noodles::vcf;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use noodles::vcf::variant::record::samples::series::Value;
 use noodles::vcf::variant::record::samples::{Sample, Series};
 use noodles::vcf::variant::record::{AlternateBases, ReferenceBases, Samples};
 use noodles::vcf::variant::Record;
-use rusqlite::Connection;
+use rusqlite::{types::Value as SQLValue, Connection};
 use std::io;
 
 #[derive(Parser)]
@@ -80,7 +80,14 @@ fn import_fasta(fasta: &String, name: &String, shallow: bool, conn: &mut Connect
                 (sequence.len() as i32),
                 &"1".to_string(),
             );
-            let edge = Edge::create(conn, block.id, None, 0, 0);
+            let edge_1 = Edge::create(conn, None, Some(block.id), 0, 0);
+            let edge_2 = Edge::create(conn, Some(block.id), None, 0, 0);
+            Path::create(
+                conn,
+                record.id(),
+                block_group.id,
+                vec![edge_1.id, edge_2.id],
+            );
         }
         println!("Created it");
     } else {
@@ -108,10 +115,8 @@ fn update_with_vcf(vcf_path: &String, collection_name: &String, conn: &mut Conne
         let ref_end = record.variant_end(&header).unwrap().get();
         let alt_bases = record.alternate_bases();
         let alt_alleles: Vec<_> = alt_bases.iter().collect::<io::Result<_>>().unwrap();
-        let mut created: HashSet<i32> = HashSet::new();
         for (sample_index, sample) in record.samples().iter().enumerate() {
             let genotype = sample.get(&header, "GT");
-            let mut allele_blocks: HashMap<i32, i32> = HashMap::new();
             if genotype.is_some() {
                 if let Value::Genotype(genotypes) = genotype.unwrap().unwrap().unwrap() {
                     for (chromosome_index, gt) in genotypes.iter().enumerate() {
@@ -137,6 +142,14 @@ fn update_with_vcf(vcf_path: &String, collection_name: &String, conn: &mut Conne
                                     &sample_names[sample_index],
                                     &seq_name,
                                 );
+                                let sample_path_id = Path::get_paths(
+                                    conn,
+                                    "select * from path where block_group_id = ?1 AND name = ?2",
+                                    vec![
+                                        SQLValue::from(sample_bg_id),
+                                        SQLValue::from(seq_name.clone()),
+                                    ],
+                                );
                                 let new_block_id = Block::create(
                                     conn,
                                     &new_sequence_hash,
@@ -145,10 +158,9 @@ fn update_with_vcf(vcf_path: &String, collection_name: &String, conn: &mut Conne
                                     alt_seq.len() as i32,
                                     &"1".to_string(),
                                 );
-                                println!("{sample_bg_id} {new_block_id:?} {chromosome_index} {phased} {allele}");
                                 BlockGroup::insert_change(
                                     conn,
-                                    sample_bg_id,
+                                    sample_path_id[0].id,
                                     ref_start as i32,
                                     ref_end as i32,
                                     new_block_id.id,
@@ -227,8 +239,16 @@ mod tests {
         );
         update_with_vcf(&vcf_path.to_str().unwrap().to_string(), &collection, conn);
         assert_eq!(
-            BlockGroup::sequence(conn, &collection, Some(&"foo".to_string()), "m123"),
-            "ATCATCGATCGATCGATCGGGAACACACAGAGA"
+            BlockGroup::get_all_sequences(conn, 1),
+            HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
+        );
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, 2),
+            HashSet::from_iter(vec!["ATCATCGATAGAGATCGATCGGGAACACACAGAGA".to_string()])
+        );
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, 3),
+            HashSet::from_iter(vec!["ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
     }
 }

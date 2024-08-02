@@ -1,4 +1,6 @@
-use rusqlite::Connection;
+use crate::models::edge::Edge;
+use rusqlite::types::Value;
+use rusqlite::{params_from_iter, Connection};
 use sha2::{Digest, Sha256};
 
 #[derive(Debug)]
@@ -47,5 +49,28 @@ impl Sequence {
             obj_hash = rows.next().unwrap().unwrap();
         }
         obj_hash
+    }
+
+    pub fn get_sequences(
+        conn: &Connection,
+        query: &str,
+        placeholders: Vec<Value>,
+    ) -> Vec<Sequence> {
+        let mut stmt = conn.prepare_cached(query).unwrap();
+        let mut rows = stmt
+            .query_map(params_from_iter(placeholders), |row| {
+                Ok(Sequence {
+                    hash: row.get(0).unwrap(),
+                    sequence_type: row.get(1).unwrap(),
+                    sequence: row.get(2).unwrap(),
+                    length: row.get(3).unwrap(),
+                })
+            })
+            .unwrap();
+        let mut objs = vec![];
+        for row in rows {
+            objs.push(row.unwrap());
+        }
+        objs
     }
 }

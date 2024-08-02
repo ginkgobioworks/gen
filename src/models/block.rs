@@ -1,4 +1,5 @@
-use rusqlite::Connection;
+use crate::models::Path;
+use rusqlite::{params_from_iter, types::Value, Connection};
 
 use crate::models::edge::{Edge, UpdatedEdge};
 
@@ -61,6 +62,13 @@ impl Block {
         }
     }
 
+    pub fn delete(conn: &Connection, block_id: i32) {
+        let mut stmt = conn
+            .prepare_cached("DELETE from block where id = ?1")
+            .unwrap();
+        stmt.execute((block_id,)).unwrap();
+    }
+
     pub fn edges_into(conn: &Connection, block_id: i32) -> Vec<Edge> {
         let edge_query = "select id, source_id, target_id, chromosome_index, phased from edges where target_id = ?1;";
         let mut stmt = conn.prepare_cached(edge_query).unwrap();
@@ -71,14 +79,14 @@ impl Block {
         while row.is_some() {
             let edge = row.unwrap();
             let edge_id: i32 = edge.get(0).unwrap();
-            let source_block_id: i32 = edge.get(1).unwrap();
-            let target_block_id: i32 = edge.get(2).unwrap();
+            let source_block_id: Option<i32> = edge.get(1).unwrap();
+            let target_block_id: Option<i32> = edge.get(2).unwrap();
             let chromosome_index: i32 = edge.get(3).unwrap();
             let phased: i32 = edge.get(4).unwrap();
             edges.push(Edge {
                 id: edge_id,
                 source_id: source_block_id,
-                target_id: Some(target_block_id),
+                target_id: target_block_id,
                 chromosome_index,
                 phased,
             });
@@ -98,14 +106,14 @@ impl Block {
         while row.is_some() {
             let edge = row.unwrap();
             let edge_id: i32 = edge.get(0).unwrap();
-            let source_block_id: i32 = edge.get(1).unwrap();
-            let target_block_id: i32 = edge.get(2).unwrap();
+            let source_block_id: Option<i32> = edge.get(1).unwrap();
+            let target_block_id: Option<i32> = edge.get(2).unwrap();
             let chromosome_index: i32 = edge.get(3).unwrap();
             let phased: i32 = edge.get(4).unwrap();
             edges.push(Edge {
                 id: edge_id,
                 source_id: source_block_id,
-                target_id: Some(target_block_id),
+                target_id: target_block_id,
                 chromosome_index,
                 phased,
             });
@@ -117,7 +125,7 @@ impl Block {
 
     pub fn split(
         conn: &Connection,
-        block: Block,
+        block: &Block,
         coordinate: i32,
         chromosome_index: i32,
         phased: i32,
@@ -150,7 +158,7 @@ impl Block {
         for edge in edges_into.iter() {
             replacement_edges.push(UpdatedEdge {
                 id: edge.id,
-                new_source_id: Some(edge.source_id),
+                new_source_id: edge.source_id,
                 new_target_id: Some(new_left_block.id),
             });
         }
@@ -167,7 +175,7 @@ impl Block {
 
         Edge::create(
             conn,
-            new_left_block.id,
+            Some(new_left_block.id),
             Some(new_right_block.id),
             chromosome_index,
             phased,
@@ -175,9 +183,30 @@ impl Block {
 
         Edge::bulk_update(conn, replacement_edges);
 
-        // TODO: Delete existing block?
+        // TODO: Delete existing block? -- leave to caller atm
 
         Some((new_left_block, new_right_block))
+    }
+
+    pub fn get_blocks(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Block> {
+        let mut stmt = conn.prepare(query).unwrap();
+        let mut rows = stmt
+            .query_map(params_from_iter(placeholders), |row| {
+                Ok(Block {
+                    id: row.get(0)?,
+                    sequence_hash: row.get(1)?,
+                    block_group_id: row.get(2)?,
+                    start: row.get(3)?,
+                    end: row.get(4)?,
+                    strand: row.get(5)?,
+                })
+            })
+            .unwrap();
+        let mut objs = vec![];
+        for row in rows {
+            objs.push(row.unwrap());
+        }
+        objs
     }
 }
 
@@ -249,9 +278,9 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        let edge1 = Edge::create(conn, block1.id, Some(block3.id), 0, 0);
-        let edge2 = Edge::create(conn, block2.id, Some(block3.id), 0, 0);
-        Edge::create(conn, block3.id, Some(block4.id), 0, 0);
+        let edge1 = Edge::create(conn, Some(block1.id), Some(block3.id), 0, 0);
+        let edge2 = Edge::create(conn, Some(block2.id), Some(block3.id), 0, 0);
+        Edge::create(conn, Some(block3.id), Some(block4.id), 0, 0);
 
         let edges_into_block3 = Block::edges_into(conn, block3.id);
         assert_eq!(edges_into_block3.len(), 2);
@@ -295,7 +324,7 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        Edge::create(conn, block1.id, Some(block2.id), 0, 0);
+        Edge::create(conn, Some(block1.id), Some(block2.id), 0, 0);
 
         let edges_into_block1 = Block::edges_into(conn, block1.id);
         assert_eq!(edges_into_block1.len(), 0);
@@ -351,9 +380,9 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        Edge::create(conn, block1.id, Some(block2.id), 0, 0);
-        let edge1 = Edge::create(conn, block2.id, Some(block3.id), 0, 0);
-        let edge2 = Edge::create(conn, block2.id, Some(block4.id), 0, 0);
+        Edge::create(conn, Some(block1.id), Some(block2.id), 0, 0);
+        let edge1 = Edge::create(conn, Some(block2.id), Some(block3.id), 0, 0);
+        let edge2 = Edge::create(conn, Some(block2.id), Some(block4.id), 0, 0);
 
         let edges_out_of_block2 = Block::edges_out_of(conn, block2.id);
         assert_eq!(edges_out_of_block2.len(), 2);
@@ -397,7 +426,7 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        Edge::create(conn, block1.id, Some(block2.id), 0, 0);
+        Edge::create(conn, Some(block1.id), Some(block2.id), 0, 0);
 
         let edges_out_of_block2 = Block::edges_out_of(conn, block2.id);
         assert_eq!(edges_out_of_block2.len(), 0);
@@ -453,11 +482,11 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        let edge1 = Edge::create(conn, block1.id, Some(block3.id), 0, 0);
-        let edge2 = Edge::create(conn, block2.id, Some(block3.id), 0, 0);
-        let edge3 = Edge::create(conn, block3.id, Some(block4.id), 0, 0);
+        let edge1 = Edge::create(conn, Some(block1.id), Some(block3.id), 0, 0);
+        let edge2 = Edge::create(conn, Some(block2.id), Some(block3.id), 0, 0);
+        let edge3 = Edge::create(conn, Some(block3.id), Some(block4.id), 0, 0);
 
-        let (left_block, right_block) = Block::split(conn, block3, 4, 0, 0).unwrap();
+        let (left_block, right_block) = Block::split(conn, &block3, 4, 0, 0).unwrap();
 
         let edges_into_left_block = Block::edges_into(conn, left_block.id);
         assert_eq!(edges_into_left_block.len(), 2);
@@ -498,7 +527,7 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        let result = Block::split(conn, block1, -1, 0, 0);
+        let result = Block::split(conn, &block1, -1, 0, 0);
         assert!(result.is_none());
 
         let block2 = Block::create(
@@ -509,7 +538,7 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        let result = Block::split(conn, block2, 100, 0, 0);
+        let result = Block::split(conn, &block2, 100, 0, 0);
         assert!(result.is_none());
     }
 }

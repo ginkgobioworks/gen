@@ -13,12 +13,6 @@ CREATE TABLE sequence (
   "length" INTEGER NOT NULL
 );
 
-CREATE TABLE path (
-  id INTEGER PRIMARY KEY NOT NULL,
-  name TEXT NOT NULL,
-  path_index INTEGER NOT NULL DEFAULT 0
-);
-
 CREATE TABLE block_group (
   id INTEGER PRIMARY KEY NOT NULL,
   collection_name TEXT NOT NULL,
@@ -44,7 +38,7 @@ CREATE UNIQUE INDEX block_uidx ON block(sequence_hash, block_group_id, start, en
 
 CREATE TABLE edges (
   id INTEGER PRIMARY KEY NOT NULL,
-  source_id INTEGER NOT NULL,
+  source_id INTEGER,
   target_id INTEGER,
   chromosome_index INTEGER NOT NULL,
   phased INTEGER NOT NULL,
@@ -52,5 +46,23 @@ CREATE TABLE edges (
   FOREIGN KEY(target_id) REFERENCES block(id),
   constraint chk_phased check (phased in (0, 1))
 );
-
 CREATE UNIQUE INDEX edge_uidx ON edges(source_id, target_id, chromosome_index, phased);
+
+CREATE TABLE path (
+  id INTEGER PRIMARY KEY NOT NULL,
+  block_group_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  FOREIGN KEY(block_group_id) REFERENCES block_group(id)
+);
+CREATE UNIQUE INDEX path_uidx ON path(block_group_id, name);
+
+CREATE TABLE path_edges (
+  id INTEGER PRIMARY KEY NOT NULL,
+  path_id INTEGER NOT NULL,
+  source_edge_id INTEGER,
+  target_edge_id INTEGER,
+  FOREIGN KEY(source_edge_id) REFERENCES edges(id),
+  FOREIGN KEY(target_edge_id) REFERENCES edges(id),
+  FOREIGN KEY(path_id) REFERENCES path(id)
+);
+CREATE UNIQUE INDEX path_edge_uidx ON path_edges(path_id, source_edge_id, target_edge_id);

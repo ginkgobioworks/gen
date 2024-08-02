@@ -1,15 +1,24 @@
-use std::collections::hash_map::Entry::Vacant;
-use std::collections::HashMap;
-use std::fmt::*;
-
+use noodles::vcf::variant::record::info::field::value::array::Values;
+use petgraph::data::Build;
+use petgraph::graphmap::DiGraphMap;
+use petgraph::visit::{Dfs, IntoNeighborsDirected, NodeCount};
+use petgraph::Direction;
+use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
+use std::collections::{HashMap, HashSet};
+use std::fmt::*;
+use std::hash::Hash;
 
 pub mod block;
 pub mod edge;
+pub mod path;
 pub mod sequence;
+
 use crate::models;
 use crate::models::block::Block;
 use crate::models::edge::Edge;
+use crate::models::path::{all_simple_paths, Path, PathEdge};
+use crate::models::sequence::Sequence;
 
 #[derive(Debug)]
 pub struct Collection {
@@ -67,470 +76,6 @@ impl Sample {
 }
 
 #[derive(Debug)]
-pub struct Path {
-    pub id: i32,
-    pub collection_name: String,
-    pub sample_name: Option<String>,
-    pub name: String,
-    pub path_index: i32,
-}
-
-impl Path {
-    // pub fn create(
-    //     conn: &mut Connection,
-    //     collection_name: &String,
-    //     sample_name: Option<&String>,
-    //     path_name: &String,
-    //     path_index: Option<i32>,
-    // ) -> Path {
-    //     let query = "INSERT INTO path (collection_name, sample_name, name, path_index) VALUES (?1, ?2, ?3, ?4) RETURNING *";
-    //     let mut stmt = conn.prepare(query).unwrap();
-    //     let index = path_index.unwrap_or(0);
-    //     match stmt.query_row((collection_name, sample_name, path_name, index), |row| {
-    //         Ok(Path {
-    //             id: row.get(0)?,
-    //             collection_name: row.get(1)?,
-    //             sample_name: row.get(2)?,
-    //             name: row.get(3)?,
-    //             path_index: row.get(4)?,
-    //         })
-    //     }) {
-    //         Ok(path) => path,
-    //         Err(rusqlite::Error::SqliteFailure(err, details)) => {
-    //             if err.code == rusqlite::ErrorCode::ConstraintViolation {
-    //                 println!("{err:?} {details:?}");
-    //                 Path {
-    //                     id: conn
-    //                         .query_row(
-    //                             "select id from path where collection_name = ?1 and sample_name is null and name = ?2 and path_index = ?3",
-    //                             (collection_name, path_name, index),
-    //                             |row| row.get(0),
-    //                         )
-    //                         .unwrap(),
-    //                     collection_name: collection_name.clone(),
-    //                     sample_name: sample_name.map(|s| s.to_string()),
-    //                     name: path_name.clone(),
-    //                     path_index: index,
-    //                 }
-    //             } else {
-    //                 panic!("something bad happened querying the database")
-    //             }
-    //         }
-    //         Err(_) => {
-    //             panic!("something bad happened querying the database")
-    //         }
-    //     }
-    // }
-    //
-    // pub fn clone(conn: &mut Connection, source_path_id: i32, target_path_id: i32) {
-    //     let mut stmt = conn
-    //         .prepare_cached(
-    //             "SELECT id, sequence_hash, start, end, strand from block where path_id = ?1",
-    //         )
-    //         .unwrap();
-    //     let mut block_map: HashMap<i32, i32> = HashMap::new();
-    //     let mut it = stmt.query([source_path_id]).unwrap();
-    //     let mut row = it.next().unwrap();
-    //     while row.is_some() {
-    //         let block = row.unwrap();
-    //         let block_id: i32 = block.get(0).unwrap();
-    //         let hash: String = block.get(1).unwrap();
-    //         let start = block.get(2).unwrap();
-    //         let end = block.get(3).unwrap();
-    //         let strand: String = block.get(4).unwrap();
-    //         let new_block = Block::create(conn, &hash, target_path_id, start, end, &strand);
-    //         block_map.insert(block_id, new_block.id);
-    //         row = it.next().unwrap();
-    //     }
-    //
-    //     // todo: figure out rusqlite's rarray
-    //     let mut stmt = conn
-    //         .prepare_cached("SELECT source_id, target_id from edges where source_id IN (?1)")
-    //         .unwrap();
-    //     let block_keys = block_map
-    //         .keys()
-    //         .map(|k| format!("{k}"))
-    //         .collect::<Vec<_>>()
-    //         .join(", ");
-    //     let mut it = stmt.query([block_keys]).unwrap();
-    //     let mut row = it.next().unwrap();
-    //     while row.is_some() {
-    //         let edge = row.unwrap();
-    //         let source_id: i32 = edge.get(0).unwrap();
-    //         let target_id: Option<i32> = edge.get(1).unwrap();
-    //         Edge::create(
-    //             conn,
-    //             *block_map.get(&source_id).unwrap_or(&source_id),
-    //             target_id,
-    //         );
-    //         row = it.next().unwrap();
-    //     }
-    // }
-    //
-    // pub fn get_or_create_sample_path(
-    //     conn: &mut Connection,
-    //     collection_name: &String,
-    //     sample_name: &String,
-    //     path_name: &String,
-    //     new_path_index: i32,
-    // ) -> i32 {
-    //     let mut path_id : i32 = match conn.query_row(
-    //         "select id from path where collection_name = ?1 AND sample_name = ?2 AND name = ?3 AND path_index = ?4",
-    //         (collection_name, sample_name, path_name, new_path_index),
-    //         |row| row.get(0),
-    //     ) {
-    //         Ok(res) => res,
-    //         Err(rusqlite::Error::QueryReturnedNoRows) => 0,
-    //         Err(_e) => {
-    //             panic!("Error querying the database: {_e}");
-    //         }
-    //     };
-    //     if path_id != 0 {
-    //         return path_id;
-    //     } else {
-    //         // no path exists, so make it first -- check if we have a reference path for this sample first
-    //         path_id = match conn.query_row(
-    //         "select id from path where collection_name = ?1 AND sample_name = ?2 AND name = ?3 AND path_index = 0",
-    //         (collection_name, sample_name, path_name),
-    //         |row| row.get(0),
-    //         ) {
-    //             Ok(res) => res,
-    //             Err(rusqlite::Error::QueryReturnedNoRows) => 0,
-    //             Err(_e) => {
-    //                 panic!("something bad happened querying the database")
-    //             }
-    //         }
-    //     }
-    //     if path_id == 0 {
-    //         // use the base reference bath if it exists since there is no base sample path
-    //         path_id = match conn.query_row(
-    //         "select path.id from path where collection_name = ?1 AND sample_name IS null AND name = ?2 AND path_index = 0",
-    //         (collection_name, path_name),
-    //         |row| row.get(0),
-    //         ) {
-    //             Ok(res) => res,
-    //             Err(rusqlite::Error::QueryReturnedNoRows) => panic!("No base path exists"),
-    //             Err(_e) => {
-    //                 panic!("something bad happened querying the database")
-    //             }
-    //         }
-    //     }
-    //     let new_path_id = Path::create(
-    //         conn,
-    //         collection_name,
-    //         Some(sample_name),
-    //         path_name,
-    //         Some(new_path_index),
-    //     );
-    //
-    //     // clone parent blocks/edges
-    //     Path::clone(conn, path_id, new_path_id.id);
-    //
-    //     new_path_id.id
-    // }
-    //
-    // #[allow(clippy::ptr_arg)]
-    // #[allow(clippy::too_many_arguments)]
-    // pub fn insert_change(
-    //     conn: &mut Connection,
-    //     path_id: i32,
-    //     start: i32,
-    //     end: i32,
-    //     new_block_id: i32,
-    // ) {
-    //     println!("change is {path_id} {start} {end} {new_block_id}");
-    //     // todo:
-    //     // 1. get blocks where start-> end overlap
-    //     // 2. split old blocks at boundry points, make new block for left/right side
-    //     // 3. make new block for sequence we are changing
-    //     // 4. update edges
-    //     // add support for deletion
-    //     // cases to check:
-    //     //  change that is the size of a block
-    //     //  change that goes over multiple blocks
-    //     //  change that hits just start/end boundry, e.g. block is 1,5 and change is 3,5 or 1,3.
-    //     //  change that deletes block boundry
-    //     // https://stackoverflow.com/questions/3269434/whats-the-most-efficient-way-to-test-if-two-ranges-overlap
-    //     let mut stmt = conn.prepare_cached("select b.id, b.sequence_hash, b.path_id, b.start, b.end, b.strand, e.id as edge_id, e.source_id, e.target_id from block b left join edges e on (e.source_id = b.id or e.target_id = b.id) where b.path_id = ?1 AND b.start <= ?3 AND ?2 <= b.end AND b.id != ?4;").unwrap();
-    //     let mut block_edges: HashMap<i32, Vec<Edge>> = HashMap::new();
-    //     let mut blocks: HashMap<i32, Block> = HashMap::new();
-    //     let mut it = stmt.query([path_id, start, end, new_block_id]).unwrap();
-    //     let mut row = it.next().unwrap();
-    //     while row.is_some() {
-    //         let entry = row.unwrap();
-    //         let block_id = entry.get(0).unwrap();
-    //         let edge_id: Option<i32> = entry.get(6).unwrap();
-    //         blocks.insert(
-    //             block_id,
-    //             Block {
-    //                 id: block_id,
-    //                 sequence_hash: entry.get(1).unwrap(),
-    //                 path_id: entry.get(2).unwrap(),
-    //                 start: entry.get(3).unwrap(),
-    //                 end: entry.get(4).unwrap(),
-    //                 strand: entry.get(5).unwrap(),
-    //             },
-    //         );
-    //         if edge_id.is_some() {
-    //             if let Vacant(e) = block_edges.entry(block_id) {
-    //                 e.insert(vec![Edge {
-    //                     id: edge_id.unwrap(),
-    //                     source_id: entry.get(7).unwrap(),
-    //                     target_id: entry.get(8).unwrap(),
-    //                 }]);
-    //             } else {
-    //                 block_edges.get_mut(&block_id).unwrap().push(Edge {
-    //                     id: entry.get(6).unwrap(),
-    //                     source_id: entry.get(7).unwrap(),
-    //                     target_id: entry.get(8).unwrap(),
-    //                 });
-    //             }
-    //         } else {
-    //             println!("empty eid {row:?}");
-    //         }
-    //         row = it.next().unwrap();
-    //     }
-    //
-    //     #[derive(Debug)]
-    //     struct ReplacementEdge {
-    //         id: i32,
-    //         new_source_id: Option<i32>,
-    //         new_target_id: Option<i32>,
-    //     }
-    //     let mut replacement_edges: Vec<ReplacementEdge> = vec![];
-    //     let mut new_edges: Vec<(i32, i32)> = vec![];
-    //
-    //     for (block_id, block) in &blocks {
-    //         let contains_start = block.start <= start && start < block.end;
-    //         let contains_end = block.start <= end && end < block.end;
-    //
-    //         if contains_start && contains_end {
-    //             // our range is fully contained w/in the block
-    //             //      |----block------|
-    //             //        |----range---|
-    //             let left_block = Block::create(
-    //                 conn,
-    //                 &block.sequence_hash,
-    //                 path_id,
-    //                 block.start,
-    //                 start,
-    //                 &block.strand,
-    //             );
-    //             let right_block = Block::create(
-    //                 conn,
-    //                 &block.sequence_hash,
-    //                 path_id,
-    //                 end,
-    //                 block.end,
-    //                 &block.strand,
-    //             );
-    //             println!("lb {left_block:?} {right_block:?}");
-    //             new_edges.push((left_block.id, new_block_id));
-    //             new_edges.push((new_block_id, right_block.id));
-    //             // what stuff went to this block?
-    //             for edges in block_edges.get(block_id) {
-    //                 for edge in edges {
-    //                     println!("block {block_id} on edge {edge:?}");
-    //                     let mut new_source_id = None;
-    //                     let mut new_target_id = None;
-    //                     if edge.source_id == *block_id {
-    //                         new_source_id = Some(right_block.id);
-    //                     }
-    //                     if edge.target_id.is_some() && edge.target_id.unwrap() == *block_id {
-    //                         new_target_id = Some(left_block.id);
-    //                     }
-    //                     replacement_edges.push(ReplacementEdge {
-    //                         id: edge.id,
-    //                         new_source_id,
-    //                         new_target_id,
-    //                     });
-    //                     println!("new res {replacement_edges:?}");
-    //                 }
-    //             }
-    //         } else if contains_start {
-    //             // our range is overlapping the end of the block
-    //             // |----block---|
-    //             //        |----range---|
-    //             let left_block = Block::create(
-    //                 conn,
-    //                 &block.sequence_hash,
-    //                 path_id,
-    //                 block.start,
-    //                 start,
-    //                 &block.strand,
-    //             );
-    //             new_edges.push((left_block.id, new_block_id));
-    //             // what stuff went to this block?
-    //             for edges in block_edges.get(block_id) {
-    //                 for edge in edges {
-    //                     let mut new_source_id = None;
-    //                     let mut new_target_id = None;
-    //                     if edge.source_id == *block_id {
-    //                         new_source_id = Some(new_block_id);
-    //                     }
-    //                     if edge.target_id.is_some() && edge.target_id.unwrap() == *block_id {
-    //                         new_target_id = Some(left_block.id);
-    //                     }
-    //                     replacement_edges.push(ReplacementEdge {
-    //                         id: edge.id,
-    //                         new_source_id,
-    //                         new_target_id,
-    //                     });
-    //                 }
-    //             }
-    //         } else if contains_end {
-    //             // our range is overlapping the beginning of the block
-    //             //              |----block---|
-    //             //        |----range---|
-    //             let right_block = Block::create(
-    //                 conn,
-    //                 &block.sequence_hash,
-    //                 path_id,
-    //                 end,
-    //                 block.end,
-    //                 &block.strand,
-    //             );
-    //             // what stuff went to this block?
-    //             new_edges.push((new_block_id, right_block.id));
-    //             for edges in block_edges.get(block_id) {
-    //                 for edge in edges {
-    //                     let mut new_source_id = None;
-    //                     let mut new_target_id = None;
-    //                     if edge.source_id == *block_id {
-    //                         new_source_id = Some(right_block.id);
-    //                     }
-    //                     if edge.target_id.is_some() && edge.target_id.unwrap() == *block_id {
-    //                         new_target_id = Some(new_block_id);
-    //                     }
-    //                     replacement_edges.push(ReplacementEdge {
-    //                         id: edge.id,
-    //                         new_source_id,
-    //                         new_target_id,
-    //                     })
-    //                 }
-    //             }
-    //         } else {
-    //             // our range is the whole block, get rid of it
-    //             //          |--block---|
-    //             //        |-----range------|
-    //             // what stuff went to this block?
-    //             for edges in block_edges.get(block_id) {
-    //                 for edge in edges {
-    //                     let mut new_source_id = None;
-    //                     let mut new_target_id = None;
-    //                     if edge.source_id == *block_id {
-    //                         new_source_id = Some(new_block_id);
-    //                     }
-    //                     if edge.target_id.is_some() && edge.target_id.unwrap() == *block_id {
-    //                         new_target_id = Some(new_block_id);
-    //                     }
-    //                     replacement_edges.push(ReplacementEdge {
-    //                         id: edge.id,
-    //                         new_source_id,
-    //                         new_target_id,
-    //                     })
-    //                 }
-    //             }
-    //         }
-    //     }
-    //
-    //     for replacement_edge in replacement_edges {
-    //         let mut exist_query;
-    //         let mut update_query;
-    //         let mut placeholders: Vec<i32> = vec![];
-    //         if replacement_edge.new_source_id.is_some() && replacement_edge.new_target_id.is_some()
-    //         {
-    //             exist_query = "select id from edges where source_id = ?1 and target_id = ?2;";
-    //             update_query = "update edges set source_id = ?1 AND target_id = ?2 where id = ?3";
-    //             placeholders.push(replacement_edge.new_source_id.unwrap());
-    //             placeholders.push(replacement_edge.new_target_id.unwrap());
-    //         } else if replacement_edge.new_source_id.is_some() {
-    //             exist_query = "select id from edges where source_id = ?1 and target_id is null;";
-    //             update_query = "update edges set source_id = ?1 where id = ?2";
-    //             placeholders.push(replacement_edge.new_source_id.unwrap());
-    //         } else if replacement_edge.new_target_id.is_some() {
-    //             exist_query = "select id from edges where source_id is null and target_id = ?1;";
-    //             update_query = "update edges set target_id = ?1 where id = ?2";
-    //             placeholders.push(replacement_edge.new_target_id.unwrap());
-    //         } else {
-    //             continue;
-    //         }
-    //         println!("{exist_query:?} {update_query} {placeholders:?}");
-    //
-    //         let mut stmt = conn.prepare_cached(exist_query).unwrap();
-    //         if !stmt.exists(params_from_iter(&placeholders)).unwrap() {
-    //             placeholders.push(replacement_edge.id);
-    //             println!("updating {exist_query:?} {update_query} {placeholders:?}");
-    //             let mut stmt = conn.prepare_cached(update_query).unwrap();
-    //             stmt.execute(params_from_iter(&placeholders)).unwrap();
-    //         } else {
-    //             println!("edge exists");
-    //         }
-    //     }
-    //     for new_edge in new_edges {
-    //         Edge::create(conn, new_edge.0, Some(new_edge.1));
-    //     }
-    //
-    //     let block_keys = blocks
-    //         .keys()
-    //         .map(|k| format!("{k}"))
-    //         .collect::<Vec<_>>()
-    //         .join(", ");
-    //     let mut stmt = conn
-    //         .prepare_cached("DELETE from block where id IN (?1)")
-    //         .unwrap();
-    //     stmt.execute([block_keys]).unwrap();
-    // }
-    //
-    // pub fn sequence(
-    //     conn: &mut Connection,
-    //     collection_name: &str,
-    //     sample_name: Option<&String>,
-    //     path_name: &str,
-    //     path_index: i32,
-    // ) -> String {
-    //     struct SequenceBlock {
-    //         sequence: String,
-    //         strand: String,
-    //     }
-    //     let mut query;
-    //     let mut placeholders: Vec<rusqlite::types::Value> =
-    //         vec![collection_name.to_string().into()];
-    //
-    //     if sample_name.is_some() {
-    //         query = "WITH RECURSIVE traverse(block_id, block_sequence, block_start, block_end, block_strand, depth) AS (
-    //       SELECT edges.source_id, substr(seq.sequence, block.start + 1, block.end - block.start), block.start, block.end, block.strand, 0 as depth FROM path left join block on (path.id = block.path_id) left join sequence seq on (seq.hash = block.sequence_hash) left join edges on (block.id = edges.source_id or block.id = edges.target_id) WHERE path.collection_name = ?1 AND path.sample_name = ?2 AND path.name = ?3 AND path.path_index = ?4 and edges.target_id is null
-    //       UNION
-    //       SELECT e2.source_id, substr(seq2.sequence, b2.start + 1, b2.end - b2.start), b2.start, b2.end, b2.strand, depth + 1 FROM edges e2 left join block b2 on (b2.id = e2.source_id) left join sequence seq2 on (seq2.hash = b2.sequence_hash) JOIN traverse t2 ON e2.target_id = t2.block_id
-    //     ) SELECT block_sequence as sequence, block_strand as strand FROM traverse order by depth desc;";
-    //         placeholders.push(sample_name.unwrap().clone().into());
-    //     } else {
-    //         query = "WITH RECURSIVE traverse(block_id, block_sequence, block_start, block_end, block_strand, depth) AS (
-    //       SELECT edges.source_id, substr(seq.sequence, block.start + 1, block.end - block.start), block.start, block.end, block.strand, 0 as depth FROM path left join block on (path.id = block.path_id) left join sequence seq on (seq.hash = block.sequence_hash) left join edges on (block.id = edges.source_id or block.id = edges.target_id) WHERE path.collection_name = ?1 AND path.sample_name is null AND path.name = ?2 AND path.path_index = ?3 and edges.target_id is null
-    //       UNION
-    //       SELECT e2.source_id, substr(seq2.sequence, b2.start + 1, b2.end - b2.start), b2.start, b2.end, b2.strand, depth + 1 FROM edges e2 left join block b2 on (b2.id = e2.source_id) left join sequence seq2 on (seq2.hash = b2.sequence_hash) JOIN traverse t2 ON e2.target_id = t2.block_id
-    //     ) SELECT block_sequence as sequence, block_strand as strand FROM traverse order by depth desc;"
-    //     }
-    //     placeholders.push(path_name.to_string().into());
-    //     placeholders.push(path_index.into());
-    //     let mut stmt = conn.prepare(query).unwrap();
-    //     let mut blocks = stmt
-    //         .query_map(params_from_iter(placeholders), |row| {
-    //             Ok(SequenceBlock {
-    //                 sequence: row.get(0)?,
-    //                 strand: row.get(1)?,
-    //             })
-    //         })
-    //         .unwrap();
-    //     let mut sequence = "".to_string();
-    //     for block in blocks {
-    //         sequence.push_str(&block.unwrap().sequence);
-    //     }
-    //     sequence
-    // }
-}
-
-#[derive(Debug)]
 pub struct BlockGroup {
     pub id: i32,
     pub collection_name: String,
@@ -581,14 +126,14 @@ impl BlockGroup {
         }
     }
 
-    pub fn clone(conn: &mut Connection, source_id: i32, target_id: i32) {
+    pub fn clone(conn: &mut Connection, source_block_group_id: i32, target_block_group_id: i32) {
         let mut stmt = conn
             .prepare_cached(
                 "SELECT id, sequence_hash, start, end, strand from block where block_group_id = ?1",
             )
             .unwrap();
         let mut block_map: HashMap<i32, i32> = HashMap::new();
-        let mut it = stmt.query([source_id]).unwrap();
+        let mut it = stmt.query([source_block_group_id]).unwrap();
         let mut row = it.next().unwrap();
         while row.is_some() {
             let block = row.unwrap();
@@ -597,14 +142,14 @@ impl BlockGroup {
             let start = block.get(2).unwrap();
             let end = block.get(3).unwrap();
             let strand: String = block.get(4).unwrap();
-            let new_block = Block::create(conn, &hash, target_id, start, end, &strand);
+            let new_block = Block::create(conn, &hash, target_block_group_id, start, end, &strand);
             block_map.insert(block_id, new_block.id);
             row = it.next().unwrap();
         }
 
         // todo: figure out rusqlite's rarray
         let mut stmt = conn
-            .prepare_cached("SELECT source_id, target_id from edges where source_id IN (?1)")
+            .prepare_cached("SELECT id, source_id, target_id, chromosome_index, phased from edges where source_id IN (?1) OR target_id in (?1)")
             .unwrap();
         let block_keys = block_map
             .keys()
@@ -613,18 +158,66 @@ impl BlockGroup {
             .join(", ");
         let mut it = stmt.query([block_keys]).unwrap();
         let mut row = it.next().unwrap();
+        let mut edge_map = HashMap::new();
         while row.is_some() {
             let edge = row.unwrap();
-            let source_id: i32 = edge.get(0).unwrap();
-            let target_id: Option<i32> = edge.get(1).unwrap();
-            Edge::create(
-                conn,
-                *block_map.get(&source_id).unwrap_or(&source_id),
-                target_id,
-                0,
-                0,
-            );
+            let edge_id: i32 = edge.get(0).unwrap();
+            let source_id: Option<i32> = edge.get(1).unwrap();
+            let target_id: Option<i32> = edge.get(2).unwrap();
+            let chrom_index = edge.get(3).unwrap();
+            let phased = edge.get(4).unwrap();
+            let mut new_edge;
+            if target_id.is_some() && source_id.is_some() {
+                let target_id = target_id.unwrap();
+                let source_id = source_id.unwrap();
+                new_edge = Edge::create(
+                    conn,
+                    Some(*block_map.get(&source_id).unwrap_or(&source_id)),
+                    Some(*block_map.get(&target_id).unwrap_or(&target_id)),
+                    chrom_index,
+                    phased,
+                );
+            } else if target_id.is_some() {
+                let target_id = target_id.unwrap();
+                new_edge = Edge::create(
+                    conn,
+                    None,
+                    Some(*block_map.get(&target_id).unwrap_or(&target_id)),
+                    chrom_index,
+                    phased,
+                );
+            } else if source_id.is_some() {
+                let source_id = source_id.unwrap();
+                new_edge = Edge::create(
+                    conn,
+                    Some(*block_map.get(&source_id).unwrap_or(&source_id)),
+                    None,
+                    0,
+                    0,
+                );
+            } else {
+                panic!("no source and target specified.");
+            }
+            edge_map.insert(edge_id, new_edge.id);
+
             row = it.next().unwrap();
+        }
+        println!("new edges {edge_map:?}");
+
+        let existing_paths = Path::get_paths(
+            conn,
+            "SELECT * from path where block_group_id = ?1",
+            vec![Value::from(source_block_group_id)],
+        );
+        println!("eps {existing_paths:?}");
+
+        for path in existing_paths {
+            let mut new_edges = vec![];
+            for edge in path.edges {
+                new_edges.push(*edge_map.get(&edge).unwrap());
+            }
+            let new_p = Path::create(conn, &path.name, target_block_group_id, new_edges);
+            println!("made {new_p:?}");
         }
     }
 
@@ -663,47 +256,120 @@ impl BlockGroup {
         }
         let new_bg_id = BlockGroup::create(conn, collection_name, Some(sample_name), group_name);
 
-        // clone parent blocks/edges
+        // clone parent blocks/edges/path
         BlockGroup::clone(conn, bg_id, new_bg_id.id);
 
         new_bg_id.id
+    }
+
+    pub fn get_all_sequences(conn: &Connection, block_group_id: i32) -> HashSet<String> {
+        let mut block_map = HashMap::new();
+        for block in Block::get_blocks(
+            conn,
+            "select * from block where block_group_id = ?1",
+            vec![Value::from(block_group_id)],
+        ) {
+            block_map.insert(block.id, block);
+        }
+        let sequence_hashes = block_map
+            .values()
+            .map(|block| format!("\"{id}\"", id = block.sequence_hash))
+            .collect::<Vec<_>>()
+            .join(",");
+        let mut sequence_map = HashMap::new();
+        for sequence in Sequence::get_sequences(
+            conn,
+            &format!("select * from sequence where hash in ({sequence_hashes})"),
+            vec![],
+        ) {
+            sequence_map.insert(sequence.hash, sequence.sequence);
+        }
+        let block_ids = block_map
+            .keys()
+            .map(|id| format!("{id}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let edges = Edge::get_edges(conn, &format!("select * from edges where source_id in ({block_ids}) OR target_id in ({block_ids})"), vec![]);
+        let mut graph: DiGraphMap<i32, ()> = DiGraphMap::new();
+        for block_id in block_map.keys() {
+            graph.add_node(*block_id);
+        }
+        for edge in edges {
+            if edge.source_id.is_some() && edge.target_id.is_some() {
+                graph.add_edge(edge.source_id.unwrap(), edge.target_id.unwrap(), ());
+            }
+        }
+        let mut start_nodes = vec![];
+        let mut end_nodes = vec![];
+        for node in graph.nodes() {
+            let has_incoming = graph.neighbors_directed(node, Direction::Incoming).next();
+            let has_outgoing = graph.neighbors_directed(node, Direction::Outgoing).next();
+            if has_incoming.is_none() {
+                start_nodes.push(node);
+            }
+            if has_outgoing.is_none() {
+                end_nodes.push(node);
+            }
+        }
+        let mut sequences = HashSet::new();
+        for start_node in start_nodes {
+            for end_node in &end_nodes {
+                for path in all_simple_paths(&graph, start_node, *end_node) {
+                    let mut current_sequence = "".to_string();
+                    for node in path {
+                        let block = block_map.get(&node).unwrap();
+                        let block_sequence = sequence_map.get(&block.sequence_hash).unwrap();
+                        current_sequence.push_str(
+                            &block_sequence[(block.start as usize)..(block.end as usize)],
+                        );
+                    }
+                    sequences.insert(current_sequence);
+                }
+            }
+        }
+        sequences
     }
 
     #[allow(clippy::ptr_arg)]
     #[allow(clippy::too_many_arguments)]
     pub fn insert_change(
         conn: &mut Connection,
-        block_group_id: i32,
+        path_id: i32,
         start: i32,
         end: i32,
         new_block_id: i32,
         chromosome_index: i32,
         phased: i32,
     ) {
-        println!("change is {block_group_id} {start} {end} {new_block_id}");
+        println!("change is {path_id} {start} {end} {new_block_id}");
         // todo:
         // 1. get blocks where start-> end overlap
-        // 2. split old blocks at boundry points, make new block for left/right side
+        // 2. split old blocks at boundary points, make new block for left/right side
         // 3. make new block for sequence we are changing
         // 4. update edges
         // add support for deletion
         // cases to check:
         //  change that is the size of a block
         //  change that goes over multiple blocks
-        //  change that hits just start/end boundry, e.g. block is 1,5 and change is 3,5 or 1,3.
-        //  change that deletes block boundry
+        //  change that hits just start/end boundary, e.g. block is 1,5 and change is 3,5 or 1,3.
+        //  change that deletes block boundary
         // https://stackoverflow.com/questions/3269434/whats-the-most-efficient-way-to-test-if-two-ranges-overlap
-        let mut stmt = conn.prepare_cached("select b.id, b.sequence_hash, b.block_group_id, b.start, b.end, b.strand, e.id as edge_id, e.source_id, e.target_id, e.chromosome_index, e.phased from block b left join edges e on (e.source_id = b.id or e.target_id = b.id) where b.block_group_id = ?1 AND b.start <= ?3 AND ?2 <= b.end AND b.id != ?4 AND e.chromosome_index = 0;").unwrap();
-        let mut block_edges: HashMap<i32, Vec<Edge>> = HashMap::new();
+
+        // check if we've already inserted this for edges connected
+        // that means we have an edge with the chromosome index, that connects our start/end coordinates with the new block id
+
+        let path = Path::get(conn, path_id);
+        let block_group_id = path.block_group_id;
+        let graph = PathEdge::edges_to_graph(conn, path.id);
+        println!("{path:?} {graph:?}");
+        let query = format!("SELECT id, sequence_hash, block_group_id, start, end, strand from block where id in ({block_ids})", block_ids = graph.nodes().map(|k| format!("{k}")).collect::<Vec<_>>().join(","));
+        let mut stmt = conn.prepare(&query).unwrap();
         let mut blocks: HashMap<i32, Block> = HashMap::new();
-        let mut it = stmt
-            .query([block_group_id, start, end, new_block_id])
-            .unwrap();
+        let mut it = stmt.query([]).unwrap();
         let mut row = it.next().unwrap();
         while row.is_some() {
             let entry = row.unwrap();
             let block_id = entry.get(0).unwrap();
-            let edge_id: Option<i32> = entry.get(6).unwrap();
             blocks.insert(
                 block_id,
                 Block {
@@ -715,219 +381,134 @@ impl BlockGroup {
                     strand: entry.get(5).unwrap(),
                 },
             );
-            if edge_id.is_some() {
-                if let Vacant(e) = block_edges.entry(block_id) {
-                    e.insert(vec![Edge {
-                        id: edge_id.unwrap(),
-                        source_id: entry.get(7).unwrap(),
-                        target_id: entry.get(8).unwrap(),
-                        chromosome_index: entry.get(9).unwrap(),
-                        phased: entry.get(10).unwrap(),
-                    }]);
-                } else {
-                    block_edges.get_mut(&block_id).unwrap().push(Edge {
-                        id: entry.get(6).unwrap(),
-                        source_id: entry.get(7).unwrap(),
-                        target_id: entry.get(8).unwrap(),
-                        chromosome_index: entry.get(9).unwrap(),
-                        phased: entry.get(10).unwrap(),
-                    });
-                }
-            } else {
-                println!("empty eid {row:?}");
-            }
             row = it.next().unwrap();
         }
-
-        #[derive(Debug)]
-        struct ReplacementEdge {
-            id: i32,
-            new_source_id: Option<i32>,
-            new_target_id: Option<i32>,
+        // TODO: probably don't need the graph, just get vector of source_ids.
+        let mut start_node = -1;
+        let start_edge = Edge::get(conn, path.edges[0]);
+        if let Some(value) = start_edge.source_id {
+            start_node = value
+        } else if let Some(value) = start_edge.target_id {
+            start_node = value
         }
-        let mut replacement_edges: Vec<ReplacementEdge> = vec![];
-        let mut new_edges: Vec<(i32, i32)> = vec![];
+        let mut dfs = Dfs::new(&graph, start_node as u32);
+        let mut path_start = 0;
+        let mut path_end = 0;
+        let mut new_edges = vec![];
+        let mut previous_block: Option<&Block> = None;
+        let mut next_node = dfs.next(&graph);
+        println!("{blocks:?}");
+        while next_node.is_some() {
+            let nx = next_node.unwrap();
+            println!("nx is {nx}");
+            let block = blocks.get(&(nx as i32)).unwrap();
+            let block_length = (block.end - block.start);
+            path_end += block_length;
 
-        for (block_id, block) in &blocks {
-            let contains_start = block.start <= start && start < block.end;
-            let contains_end = block.start <= end && end < block.end;
+            // do stuff here
+            println!("{nx} {block:?} {start} {end} {path_start} {path_end}");
+
+            let contains_start = path_start <= start && start < path_end;
+            let contains_end = path_start <= end && end < path_end;
+            let overlap = path_start <= end && start <= path_end;
 
             if contains_start && contains_end {
                 // our range is fully contained w/in the block
                 //      |----block------|
                 //        |----range---|
-                let left_block = Block::create(
-                    conn,
-                    &block.sequence_hash,
-                    block_group_id,
-                    block.start,
-                    start,
-                    &block.strand,
-                );
-                let right_block = Block::create(
-                    conn,
-                    &block.sequence_hash,
-                    block_group_id,
-                    end,
-                    block.end,
-                    &block.strand,
-                );
-                println!("lb {left_block:?} {right_block:?}");
-                new_edges.push((left_block.id, new_block_id));
-                new_edges.push((new_block_id, right_block.id));
-                // what stuff went to this block?
-                for edges in block_edges.get(block_id) {
-                    for edge in edges {
-                        println!("block {block_id} on edge {edge:?}");
-                        let mut new_source_id = None;
-                        let mut new_target_id = None;
-                        if edge.source_id == *block_id {
-                            new_source_id = Some(right_block.id);
-                        }
-                        if edge.target_id.is_some() && edge.target_id.unwrap() == *block_id {
-                            new_target_id = Some(left_block.id);
-                        }
-                        replacement_edges.push(ReplacementEdge {
-                            id: edge.id,
-                            new_source_id,
-                            new_target_id,
-                        });
-                        println!("new res {replacement_edges:?}");
-                    }
-                }
+                let (left_block, right_block) =
+                    Block::split(conn, block, start - path_start, chromosome_index, phased)
+                        .unwrap();
+                Block::delete(conn, block.id);
+                // let left_block = Block::create(
+                //     conn,
+                //     &block.sequence_hash,
+                //     block_group_id,
+                //     block.start,
+                //     start - path_start,
+                //     &block.strand,
+                // );
+                // let right_block = Block::create(
+                //     conn,
+                //     &block.sequence_hash,
+                //     block_group_id,
+                //     block.start + (end - path_start),
+                //     block.end,
+                //     &block.strand,
+                // );
+                // if let Some(value) = previous_block {
+                //     new_edges.push((Some(value.id), Some(left_block.id)))
+                // }
+                new_edges.push((Some(left_block.id), Some(new_block_id)));
+                new_edges.push((Some(new_block_id), Some(right_block.id)));
             } else if contains_start {
                 // our range is overlapping the end of the block
                 // |----block---|
                 //        |----range---|
-                let left_block = Block::create(
-                    conn,
-                    &block.sequence_hash,
-                    block_group_id,
-                    block.start,
-                    start,
-                    &block.strand,
-                );
-                new_edges.push((left_block.id, new_block_id));
-                // what stuff went to this block?
-                for edges in block_edges.get(block_id) {
-                    for edge in edges {
-                        let mut new_source_id = None;
-                        let mut new_target_id = None;
-                        if edge.source_id == *block_id {
-                            new_source_id = Some(new_block_id);
-                        }
-                        if edge.target_id.is_some() && edge.target_id.unwrap() == *block_id {
-                            new_target_id = Some(left_block.id);
-                        }
-                        replacement_edges.push(ReplacementEdge {
-                            id: edge.id,
-                            new_source_id,
-                            new_target_id,
-                        });
-                    }
-                }
+                let (left_block, right_block) =
+                    Block::split(conn, block, start - path_start, chromosome_index, phased)
+                        .unwrap();
+                Block::delete(conn, block.id);
+                // let left_block = Block::create(
+                //     conn,
+                //     &block.sequence_hash,
+                //     block_group_id,
+                //     block.start,
+                //     start - path_start,
+                //     &block.strand,
+                // );
+                // if let Some(value) = previous_block {
+                //     new_edges.push((Some(value.id), Some(left_block.id)));
+                // } else {
+                //     new_edges.push((None, Some(left_block.id)));
+                // }
+                new_edges.push((Some(left_block.id), Some(new_block_id)));
             } else if contains_end {
                 // our range is overlapping the beginning of the block
                 //              |----block---|
                 //        |----range---|
-                let right_block = Block::create(
-                    conn,
-                    &block.sequence_hash,
-                    block_group_id,
-                    end,
-                    block.end,
-                    &block.strand,
-                );
-                // what stuff went to this block?
-                new_edges.push((new_block_id, right_block.id));
-                for edges in block_edges.get(block_id) {
-                    for edge in edges {
-                        let mut new_source_id = None;
-                        let mut new_target_id = None;
-                        if edge.source_id == *block_id {
-                            new_source_id = Some(right_block.id);
-                        }
-                        if edge.target_id.is_some() && edge.target_id.unwrap() == *block_id {
-                            new_target_id = Some(new_block_id);
-                        }
-                        replacement_edges.push(ReplacementEdge {
-                            id: edge.id,
-                            new_source_id,
-                            new_target_id,
-                        })
-                    }
-                }
-            } else {
-                // our range is the whole block, get rid of it
+                let (left_block, right_block) =
+                    Block::split(conn, block, end - path_start, chromosome_index, phased).unwrap();
+                Block::delete(conn, block.id);
+                // let right_block = Block::create(
+                //     conn,
+                //     &block.sequence_hash,
+                //     block_group_id,
+                //     end - path_start,
+                //     block.end,
+                //     &block.strand,
+                // );
+                // // what stuff went to this block?
+                new_edges.push((Some(new_block_id), Some(right_block.id)));
+                // let last_node = dfs.next(&graph);
+                // if last_node.is_some() {
+                //     let next_block = blocks.get(&(last_node.unwrap() as i32)).unwrap();
+                //     new_edges.push((Some(right_block.id), Some(next_block.id)));
+                // } else {
+                //     new_edges.push((Some(right_block.id), None))
+                // }
+                break;
+            } else if overlap {
+                // our range is the whole block, ignore it
                 //          |--block---|
                 //        |-----range------|
-                // what stuff went to this block?
-                for edges in block_edges.get(block_id) {
-                    for edge in edges {
-                        let mut new_source_id = None;
-                        let mut new_target_id = None;
-                        if edge.source_id == *block_id {
-                            new_source_id = Some(new_block_id);
-                        }
-                        if edge.target_id.is_some() && edge.target_id.unwrap() == *block_id {
-                            new_target_id = Some(new_block_id);
-                        }
-                        replacement_edges.push(ReplacementEdge {
-                            id: edge.id,
-                            new_source_id,
-                            new_target_id,
-                        })
-                    }
-                }
+            } else {
+                // not yet at the range
             }
+
+            path_start += block_length;
+            if path_start > end {
+                break;
+            }
+            previous_block = Some(block);
+            next_node = dfs.next(&graph);
         }
 
-        for replacement_edge in replacement_edges {
-            let mut exist_query;
-            let mut update_query;
-            let mut placeholders: Vec<i32> = vec![];
-            if replacement_edge.new_source_id.is_some() && replacement_edge.new_target_id.is_some()
-            {
-                exist_query = "select id from edges where source_id = ?1 and target_id = ?2;";
-                update_query = "update edges set source_id = ?1 AND target_id = ?2 where id = ?3";
-                placeholders.push(replacement_edge.new_source_id.unwrap());
-                placeholders.push(replacement_edge.new_target_id.unwrap());
-            } else if replacement_edge.new_source_id.is_some() {
-                exist_query = "select id from edges where source_id = ?1 and target_id is null;";
-                update_query = "update edges set source_id = ?1 where id = ?2";
-                placeholders.push(replacement_edge.new_source_id.unwrap());
-            } else if replacement_edge.new_target_id.is_some() {
-                exist_query = "select id from edges where source_id is null and target_id = ?1;";
-                update_query = "update edges set target_id = ?1 where id = ?2";
-                placeholders.push(replacement_edge.new_target_id.unwrap());
-            } else {
-                continue;
-            }
-            println!("{exist_query:?} {update_query} {placeholders:?}");
+        println!("change is {path:?} {graph:?} {blocks:?} {new_edges:?}");
 
-            let mut stmt = conn.prepare_cached(exist_query).unwrap();
-            if !stmt.exists(params_from_iter(&placeholders)).unwrap() {
-                placeholders.push(replacement_edge.id);
-                println!("updating {exist_query:?} {update_query} {placeholders:?}");
-                let mut stmt = conn.prepare_cached(update_query).unwrap();
-                stmt.execute(params_from_iter(&placeholders)).unwrap();
-            } else {
-                println!("edge exists");
-            }
-        }
         for new_edge in new_edges {
-            Edge::create(conn, new_edge.0, Some(new_edge.1), chromosome_index, phased);
+            Edge::create(conn, new_edge.0, new_edge.1, chromosome_index, phased);
         }
-
-        let block_keys = blocks
-            .keys()
-            .map(|k| format!("{k}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let mut stmt = conn
-            .prepare_cached("DELETE from block where id IN (?1)")
-            .unwrap();
-        stmt.execute([block_keys]).unwrap();
     }
 
     // TODO: move this to path, doesn't belong in block group
@@ -949,15 +530,15 @@ impl BlockGroup {
             query = "WITH RECURSIVE traverse(block_id, block_sequence, block_start, block_end, block_strand, depth) AS (
           SELECT edges.source_id, substr(seq.sequence, block.start + 1, block.end - block.start), block.start, block.end, block.strand, 0 as depth FROM block_group left join block on (block_group.id = block.block_group_id) left join sequence seq on (seq.hash = block.sequence_hash) left join edges on (block.id = edges.source_id or block.id = edges.target_id) WHERE block_group.collection_name = ?1 AND block_group.sample_name = ?2 AND block_group.name = ?3 and edges.target_id is null
           UNION
-          SELECT e2.source_id, substr(seq2.sequence, b2.start + 1, b2.end - b2.start), b2.start, b2.end, b2.strand, depth + 1 FROM edges e2 left join block b2 on (b2.id = e2.source_id) left join sequence seq2 on (seq2.hash = b2.sequence_hash) JOIN traverse t2 ON e2.target_id = t2.block_id
-        ) SELECT block_sequence as sequence, block_strand as strand FROM traverse order by depth desc;";
+          SELECT e2.source_id, substr(seq2.sequence, b2.start + 1, b2.end - b2.start), b2.start, b2.end, b2.strand, depth + 1 FROM edges e2 left join block b2 on (b2.id = e2.source_id) left join sequence seq2 on (seq2.hash = b2.sequence_hash) JOIN traverse t2 ON e2.target_id = t2.block_id order by depth desc
+        ) SELECT block_sequence as sequence, block_strand as strand FROM traverse;";
             placeholders.push(sample_name.unwrap().clone().into());
         } else {
             query = "WITH RECURSIVE traverse(block_id, block_sequence, block_start, block_end, block_strand, depth) AS (
           SELECT edges.source_id, substr(seq.sequence, block.start + 1, block.end - block.start), block.start, block.end, block.strand, 0 as depth FROM block_group left join block on (block_group.id = block.block_group_id) left join sequence seq on (seq.hash = block.sequence_hash) left join edges on (block.id = edges.source_id or block.id = edges.target_id) WHERE block_group.collection_name = ?1 AND block_group.sample_name is null AND block_group.name = ?2 and edges.target_id is null
           UNION
-          SELECT e2.source_id, substr(seq2.sequence, b2.start + 1, b2.end - b2.start), b2.start, b2.end, b2.strand, depth + 1 FROM edges e2 left join block b2 on (b2.id = e2.source_id) left join sequence seq2 on (seq2.hash = b2.sequence_hash) JOIN traverse t2 ON e2.target_id = t2.block_id
-        ) SELECT block_sequence as sequence, block_strand as strand FROM traverse order by depth desc;"
+          SELECT e2.source_id, substr(seq2.sequence, b2.start + 1, b2.end - b2.start), b2.start, b2.end, b2.strand, depth + 1 FROM edges e2 left join block b2 on (b2.id = e2.source_id) left join sequence seq2 on (seq2.hash = b2.sequence_hash) JOIN traverse t2 ON e2.target_id = t2.block_id  order by depth desc
+        ) SELECT block_sequence as sequence, block_strand as strand FROM traverse;"
         }
         placeholders.push(block_group_name.to_string().into());
         let mut stmt = conn.prepare(query).unwrap();
@@ -974,5 +555,97 @@ impl BlockGroup {
             sequence.push_str(&block.unwrap().sequence);
         }
         sequence
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::get_connection as get_db_connection;
+    use crate::migrations::run_migrations;
+    use std::fs;
+    use std::hash::Hash;
+
+    fn get_connection() -> Connection {
+        let mut conn = Connection::open_in_memory()
+            .unwrap_or_else(|_| panic!("Error opening in memory test db"));
+        run_migrations(&mut conn);
+        conn
+    }
+
+    fn setup_block_group(conn: &mut Connection) -> (i32, i32) {
+        let a_seq_hash = Sequence::create(conn, "DNA".to_string(), &"AAAAAAAAAA".to_string(), true);
+        let t_seq_hash = Sequence::create(conn, "DNA".to_string(), &"TTTTTTTTTT".to_string(), true);
+        let c_seq_hash = Sequence::create(conn, "DNA".to_string(), &"CCCCCCCCCC".to_string(), true);
+        let g_seq_hash = Sequence::create(conn, "DNA".to_string(), &"GGGGGGGGGG".to_string(), true);
+        let collection = Collection::create(conn, &"test".to_string());
+        let block_group = BlockGroup::create(conn, &"test".to_string(), None, &"hg19".to_string());
+        let a_block = Block::create(conn, &a_seq_hash, block_group.id, 0, 10, &"1".to_string());
+        let t_block = Block::create(conn, &t_seq_hash, block_group.id, 0, 10, &"1".to_string());
+        let c_block = Block::create(conn, &c_seq_hash, block_group.id, 0, 10, &"1".to_string());
+        let g_block = Block::create(conn, &g_seq_hash, block_group.id, 0, 10, &"1".to_string());
+        let edge_0 = Edge::create(conn, None, Some(a_block.id), 0, 0);
+        let edge_1 = Edge::create(conn, Some(a_block.id), Some(t_block.id), 0, 0);
+        let edge_2 = Edge::create(conn, Some(t_block.id), Some(c_block.id), 0, 0);
+        let edge_3 = Edge::create(conn, Some(c_block.id), Some(g_block.id), 0, 0);
+        let edge_4 = Edge::create(conn, Some(g_block.id), None, 0, 0);
+        let path = Path::create(
+            conn,
+            "chr1",
+            block_group.id,
+            vec![edge_0.id, edge_1.id, edge_2.id, edge_3.id, edge_4.id],
+        );
+        (block_group.id, path.id)
+    }
+
+    #[test]
+    fn simple_insert() {
+        fs::remove_file("test.db");
+        let mut conn = get_db_connection("test.db");
+        let (block_group_id, path_id) = setup_block_group(&mut conn);
+        let insert_sequence =
+            Sequence::create(&mut conn, "DNA".to_string(), &"NNNN".to_string(), true);
+        let insert = Block::create(
+            &conn,
+            &insert_sequence,
+            block_group_id,
+            0,
+            4,
+            &"1".to_string(),
+        );
+        BlockGroup::insert_change(&mut conn, path_id, 7, 15, insert.id, 1, 0);
+
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAANNNNTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+
+        // TODO: should handle this w/ edges instead of a block, maybe this is ok though.
+        let deletion_sequence =
+            Sequence::create(&mut conn, "DNA".to_string(), &"".to_string(), true);
+        let deletion = Block::create(
+            &conn,
+            &deletion_sequence,
+            block_group_id,
+            0,
+            0,
+            &"1".to_string(),
+        );
+
+        // take out an entire block.
+        BlockGroup::insert_change(&mut conn, path_id, 19, 31, deletion.id, 1, 0);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAANNNNTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTTTTTTTTGGGGGGGGG".to_string()
+            ])
+        )
     }
 }
