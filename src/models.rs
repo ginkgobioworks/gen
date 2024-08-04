@@ -17,7 +17,7 @@ pub mod sequence;
 use crate::models;
 use crate::models::block::Block;
 use crate::models::edge::Edge;
-use crate::models::path::{all_simple_paths, Path, PathEdge};
+use crate::models::path::{all_simple_paths, Path, PathBlock};
 use crate::models::sequence::Sequence;
 
 #[derive(Debug)]
@@ -158,10 +158,8 @@ impl BlockGroup {
             .join(", ");
         let mut it = stmt.query([block_keys]).unwrap();
         let mut row = it.next().unwrap();
-        let mut edge_map = HashMap::new();
         while row.is_some() {
             let edge = row.unwrap();
-            let edge_id: i32 = edge.get(0).unwrap();
             let source_id: Option<i32> = edge.get(1).unwrap();
             let target_id: Option<i32> = edge.get(2).unwrap();
             let chrom_index = edge.get(3).unwrap();
@@ -198,7 +196,6 @@ impl BlockGroup {
             } else {
                 panic!("no source and target specified.");
             }
-            edge_map.insert(edge_id, new_edge.id);
 
             row = it.next().unwrap();
         }
@@ -210,11 +207,11 @@ impl BlockGroup {
         );
 
         for path in existing_paths {
-            let mut new_edges = vec![];
-            for edge in path.edges {
-                new_edges.push(*edge_map.get(&edge).unwrap());
+            let mut new_blocks = vec![];
+            for block in path.blocks {
+                new_blocks.push(*block_map.get(&block).unwrap());
             }
-            Path::create(conn, &path.name, target_block_group_id, new_edges);
+            Path::create(conn, &path.name, target_block_group_id, new_blocks);
         }
     }
 
@@ -356,7 +353,7 @@ impl BlockGroup {
         // that means we have an edge with the chromosome index, that connects our start/end coordinates with the new block id
 
         let path = Path::get(conn, path_id);
-        let graph = PathEdge::edges_to_graph(conn, path.id);
+        let graph = PathBlock::blocks_to_graph(conn, path.id);
         println!("{path:?} {graph:?}");
         let query = format!("SELECT id, sequence_hash, block_group_id, start, end, strand from block where id in ({block_ids})", block_ids = graph.nodes().map(|k| format!("{k}")).collect::<Vec<_>>().join(","));
         let mut stmt = conn.prepare(&query).unwrap();
@@ -380,21 +377,12 @@ impl BlockGroup {
             row = it.next().unwrap();
         }
         // TODO: probably don't need the graph, just get vector of source_ids.
-        let mut start_node = -1;
-        let start_edge = Edge::get(conn, path.edges[0]);
-        if let Some(value) = start_edge.source_id {
-            start_node = value
-        } else if let Some(value) = start_edge.target_id {
-            start_node = value
-        }
-        let mut dfs = Dfs::new(&graph, start_node as u32);
         let mut path_start = 0;
         let mut path_end = 0;
         let mut new_edges = vec![];
         let mut previous_block: Option<&Block> = None;
-        println!("{blocks:?}");
-        while let Some(nx) = dfs.next(&graph) {
-            let block = blocks.get(&(nx as i32)).unwrap();
+        for block_id in &path.blocks {
+            let block = blocks.get(block_id).unwrap();
             let block_length = (block.end - block.start);
             path_end += block_length;
 
@@ -406,9 +394,14 @@ impl BlockGroup {
                 // our range is fully contained w/in the block
                 //      |----block------|
                 //        |----range---|
-                let (left_block, right_block) =
-                    Block::split(conn, block, start - path_start, chromosome_index, phased)
-                        .unwrap();
+                let (left_block, right_block) = Block::split(
+                    conn,
+                    block,
+                    block.start + start - path_start,
+                    chromosome_index,
+                    phased,
+                )
+                .unwrap();
                 Block::delete(conn, block.id);
                 // let left_block = Block::create(
                 //     conn,
@@ -435,9 +428,14 @@ impl BlockGroup {
                 // our range is overlapping the end of the block
                 // |----block---|
                 //        |----range---|
-                let (left_block, right_block) =
-                    Block::split(conn, block, start - path_start, chromosome_index, phased)
-                        .unwrap();
+                let (left_block, right_block) = Block::split(
+                    conn,
+                    block,
+                    block.start + start - path_start,
+                    chromosome_index,
+                    phased,
+                )
+                .unwrap();
                 Block::delete(conn, block.id);
                 // let left_block = Block::create(
                 //     conn,
@@ -457,8 +455,14 @@ impl BlockGroup {
                 // our range is overlapping the beginning of the block
                 //              |----block---|
                 //        |----range---|
-                let (left_block, right_block) =
-                    Block::split(conn, block, end - path_start, chromosome_index, phased).unwrap();
+                let (left_block, right_block) = Block::split(
+                    conn,
+                    block,
+                    block.start + end - path_start,
+                    chromosome_index,
+                    phased,
+                )
+                .unwrap();
                 Block::delete(conn, block.id);
                 // let right_block = Block::create(
                 //     conn,
@@ -492,8 +496,6 @@ impl BlockGroup {
             }
             previous_block = Some(block);
         }
-
-        println!("change is {path:?} {graph:?} {blocks:?} {new_edges:?}");
 
         for new_edge in new_edges {
             Edge::create(conn, new_edge.0, new_edge.1, chromosome_index, phased);
@@ -536,7 +538,7 @@ mod tests {
             conn,
             "chr1",
             block_group.id,
-            vec![edge_0.id, edge_1.id, edge_2.id, edge_3.id, edge_4.id],
+            vec![a_block.id, t_block.id, c_block.id, g_block.id],
         );
         (block_group.id, path.id)
     }
@@ -587,7 +589,8 @@ mod tests {
             HashSet::from_iter(vec![
                 "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
                 "AAAAAAANNNNTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
-                "AAAAAAAAAATTTTTTTTTGGGGGGGGG".to_string()
+                "AAAAAAAAAATTTTTTTTTGGGGGGGGG".to_string(),
+                "AAAAAAANNNNTTTTGGGGGGGGG".to_string(),
             ])
         )
     }

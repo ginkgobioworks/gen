@@ -2,6 +2,7 @@ use crate::models::Path;
 use rusqlite::{params_from_iter, types::Value, Connection};
 
 use crate::models::edge::{Edge, UpdatedEdge};
+use crate::models::path::PathBlock;
 
 #[derive(Debug)]
 pub struct Block {
@@ -131,7 +132,12 @@ impl Block {
         phased: i32,
     ) -> Option<(Block, Block)> {
         if coordinate < block.start || coordinate >= block.end {
-            println!("Coordinate is out of block bounds");
+            println!(
+                "Coordinate {coordinate} is out of block {block_id} bounds ({start}, {end})",
+                start = block.start,
+                end = block.end,
+                block_id = block.id
+            );
             return None;
         }
         let new_left_block = Block::create(
@@ -182,6 +188,41 @@ impl Block {
         );
 
         Edge::bulk_update(conn, replacement_edges);
+
+        // replace paths using this block
+        let impacted_path_blocks = PathBlock::query(
+            conn,
+            "select * from path_blocks where source_block_id = ?1 OR target_block_id = ?1",
+            vec![Value::from(block.id)],
+        );
+
+        for path_block in impacted_path_blocks {
+            let path_id = path_block.path_id;
+            PathBlock::create(
+                conn,
+                path_id,
+                Some(new_left_block.id),
+                Some(new_right_block.id),
+            );
+            if let Some(source_block_id) = path_block.source_block_id {
+                if source_block_id == block.id {
+                    PathBlock::update(
+                        conn,
+                        "update path_blocks set source_block_id = ?2 where id = ?1",
+                        vec![Value::from(path_block.id), Value::from(new_right_block.id)],
+                    );
+                }
+            }
+            if let Some(target_block_id) = path_block.target_block_id {
+                if target_block_id == block.id {
+                    PathBlock::update(
+                        conn,
+                        "update path_blocks set target_block_id = ?2 where id = ?1",
+                        vec![Value::from(path_block.id), Value::from(new_left_block.id)],
+                    );
+                }
+            }
+        }
 
         // TODO: Delete existing block? -- leave to caller atm
 
