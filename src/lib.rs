@@ -15,6 +15,13 @@ pub fn get_connection(db_path: &str) -> Connection {
     conn
 }
 
+pub fn run_query(conn: &Connection, query: &str) {
+    let mut stmt = conn.prepare(query).unwrap();
+    for entry in stmt.query_map([], |row| Ok(println!("{row:?}"))).unwrap() {
+        println!("{entry:?}");
+    }
+}
+
 pub fn calculate_hash(t: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(t);

@@ -176,7 +176,6 @@ impl PathEdge {
         let mut graph = DiGraphMap::new();
         for edge in rows {
             let (source, target) = edge.unwrap();
-            println!("edg eis {source:?} {target:?}");
             if let Some(source_value) = source {
                 graph.add_node(source_value);
                 if let Some(target_value) = target {

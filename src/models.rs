@@ -202,22 +202,19 @@ impl BlockGroup {
 
             row = it.next().unwrap();
         }
-        println!("new edges {edge_map:?}");
 
         let existing_paths = Path::get_paths(
             conn,
             "SELECT * from path where block_group_id = ?1",
             vec![Value::from(source_block_group_id)],
         );
-        println!("eps {existing_paths:?}");
 
         for path in existing_paths {
             let mut new_edges = vec![];
             for edge in path.edges {
                 new_edges.push(*edge_map.get(&edge).unwrap());
             }
-            let new_p = Path::create(conn, &path.name, target_block_group_id, new_edges);
-            println!("made {new_p:?}");
+            Path::create(conn, &path.name, target_block_group_id, new_edges);
         }
     }
 
@@ -359,7 +356,6 @@ impl BlockGroup {
         // that means we have an edge with the chromosome index, that connects our start/end coordinates with the new block id
 
         let path = Path::get(conn, path_id);
-        let block_group_id = path.block_group_id;
         let graph = PathEdge::edges_to_graph(conn, path.id);
         println!("{path:?} {graph:?}");
         let query = format!("SELECT id, sequence_hash, block_group_id, start, end, strand from block where id in ({block_ids})", block_ids = graph.nodes().map(|k| format!("{k}")).collect::<Vec<_>>().join(","));
@@ -396,17 +392,11 @@ impl BlockGroup {
         let mut path_end = 0;
         let mut new_edges = vec![];
         let mut previous_block: Option<&Block> = None;
-        let mut next_node = dfs.next(&graph);
         println!("{blocks:?}");
-        while next_node.is_some() {
-            let nx = next_node.unwrap();
-            println!("nx is {nx}");
+        while let Some(nx) = dfs.next(&graph) {
             let block = blocks.get(&(nx as i32)).unwrap();
             let block_length = (block.end - block.start);
             path_end += block_length;
-
-            // do stuff here
-            println!("{nx} {block:?} {start} {end} {path_start} {path_end}");
 
             let contains_start = path_start <= start && start < path_end;
             let contains_end = path_start <= end && end < path_end;
@@ -501,7 +491,6 @@ impl BlockGroup {
                 break;
             }
             previous_block = Some(block);
-            next_node = dfs.next(&graph);
         }
 
         println!("change is {path:?} {graph:?} {blocks:?} {new_edges:?}");
@@ -509,52 +498,6 @@ impl BlockGroup {
         for new_edge in new_edges {
             Edge::create(conn, new_edge.0, new_edge.1, chromosome_index, phased);
         }
-    }
-
-    // TODO: move this to path, doesn't belong in block group
-    pub fn sequence(
-        conn: &mut Connection,
-        collection_name: &str,
-        sample_name: Option<&String>,
-        block_group_name: &str,
-    ) -> String {
-        struct SequenceBlock {
-            sequence: String,
-            strand: String,
-        }
-        let mut query;
-        let mut placeholders: Vec<rusqlite::types::Value> =
-            vec![collection_name.to_string().into()];
-
-        if sample_name.is_some() {
-            query = "WITH RECURSIVE traverse(block_id, block_sequence, block_start, block_end, block_strand, depth) AS (
-          SELECT edges.source_id, substr(seq.sequence, block.start + 1, block.end - block.start), block.start, block.end, block.strand, 0 as depth FROM block_group left join block on (block_group.id = block.block_group_id) left join sequence seq on (seq.hash = block.sequence_hash) left join edges on (block.id = edges.source_id or block.id = edges.target_id) WHERE block_group.collection_name = ?1 AND block_group.sample_name = ?2 AND block_group.name = ?3 and edges.target_id is null
-          UNION
-          SELECT e2.source_id, substr(seq2.sequence, b2.start + 1, b2.end - b2.start), b2.start, b2.end, b2.strand, depth + 1 FROM edges e2 left join block b2 on (b2.id = e2.source_id) left join sequence seq2 on (seq2.hash = b2.sequence_hash) JOIN traverse t2 ON e2.target_id = t2.block_id order by depth desc
-        ) SELECT block_sequence as sequence, block_strand as strand FROM traverse;";
-            placeholders.push(sample_name.unwrap().clone().into());
-        } else {
-            query = "WITH RECURSIVE traverse(block_id, block_sequence, block_start, block_end, block_strand, depth) AS (
-          SELECT edges.source_id, substr(seq.sequence, block.start + 1, block.end - block.start), block.start, block.end, block.strand, 0 as depth FROM block_group left join block on (block_group.id = block.block_group_id) left join sequence seq on (seq.hash = block.sequence_hash) left join edges on (block.id = edges.source_id or block.id = edges.target_id) WHERE block_group.collection_name = ?1 AND block_group.sample_name is null AND block_group.name = ?2 and edges.target_id is null
-          UNION
-          SELECT e2.source_id, substr(seq2.sequence, b2.start + 1, b2.end - b2.start), b2.start, b2.end, b2.strand, depth + 1 FROM edges e2 left join block b2 on (b2.id = e2.source_id) left join sequence seq2 on (seq2.hash = b2.sequence_hash) JOIN traverse t2 ON e2.target_id = t2.block_id  order by depth desc
-        ) SELECT block_sequence as sequence, block_strand as strand FROM traverse;"
-        }
-        placeholders.push(block_group_name.to_string().into());
-        let mut stmt = conn.prepare(query).unwrap();
-        let mut blocks = stmt
-            .query_map(params_from_iter(placeholders), |row| {
-                Ok(SequenceBlock {
-                    sequence: row.get(0)?,
-                    strand: row.get(1)?,
-                })
-            })
-            .unwrap();
-        let mut sequence = "".to_string();
-        for block in blocks {
-            sequence.push_str(&block.unwrap().sequence);
-        }
-        sequence
     }
 }
 
