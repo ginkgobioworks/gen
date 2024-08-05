@@ -56,13 +56,13 @@ CREATE TABLE path (
 );
 CREATE UNIQUE INDEX path_uidx ON path(block_group_id, name);
 
-CREATE TABLE path_edges (
+CREATE TABLE path_blocks (
   id INTEGER PRIMARY KEY NOT NULL,
   path_id INTEGER NOT NULL,
-  source_edge_id INTEGER,
-  target_edge_id INTEGER,
-  FOREIGN KEY(source_edge_id) REFERENCES edges(id),
-  FOREIGN KEY(target_edge_id) REFERENCES edges(id),
+  source_block_id INTEGER,
+  target_block_id INTEGER,
+  FOREIGN KEY(source_block_id) REFERENCES block(id),
+  FOREIGN KEY(target_block_id) REFERENCES block(id),
   FOREIGN KEY(path_id) REFERENCES path(id)
 );
-CREATE UNIQUE INDEX path_edge_uidx ON path_edges(path_id, source_edge_id, target_edge_id);
+CREATE UNIQUE INDEX path_blocks_uidx ON path_blocks(path_id, source_block_id, target_block_id);

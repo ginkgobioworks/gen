@@ -80,14 +80,9 @@ fn import_fasta(fasta: &String, name: &String, shallow: bool, conn: &mut Connect
                 (sequence.len() as i32),
                 &"1".to_string(),
             );
-            let edge_1 = Edge::create(conn, None, Some(block.id), 0, 0);
-            let edge_2 = Edge::create(conn, Some(block.id), None, 0, 0);
-            Path::create(
-                conn,
-                record.id(),
-                block_group.id,
-                vec![edge_1.id, edge_2.id],
-            );
+            Edge::create(conn, None, Some(block.id), 0, 0);
+            Edge::create(conn, Some(block.id), None, 0, 0);
+            Path::create(conn, record.id(), block_group.id, vec![block.id]);
         }
         println!("Created it");
     } else {
