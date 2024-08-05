@@ -409,7 +409,6 @@ impl BlockGroup {
             let block = blocks.get(block_id).unwrap();
             let block_length = (block.end - block.start);
             path_end += block_length;
-            println!("maybe hash {path_start} {path_end}");
 
             let contains_start = path_start <= start && start < path_end;
             let contains_end = path_start < end && end < path_end;
