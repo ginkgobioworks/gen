@@ -67,12 +67,22 @@ pub struct Sample {
 impl Sample {
     pub fn create(conn: &mut Connection, name: &String) -> Sample {
         let mut stmt = conn
-            .prepare("INSERT INTO sample (name) VALUES (?1) RETURNING *")
+            .prepare("INSERT INTO sample (name) VALUES (?1)")
             .unwrap();
-        let mut rows = stmt
-            .query_map((name,), |row| Ok(Sample { name: row.get(0)? }))
-            .unwrap();
-        rows.next().unwrap().unwrap()
+        match stmt.execute((name,)) {
+            Ok(_) => Sample { name: name.clone() },
+            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+                if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                    println!("{err:?} {details:?}");
+                    Sample { name: name.clone() }
+                } else {
+                    panic!("something bad happened querying the database")
+                }
+            }
+            Err(_) => {
+                panic!("something bad happened querying the database")
+            }
+        }
     }
 }
 
@@ -101,7 +111,7 @@ impl BlockGroup {
                 name: row.get(3)?,
             })
         }) {
-            Ok(path) => path,
+            Ok(res) => res,
             Err(rusqlite::Error::SqliteFailure(err, details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
                     println!("{err:?} {details:?}");
