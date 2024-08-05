@@ -131,6 +131,7 @@ impl Block {
         chromosome_index: i32,
         phased: i32,
     ) -> Option<(Block, Block)> {
+        println!("splitting block {id} at {coordinate}", id = block.id);
         if coordinate < block.start || coordinate >= block.end {
             println!(
                 "Coordinate {coordinate} is out of block {block_id} bounds ({start}, {end})",
@@ -179,6 +180,8 @@ impl Block {
             });
         }
 
+        println!("impacted edges {edges_into:?} {edges_out_of:?}");
+
         Edge::create(
             conn,
             Some(new_left_block.id),
@@ -206,6 +209,7 @@ impl Block {
             );
             if let Some(source_block_id) = path_block.source_block_id {
                 if source_block_id == block.id {
+                    println!("updating {path_block:?} with {new_right_block:?}");
                     PathBlock::update(
                         conn,
                         "update path_blocks set source_block_id = ?2 where id = ?1",
@@ -248,6 +252,14 @@ impl Block {
             objs.push(row.unwrap());
         }
         objs
+    }
+
+    pub fn get_sequence(conn: &Connection, block_id: i32) -> (String, String) {
+        let mut stmt = conn.prepare_cached("select substr(sequence.sequence, block.start + 1, block.end - block.start) as sequence, block.strand from sequence left join block on (block.sequence_hash = sequence.hash) where block.id = ?1").unwrap();
+        let mut rows = stmt
+            .query_map((block_id,), |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap();
+        rows.next().unwrap().unwrap()
     }
 }
 

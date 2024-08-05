@@ -158,7 +158,7 @@ fn update_with_vcf(vcf_path: &String, collection_name: &String, conn: &mut Conne
                                     sample_path_id[0].id,
                                     ref_start as i32,
                                     ref_end as i32,
-                                    new_block_id.id,
+                                    &new_block_id,
                                     chromosome_index as i32,
                                     phased,
                                 );

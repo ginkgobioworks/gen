@@ -66,3 +66,17 @@ CREATE TABLE path_blocks (
   FOREIGN KEY(path_id) REFERENCES path(id)
 );
 CREATE UNIQUE INDEX path_blocks_uidx ON path_blocks(path_id, source_block_id, target_block_id);
+
+CREATE TABLE change_log (
+  hash TEXT PRIMARY KEY NOT NULL,
+  path_id INTEGER NOT NULL,
+  path_start INTEGER NOT NULL,
+  path_end INTEGER NOT NULL,
+  sequence_hash TEXT NOT NULL,
+  sequence_start INTEGER NOT NULL,
+  sequence_end INTEGER NOT NULL,
+  sequence_strand TEXT NOT NULL,
+  FOREIGN KEY(path_id) REFERENCES path(id),
+  FOREIGN KEY(sequence_hash) REFERENCES sequence(hash)
+);
+CREATE UNIQUE INDEX change_log_uidx ON change_log(hash);
