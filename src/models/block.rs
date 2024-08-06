@@ -64,6 +64,7 @@ impl Block {
     }
 
     pub fn delete(conn: &Connection, block_id: i32) {
+        println!("deleting {block_id}");
         let mut stmt = conn
             .prepare_cached("DELETE from block where id = ?1")
             .unwrap();
