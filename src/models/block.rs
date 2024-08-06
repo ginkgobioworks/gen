@@ -64,6 +64,7 @@ impl Block {
     }
 
     pub fn delete(conn: &Connection, block_id: i32) {
+        println!("deleting {block_id}");
         let mut stmt = conn
             .prepare_cached("DELETE from block where id = ?1")
             .unwrap();
@@ -248,6 +249,14 @@ impl Block {
             objs.push(row.unwrap());
         }
         objs
+    }
+
+    pub fn get_sequence(conn: &Connection, block_id: i32) -> (String, String) {
+        let mut stmt = conn.prepare_cached("select substr(sequence.sequence, block.start + 1, block.end - block.start) as sequence, block.strand from sequence left join block on (block.sequence_hash = sequence.hash) where block.id = ?1").unwrap();
+        let mut rows = stmt
+            .query_map((block_id,), |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap();
+        rows.next().unwrap().unwrap()
     }
 }
 

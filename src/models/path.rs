@@ -1,10 +1,11 @@
-use crate::models::edge::Edge;
+use crate::models::block::Block;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::prelude::Dfs;
 use petgraph::visit::{IntoNeighborsDirected, NodeCount};
 use petgraph::{Direction, Outgoing};
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
+use sha2::digest::generic_array::sequence;
 use std::hash::Hash;
 use std::iter::from_fn;
 
@@ -78,6 +79,16 @@ impl Path {
             paths.push(row.unwrap());
         }
         paths
+    }
+
+    pub fn sequence(conn: &Connection, path_id: i32) -> String {
+        let block_ids = PathBlock::get_blocks(conn, path_id);
+        // todo: fix this to handle strand and join order
+        let mut sequence = "".to_string();
+        for block_id in block_ids {
+            sequence.push_str(&Block::get_sequence(conn, block_id).0);
+        }
+        sequence
     }
 }
 
