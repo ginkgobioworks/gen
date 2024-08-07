@@ -1,13 +1,11 @@
 use crate::models::block::Block;
+use crate::models::edge::Edge;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::prelude::Dfs;
-use petgraph::visit::{IntoNeighborsDirected, NodeCount};
-use petgraph::{Direction, Outgoing};
+use petgraph::Direction;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
-use sha2::digest::generic_array::sequence;
 use std::hash::Hash;
-use std::iter::from_fn;
 
 #[derive(Debug)]
 pub struct Path {
@@ -15,6 +13,25 @@ pub struct Path {
     pub name: String,
     pub block_group_id: i32,
     pub blocks: Vec<i32>,
+}
+
+// interesting gist here: https://gist.github.com/mbhall88/cd900add6335c96127efea0e0f6a9f48, see if we
+// can expand this to ambiguous bases/keep case
+pub fn revcomp(seq: &str) -> String {
+    String::from_utf8(
+        seq.chars()
+            .rev()
+            .map(|c| -> u8 {
+                let rc = c as u8;
+                if rc & 2 != 0 {
+                    rc ^ 4
+                } else {
+                    rc ^ 21
+                }
+            })
+            .collect(),
+    )
+    .unwrap()
 }
 
 impl Path {
@@ -83,10 +100,14 @@ impl Path {
 
     pub fn sequence(conn: &Connection, path_id: i32) -> String {
         let block_ids = PathBlock::get_blocks(conn, path_id);
-        // todo: fix this to handle strand and join order
         let mut sequence = "".to_string();
         for block_id in block_ids {
-            sequence.push_str(&Block::get_sequence(conn, block_id).0);
+            let (block_sequence, strand) = Block::get_sequence(conn, block_id);
+            if strand == "-" {
+                sequence.push_str(&revcomp(&block_sequence));
+            } else {
+                sequence.push_str(&block_sequence);
+            }
         }
         sequence
     }
@@ -235,38 +256,128 @@ impl PathBlock {
     }
 }
 
-// hacked from https://docs.rs/petgraph/latest/src/petgraph/algo/simple_paths.rs.html#36-102 to support digraphmap
-pub fn all_simple_paths<G>(
-    graph: G,
-    from: G::NodeId,
-    to: G::NodeId,
-) -> impl Iterator<Item = Vec<G::NodeId>>
-where
-    G: NodeCount,
-    G: IntoNeighborsDirected,
-    G::NodeId: Eq + Hash,
-{
-    // list of visited nodes
-    let mut visited = vec![from];
-    // list of childs of currently exploring path nodes,
-    // last elem is list of childs of last visited node
-    let mut stack = vec![graph.neighbors_directed(from, Outgoing)];
+mod tests {
+    use rusqlite::Connection;
+    use std::collections::HashSet;
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
 
-    from_fn(move || {
-        while let Some(children) = stack.last_mut() {
-            if let Some(child) = children.next() {
-                if child == to {
-                    let path = visited.iter().cloned().chain(Some(to)).collect::<_>();
-                    return Some(path);
-                } else if !visited.contains(&child) {
-                    visited.push(child);
-                    stack.push(graph.neighbors_directed(child, Outgoing));
-                }
-            } else {
-                stack.pop();
-                visited.pop();
-            }
-        }
-        None
-    })
+    use crate::migrations::run_migrations;
+    use crate::models::{sequence::Sequence, BlockGroup, Collection};
+
+    fn get_connection() -> Connection {
+        let mut conn = Connection::open_in_memory()
+            .unwrap_or_else(|_| panic!("Error opening in memory test db"));
+        rusqlite::vtab::array::load_module(&conn).unwrap();
+        run_migrations(&mut conn);
+        conn
+    }
+
+    #[test]
+    fn test_gets_sequence() {
+        let conn = &mut get_connection();
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
+        let block1 = Block::create(
+            conn,
+            &sequence1_hash,
+            block_group.id,
+            0,
+            8,
+            &"+".to_string(),
+        );
+        let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
+        let block2 = Block::create(
+            conn,
+            &sequence2_hash,
+            block_group.id,
+            1,
+            8,
+            &"+".to_string(),
+        );
+        let sequence3_hash = Sequence::create(conn, "DNA", "CCCCCCCC", true);
+        let block3 = Block::create(
+            conn,
+            &sequence3_hash,
+            block_group.id,
+            1,
+            8,
+            &"+".to_string(),
+        );
+        let sequence4_hash = Sequence::create(conn, "DNA", "GGGGGGGG", true);
+        let block4 = Block::create(
+            conn,
+            &sequence4_hash,
+            block_group.id,
+            1,
+            8,
+            &"+".to_string(),
+        );
+        Edge::create(conn, Some(block1.id), Some(block2.id), 0, 0);
+        Edge::create(conn, Some(block2.id), Some(block3.id), 0, 0);
+        Edge::create(conn, Some(block2.id), Some(block4.id), 0, 0);
+
+        let path = Path::create(
+            conn,
+            "chr1",
+            block_group.id,
+            vec![block1.id, block2.id, block3.id],
+        );
+        assert_eq!(Path::sequence(conn, path.id), "ATCGATCGAAAAAAACCCCCCC");
+    }
+
+    #[test]
+    fn test_gets_sequence_with_rc() {
+        let conn = &mut get_connection();
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
+        let block1 = Block::create(
+            conn,
+            &sequence1_hash,
+            block_group.id,
+            0,
+            8,
+            &"-".to_string(),
+        );
+        let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
+        let block2 = Block::create(
+            conn,
+            &sequence2_hash,
+            block_group.id,
+            1,
+            8,
+            &"-".to_string(),
+        );
+        let sequence3_hash = Sequence::create(conn, "DNA", "CCCCCCCC", true);
+        let block3 = Block::create(
+            conn,
+            &sequence3_hash,
+            block_group.id,
+            1,
+            8,
+            &"-".to_string(),
+        );
+        let sequence4_hash = Sequence::create(conn, "DNA", "GGGGGGGG", true);
+        let block4 = Block::create(
+            conn,
+            &sequence4_hash,
+            block_group.id,
+            1,
+            8,
+            &"-".to_string(),
+        );
+        Edge::create(conn, Some(block1.id), Some(block2.id), 0, 0);
+        Edge::create(conn, Some(block2.id), Some(block3.id), 0, 0);
+        Edge::create(conn, Some(block1.id), Some(block4.id), 0, 0);
+
+        let path = Path::create(
+            conn,
+            "chr1",
+            block_group.id,
+            vec![block3.id, block2.id, block1.id],
+        );
+        assert_eq!(Path::sequence(conn, path.id), "GGGGGGGTTTTTTTCGATCGAT");
+    }
 }

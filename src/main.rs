@@ -13,7 +13,6 @@ use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use noodles::vcf::variant::record::samples::series::Value;
 use noodles::vcf::variant::record::samples::{Sample, Series};
 use noodles::vcf::variant::record::{AlternateBases, ReferenceBases, Samples};
-use noodles::vcf::variant::record_buf::samples::sample::value::genotype::Genotype;
 use noodles::vcf::variant::Record;
 use rusqlite::{types::Value as SQLValue, Connection};
 use std::io;
@@ -65,7 +64,7 @@ enum Commands {
     },
 }
 
-fn import_fasta(fasta: &String, name: &String, shallow: bool, conn: &mut Connection) {
+fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection) {
     // TODO: support gz
     let mut reader = fasta::Reader::from_file(fasta).unwrap();
 
@@ -75,9 +74,8 @@ fn import_fasta(fasta: &String, name: &String, shallow: bool, conn: &mut Connect
         for result in reader.records() {
             let record = result.expect("Error during fasta record parsing");
             let sequence = String::from_utf8(record.seq().to_vec()).unwrap();
-            let seq_hash = Sequence::create(conn, "DNA".to_string(), &sequence, !shallow);
-            let block_group =
-                BlockGroup::create(conn, &collection.name, None, &record.id().to_string());
+            let seq_hash = Sequence::create(conn, "DNA", &sequence, !shallow);
+            let block_group = BlockGroup::create(conn, &collection.name, None, record.id());
             let block = Block::create(
                 conn,
                 &seq_hash,
@@ -139,8 +137,7 @@ fn update_with_vcf(
                             Phasing::Unphased => 0,
                         };
                         // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
-                        let new_sequence_hash =
-                            Sequence::create(conn, "DNA".to_string(), &alt_seq.to_string(), true);
+                        let new_sequence_hash = Sequence::create(conn, "DNA", alt_seq, true);
                         let sample_bg_id = BlockGroup::get_or_create_sample_block_group(
                             conn,
                             collection_name,
@@ -191,12 +188,8 @@ fn update_with_vcf(
                                 if allele != 0 {
                                     let alt_seq = alt_alleles[allele - 1];
                                     // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
-                                    let new_sequence_hash = Sequence::create(
-                                        conn,
-                                        "DNA".to_string(),
-                                        &alt_seq.to_string(),
-                                        true,
-                                    );
+                                    let new_sequence_hash =
+                                        Sequence::create(conn, "DNA", alt_seq, true);
                                     let sample_bg_id = BlockGroup::get_or_create_sample_block_group(
                                         conn,
                                         collection_name,
@@ -298,7 +291,7 @@ mod tests {
         let mut conn = get_connection(None);
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
-            &"test".to_string(),
+            "test",
             false,
             &mut conn,
         );

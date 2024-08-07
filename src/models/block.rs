@@ -281,15 +281,9 @@ mod tests {
     #[test]
     fn test_edges_into() {
         let conn = &mut get_connection();
-        Collection::create(conn, &"test collection".to_string());
-        let block_group = BlockGroup::create(
-            conn,
-            &"test collection".to_string(),
-            None,
-            &"test block group".to_string(),
-        );
-        let sequence1_hash =
-            Sequence::create(conn, "DNA".to_string(), &"ATCGATCG".to_string(), true);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
         let block1 = Block::create(
             conn,
             &sequence1_hash,
@@ -298,8 +292,7 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        let sequence2_hash =
-            Sequence::create(conn, "DNA".to_string(), &"AAAAAAAA".to_string(), true);
+        let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
         let block2 = Block::create(
             conn,
             &sequence2_hash,
@@ -308,8 +301,7 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        let sequence3_hash =
-            Sequence::create(conn, "DNA".to_string(), &"CCCCCCCC".to_string(), true);
+        let sequence3_hash = Sequence::create(conn, "DNA", "CCCCCCCC", true);
         let block3 = Block::create(
             conn,
             &sequence3_hash,
@@ -318,8 +310,7 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        let sequence4_hash =
-            Sequence::create(conn, "DNA".to_string(), &"GGGGGGGG".to_string(), true);
+        let sequence4_hash = Sequence::create(conn, "DNA", "GGGGGGGG", true);
         let block4 = Block::create(
             conn,
             &sequence4_hash,
@@ -347,15 +338,9 @@ mod tests {
     #[test]
     fn test_no_edges_into() {
         let conn = &mut get_connection();
-        Collection::create(conn, &"test collection".to_string());
-        let block_group = BlockGroup::create(
-            conn,
-            &"test collection".to_string(),
-            None,
-            &"test block group".to_string(),
-        );
-        let sequence1_hash =
-            Sequence::create(conn, "DNA".to_string(), &"ATCGATCG".to_string(), true);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
         let block1 = Block::create(
             conn,
             &sequence1_hash,
@@ -364,8 +349,7 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        let sequence2_hash =
-            Sequence::create(conn, "DNA".to_string(), &"AAAAAAAA".to_string(), true);
+        let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
         let block2 = Block::create(
             conn,
             &sequence2_hash,
@@ -383,15 +367,9 @@ mod tests {
     #[test]
     fn test_edges_out_of() {
         let conn = &mut get_connection();
-        Collection::create(conn, &"test collection".to_string());
-        let block_group = BlockGroup::create(
-            conn,
-            &"test collection".to_string(),
-            None,
-            &"test block group".to_string(),
-        );
-        let sequence1_hash =
-            Sequence::create(conn, "DNA".to_string(), &"ATCGATCG".to_string(), true);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
         let block1 = Block::create(
             conn,
             &sequence1_hash,
@@ -400,8 +378,7 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        let sequence2_hash =
-            Sequence::create(conn, "DNA".to_string(), &"AAAAAAAA".to_string(), true);
+        let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
         let block2 = Block::create(
             conn,
             &sequence2_hash,
@@ -410,8 +387,7 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        let sequence3_hash =
-            Sequence::create(conn, "DNA".to_string(), &"CCCCCCCC".to_string(), true);
+        let sequence3_hash = Sequence::create(conn, "DNA", "CCCCCCCC", true);
         let block3 = Block::create(
             conn,
             &sequence3_hash,
@@ -420,8 +396,7 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        let sequence4_hash =
-            Sequence::create(conn, "DNA".to_string(), &"GGGGGGGG".to_string(), true);
+        let sequence4_hash = Sequence::create(conn, "DNA", "GGGGGGGG", true);
         let block4 = Block::create(
             conn,
             &sequence4_hash,
@@ -449,15 +424,9 @@ mod tests {
     #[test]
     fn test_no_edges_out_of() {
         let conn = &mut get_connection();
-        Collection::create(conn, &"test collection".to_string());
-        let block_group = BlockGroup::create(
-            conn,
-            &"test collection".to_string(),
-            None,
-            &"test block group".to_string(),
-        );
-        let sequence1_hash =
-            Sequence::create(conn, "DNA".to_string(), &"ATCGATCG".to_string(), true);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
         let block1 = Block::create(
             conn,
             &sequence1_hash,
@@ -466,8 +435,7 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        let sequence2_hash =
-            Sequence::create(conn, "DNA".to_string(), &"AAAAAAAA".to_string(), true);
+        let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
         let block2 = Block::create(
             conn,
             &sequence2_hash,
@@ -485,15 +453,9 @@ mod tests {
     #[test]
     fn test_split_block() {
         let conn = &mut get_connection();
-        Collection::create(conn, &"test collection".to_string());
-        let block_group = BlockGroup::create(
-            conn,
-            &"test collection".to_string(),
-            None,
-            &"test block group".to_string(),
-        );
-        let sequence1_hash =
-            Sequence::create(conn, "DNA".to_string(), &"ATCGATCG".to_string(), true);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
         let block1 = Block::create(
             conn,
             &sequence1_hash,
@@ -502,8 +464,7 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        let sequence2_hash =
-            Sequence::create(conn, "DNA".to_string(), &"AAAAAAAA".to_string(), true);
+        let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
         let block2 = Block::create(
             conn,
             &sequence2_hash,
@@ -512,8 +473,7 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        let sequence3_hash =
-            Sequence::create(conn, "DNA".to_string(), &"CCCCCCCC".to_string(), true);
+        let sequence3_hash = Sequence::create(conn, "DNA", "CCCCCCCC", true);
         let block3 = Block::create(
             conn,
             &sequence3_hash,
@@ -522,8 +482,7 @@ mod tests {
             8,
             &"+".to_string(),
         );
-        let sequence4_hash =
-            Sequence::create(conn, "DNA".to_string(), &"GGGGGGGG".to_string(), true);
+        let sequence4_hash = Sequence::create(conn, "DNA", "GGGGGGGG", true);
         let block4 = Block::create(
             conn,
             &sequence4_hash,
@@ -560,15 +519,9 @@ mod tests {
     #[test]
     fn test_split_block_bad_coordinate() {
         let conn = &mut get_connection();
-        Collection::create(conn, &"test collection".to_string());
-        let block_group = BlockGroup::create(
-            conn,
-            &"test collection".to_string(),
-            None,
-            &"test block group".to_string(),
-        );
-        let sequence1_hash =
-            Sequence::create(conn, "DNA".to_string(), &"ATCGATCG".to_string(), true);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
         let block1 = Block::create(
             conn,
             &sequence1_hash,
@@ -590,5 +543,25 @@ mod tests {
         );
         let result = Block::split(conn, &block2, 100, 0, 0);
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn get_sequence() {
+        let conn = get_connection();
+        let sequence = "AAATTTCCCGGG".to_string();
+        let seq = Sequence::create(&conn, "DNA", &sequence, true);
+        let coll = Collection::create(&conn, "test");
+        let bg = BlockGroup::create(&conn, "test", None, "test");
+        let block = Block::create(&conn, &seq, bg.id, 0, 12, &"1".to_string());
+        assert_eq!(
+            Block::get_sequence(&conn, block.id),
+            (sequence, "1".to_string())
+        );
+
+        let block = Block::create(&conn, &seq, bg.id, 0, 9, &"1".to_string());
+        assert_eq!(
+            Block::get_sequence(&conn, block.id),
+            ("AAATTTCCC".to_string(), "1".to_string())
+        );
     }
 }

@@ -1,4 +1,3 @@
-use crate::models::edge::Edge;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use sha2::{Digest, Sha256};
@@ -12,14 +11,9 @@ pub struct Sequence {
 }
 
 impl Sequence {
-    pub fn create(
-        conn: &Connection,
-        sequence_type: String,
-        sequence: &String,
-        store: bool,
-    ) -> String {
+    pub fn create(conn: &Connection, sequence_type: &str, sequence: &str, store: bool) -> String {
         let mut hasher = Sha256::new();
-        hasher.update(&sequence_type);
+        hasher.update(sequence_type);
         hasher.update(sequence);
         let hash = format!("{:x}", hasher.finalize());
         let mut obj_hash: String = match conn.query_row(
@@ -38,10 +32,10 @@ impl Sequence {
             let mut rows = stmt
                 .query_map(
                     (
-                        hash,
-                        sequence_type,
-                        if store { sequence } else { "" },
-                        sequence.len(),
+                        Value::from(hash.to_string()),
+                        Value::from(sequence_type.to_string()),
+                        Value::from((if store { sequence } else { "" }).to_string()),
+                        Value::from(sequence.len() as i32),
                     ),
                     |row| row.get(0),
                 )
