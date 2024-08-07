@@ -413,16 +413,10 @@ impl BlockGroup {
         let mut path_end = 0;
         let mut new_edges = vec![];
         let mut previous_block: Option<&Block> = None;
-        let mut loose_connection = false;
         for block_id in &path.blocks {
             let block = blocks.get(block_id).unwrap();
             let block_length = (block.end - block.start);
             path_end += block_length;
-
-            if loose_connection && path_start == end {
-                new_edges.push((Some(new_block_id), Some(block.id)));
-                loose_connection = false;
-            }
 
             let (contains_start, contains_end, overlap) =
                 get_overlap(path_start, path_end, start, end);
@@ -434,49 +428,41 @@ impl BlockGroup {
                 // our range is fully contained w/in the block
                 //      |----block------|
                 //        |----range---|
-                let (left_block, right_block) = Block::split(
-                    conn,
-                    block,
-                    block.start + start - path_start,
-                    chromosome_index,
-                    phased,
-                )
-                .unwrap();
-                Block::delete(conn, block.id);
-                // let left_block = Block::create(
-                //     conn,
-                //     &block.sequence_hash,
-                //     block_group_id,
-                //     block.start,
-                //     start - path_start,
-                //     &block.strand,
-                // );
-                // let right_block = Block::create(
-                //     conn,
-                //     &block.sequence_hash,
-                //     block_group_id,
-                //     block.start + (end - path_start),
-                //     block.end,
-                //     &block.strand,
-                // );
-                // if let Some(value) = previous_block {
-                //     new_edges.push((Some(value.id), Some(left_block.id)))
-                // }
-                new_edges.push((Some(left_block.id), Some(new_block_id)));
-                new_edges.push((Some(new_block_id), Some(right_block.id)));
+                let start_split_point = block.start + start - path_start;
+                let end_split_point = block.start + end - path_start;
+                let mut next_block;
+                if start_split_point == block.start {
+                    if let Some(pb) = previous_block {
+                        new_edges.push((Some(pb.id), Some(new_block_id)));
+                    }
+                    next_block = block.clone();
+                } else {
+                    let (left_block, right_block) =
+                        Block::split(conn, block, start_split_point, chromosome_index, phased)
+                            .unwrap();
+                    Block::delete(conn, block.id);
+                    new_edges.push((Some(left_block.id), Some(new_block_id)));
+                    next_block = right_block.clone();
+                }
+
+                if end_split_point == next_block.start {
+                    new_edges.push((Some(new_block_id), Some(next_block.id)));
+                } else {
+                    let (left_block, right_block) =
+                        Block::split(conn, &next_block, end_split_point, chromosome_index, phased)
+                            .unwrap();
+                    Block::delete(conn, next_block.id);
+                    new_edges.push((Some(new_block_id), Some(left_block.id)));
+                }
             } else if contains_start {
                 // our range is overlapping the end of the block
                 // |----block---|
                 //        |----range---|
                 let split_point = block.start + start - path_start;
-                println!("{block:?} {split_point}");
                 if split_point == block.start {
+                    // the split happens before this block begins, so it's an insert operation
                     if let Some(pb) = previous_block {
                         new_edges.push((Some(pb.id), Some(new_block_id)));
-                    }
-                    // we actually are skipping this block
-                    if path_end >= end {
-                        loose_connection = true;
                     }
                 } else {
                     let (left_block, right_block) =
@@ -484,28 +470,20 @@ impl BlockGroup {
                     Block::delete(conn, block.id);
                     new_edges.push((Some(left_block.id), Some(new_block_id)));
                 }
-                // let left_block = Block::create(
-                //     conn,
-                //     &block.sequence_hash,
-                //     block_group_id,
-                //     block.start,
-                //     start - path_start,
-                //     &block.strand,
-                // );
-                // if let Some(value) = previous_block {
-                //     new_edges.push((Some(value.id), Some(left_block.id)));
-                // } else {
-                //     new_edges.push((None, Some(left_block.id)));
-                // }
             } else if contains_end {
                 // our range is overlapping the beginning of the block
                 //              |----block---|
                 //        |----range---|
                 let split_point = block.start + end - path_start;
-                let (left_block, right_block) =
-                    Block::split(conn, block, split_point, chromosome_index, phased).unwrap();
-                Block::delete(conn, block.id);
-                new_edges.push((Some(new_block_id), Some(right_block.id)));
+                if split_point == block.start {
+                    // the previous change ends right before this block starts, so it's an insert
+                    new_edges.push((Some(new_block_id), Some(block.id)));
+                } else {
+                    let (left_block, right_block) =
+                        Block::split(conn, block, split_point, chromosome_index, phased).unwrap();
+                    Block::delete(conn, block.id);
+                    new_edges.push((Some(new_block_id), Some(right_block.id)));
+                }
                 break;
             } else if overlap {
                 // our range is the whole block, ignore it
@@ -519,6 +497,10 @@ impl BlockGroup {
             if path_start > end {
                 break;
             }
+            // TODO: will we ever have a scenario where previous_block should not be set?
+            // for example, if overlap is true, we shouldn't be making the previous block
+            // an intermediary. Tests make this appear to not be a problem, but worth
+            // exploring fully.
             previous_block = Some(block);
         }
 
@@ -716,6 +698,31 @@ mod tests {
     }
 
     #[test]
+    fn insert_on_block_boundary_middle() {
+        let mut conn = get_connection();
+        let (block_group_id, path_id) = setup_block_group(&conn);
+        let insert_sequence = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert = Block::create(
+            &conn,
+            &insert_sequence,
+            block_group_id,
+            0,
+            4,
+            &"1".to_string(),
+        );
+        BlockGroup::insert_change(&mut conn, path_id, 15, 15, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTTTTNNNNTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
     fn insert_on_block_boundary_start() {
         let mut conn = get_connection();
         let (block_group_id, path_id) = setup_block_group(&conn);
@@ -811,6 +818,31 @@ mod tests {
             HashSet::from_iter(vec![
                 "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
                 "AAAAAAAAAATTTTTNNNNCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_spanning_blocks() {
+        let mut conn = get_connection();
+        let (block_group_id, path_id) = setup_block_group(&conn);
+        let insert_sequence = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert = Block::create(
+            &conn,
+            &insert_sequence,
+            block_group_id,
+            0,
+            4,
+            &"1".to_string(),
+        );
+        BlockGroup::insert_change(&mut conn, path_id, 5, 35, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAANNNNGGGGG".to_string()
             ])
         );
     }

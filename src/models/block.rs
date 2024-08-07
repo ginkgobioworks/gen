@@ -4,7 +4,7 @@ use rusqlite::{params_from_iter, types::Value, Connection};
 use crate::models::edge::{Edge, UpdatedEdge};
 use crate::models::path::PathBlock;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Block {
     pub id: i32,
     pub sequence_hash: String,
