@@ -69,8 +69,6 @@ fn import_fasta(fasta: &String, name: &String, shallow: bool, conn: &mut Connect
     // TODO: support gz
     let mut reader = fasta::Reader::from_file(fasta).unwrap();
 
-    run_migrations(conn);
-
     if !models::Collection::exists(conn, name) {
         let collection = models::Collection::create(conn, name);
 
@@ -271,13 +269,23 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use rusqlite::Connection;
+    use std::fs;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use gen::migrations::run_migrations;
 
-    fn get_connection() -> Connection {
-        let mut conn = Connection::open_in_memory()
-            .unwrap_or_else(|_| panic!("Error opening in memory test db"));
+    fn get_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Connection {
+        let path: Option<&str> = db_path.into();
+        let mut conn;
+        if let Some(v) = path {
+            if fs::metadata(v).is_ok() {
+                fs::remove_file(v).unwrap();
+            }
+            conn = Connection::open(v).unwrap_or_else(|_| panic!("Error connecting to {}", v));
+        } else {
+            conn = Connection::open_in_memory()
+                .unwrap_or_else(|_| panic!("Error opening in memory test db"));
+        }
         rusqlite::vtab::array::load_module(&conn).unwrap();
         run_migrations(&mut conn);
         conn
@@ -287,11 +295,20 @@ mod tests {
     fn test_add_fasta() {
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
+        let mut conn = get_connection(None);
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &"test".to_string(),
             false,
-            &mut get_connection(),
+            &mut conn,
+        );
+        assert_eq!(
+            BlockGroup::get_all_sequences(&conn, 1),
+            HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
+        );
+        assert_eq!(
+            Path::sequence(&conn, 1),
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()
         );
     }
 
@@ -301,7 +318,7 @@ mod tests {
         vcf_path.push("fixtures/simple.vcf");
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
-        let conn = &mut get_connection();
+        let conn = &mut get_connection("test.db");
         let collection = "test".to_string();
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
@@ -320,13 +337,55 @@ mod tests {
             BlockGroup::get_all_sequences(conn, 1),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
+        // A homozygous set of variants should only return 1 sequence
         assert_eq!(
             BlockGroup::get_all_sequences(conn, 2),
             HashSet::from_iter(vec!["ATCATCGATAGAGATCGATCGGGAACACACAGAGA".to_string()])
         );
+        // This individual is homozygous for the first variant and does not contain the second
         assert_eq!(
             BlockGroup::get_all_sequences(conn, 3),
             HashSet::from_iter(vec!["ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_update_fasta_with_vcf_custom_genotype() {
+        let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        vcf_path.push("fixtures/general.vcf");
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let conn = &mut get_connection("test.db");
+        let collection = "test".to_string();
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+        );
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "0/1".to_string(),
+            "sample 1".to_string(),
+            conn,
+        );
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, 1),
+            HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
+        );
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, 2),
+            HashSet::from_iter(
+                [
+                    "ATCGATCGATAGATCGATCGATCGGGAACACACAGAGA",
+                    "ATCACGATCGATAGATCGATCGATCGGGAACACACAGAGA",
+                    "ATCGATCGATCGATCGATCGGGAACACACAGAGA",
+                    "ATCACGATCGATCGATCGATCGGGAACACACAGAGA"
+                ]
+                .iter()
+                .map(|v| v.to_string())
+            )
         );
     }
 }

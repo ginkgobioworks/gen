@@ -13,7 +13,7 @@ pub struct Sequence {
 
 impl Sequence {
     pub fn create(
-        conn: &mut Connection,
+        conn: &Connection,
         sequence_type: String,
         sequence: &String,
         store: bool,

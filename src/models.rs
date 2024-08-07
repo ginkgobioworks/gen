@@ -27,13 +27,13 @@ pub struct Collection {
 }
 
 impl Collection {
-    pub fn exists(conn: &mut Connection, name: &String) -> bool {
+    pub fn exists(conn: &Connection, name: &String) -> bool {
         let mut stmt = conn
             .prepare("select name from collection where name = ?1")
             .unwrap();
         stmt.exists([name]).unwrap()
     }
-    pub fn create(conn: &mut Connection, name: &String) -> Collection {
+    pub fn create(conn: &Connection, name: &String) -> Collection {
         let mut stmt = conn
             .prepare("INSERT INTO collection (name) VALUES (?1) RETURNING *")
             .unwrap();
@@ -43,7 +43,7 @@ impl Collection {
         rows.next().unwrap().unwrap()
     }
 
-    pub fn bulk_create(conn: &mut Connection, names: &Vec<String>) -> Vec<Collection> {
+    pub fn bulk_create(conn: &Connection, names: &Vec<String>) -> Vec<Collection> {
         let placeholders = names.iter().map(|_| "(?)").collect::<Vec<_>>().join(", ");
         let q = format!(
             "INSERT INTO collection (name) VALUES {} RETURNING *",
@@ -65,7 +65,7 @@ pub struct Sample {
 }
 
 impl Sample {
-    pub fn create(conn: &mut Connection, name: &String) -> Sample {
+    pub fn create(conn: &Connection, name: &String) -> Sample {
         let mut stmt = conn
             .prepare("INSERT INTO sample (name) VALUES (?1)")
             .unwrap();
@@ -96,7 +96,7 @@ pub struct BlockGroup {
 
 impl BlockGroup {
     pub fn create(
-        conn: &mut Connection,
+        conn: &Connection,
         collection_name: &String,
         sample_name: Option<&String>,
         name: &String,
@@ -606,7 +606,7 @@ mod tests {
         conn
     }
 
-    fn setup_block_group(conn: &mut Connection) -> (i32, i32) {
+    fn setup_block_group(conn: &Connection) -> (i32, i32) {
         let a_seq_hash = Sequence::create(conn, "DNA".to_string(), &"AAAAAAAAAA".to_string(), true);
         let t_seq_hash = Sequence::create(conn, "DNA".to_string(), &"TTTTTTTTTT".to_string(), true);
         let c_seq_hash = Sequence::create(conn, "DNA".to_string(), &"CCCCCCCCCC".to_string(), true);
@@ -634,9 +634,8 @@ mod tests {
     #[test]
     fn insert_and_deletion() {
         let mut conn = get_connection();
-        let (block_group_id, path_id) = setup_block_group(&mut conn);
-        let insert_sequence =
-            Sequence::create(&mut conn, "DNA".to_string(), &"NNNN".to_string(), true);
+        let (block_group_id, path_id) = setup_block_group(&conn);
+        let insert_sequence = Sequence::create(&conn, "DNA".to_string(), &"NNNN".to_string(), true);
         let insert = Block::create(
             &conn,
             &insert_sequence,
@@ -657,8 +656,7 @@ mod tests {
         );
 
         // TODO: should handle this w/ edges instead of a block, maybe this is ok though.
-        let deletion_sequence =
-            Sequence::create(&mut conn, "DNA".to_string(), &"".to_string(), true);
+        let deletion_sequence = Sequence::create(&conn, "DNA".to_string(), &"".to_string(), true);
         let deletion = Block::create(
             &conn,
             &deletion_sequence,
@@ -685,9 +683,8 @@ mod tests {
     #[test]
     fn simple_insert() {
         let mut conn = get_connection();
-        let (block_group_id, path_id) = setup_block_group(&mut conn);
-        let insert_sequence =
-            Sequence::create(&mut conn, "DNA".to_string(), &"NNNN".to_string(), true);
+        let (block_group_id, path_id) = setup_block_group(&conn);
+        let insert_sequence = Sequence::create(&conn, "DNA".to_string(), &"NNNN".to_string(), true);
         let insert = Block::create(
             &conn,
             &insert_sequence,
@@ -711,9 +708,8 @@ mod tests {
     #[test]
     fn insert_on_block_boundary_start() {
         let mut conn = get_connection();
-        let (block_group_id, path_id) = setup_block_group(&mut conn);
-        let insert_sequence =
-            Sequence::create(&mut conn, "DNA".to_string(), &"NNNN".to_string(), true);
+        let (block_group_id, path_id) = setup_block_group(&conn);
+        let insert_sequence = Sequence::create(&conn, "DNA".to_string(), &"NNNN".to_string(), true);
         let insert = Block::create(
             &conn,
             &insert_sequence,
@@ -737,9 +733,8 @@ mod tests {
     #[test]
     fn insert_on_block_boundary_end() {
         let mut conn = get_connection();
-        let (block_group_id, path_id) = setup_block_group(&mut conn);
-        let insert_sequence =
-            Sequence::create(&mut conn, "DNA".to_string(), &"NNNN".to_string(), true);
+        let (block_group_id, path_id) = setup_block_group(&conn);
+        let insert_sequence = Sequence::create(&conn, "DNA".to_string(), &"NNNN".to_string(), true);
         let insert = Block::create(
             &conn,
             &insert_sequence,
@@ -763,9 +758,8 @@ mod tests {
     #[test]
     fn insert_across_entire_block_boundary() {
         let mut conn = get_connection();
-        let (block_group_id, path_id) = setup_block_group(&mut conn);
-        let insert_sequence =
-            Sequence::create(&mut conn, "DNA".to_string(), &"NNNN".to_string(), true);
+        let (block_group_id, path_id) = setup_block_group(&conn);
+        let insert_sequence = Sequence::create(&conn, "DNA".to_string(), &"NNNN".to_string(), true);
         let insert = Block::create(
             &conn,
             &insert_sequence,
@@ -789,9 +783,8 @@ mod tests {
     #[test]
     fn insert_across_two_blocks() {
         let mut conn = get_connection();
-        let (block_group_id, path_id) = setup_block_group(&mut conn);
-        let insert_sequence =
-            Sequence::create(&mut conn, "DNA".to_string(), &"NNNN".to_string(), true);
+        let (block_group_id, path_id) = setup_block_group(&conn);
+        let insert_sequence = Sequence::create(&conn, "DNA".to_string(), &"NNNN".to_string(), true);
         let insert = Block::create(
             &conn,
             &insert_sequence,
@@ -815,9 +808,8 @@ mod tests {
     #[test]
     fn simple_deletion() {
         let mut conn = get_connection();
-        let (block_group_id, path_id) = setup_block_group(&mut conn);
-        let deletion_sequence =
-            Sequence::create(&mut conn, "DNA".to_string(), &"".to_string(), true);
+        let (block_group_id, path_id) = setup_block_group(&conn);
+        let deletion_sequence = Sequence::create(&conn, "DNA".to_string(), &"".to_string(), true);
         let deletion = Block::create(
             &conn,
             &deletion_sequence,
@@ -842,9 +834,8 @@ mod tests {
     #[test]
     fn doesnt_apply_same_insert_twice() {
         let mut conn = get_connection();
-        let (block_group_id, path_id) = setup_block_group(&mut conn);
-        let insert_sequence =
-            Sequence::create(&mut conn, "DNA".to_string(), &"NNNN".to_string(), true);
+        let (block_group_id, path_id) = setup_block_group(&conn);
+        let insert_sequence = Sequence::create(&conn, "DNA".to_string(), &"NNNN".to_string(), true);
         let insert = Block::create(
             &conn,
             &insert_sequence,
