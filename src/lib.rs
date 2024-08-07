@@ -72,7 +72,7 @@ pub fn parse_genotype(gt: &str) -> Vec<Option<Genotype>> {
 
 pub fn get_overlap(a: i32, b: i32, x: i32, y: i32) -> (bool, bool, bool) {
     let contains_start = a <= x && x < b;
-    let contains_end = a < y && y < b;
+    let contains_end = a <= y && y < b;
     let overlap = a < y && x < b;
     (contains_start, contains_end, overlap)
 }
@@ -165,6 +165,6 @@ mod tests {
         assert_eq!(get_overlap(0, 10, 10, 10), (false, false, false));
         assert_eq!(get_overlap(10, 20, 10, 20), (true, false, true));
         assert_eq!(get_overlap(10, 20, 5, 15), (false, true, true));
-        assert_eq!(get_overlap(10, 20, 0, 10), (false, false, false));
+        assert_eq!(get_overlap(10, 20, 0, 10), (false, true, false));
     }
 }
