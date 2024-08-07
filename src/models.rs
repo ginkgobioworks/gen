@@ -317,18 +317,28 @@ impl BlockGroup {
             }
         }
         let mut sequences = HashSet::new();
+
         for start_node in start_nodes {
             for end_node in &end_nodes {
-                for path in all_simple_paths(&graph, start_node, *end_node) {
-                    let mut current_sequence = "".to_string();
-                    for node in path {
-                        let block = block_map.get(&node).unwrap();
-                        let block_sequence = sequence_map.get(&block.sequence_hash).unwrap();
-                        current_sequence.push_str(
-                            &block_sequence[(block.start as usize)..(block.end as usize)],
-                        );
+                // TODO: maybe make all_simple_paths return a single path id where start == end
+                if start_node == *end_node {
+                    let block = block_map.get(&start_node).unwrap();
+                    let block_sequence = sequence_map.get(&block.sequence_hash).unwrap();
+                    sequences.insert(
+                        block_sequence[(block.start as usize)..(block.end as usize)].to_string(),
+                    );
+                } else {
+                    for path in all_simple_paths(&graph, start_node, *end_node) {
+                        let mut current_sequence = "".to_string();
+                        for node in path {
+                            let block = block_map.get(&node).unwrap();
+                            let block_sequence = sequence_map.get(&block.sequence_hash).unwrap();
+                            current_sequence.push_str(
+                                &block_sequence[(block.start as usize)..(block.end as usize)],
+                            );
+                        }
+                        sequences.insert(current_sequence);
                     }
-                    sequences.insert(current_sequence);
                 }
             }
         }
