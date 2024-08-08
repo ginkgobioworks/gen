@@ -22,11 +22,25 @@ pub fn revcomp(seq: &str) -> String {
         seq.chars()
             .rev()
             .map(|c| -> u8 {
+                let is_upper = c.is_ascii_uppercase();
                 let rc = c as u8;
-                if rc & 2 != 0 {
+                let v = if rc == 78 {
+                    // N
+                    rc
+                } else if rc == 110 {
+                    // n
+                    rc
+                } else if rc & 2 != 0 {
+                    // CG
                     rc ^ 4
                 } else {
+                    // AT
                     rc ^ 21
+                };
+                if is_upper {
+                    v
+                } else {
+                    v.to_ascii_lowercase()
                 }
             })
             .collect(),
@@ -323,5 +337,12 @@ mod tests {
             vec![block3.id, block2.id, block1.id],
         );
         assert_eq!(Path::sequence(conn, path.id), "GGGGGGGTTTTTTTCGATCGAT");
+    }
+
+    #[test]
+    fn test_reverse_complement() {
+        assert_eq!(revcomp("ATCCGG"), "CCGGAT");
+        assert_eq!(revcomp("CNNNNA"), "TNNNNG");
+        assert_eq!(revcomp("cNNgnAt"), "aTncNNg");
     }
 }

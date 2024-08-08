@@ -118,6 +118,7 @@ fn update_with_vcf(
     if !fixed_genotype.is_empty() {
         genotype = parse_genotype(&fixed_genotype);
     }
+
     for result in reader.records() {
         let record = result.unwrap();
         let seq_name = record.reference_sequence_name().to_string();
@@ -127,6 +128,7 @@ fn update_with_vcf(
         let ref_end = record.variant_end(&header).unwrap().get();
         let alt_bases = record.alternate_bases();
         let alt_alleles: Vec<_> = alt_bases.iter().collect::<io::Result<_>>().unwrap();
+        // TODO: fix this duplication of handling an insert
         if !fixed_sample.is_empty() && !genotype.is_empty() {
             for (chromosome_index, genotype) in genotype.iter().enumerate() {
                 if let Some(gt) = genotype {
