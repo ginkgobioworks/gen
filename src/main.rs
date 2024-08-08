@@ -82,7 +82,7 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
                 block_group.id,
                 0,
                 (sequence.len() as i32),
-                &"1".to_string(),
+                "+",
             );
             Edge::create(conn, None, Some(block.id), 0, 0);
             Edge::create(conn, Some(block.id), None, 0, 0);
@@ -158,7 +158,7 @@ fn update_with_vcf(
                             sample_bg_id,
                             0,
                             alt_seq.len() as i32,
-                            &"1".to_string(),
+                            "+",
                         );
                         BlockGroup::insert_change(
                             conn,
@@ -210,7 +210,7 @@ fn update_with_vcf(
                                         sample_bg_id,
                                         0,
                                         alt_seq.len() as i32,
-                                        &"1".to_string(),
+                                        "+",
                                     );
                                     BlockGroup::insert_change(
                                         conn,

@@ -21,7 +21,7 @@ impl Block {
         block_group_id: i32,
         start: i32,
         end: i32,
-        strand: &String,
+        strand: &str,
     ) -> Block {
         let mut stmt = conn
             .prepare_cached("INSERT INTO block (sequence_hash, block_group_id, start, end, strand) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING *")
@@ -51,7 +51,7 @@ impl Block {
                         block_group_id,
                         start,
                         end,
-                        strand: strand.clone(),
+                        strand: strand.to_string(),
                     }
                 } else {
                     panic!("something bad happened querying the database")
@@ -284,41 +284,13 @@ mod tests {
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
         let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
-        let block1 = Block::create(
-            conn,
-            &sequence1_hash,
-            block_group.id,
-            0,
-            8,
-            &"+".to_string(),
-        );
+        let block1 = Block::create(conn, &sequence1_hash, block_group.id, 0, 8, "+");
         let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
-        let block2 = Block::create(
-            conn,
-            &sequence2_hash,
-            block_group.id,
-            1,
-            8,
-            &"+".to_string(),
-        );
+        let block2 = Block::create(conn, &sequence2_hash, block_group.id, 1, 8, "+");
         let sequence3_hash = Sequence::create(conn, "DNA", "CCCCCCCC", true);
-        let block3 = Block::create(
-            conn,
-            &sequence3_hash,
-            block_group.id,
-            1,
-            8,
-            &"+".to_string(),
-        );
+        let block3 = Block::create(conn, &sequence3_hash, block_group.id, 1, 8, "+");
         let sequence4_hash = Sequence::create(conn, "DNA", "GGGGGGGG", true);
-        let block4 = Block::create(
-            conn,
-            &sequence4_hash,
-            block_group.id,
-            1,
-            8,
-            &"+".to_string(),
-        );
+        let block4 = Block::create(conn, &sequence4_hash, block_group.id, 1, 8, "+");
         let edge1 = Edge::create(conn, Some(block1.id), Some(block3.id), 0, 0);
         let edge2 = Edge::create(conn, Some(block2.id), Some(block3.id), 0, 0);
         Edge::create(conn, Some(block3.id), Some(block4.id), 0, 0);
@@ -341,23 +313,9 @@ mod tests {
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
         let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
-        let block1 = Block::create(
-            conn,
-            &sequence1_hash,
-            block_group.id,
-            0,
-            8,
-            &"+".to_string(),
-        );
+        let block1 = Block::create(conn, &sequence1_hash, block_group.id, 0, 8, "+");
         let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
-        let block2 = Block::create(
-            conn,
-            &sequence2_hash,
-            block_group.id,
-            1,
-            8,
-            &"+".to_string(),
-        );
+        let block2 = Block::create(conn, &sequence2_hash, block_group.id, 1, 8, "+");
         Edge::create(conn, Some(block1.id), Some(block2.id), 0, 0);
 
         let edges_into_block1 = Block::edges_into(conn, block1.id);
@@ -370,41 +328,13 @@ mod tests {
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
         let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
-        let block1 = Block::create(
-            conn,
-            &sequence1_hash,
-            block_group.id,
-            0,
-            8,
-            &"+".to_string(),
-        );
+        let block1 = Block::create(conn, &sequence1_hash, block_group.id, 0, 8, "+");
         let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
-        let block2 = Block::create(
-            conn,
-            &sequence2_hash,
-            block_group.id,
-            1,
-            8,
-            &"+".to_string(),
-        );
+        let block2 = Block::create(conn, &sequence2_hash, block_group.id, 1, 8, "+");
         let sequence3_hash = Sequence::create(conn, "DNA", "CCCCCCCC", true);
-        let block3 = Block::create(
-            conn,
-            &sequence3_hash,
-            block_group.id,
-            1,
-            8,
-            &"+".to_string(),
-        );
+        let block3 = Block::create(conn, &sequence3_hash, block_group.id, 1, 8, "+");
         let sequence4_hash = Sequence::create(conn, "DNA", "GGGGGGGG", true);
-        let block4 = Block::create(
-            conn,
-            &sequence4_hash,
-            block_group.id,
-            1,
-            8,
-            &"+".to_string(),
-        );
+        let block4 = Block::create(conn, &sequence4_hash, block_group.id, 1, 8, "+");
         Edge::create(conn, Some(block1.id), Some(block2.id), 0, 0);
         let edge1 = Edge::create(conn, Some(block2.id), Some(block3.id), 0, 0);
         let edge2 = Edge::create(conn, Some(block2.id), Some(block4.id), 0, 0);
@@ -427,23 +357,9 @@ mod tests {
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
         let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
-        let block1 = Block::create(
-            conn,
-            &sequence1_hash,
-            block_group.id,
-            0,
-            8,
-            &"+".to_string(),
-        );
+        let block1 = Block::create(conn, &sequence1_hash, block_group.id, 0, 8, "+");
         let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
-        let block2 = Block::create(
-            conn,
-            &sequence2_hash,
-            block_group.id,
-            1,
-            8,
-            &"+".to_string(),
-        );
+        let block2 = Block::create(conn, &sequence2_hash, block_group.id, 1, 8, "+");
         Edge::create(conn, Some(block1.id), Some(block2.id), 0, 0);
 
         let edges_out_of_block2 = Block::edges_out_of(conn, block2.id);
@@ -456,41 +372,13 @@ mod tests {
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
         let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
-        let block1 = Block::create(
-            conn,
-            &sequence1_hash,
-            block_group.id,
-            0,
-            8,
-            &"+".to_string(),
-        );
+        let block1 = Block::create(conn, &sequence1_hash, block_group.id, 0, 8, "+");
         let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
-        let block2 = Block::create(
-            conn,
-            &sequence2_hash,
-            block_group.id,
-            1,
-            8,
-            &"+".to_string(),
-        );
+        let block2 = Block::create(conn, &sequence2_hash, block_group.id, 1, 8, "+");
         let sequence3_hash = Sequence::create(conn, "DNA", "CCCCCCCC", true);
-        let block3 = Block::create(
-            conn,
-            &sequence3_hash,
-            block_group.id,
-            1,
-            8,
-            &"+".to_string(),
-        );
+        let block3 = Block::create(conn, &sequence3_hash, block_group.id, 1, 8, "+");
         let sequence4_hash = Sequence::create(conn, "DNA", "GGGGGGGG", true);
-        let block4 = Block::create(
-            conn,
-            &sequence4_hash,
-            block_group.id,
-            1,
-            8,
-            &"+".to_string(),
-        );
+        let block4 = Block::create(conn, &sequence4_hash, block_group.id, 1, 8, "+");
         let edge1 = Edge::create(conn, Some(block1.id), Some(block3.id), 0, 0);
         let edge2 = Edge::create(conn, Some(block2.id), Some(block3.id), 0, 0);
         let edge3 = Edge::create(conn, Some(block3.id), Some(block4.id), 0, 0);
@@ -522,25 +410,11 @@ mod tests {
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
         let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
-        let block1 = Block::create(
-            conn,
-            &sequence1_hash,
-            block_group.id,
-            0,
-            8,
-            &"+".to_string(),
-        );
+        let block1 = Block::create(conn, &sequence1_hash, block_group.id, 0, 8, "+");
         let result = Block::split(conn, &block1, -1, 0, 0);
         assert!(result.is_none());
 
-        let block2 = Block::create(
-            conn,
-            &sequence1_hash,
-            block_group.id,
-            0,
-            8,
-            &"+".to_string(),
-        );
+        let block2 = Block::create(conn, &sequence1_hash, block_group.id, 0, 8, "+");
         let result = Block::split(conn, &block2, 100, 0, 0);
         assert!(result.is_none());
     }
@@ -552,13 +426,13 @@ mod tests {
         let seq = Sequence::create(&conn, "DNA", &sequence, true);
         let coll = Collection::create(&conn, "test");
         let bg = BlockGroup::create(&conn, "test", None, "test");
-        let block = Block::create(&conn, &seq, bg.id, 0, 12, &"1".to_string());
+        let block = Block::create(&conn, &seq, bg.id, 0, 12, "+");
         assert_eq!(
             Block::get_sequence(&conn, block.id),
             (sequence, "1".to_string())
         );
 
-        let block = Block::create(&conn, &seq, bg.id, 0, 9, &"1".to_string());
+        let block = Block::create(&conn, &seq, bg.id, 0, 9, "+");
         assert_eq!(
             Block::get_sequence(&conn, block.id),
             ("AAATTTCCC".to_string(), "1".to_string())

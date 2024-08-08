@@ -605,10 +605,10 @@ mod tests {
         let g_seq_hash = Sequence::create(conn, "DNA", "GGGGGGGGGG", true);
         let collection = Collection::create(conn, "test");
         let block_group = BlockGroup::create(conn, "test", None, "hg19");
-        let a_block = Block::create(conn, &a_seq_hash, block_group.id, 0, 10, &"1".to_string());
-        let t_block = Block::create(conn, &t_seq_hash, block_group.id, 0, 10, &"1".to_string());
-        let c_block = Block::create(conn, &c_seq_hash, block_group.id, 0, 10, &"1".to_string());
-        let g_block = Block::create(conn, &g_seq_hash, block_group.id, 0, 10, &"1".to_string());
+        let a_block = Block::create(conn, &a_seq_hash, block_group.id, 0, 10, "+");
+        let t_block = Block::create(conn, &t_seq_hash, block_group.id, 0, 10, "+");
+        let c_block = Block::create(conn, &c_seq_hash, block_group.id, 0, 10, "+");
+        let g_block = Block::create(conn, &g_seq_hash, block_group.id, 0, 10, "+");
         let edge_0 = Edge::create(conn, None, Some(a_block.id), 0, 0);
         let edge_1 = Edge::create(conn, Some(a_block.id), Some(t_block.id), 0, 0);
         let edge_2 = Edge::create(conn, Some(t_block.id), Some(c_block.id), 0, 0);
@@ -628,14 +628,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path_id) = setup_block_group(&conn);
         let insert_sequence = Sequence::create(&conn, "DNA", "NNNN", true);
-        let insert = Block::create(
-            &conn,
-            &insert_sequence,
-            block_group_id,
-            0,
-            4,
-            &"1".to_string(),
-        );
+        let insert = Block::create(&conn, &insert_sequence, block_group_id, 0, 4, "+");
         BlockGroup::insert_change(&mut conn, path_id, 7, 15, &insert, 1, 0);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -649,14 +642,7 @@ mod tests {
 
         // TODO: should handle this w/ edges instead of a block, maybe this is ok though.
         let deletion_sequence = Sequence::create(&conn, "DNA", "", true);
-        let deletion = Block::create(
-            &conn,
-            &deletion_sequence,
-            block_group_id,
-            0,
-            0,
-            &"1".to_string(),
-        );
+        let deletion = Block::create(&conn, &deletion_sequence, block_group_id, 0, 0, "+");
 
         // take out an entire block.
         BlockGroup::insert_change(&mut conn, path_id, 19, 31, &deletion, 1, 0);
@@ -677,14 +663,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path_id) = setup_block_group(&conn);
         let insert_sequence = Sequence::create(&conn, "DNA", "NNNN", true);
-        let insert = Block::create(
-            &conn,
-            &insert_sequence,
-            block_group_id,
-            0,
-            4,
-            &"1".to_string(),
-        );
+        let insert = Block::create(&conn, &insert_sequence, block_group_id, 0, 4, "+");
         BlockGroup::insert_change(&mut conn, path_id, 7, 15, &insert, 1, 0);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -702,14 +681,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path_id) = setup_block_group(&conn);
         let insert_sequence = Sequence::create(&conn, "DNA", "NNNN", true);
-        let insert = Block::create(
-            &conn,
-            &insert_sequence,
-            block_group_id,
-            0,
-            4,
-            &"1".to_string(),
-        );
+        let insert = Block::create(&conn, &insert_sequence, block_group_id, 0, 4, "+");
         BlockGroup::insert_change(&mut conn, path_id, 15, 15, &insert, 1, 0);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -727,14 +699,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path_id) = setup_block_group(&conn);
         let insert_sequence = Sequence::create(&conn, "DNA", "NNNN", true);
-        let insert = Block::create(
-            &conn,
-            &insert_sequence,
-            block_group_id,
-            0,
-            4,
-            &"1".to_string(),
-        );
+        let insert = Block::create(&conn, &insert_sequence, block_group_id, 0, 4, "+");
         BlockGroup::insert_change(&mut conn, path_id, 10, 10, &insert, 1, 0);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -752,14 +717,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path_id) = setup_block_group(&conn);
         let insert_sequence = Sequence::create(&conn, "DNA", "NNNN", true);
-        let insert = Block::create(
-            &conn,
-            &insert_sequence,
-            block_group_id,
-            0,
-            4,
-            &"1".to_string(),
-        );
+        let insert = Block::create(&conn, &insert_sequence, block_group_id, 0, 4, "+");
         BlockGroup::insert_change(&mut conn, path_id, 9, 9, &insert, 1, 0);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -777,14 +735,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path_id) = setup_block_group(&conn);
         let insert_sequence = Sequence::create(&conn, "DNA", "NNNN", true);
-        let insert = Block::create(
-            &conn,
-            &insert_sequence,
-            block_group_id,
-            0,
-            4,
-            &"1".to_string(),
-        );
+        let insert = Block::create(&conn, &insert_sequence, block_group_id, 0, 4, "+");
         BlockGroup::insert_change(&mut conn, path_id, 10, 20, &insert, 1, 0);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -802,14 +753,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path_id) = setup_block_group(&conn);
         let insert_sequence = Sequence::create(&conn, "DNA", "NNNN", true);
-        let insert = Block::create(
-            &conn,
-            &insert_sequence,
-            block_group_id,
-            0,
-            4,
-            &"1".to_string(),
-        );
+        let insert = Block::create(&conn, &insert_sequence, block_group_id, 0, 4, "+");
         BlockGroup::insert_change(&mut conn, path_id, 15, 25, &insert, 1, 0);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -827,14 +771,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path_id) = setup_block_group(&conn);
         let insert_sequence = Sequence::create(&conn, "DNA", "NNNN", true);
-        let insert = Block::create(
-            &conn,
-            &insert_sequence,
-            block_group_id,
-            0,
-            4,
-            &"1".to_string(),
-        );
+        let insert = Block::create(&conn, &insert_sequence, block_group_id, 0, 4, "+");
         BlockGroup::insert_change(&mut conn, path_id, 5, 35, &insert, 1, 0);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -852,14 +789,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path_id) = setup_block_group(&conn);
         let deletion_sequence = Sequence::create(&conn, "DNA", "", true);
-        let deletion = Block::create(
-            &conn,
-            &deletion_sequence,
-            block_group_id,
-            0,
-            0,
-            &"1".to_string(),
-        );
+        let deletion = Block::create(&conn, &deletion_sequence, block_group_id, 0, 0, "+");
 
         // take out an entire block.
         BlockGroup::insert_change(&mut conn, path_id, 19, 31, &deletion, 1, 0);
@@ -878,14 +808,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path_id) = setup_block_group(&conn);
         let insert_sequence = Sequence::create(&conn, "DNA", "NNNN", true);
-        let insert = Block::create(
-            &conn,
-            &insert_sequence,
-            block_group_id,
-            0,
-            4,
-            &"1".to_string(),
-        );
+        let insert = Block::create(&conn, &insert_sequence, block_group_id, 0, 4, "+");
         BlockGroup::insert_change(&mut conn, path_id, 7, 15, &insert, 1, 0);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
