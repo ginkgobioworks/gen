@@ -5,7 +5,6 @@ use petgraph::prelude::Dfs;
 use petgraph::Direction;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
-use std::hash::Hash;
 
 #[derive(Debug)]
 pub struct Path {
@@ -94,7 +93,7 @@ impl Path {
 
     pub fn get_paths(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Path> {
         let mut stmt = conn.prepare(query).unwrap();
-        let mut rows = stmt
+        let rows = stmt
             .query_map(params_from_iter(placeholders), |row| {
                 let path_id = row.get(0).unwrap();
                 Ok(Path {
@@ -160,7 +159,7 @@ impl PathBlock {
             Err(rusqlite::Error::SqliteFailure(err, details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
                     println!("{err:?} {details:?}");
-                    let mut query;
+                    let query;
                     let mut placeholders = vec![path_id];
                     if let Some(s) = source_block_id {
                         if let Some(t) = target_block_id {
@@ -198,7 +197,7 @@ impl PathBlock {
 
     pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<PathBlock> {
         let mut stmt = conn.prepare(query).unwrap();
-        let mut rows = stmt
+        let rows = stmt
             .query_map(params_from_iter(placeholders), |row| {
                 Ok(PathBlock {
                     id: row.get(0)?,
@@ -241,10 +240,10 @@ impl PathBlock {
         blocks
     }
 
-    pub fn blocks_to_graph(conn: &Connection, path_id: i32) -> DiGraphMap<(u32), ()> {
+    pub fn blocks_to_graph(conn: &Connection, path_id: i32) -> DiGraphMap<u32, ()> {
         let query = "SELECT source_block_id, target_block_id from path_blocks where path_id = ?1;";
         let mut stmt = conn.prepare_cached(query).unwrap();
-        let mut rows = stmt
+        let rows = stmt
             .query_map((path_id,), |row| {
                 let source_id: Option<u32> = row.get(0).unwrap();
                 let target_id: Option<u32> = row.get(1).unwrap();
@@ -272,7 +271,6 @@ impl PathBlock {
 
 mod tests {
     use rusqlite::Connection;
-    use std::collections::HashSet;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 

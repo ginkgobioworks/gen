@@ -39,12 +39,12 @@ pub struct Genotype {
 
 pub fn parse_genotype(gt: &str) -> Vec<Option<Genotype>> {
     let mut genotypes = vec![];
-    let mut phase = match gt.contains("/") {
+    let mut phase = match gt.contains('/') {
         true => Phasing::Unphased,
         false => Phasing::Phased,
     };
-    for (index, entry) in gt.split_inclusive(|c| c == '|' || c == '/').enumerate() {
-        let mut allele;
+    for entry in gt.split_inclusive(|c| c == '|' || c == '/') {
+        let allele;
         let mut phasing = Phasing::Unphased;
         if entry.ends_with(['/', '|']) {
             let (allele_str, phasing_str) = entry.split_at(entry.len() - 1);
@@ -99,7 +99,7 @@ mod tests {
 
     #[test]
     fn it_queries() {
-        let mut conn = get_connection();
+        let conn = get_connection();
         let sequence_count: i32 = conn
             .query_row(
                 "SELECT count(*) from sequence where hash = 'foo'",
