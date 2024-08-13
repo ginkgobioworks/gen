@@ -420,20 +420,21 @@ mod tests {
 
     #[test]
     fn get_sequence() {
-        let conn = get_connection();
+        let conn = &mut get_connection();
         let sequence = "AAATTTCCCGGG".to_string();
-        let seq = Sequence::create(&conn, "DNA", &sequence, true);
-        let bg = BlockGroup::create(&conn, "test", None, "test");
-        let block = Block::create(&conn, &seq, bg.id, 0, 12, "+");
+        let seq = Sequence::create(conn, "DNA", &sequence, true);
+        Collection::create(conn, "test collection");
+        let bg = BlockGroup::create(conn, "test collection", None, "test");
+        let block = Block::create(conn, &seq, bg.id, 0, 12, "+");
         assert_eq!(
-            Block::get_sequence(&conn, block.id),
-            (sequence, "1".to_string())
+            Block::get_sequence(conn, block.id),
+            (sequence, "+".to_string())
         );
 
-        let block = Block::create(&conn, &seq, bg.id, 0, 9, "+");
+        let block = Block::create(conn, &seq, bg.id, 0, 9, "+");
         assert_eq!(
-            Block::get_sequence(&conn, block.id),
-            ("AAATTTCCC".to_string(), "1".to_string())
+            Block::get_sequence(conn, block.id),
+            ("AAATTTCCC".to_string(), "+".to_string())
         );
     }
 }
