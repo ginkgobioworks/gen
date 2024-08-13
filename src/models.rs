@@ -1,5 +1,3 @@
-use noodles::vcf::variant::record::info::field::value::array::Values;
-use petgraph::data::Build;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
 use rusqlite::types::Value;
@@ -7,7 +5,6 @@ use rusqlite::{params_from_iter, Connection};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fmt::*;
-use std::hash::Hash;
 
 pub mod block;
 pub mod edge;
@@ -175,11 +172,10 @@ impl BlockGroup {
             let target_id: Option<i32> = edge.get(2).unwrap();
             let chrom_index = edge.get(3).unwrap();
             let phased = edge.get(4).unwrap();
-            let mut new_edge;
             if target_id.is_some() && source_id.is_some() {
                 let target_id = target_id.unwrap();
                 let source_id = source_id.unwrap();
-                new_edge = Edge::create(
+                Edge::create(
                     conn,
                     Some(*block_map.get(&source_id).unwrap_or(&source_id)),
                     Some(*block_map.get(&target_id).unwrap_or(&target_id)),
@@ -188,7 +184,7 @@ impl BlockGroup {
                 );
             } else if target_id.is_some() {
                 let target_id = target_id.unwrap();
-                new_edge = Edge::create(
+                Edge::create(
                     conn,
                     None,
                     Some(*block_map.get(&target_id).unwrap_or(&target_id)),
@@ -197,7 +193,7 @@ impl BlockGroup {
                 );
             } else if source_id.is_some() {
                 let source_id = source_id.unwrap();
-                new_edge = Edge::create(
+                Edge::create(
                     conn,
                     Some(*block_map.get(&source_id).unwrap_or(&source_id)),
                     None,
@@ -415,7 +411,7 @@ impl BlockGroup {
         let mut previous_block: Option<&Block> = None;
         for block_id in &path.blocks {
             let block = blocks.get(block_id).unwrap();
-            let block_length = (block.end - block.start);
+            let block_length = block.end - block.start;
             path_end += block_length;
 
             let (contains_start, contains_end, overlap) =
@@ -448,7 +444,7 @@ impl BlockGroup {
                 if end_split_point == next_block.start {
                     new_edges.push((Some(new_block_id), Some(next_block.id)));
                 } else {
-                    let (left_block, right_block) =
+                    let (left_block, _right_block) =
                         Block::split(conn, &next_block, end_split_point, chromosome_index, phased)
                             .unwrap();
                     Block::delete(conn, next_block.id);
@@ -465,7 +461,7 @@ impl BlockGroup {
                         new_edges.push((Some(pb.id), Some(new_block_id)));
                     }
                 } else {
-                    let (left_block, right_block) =
+                    let (left_block, _right_block) =
                         Block::split(conn, block, split_point, chromosome_index, phased).unwrap();
                     Block::delete(conn, block.id);
                     new_edges.push((Some(left_block.id), Some(new_block_id)));
@@ -479,7 +475,7 @@ impl BlockGroup {
                     // the previous change ends right before this block starts, so it's an insert
                     new_edges.push((Some(new_block_id), Some(block.id)));
                 } else {
-                    let (left_block, right_block) =
+                    let (_left_block, right_block) =
                         Block::split(conn, block, split_point, chromosome_index, phased).unwrap();
                     Block::delete(conn, block.id);
                     new_edges.push((Some(new_block_id), Some(right_block.id)));
@@ -586,9 +582,7 @@ impl ChangeLog {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::get_connection as get_db_connection;
     use crate::migrations::run_migrations;
-    use std::fs;
     use std::hash::Hash;
 
     fn get_connection() -> Connection {
@@ -603,17 +597,17 @@ mod tests {
         let t_seq_hash = Sequence::create(conn, "DNA", "TTTTTTTTTT", true);
         let c_seq_hash = Sequence::create(conn, "DNA", "CCCCCCCCCC", true);
         let g_seq_hash = Sequence::create(conn, "DNA", "GGGGGGGGGG", true);
-        let collection = Collection::create(conn, "test");
+        let _collection = Collection::create(conn, "test");
         let block_group = BlockGroup::create(conn, "test", None, "hg19");
         let a_block = Block::create(conn, &a_seq_hash, block_group.id, 0, 10, "+");
         let t_block = Block::create(conn, &t_seq_hash, block_group.id, 0, 10, "+");
         let c_block = Block::create(conn, &c_seq_hash, block_group.id, 0, 10, "+");
         let g_block = Block::create(conn, &g_seq_hash, block_group.id, 0, 10, "+");
-        let edge_0 = Edge::create(conn, None, Some(a_block.id), 0, 0);
-        let edge_1 = Edge::create(conn, Some(a_block.id), Some(t_block.id), 0, 0);
-        let edge_2 = Edge::create(conn, Some(t_block.id), Some(c_block.id), 0, 0);
-        let edge_3 = Edge::create(conn, Some(c_block.id), Some(g_block.id), 0, 0);
-        let edge_4 = Edge::create(conn, Some(g_block.id), None, 0, 0);
+        let _edge_0 = Edge::create(conn, None, Some(a_block.id), 0, 0);
+        let _edge_1 = Edge::create(conn, Some(a_block.id), Some(t_block.id), 0, 0);
+        let _edge_2 = Edge::create(conn, Some(t_block.id), Some(c_block.id), 0, 0);
+        let _edge_3 = Edge::create(conn, Some(c_block.id), Some(g_block.id), 0, 0);
+        let _edge_4 = Edge::create(conn, Some(g_block.id), None, 0, 0);
         let path = Path::create(
             conn,
             "chr1",

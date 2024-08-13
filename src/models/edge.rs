@@ -1,6 +1,3 @@
-use std::collections::HashMap;
-
-use crate::models::Path;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 
@@ -21,8 +18,8 @@ impl Edge {
         chromosome_index: i32,
         phased: i32,
     ) -> Edge {
-        let mut query;
-        let mut id_query;
+        let query;
+        let id_query;
         let mut placeholders: Vec<Value> = vec![];
         if target_id.is_some() && source_id.is_some() {
             query = "INSERT INTO edges (source_id, target_id, chromosome_index, phased) VALUES (?1, ?2, ?3, ?4) RETURNING *";
@@ -175,7 +172,7 @@ impl Edge {
 
     pub fn get_edges(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Edge> {
         let mut stmt = conn.prepare_cached(query).unwrap();
-        let mut rows = stmt
+        let rows = stmt
             .query_map(params_from_iter(placeholders), |row| {
                 Ok(Edge {
                     id: row.get(0)?,

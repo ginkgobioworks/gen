@@ -51,7 +51,7 @@ impl Sequence {
         placeholders: Vec<Value>,
     ) -> Vec<Sequence> {
         let mut stmt = conn.prepare_cached(query).unwrap();
-        let mut rows = stmt
+        let rows = stmt
             .query_map(params_from_iter(placeholders), |row| {
                 Ok(Sequence {
                     hash: row.get(0).unwrap(),

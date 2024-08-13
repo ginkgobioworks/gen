@@ -1,4 +1,3 @@
-use crate::models::Path;
 use rusqlite::{params_from_iter, types::Value, Connection};
 
 use crate::models::edge::{Edge, UpdatedEdge};
@@ -232,7 +231,7 @@ impl Block {
 
     pub fn get_blocks(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Block> {
         let mut stmt = conn.prepare(query).unwrap();
-        let mut rows = stmt
+        let rows = stmt
             .query_map(params_from_iter(placeholders), |row| {
                 Ok(Block {
                     id: row.get(0)?,
@@ -424,7 +423,6 @@ mod tests {
         let conn = get_connection();
         let sequence = "AAATTTCCCGGG".to_string();
         let seq = Sequence::create(&conn, "DNA", &sequence, true);
-        let coll = Collection::create(&conn, "test");
         let bg = BlockGroup::create(&conn, "test", None, "test");
         let block = Block::create(&conn, &seq, bg.id, 0, 12, "+");
         assert_eq!(
