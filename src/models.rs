@@ -444,11 +444,11 @@ impl BlockGroup {
                 if end_split_point == next_block.start {
                     new_edges.push((Some(new_block_id), Some(next_block.id)));
                 } else {
-                    let (left_block, _right_block) =
+                    let (_left_block, right_block) =
                         Block::split(conn, &next_block, end_split_point, chromosome_index, phased)
                             .unwrap();
                     Block::delete(conn, next_block.id);
-                    new_edges.push((Some(new_block_id), Some(left_block.id)));
+                    new_edges.push((Some(new_block_id), Some(right_block.id)));
                 }
             } else if contains_start {
                 // our range is overlapping the end of the block
@@ -684,6 +684,24 @@ mod tests {
             HashSet::from_iter(vec![
                 "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
                 "AAAAAAAAAATTTTTNNNNTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_within_block() {
+        let mut conn = get_connection();
+        let (block_group_id, path_id) = setup_block_group(&conn);
+        let insert_sequence = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert = Block::create(&conn, &insert_sequence, block_group_id, 0, 4, "+");
+        BlockGroup::insert_change(&mut conn, path_id, 12, 17, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTNNNNTTTCCCCCCCCCCGGGGGGGGGG".to_string()
             ])
         );
     }

@@ -373,10 +373,10 @@ mod tests {
             BlockGroup::get_all_sequences(conn, 2),
             HashSet::from_iter(
                 [
-                    "ATCGATCGATAGATCGATCGATCGGGAACACACAGAGA",
-                    "ATCACGATCGATAGATCGATCGATCGGGAACACACAGAGA",
+                    "ATCGATCGATAGAGATCGATCGGGAACACACAGAGA",
+                    "ATCATCGATAGAGATCGATCGGGAACACACAGAGA",
                     "ATCGATCGATCGATCGATCGGGAACACACAGAGA",
-                    "ATCACGATCGATCGATCGATCGGGAACACACAGAGA"
+                    "ATCATCGATCGATCGATCGGGAACACACAGAGA"
                 ]
                 .iter()
                 .map(|v| v.to_string())
