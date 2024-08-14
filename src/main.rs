@@ -146,14 +146,6 @@ fn update_with_vcf(
                             &fixed_sample,
                             &seq_name,
                         );
-                        let sample_path_id = Path::get_paths(
-                            conn,
-                            "select * from path where block_group_id = ?1 AND name = ?2",
-                            vec![
-                                SQLValue::from(sample_bg_id),
-                                SQLValue::from(seq_name.clone()),
-                            ],
-                        );
                         let new_block_id = Block::create(
                             conn,
                             &new_sequence_hash,
@@ -164,7 +156,7 @@ fn update_with_vcf(
                         );
                         BlockGroup::insert_change(
                             conn,
-                            sample_path_id[0].id,
+                            sample_bg_id,
                             ref_start as i32,
                             ref_end as i32,
                             &new_block_id,
@@ -198,14 +190,6 @@ fn update_with_vcf(
                                         &sample_names[sample_index],
                                         &seq_name,
                                     );
-                                    let sample_path_id = Path::get_paths(
-                                        conn,
-                                        "select * from path where block_group_id = ?1 AND name = ?2",
-                                        vec![
-                                            SQLValue::from(sample_bg_id),
-                                            SQLValue::from(seq_name.clone()),
-                                        ],
-                                    );
                                     let new_block_id = Block::create(
                                         conn,
                                         &new_sequence_hash,
@@ -216,7 +200,7 @@ fn update_with_vcf(
                                     );
                                     BlockGroup::insert_change(
                                         conn,
-                                        sample_path_id[0].id,
+                                        sample_bg_id,
                                         ref_start as i32,
                                         ref_end as i32,
                                         &new_block_id,
@@ -373,10 +357,10 @@ mod tests {
             BlockGroup::get_all_sequences(conn, 2),
             HashSet::from_iter(
                 [
-                    "ATCGATCGATAGATCGATCGATCGGGAACACACAGAGA",
-                    "ATCACGATCGATAGATCGATCGATCGGGAACACACAGAGA",
+                    "ATCGATCGATAGAGATCGATCGGGAACACACAGAGA",
+                    "ATCATCGATAGAGATCGATCGGGAACACACAGAGA",
                     "ATCGATCGATCGATCGATCGGGAACACACAGAGA",
-                    "ATCACGATCGATCGATCGATCGGGAACACACAGAGA"
+                    "ATCATCGATCGATCGATCGGGAACACACAGAGA"
                 ]
                 .iter()
                 .map(|v| v.to_string())
