@@ -8,7 +8,9 @@ use std::fmt::*;
 
 pub mod block;
 pub mod edge;
+pub mod new_edge;
 pub mod path;
+pub mod path_edge;
 pub mod sequence;
 
 use crate::graph::all_simple_paths;

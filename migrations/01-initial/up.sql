@@ -80,3 +80,28 @@ CREATE TABLE change_log (
   FOREIGN KEY(sequence_hash) REFERENCES sequence(hash)
 );
 CREATE UNIQUE INDEX change_log_uidx ON change_log(hash);
+
+CREATE TABLE new_edges (
+  id INTEGER PRIMARY KEY NOT NULL,
+  source_hash TEXT,
+  source_coordinate INTEGER,
+  target_hash TEXT,
+  target_coordinate INTEGER,
+  chromosome_index INTEGER NOT NULL,
+  phased INTEGER NOT NULL,
+  FOREIGN KEY(source_hash) REFERENCES sequence(hash),
+  FOREIGN KEY(target_hash) REFERENCES sequence(hash),
+  constraint chk_phased check (phased in (0, 1))
+);
+CREATE UNIQUE INDEX new_edge_uidx ON new_edges(source_hash, source_coordinate, target_hash, target_coordinate, chromosome_index, phased);
+
+CREATE TABLE path_edges (
+  id INTEGER PRIMARY KEY NOT NULL,
+  path_id INTEGER NOT NULL,
+  source_edge_id INTEGER,
+  target_edge_id INTEGER,
+  FOREIGN KEY(source_edge_id) REFERENCES new_edges(id),
+  FOREIGN KEY(target_edge_id) REFERENCES new_edges(id),
+  FOREIGN KEY(path_id) REFERENCES path(id)
+);
+CREATE UNIQUE INDEX path_edges_uidx ON path_edges(path_id, source_edge_id, target_edge_id);

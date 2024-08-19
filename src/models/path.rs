@@ -1,5 +1,4 @@
-use crate::models::block::Block;
-use crate::models::edge::Edge;
+use crate::models::{block::Block, edge::Edge, path_edge::PathEdge};
 use petgraph::graphmap::DiGraphMap;
 use petgraph::prelude::Dfs;
 use petgraph::Direction;
@@ -45,6 +44,16 @@ pub fn revcomp(seq: &str) -> String {
             .collect(),
     )
     .unwrap()
+}
+
+#[derive(Clone, Debug)]
+pub struct NewBlock {
+    pub id: i32,
+    pub sequence_hash: String,
+    pub block_sequence: String,
+    pub start: i32,
+    pub end: i32,
+    pub strand: String,
 }
 
 impl Path {
@@ -123,6 +132,12 @@ impl Path {
             }
         }
         sequence
+    }
+
+    pub fn get_new_blocks(conn: &Connection, path_id: i32) -> Vec<NewBlock> {
+        let mut new_blocks = vec![];
+        let edges = PathEdge::edges_for(conn, path_id);
+        new_blocks
     }
 }
 
