@@ -1,12 +1,11 @@
 use crate::models::{block::Block, new_edge::NewEdge, path_edge::PathEdge, sequence::Sequence};
+use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::prelude::Dfs;
 use petgraph::Direction;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use std::collections::{HashMap, HashSet};
-
-use itertools::Itertools;
 
 #[derive(Debug)]
 pub struct Path {
