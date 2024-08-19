@@ -73,16 +73,15 @@ impl Sequence {
         conn: &Connection,
         hashes: Vec<String>,
     ) -> HashMap<String, Sequence> {
-        let mut sequence_map = HashMap::new();
         let joined_hashes = &hashes.join(",");
-        for sequence in Sequence::get_sequences(
+        let sequences = Sequence::get_sequences(
             conn,
             &format!("select * from sequence where hash in ({0})", joined_hashes),
             vec![],
-        ) {
-            sequence_map.insert(sequence.hash.clone(), sequence);
-        }
-
-        sequence_map
+        );
+        sequences
+            .into_iter()
+            .map(|sequence| (sequence.hash.clone(), sequence))
+            .collect::<HashMap<String, Sequence>>()
     }
 }
