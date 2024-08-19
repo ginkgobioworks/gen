@@ -278,7 +278,7 @@ impl BlockGroup {
             .values()
             .map(|block| format!("\"{id}\"", id = block.sequence_hash))
             .collect::<Vec<_>>();
-        let sequence_map = Sequence::get_sequences_by_hash(conn, sequence_hashes);
+        let sequence_map = Sequence::sequences_by_hash(conn, sequence_hashes);
         let block_ids = block_map
             .keys()
             .map(|id| format!("{id}"))

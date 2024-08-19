@@ -169,7 +169,7 @@ mod tests {
             vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
         );
         assert_eq!(
-            Path::new_get_sequence(conn, path),
+            Path::new_sequence(conn, path),
             "ATCGATCGAAAAAAACCCCCCCGGGGGGG"
         );
     }
@@ -236,7 +236,7 @@ mod tests {
             vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
         );
         assert_eq!(
-            Path::new_get_sequence(conn, path),
+            Path::new_sequence(conn, path),
             "CCCCCCCGGGGGGGTTTTTTTCGATCGAT"
         );
     }

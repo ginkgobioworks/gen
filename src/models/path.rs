@@ -152,7 +152,7 @@ impl Path {
         paths
     }
 
-    pub fn get_sequence(conn: &Connection, path_id: i32) -> String {
+    pub fn sequence(conn: &Connection, path_id: i32) -> String {
         let block_ids = PathBlock::get_blocks(conn, path_id);
         let mut sequence = "".to_string();
         for block_id in block_ids {
@@ -166,7 +166,7 @@ impl Path {
         sequence
     }
 
-    pub fn new_get_sequence(conn: &Connection, path: Path) -> String {
+    pub fn new_sequence(conn: &Connection, path: Path) -> String {
         let blocks = Path::blocks_for(conn, path);
         blocks
             .into_iter()
@@ -235,7 +235,7 @@ impl Path {
                 sequence_hashes.insert(edge.target_hash.clone().unwrap());
             }
         }
-        let sequences_by_hash = Sequence::get_sequences_by_hash(
+        let sequences_by_hash = Sequence::sequences_by_hash(
             conn,
             sequence_hashes
                 .into_iter()
@@ -443,7 +443,7 @@ mod tests {
             block_group.id,
             vec![block1.id, block2.id, block3.id],
         );
-        assert_eq!(Path::get_sequence(conn, path.id), "ATCGATCGAAAAAAACCCCCCC");
+        assert_eq!(Path::sequence(conn, path.id), "ATCGATCGAAAAAAACCCCCCC");
     }
 
     #[test]
@@ -469,7 +469,7 @@ mod tests {
             block_group.id,
             vec![block3.id, block2.id, block1.id],
         );
-        assert_eq!(Path::get_sequence(conn, path.id), "GGGGGGGTTTTTTTCGATCGAT");
+        assert_eq!(Path::sequence(conn, path.id), "GGGGGGGTTTTTTTCGATCGAT");
     }
 
     #[test]

@@ -302,7 +302,7 @@ mod tests {
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
         assert_eq!(
-            Path::get_sequence(&conn, 1),
+            Path::sequence(&conn, 1),
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()
         );
     }

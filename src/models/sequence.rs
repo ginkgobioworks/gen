@@ -46,11 +46,7 @@ impl Sequence {
         obj_hash
     }
 
-    pub fn get_sequences(
-        conn: &Connection,
-        query: &str,
-        placeholders: Vec<Value>,
-    ) -> Vec<Sequence> {
+    pub fn sequences(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Sequence> {
         let mut stmt = conn.prepare_cached(query).unwrap();
         let rows = stmt
             .query_map(params_from_iter(placeholders), |row| {
@@ -69,12 +65,9 @@ impl Sequence {
         objs
     }
 
-    pub fn get_sequences_by_hash(
-        conn: &Connection,
-        hashes: Vec<String>,
-    ) -> HashMap<String, Sequence> {
+    pub fn sequences_by_hash(conn: &Connection, hashes: Vec<String>) -> HashMap<String, Sequence> {
         let joined_hashes = &hashes.join(",");
-        let sequences = Sequence::get_sequences(
+        let sequences = Sequence::sequences(
             conn,
             &format!("select * from sequence where hash in ({0})", joined_hashes),
             vec![],
