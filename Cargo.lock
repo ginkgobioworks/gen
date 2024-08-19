@@ -591,6 +591,7 @@ dependencies = [
  "bio",
  "clap",
  "include_dir",
+ "itertools",
  "noodles",
  "petgraph",
  "rusqlite",

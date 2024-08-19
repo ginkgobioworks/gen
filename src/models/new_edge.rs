@@ -1,7 +1,7 @@
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct NewEdge {
     pub id: i32,
     pub source_hash: Option<String>,
@@ -84,5 +84,33 @@ impl NewEdge {
                 panic!("something bad happened querying the database")
             }
         }
+    }
+
+    pub fn load(conn: &Connection, edge_ids: Vec<i32>) -> Vec<NewEdge> {
+        let formatted_edge_ids = edge_ids
+            .into_iter()
+            .map(|edge_id| edge_id.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        let query = format!("select id, source_hash, source_coordinate, target_hash, target_coordinate, chromosome_index, phased from new_edges where id in ({});", formatted_edge_ids);
+        let mut stmt = conn.prepare_cached(&query).unwrap();
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(NewEdge {
+                    id: row.get(0)?,
+                    source_hash: row.get(1)?,
+                    source_coordinate: row.get(2)?,
+                    target_hash: row.get(3)?,
+                    target_coordinate: row.get(4)?,
+                    chromosome_index: row.get(5)?,
+                    phased: row.get(6)?,
+                })
+            })
+            .unwrap();
+        let mut objs = vec![];
+        for row in rows {
+            objs.push(row.unwrap());
+        }
+        objs
     }
 }

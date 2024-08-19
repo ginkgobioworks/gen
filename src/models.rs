@@ -277,16 +277,8 @@ impl BlockGroup {
         let sequence_hashes = block_map
             .values()
             .map(|block| format!("\"{id}\"", id = block.sequence_hash))
-            .collect::<Vec<_>>()
-            .join(",");
-        let mut sequence_map = HashMap::new();
-        for sequence in Sequence::get_sequences(
-            conn,
-            &format!("select * from sequence where hash in ({sequence_hashes})"),
-            vec![],
-        ) {
-            sequence_map.insert(sequence.hash, sequence.sequence);
-        }
+            .collect::<Vec<_>>();
+        let sequence_map = Sequence::get_sequences_by_hash(conn, sequence_hashes);
         let block_ids = block_map
             .keys()
             .map(|id| format!("{id}"))
@@ -323,7 +315,8 @@ impl BlockGroup {
                     let block = block_map.get(&start_node).unwrap();
                     let block_sequence = sequence_map.get(&block.sequence_hash).unwrap();
                     sequences.insert(
-                        block_sequence[(block.start as usize)..(block.end as usize)].to_string(),
+                        block_sequence.sequence[(block.start as usize)..(block.end as usize)]
+                            .to_string(),
                     );
                 } else {
                     for path in all_simple_paths(&graph, start_node, *end_node) {
@@ -332,7 +325,8 @@ impl BlockGroup {
                             let block = block_map.get(&node).unwrap();
                             let block_sequence = sequence_map.get(&block.sequence_hash).unwrap();
                             current_sequence.push_str(
-                                &block_sequence[(block.start as usize)..(block.end as usize)],
+                                &block_sequence.sequence
+                                    [(block.start as usize)..(block.end as usize)],
                             );
                         }
                         sequences.insert(current_sequence);
@@ -428,20 +422,19 @@ impl BlockGroup {
                 //        |----range---|
                 let start_split_point = block.start + start - path_start;
                 let end_split_point = block.start + end - path_start;
-                let mut next_block;
-                if start_split_point == block.start {
+                let next_block = if start_split_point == block.start {
                     if let Some(pb) = previous_block {
                         new_edges.push((Some(pb.id), Some(new_block_id)));
                     }
-                    next_block = block.clone();
+                    block.clone()
                 } else {
                     let (left_block, right_block) =
                         Block::split(conn, block, start_split_point, chromosome_index, phased)
                             .unwrap();
                     Block::delete(conn, block.id);
                     new_edges.push((Some(left_block.id), Some(new_block_id)));
-                    next_block = right_block.clone();
-                }
+                    right_block.clone()
+                };
 
                 if end_split_point == next_block.start {
                     new_edges.push((Some(new_block_id), Some(next_block.id)));
@@ -585,7 +578,6 @@ impl ChangeLog {
 mod tests {
     use super::*;
     use crate::migrations::run_migrations;
-    use std::hash::Hash;
 
     fn get_connection() -> Connection {
         let mut conn = Connection::open_in_memory()

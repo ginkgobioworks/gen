@@ -98,10 +98,9 @@ CREATE UNIQUE INDEX new_edge_uidx ON new_edges(source_hash, source_coordinate, t
 CREATE TABLE path_edges (
   id INTEGER PRIMARY KEY NOT NULL,
   path_id INTEGER NOT NULL,
-  source_edge_id INTEGER,
-  target_edge_id INTEGER,
-  FOREIGN KEY(source_edge_id) REFERENCES new_edges(id),
-  FOREIGN KEY(target_edge_id) REFERENCES new_edges(id),
+  index_in_path INTEGER NOT NULL,
+  edge_id INTEGER NOT NULL,
+  FOREIGN KEY(edge_id) REFERENCES new_edges(id),
   FOREIGN KEY(path_id) REFERENCES path(id)
 );
-CREATE UNIQUE INDEX path_edges_uidx ON path_edges(path_id, source_edge_id, target_edge_id);
+CREATE UNIQUE INDEX path_edges_uidx ON path_edges(path_id, edge_id);

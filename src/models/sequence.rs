@@ -1,8 +1,9 @@
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Sequence {
     pub hash: String,
     pub sequence_type: String,
@@ -66,5 +67,22 @@ impl Sequence {
             objs.push(row.unwrap());
         }
         objs
+    }
+
+    pub fn get_sequences_by_hash(
+        conn: &Connection,
+        hashes: Vec<String>,
+    ) -> HashMap<String, Sequence> {
+        let mut sequence_map = HashMap::new();
+        let joined_hashes = &hashes.join(",");
+        for sequence in Sequence::get_sequences(
+            conn,
+            &format!("select * from sequence where hash in ({0})", joined_hashes),
+            vec![],
+        ) {
+            sequence_map.insert(sequence.hash.clone(), sequence);
+        }
+
+        sequence_map
     }
 }

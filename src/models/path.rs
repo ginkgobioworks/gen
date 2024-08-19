@@ -1,9 +1,12 @@
-use crate::models::{block::Block, edge::Edge, path_edge::PathEdge};
+use crate::models::{block::Block, new_edge::NewEdge, path_edge::PathEdge, sequence::Sequence};
 use petgraph::graphmap::DiGraphMap;
 use petgraph::prelude::Dfs;
 use petgraph::Direction;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
+use std::collections::{HashMap, HashSet};
+
+use itertools::Itertools;
 
 #[derive(Debug)]
 pub struct Path {
@@ -49,10 +52,12 @@ pub fn revcomp(seq: &str) -> String {
 #[derive(Clone, Debug)]
 pub struct NewBlock {
     pub id: i32,
-    pub sequence_hash: String,
+    pub sequence: Sequence,
     pub block_sequence: String,
-    pub start: i32,
-    pub end: i32,
+    pub sequence_start: i32,
+    pub sequence_end: i32,
+    pub path_start: i32,
+    pub path_end: i32,
     pub strand: String,
 }
 
@@ -79,6 +84,33 @@ impl Path {
             } else {
                 PathBlock::create(conn, path.id, Some(*block), None);
             }
+        }
+
+        path
+    }
+
+    pub fn new_create(
+        conn: &Connection,
+        name: &str,
+        block_group_id: i32,
+        edge_ids: Vec<i32>,
+    ) -> Path {
+        let query = "INSERT INTO path (name, block_group_id) VALUES (?1, ?2) RETURNING (id)";
+        let mut stmt = conn.prepare(query).unwrap();
+        let mut rows = stmt
+            .query_map((name, block_group_id), |row| {
+                Ok(Path {
+                    id: row.get(0)?,
+                    name: name.to_string(),
+                    block_group_id,
+                    blocks: vec![],
+                })
+            })
+            .unwrap();
+        let path = rows.next().unwrap().unwrap();
+
+        for (index, edge_id) in edge_ids.iter().enumerate() {
+            PathEdge::create(conn, path.id, index.try_into().unwrap(), *edge_id);
         }
 
         path
@@ -120,7 +152,7 @@ impl Path {
         paths
     }
 
-    pub fn sequence(conn: &Connection, path_id: i32) -> String {
+    pub fn get_sequence(conn: &Connection, path_id: i32) -> String {
         let block_ids = PathBlock::get_blocks(conn, path_id);
         let mut sequence = "".to_string();
         for block_id in block_ids {
@@ -134,10 +166,98 @@ impl Path {
         sequence
     }
 
-    pub fn get_new_blocks(conn: &Connection, path_id: i32) -> Vec<NewBlock> {
-        let mut new_blocks = vec![];
-        let edges = PathEdge::edges_for(conn, path_id);
-        new_blocks
+    pub fn new_get_sequence(conn: &Connection, path: Path) -> String {
+        let blocks = Path::blocks_for(conn, path);
+        blocks
+            .into_iter()
+            .map(|block| block.block_sequence)
+            .collect::<Vec<_>>()
+            .join("")
+    }
+
+    pub fn edge_pairs_to_block(
+        block_id: i32,
+        path: &Path,
+        into: NewEdge,
+        out_of: NewEdge,
+        sequences_by_hash: &HashMap<String, Sequence>,
+        current_path_length: i32,
+    ) -> NewBlock {
+        if into.target_hash.is_none() || out_of.source_hash.is_none() {
+            panic!(
+                "Consecutive edges in path {} have None as internal block sequence",
+                path.id
+            );
+        }
+
+        if into.target_hash != out_of.source_hash {
+            panic!(
+                "Consecutive edges in path {0} don't share the same block",
+                path.id
+            );
+        }
+
+        let sequence = sequences_by_hash.get(&into.target_hash.unwrap()).unwrap();
+        let start = into.target_coordinate.unwrap();
+        let end = out_of.source_coordinate.unwrap();
+
+        let strand;
+        let block_sequence;
+
+        if end >= start {
+            strand = "+";
+            block_sequence = sequence.sequence[start as usize..end as usize].to_string();
+        } else {
+            strand = "-";
+            block_sequence = revcomp(&sequence.sequence[end as usize..start as usize + 1]);
+        }
+
+        NewBlock {
+            id: block_id,
+            sequence: sequence.clone(),
+            block_sequence,
+            sequence_start: start,
+            sequence_end: end,
+            path_start: current_path_length,
+            path_end: current_path_length + end,
+            strand: strand.to_string(),
+        }
+    }
+
+    pub fn blocks_for(conn: &Connection, path: Path) -> Vec<NewBlock> {
+        let edges = PathEdge::edges_for(conn, path.id);
+        let mut sequence_hashes = HashSet::new();
+        for edge in &edges {
+            if edge.source_hash.is_some() {
+                sequence_hashes.insert(edge.source_hash.clone().unwrap());
+            }
+            if edge.target_hash.is_some() {
+                sequence_hashes.insert(edge.target_hash.clone().unwrap());
+            }
+        }
+        let sequences_by_hash = Sequence::get_sequences_by_hash(
+            conn,
+            sequence_hashes
+                .into_iter()
+                .map(|hash| format!("\"{hash}\""))
+                .collect(),
+        );
+
+        let mut blocks = vec![];
+        let mut path_length = 0;
+        for (index, (into, out_of)) in edges.into_iter().tuple_windows().enumerate() {
+            let block = Path::edge_pairs_to_block(
+                index as i32,
+                &path,
+                into,
+                out_of,
+                &sequences_by_hash,
+                path_length,
+            );
+            path_length += block.block_sequence.len() as i32;
+            blocks.push(block);
+        }
+        blocks
     }
 }
 
@@ -290,7 +410,7 @@ mod tests {
     use super::*;
 
     use crate::migrations::run_migrations;
-    use crate::models::{sequence::Sequence, BlockGroup, Collection};
+    use crate::models::{sequence::Sequence, BlockGroup, Collection, Edge};
 
     fn get_connection() -> Connection {
         let mut conn = Connection::open_in_memory()
@@ -323,7 +443,7 @@ mod tests {
             block_group.id,
             vec![block1.id, block2.id, block3.id],
         );
-        assert_eq!(Path::sequence(conn, path.id), "ATCGATCGAAAAAAACCCCCCC");
+        assert_eq!(Path::get_sequence(conn, path.id), "ATCGATCGAAAAAAACCCCCCC");
     }
 
     #[test]
@@ -349,7 +469,7 @@ mod tests {
             block_group.id,
             vec![block3.id, block2.id, block1.id],
         );
-        assert_eq!(Path::sequence(conn, path.id), "GGGGGGGTTTTTTTCGATCGAT");
+        assert_eq!(Path::get_sequence(conn, path.id), "GGGGGGGTTTTTTTCGATCGAT");
     }
 
     #[test]
