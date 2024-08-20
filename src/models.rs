@@ -16,7 +16,8 @@ pub mod sequence;
 use crate::graph::all_simple_paths;
 use crate::models::block::Block;
 use crate::models::edge::Edge;
-use crate::models::path::{Path, PathBlock};
+use crate::models::new_edge::NewEdge;
+use crate::models::path::{NewBlock, Path, PathBlock};
 use crate::models::sequence::Sequence;
 use crate::{get_overlap, models};
 
@@ -500,6 +501,112 @@ impl BlockGroup {
         }
 
         change.save(conn);
+    }
+
+    #[allow(clippy::ptr_arg)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_insert_change(
+        conn: &mut Connection,
+        path: Path,
+        start: i32,
+        end: i32,
+        new_block: &NewBlock,
+        chromosome_index: i32,
+        phased: i32,
+    ) -> Vec<NewEdge> {
+        // todo:
+        // cases to check:
+        //  change that is the size of a block
+        //  change that goes over multiple blocks
+        //  change that hits just start/end boundary, e.g. block is 1,5 and change is 3,5 or 1,3.
+        //  change that deletes block boundary
+
+        let tree = Path::intervaltree_for(conn, path);
+
+        let start_blocks: Vec<NewBlock> =
+            tree.query_point(start).map(|x| x.value.clone()).collect();
+        assert_eq!(start_blocks.len(), 1);
+        let start_block = &start_blocks[0];
+
+        let end_blocks: Vec<NewBlock> = tree.query_point(end).map(|x| x.value.clone()).collect();
+        assert_eq!(end_blocks.len(), 1);
+        let end_block = &end_blocks[0];
+
+        let mut new_edges = vec![];
+
+        if new_block.sequence_start == new_block.sequence_end {
+            // Deletion
+            let new_edge = NewEdge {
+                id: 0,
+                source_hash: Some(start_block.sequence.hash.clone()),
+                source_coordinate: Some(
+                    start - start_block.path_start + start_block.sequence_start,
+                ),
+                target_hash: Some(end_block.sequence.hash.clone()),
+                target_coordinate: Some(end - end_block.path_start + end_block.sequence_start),
+                chromosome_index,
+                phased,
+            };
+            new_edges.push(new_edge);
+        } else {
+            // Insertion/replacement
+            let new_start_edge = NewEdge {
+                id: 0,
+                source_hash: Some(start_block.sequence.hash.clone()),
+                source_coordinate: Some(
+                    start - start_block.path_start + start_block.sequence_start,
+                ),
+                target_hash: Some(new_block.sequence.hash.clone()),
+                target_coordinate: Some(new_block.sequence_start),
+                chromosome_index,
+                phased,
+            };
+            let new_end_edge = NewEdge {
+                id: 0,
+                source_hash: Some(new_block.sequence.hash.clone()),
+                source_coordinate: Some(new_block.sequence_end),
+                target_hash: Some(end_block.sequence.hash.clone()),
+                target_coordinate: Some(end - end_block.path_start + end_block.sequence_start),
+                chromosome_index,
+                phased,
+            };
+            new_edges.push(new_start_edge);
+            new_edges.push(new_end_edge);
+        }
+
+        // NOTE: Add edges marking the existing "block" that is being substituted out, so we can
+        // retrieve it as one node of the overall graph
+        if start < start_block.path_end {
+            let split_coordinate = start - start_block.path_start + start_block.sequence_start;
+            let new_split_start_edge = NewEdge {
+                id: 0,
+                source_hash: Some(start_block.sequence.hash.clone()),
+                source_coordinate: Some(split_coordinate),
+                target_hash: Some(start_block.sequence.hash.clone()),
+                target_coordinate: Some(split_coordinate + 1),
+                chromosome_index,
+                phased,
+            };
+            new_edges.push(new_split_start_edge);
+        }
+
+        if end > end_block.path_start {
+            let split_coordinate = end - end_block.path_start + end_block.sequence_start;
+            let new_split_end_edge = NewEdge {
+                id: 0,
+                source_hash: Some(new_block.sequence.hash.clone()),
+                source_coordinate: Some(split_coordinate),
+                target_hash: Some(end_block.sequence.hash.clone()),
+                target_coordinate: Some(split_coordinate + 1),
+                chromosome_index,
+                phased,
+            };
+
+            new_edges.push(new_split_end_edge);
+        }
+
+        // TODO: bulk create-or-get of new edges
+        new_edges
     }
 }
 
