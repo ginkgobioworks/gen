@@ -1,4 +1,5 @@
 use crate::models::{block::Block, new_edge::NewEdge, path_edge::PathEdge, sequence::Sequence};
+use intervaltree::IntervalTree;
 use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::prelude::Dfs;
@@ -202,13 +203,16 @@ impl Path {
 
         let strand;
         let block_sequence;
+        let block_sequence_length;
 
         if end >= start {
             strand = "+";
             block_sequence = sequence.sequence[start as usize..end as usize].to_string();
+            block_sequence_length = end - start;
         } else {
             strand = "-";
             block_sequence = revcomp(&sequence.sequence[end as usize..start as usize + 1]);
+            block_sequence_length = start - end;
         }
 
         NewBlock {
@@ -218,7 +222,7 @@ impl Path {
             sequence_start: start,
             sequence_end: end,
             path_start: current_path_length,
-            path_end: current_path_length + end,
+            path_end: current_path_length + block_sequence_length,
             strand: strand.to_string(),
         }
     }
@@ -257,6 +261,15 @@ impl Path {
             blocks.push(block);
         }
         blocks
+    }
+
+    pub fn intervaltree_for(conn: &Connection, path: Path) -> IntervalTree<i32, NewBlock> {
+        let blocks = Path::blocks_for(conn, path);
+        let tree: IntervalTree<i32, NewBlock> = blocks
+            .into_iter()
+            .map(|block| (block.path_start..block.path_end, block))
+            .collect();
+        tree
     }
 }
 
@@ -476,5 +489,98 @@ mod tests {
         assert_eq!(revcomp("ATCCGG"), "CCGGAT");
         assert_eq!(revcomp("CNNNNA"), "TNNNNG");
         assert_eq!(revcomp("cNNgnAt"), "aTncNNg");
+    }
+
+    #[test]
+    fn test_intervaltree() {
+        let conn = &mut get_connection();
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
+        let edge1 = NewEdge::create(
+            conn,
+            None,
+            None,
+            Some(sequence1_hash.clone()),
+            Some(0),
+            0,
+            0,
+        );
+        let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
+        let edge2 = NewEdge::create(
+            conn,
+            Some(sequence1_hash.clone()),
+            Some(8),
+            Some(sequence2_hash.clone()),
+            Some(1),
+            0,
+            0,
+        );
+        let sequence3_hash = Sequence::create(conn, "DNA", "CCCCCCCC", true);
+        let edge3 = NewEdge::create(
+            conn,
+            Some(sequence2_hash.clone()),
+            Some(8),
+            Some(sequence3_hash.clone()),
+            Some(1),
+            0,
+            0,
+        );
+        let sequence4_hash = Sequence::create(conn, "DNA", "GGGGGGGG", true);
+        let edge4 = NewEdge::create(
+            conn,
+            Some(sequence3_hash.clone()),
+            Some(8),
+            Some(sequence4_hash.clone()),
+            Some(1),
+            0,
+            0,
+        );
+        let edge5 = NewEdge::create(
+            conn,
+            Some(sequence4_hash.clone()),
+            Some(8),
+            None,
+            None,
+            0,
+            0,
+        );
+
+        let path = Path::new_create(
+            conn,
+            "chr1",
+            block_group.id,
+            vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
+        );
+        let tree = Path::intervaltree_for(conn, path);
+        let blocks1: Vec<_> = tree.query_point(2).map(|x| x.value.clone()).collect();
+        assert_eq!(blocks1.len(), 1);
+        let block1 = &blocks1[0];
+        assert_eq!(block1.sequence.hash, sequence1_hash);
+        assert_eq!(block1.sequence_start, 0);
+        assert_eq!(block1.sequence_end, 8);
+        assert_eq!(block1.path_start, 0);
+        assert_eq!(block1.path_end, 8);
+        assert_eq!(block1.strand, "+");
+
+        let blocks2: Vec<_> = tree.query_point(12).map(|x| x.value.clone()).collect();
+        assert_eq!(blocks2.len(), 1);
+        let block2 = &blocks2[0];
+        assert_eq!(block2.sequence.hash, sequence2_hash);
+        assert_eq!(block2.sequence_start, 1);
+        assert_eq!(block2.sequence_end, 8);
+        assert_eq!(block2.path_start, 8);
+        assert_eq!(block2.path_end, 15);
+        assert_eq!(block2.strand, "+");
+
+        let blocks4: Vec<_> = tree.query_point(25).map(|x| x.value.clone()).collect();
+        assert_eq!(blocks4.len(), 1);
+        let block4 = &blocks4[0];
+        assert_eq!(block4.sequence.hash, sequence4_hash);
+        assert_eq!(block4.sequence_start, 1);
+        assert_eq!(block4.sequence_end, 8);
+        assert_eq!(block4.path_start, 22);
+        assert_eq!(block4.path_end, 29);
+        assert_eq!(block4.strand, "+");
     }
 }
