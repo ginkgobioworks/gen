@@ -3,7 +3,7 @@ use crate::models::path::PathBlock;
 use noodles::core::Position;
 use noodles::fasta;
 use rusqlite::{params_from_iter, types::Value, Connection};
-use std::fs;
+use std::{fs, str};
 
 #[derive(Clone, Debug)]
 pub struct Block {
@@ -284,15 +284,15 @@ impl Block {
                 let mut reader = fasta::io::indexed_reader::Builder::default()
                     .build_from_path(external_path)
                     .unwrap();
-                sequence = String::from_utf8(
+                sequence = str::from_utf8(
                     reader
                         .query(&format!("{name}:{start}-{end}").parse().unwrap())
                         .unwrap()
                         .sequence()
-                        .as_ref()
-                        .to_vec(),
+                        .as_ref(),
                 )
-                .unwrap();
+                .unwrap()
+                .to_string();
             } else {
                 let mut reader = fasta::io::reader::Builder
                     .build_from_path(external_path)
@@ -300,7 +300,7 @@ impl Block {
                 for result in reader.records() {
                     let record = result.unwrap();
                     if String::from_utf8(record.name().to_vec()).unwrap() == name {
-                        sequence = String::from_utf8(
+                        sequence = str::from_utf8(
                             record
                                 .sequence()
                                 .slice(
@@ -308,10 +308,10 @@ impl Block {
                                         ..=Position::try_from(end as usize).unwrap(),
                                 )
                                 .unwrap()
-                                .as_ref()
-                                .to_vec(),
+                                .as_ref(),
                         )
-                        .unwrap();
+                        .unwrap()
+                        .to_string();
                         break;
                     }
                 }

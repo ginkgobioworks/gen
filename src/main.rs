@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::PathBuf;
+use std::{io, str};
 
 use gen::migrations::run_migrations;
 use gen::models::{self, block::Block, edge::Edge, path::Path, sequence::Sequence, BlockGroup};
@@ -15,7 +16,6 @@ use noodles::vcf::variant::record::samples::{Sample, Series};
 use noodles::vcf::variant::record::{AlternateBases, ReferenceBases, Samples};
 use noodles::vcf::variant::Record;
 use rusqlite::{types::Value as SQLValue, Connection};
-use std::io;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -73,7 +73,9 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
 
         for result in reader.records() {
             let record = result.expect("Error during fasta record parsing");
-            let sequence = String::from_utf8(record.sequence().as_ref().to_vec()).unwrap();
+            let sequence = str::from_utf8(record.sequence().as_ref())
+                .unwrap()
+                .to_string();
             let name = String::from_utf8(record.name().to_vec()).unwrap();
             let sequence_length = record.sequence().len() as i32;
             let seq_hash = Sequence::create(
