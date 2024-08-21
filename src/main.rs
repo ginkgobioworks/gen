@@ -242,7 +242,12 @@ fn main() {
             name,
             db,
             shallow,
-        }) => import_fasta(fasta, name, *shallow, &mut get_connection(db)),
+        }) => {
+            let mut conn = get_connection(db);
+            conn.execute("BEGIN TRANSACTION", []).unwrap();
+            import_fasta(fasta, name, *shallow, &mut conn);
+            conn.execute("END TRANSACTION", []).unwrap();
+        }
         Some(Commands::Update {
             name,
             db,
@@ -250,13 +255,18 @@ fn main() {
             vcf,
             genotype,
             sample,
-        }) => update_with_vcf(
-            vcf,
-            name,
-            genotype.clone().unwrap_or("".to_string()),
-            sample.clone().unwrap_or("".to_string()),
-            &mut get_connection(db),
-        ),
+        }) => {
+            let mut conn = get_connection(db);
+            conn.execute("BEGIN TRANSACTION", []).unwrap();
+            update_with_vcf(
+                vcf,
+                name,
+                genotype.clone().unwrap_or("".to_string()),
+                sample.clone().unwrap_or("".to_string()),
+                &mut conn,
+            );
+            conn.execute("END TRANSACTION", []).unwrap();
+        }
         None => {}
     }
 }
