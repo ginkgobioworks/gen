@@ -105,4 +105,13 @@ CREATE TABLE path_edges (
 );
 CREATE UNIQUE INDEX path_edges_uidx ON path_edges(path_id, edge_id);
 
+CREATE TABLE block_group_edges (
+  id INTEGER PRIMARY KEY NOT NULL,
+  block_group_id INTEGER NOT NULL,
+  edge_id INTEGER NOT NULL,
+  FOREIGN KEY(block_group_id) REFERENCES block_group(id),
+  FOREIGN KEY(edge_id) REFERENCES new_edges(id)
+);
+CREATE UNIQUE INDEX block_group_edges_uidx ON block_group_edges(block_group_id, edge_id);
+
 INSERT INTO sequence (hash, sequence_type, sequence, "length") values ("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "OTHER", "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", 64), ("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "OTHER", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", 64);

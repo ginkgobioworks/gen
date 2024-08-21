@@ -9,6 +9,7 @@ use gen::migrations::run_migrations;
 use gen::models::{
     self,
     block::Block,
+    block_group_edge::BlockGroupEdge,
     edge::Edge,
     new_edge::NewEdge,
     path::{NewBlock, Path},
@@ -133,6 +134,7 @@ fn new_import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connec
                 0,
                 0,
             );
+            BlockGroupEdge::bulk_create(conn, block_group.id, vec![edge_into.id, edge_out_of.id]);
             Path::new_create(
                 conn,
                 record.id(),
@@ -362,6 +364,7 @@ fn new_update_with_vcf(
                         };
                         BlockGroup::new_insert_change(
                             conn,
+                            sample_bg_id,
                             &sample_paths[0],
                             ref_start as i32,
                             ref_end as i32,
@@ -422,6 +425,7 @@ fn new_update_with_vcf(
                                     };
                                     BlockGroup::new_insert_change(
                                         conn,
+                                        sample_bg_id,
                                         &sample_paths[0],
                                         ref_start as i32,
                                         ref_end as i32,
