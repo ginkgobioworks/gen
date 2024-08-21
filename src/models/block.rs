@@ -649,10 +649,16 @@ mod tests {
             ("ATCGATCGATCG".to_string(), "+".to_string())
         );
 
-        let block = Block::create(conn, &seq, bg.id, 0, 9, "+");
+        let block = Block::create(conn, &seq, bg.id, 3, 9, "+");
         assert_eq!(
             Block::get_sequence(conn, block.id),
-            ("ATCGATCGA".to_string(), "+".to_string())
+            ("GATCGA".to_string(), "+".to_string())
+        );
+
+        let block = Block::create(conn, &seq, bg.id, 3, 9, "-");
+        assert_eq!(
+            Block::get_sequence(conn, block.id),
+            ("GATCGA".to_string(), "-".to_string())
         );
     }
 }
