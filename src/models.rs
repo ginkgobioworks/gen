@@ -18,6 +18,7 @@ use crate::models::block::Block;
 use crate::models::edge::Edge;
 use crate::models::new_edge::{EdgeData, NewEdge};
 use crate::models::path::{NewBlock, Path, PathBlock};
+use crate::models::path_edge::PathEdge;
 use crate::models::sequence::Sequence;
 use crate::{get_overlap, models};
 
@@ -217,11 +218,11 @@ impl BlockGroup {
         );
 
         for path in existing_paths {
-            let mut new_blocks = vec![];
-            for block in path.blocks {
-                new_blocks.push(*block_map.get(&block).unwrap());
-            }
-            Path::create(conn, &path.name, target_block_group_id, new_blocks);
+            let edge_ids = PathEdge::edges_for(conn, path.id)
+                .into_iter()
+                .map(|edge| edge.id)
+                .collect();
+            Path::new_create(conn, &path.name, target_block_group_id, edge_ids);
         }
     }
 
@@ -507,7 +508,7 @@ impl BlockGroup {
     #[allow(clippy::too_many_arguments)]
     pub fn new_insert_change(
         conn: &mut Connection,
-        path: Path,
+        path: &Path,
         start: i32,
         end: i32,
         new_block: &NewBlock,
@@ -567,8 +568,8 @@ impl BlockGroup {
             new_edges.push(new_end_edge);
         }
 
-        // NOTE: Add edges marking the existing "block" that is being substituted out, so we can
-        // retrieve it as one node of the overall graph
+        // NOTE: Add edges marking the existing part of the sequence that is being substituted out,
+        // so we can retrieve it as one node of the overall graph
         if start < start_block.path_end {
             let split_coordinate = start - start_block.path_start + start_block.sequence_start;
             let new_split_start_edge = EdgeData {

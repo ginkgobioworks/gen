@@ -8,7 +8,7 @@ use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Path {
     pub id: i32,
     pub name: String,
@@ -141,7 +141,7 @@ impl Path {
                     id: path_id,
                     block_group_id: row.get(1)?,
                     name: row.get(2)?,
-                    blocks: PathBlock::get_blocks(conn, path_id),
+                    blocks: vec![],
                 })
             })
             .unwrap();
@@ -167,7 +167,7 @@ impl Path {
     }
 
     pub fn new_sequence(conn: &Connection, path: Path) -> String {
-        let blocks = Path::blocks_for(conn, path);
+        let blocks = Path::blocks_for(conn, &path);
         blocks
             .into_iter()
             .map(|block| block.block_sequence)
@@ -220,7 +220,7 @@ impl Path {
         }
     }
 
-    pub fn blocks_for(conn: &Connection, path: Path) -> Vec<NewBlock> {
+    pub fn blocks_for(conn: &Connection, path: &Path) -> Vec<NewBlock> {
         let edges = PathEdge::edges_for(conn, path.id);
         let mut sequence_hashes = HashSet::new();
         for edge in &edges {
@@ -244,7 +244,7 @@ impl Path {
         for (index, (into, out_of)) in edges.into_iter().tuple_windows().enumerate() {
             let block = Path::edge_pairs_to_block(
                 index as i32,
-                &path,
+                path,
                 into,
                 out_of,
                 &sequences_by_hash,
@@ -256,7 +256,7 @@ impl Path {
         blocks
     }
 
-    pub fn intervaltree_for(conn: &Connection, path: Path) -> IntervalTree<i32, NewBlock> {
+    pub fn intervaltree_for(conn: &Connection, path: &Path) -> IntervalTree<i32, NewBlock> {
         let blocks = Path::blocks_for(conn, path);
         let tree: IntervalTree<i32, NewBlock> = blocks
             .into_iter()
@@ -545,7 +545,7 @@ mod tests {
             block_group.id,
             vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
         );
-        let tree = Path::intervaltree_for(conn, path);
+        let tree = Path::intervaltree_for(conn, &path);
         let blocks1: Vec<_> = tree.query_point(2).map(|x| x.value.clone()).collect();
         assert_eq!(blocks1.len(), 1);
         let block1 = &blocks1[0];
