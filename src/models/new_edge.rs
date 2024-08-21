@@ -1,6 +1,6 @@
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::hash::RandomState;
 
 #[derive(Clone, Debug)]
@@ -248,18 +248,20 @@ mod tests {
         let edges = NewEdge::bulk_load(conn, edge_ids);
         assert_eq!(edges.len(), 3);
 
-        let edge_result1 = &edges[0];
-        assert_eq!(edge_result1.source_hash, NewEdge::PATH_START_HASH);
+        let edges_by_source_hash = edges
+            .into_iter()
+            .map(|edge| (edge.source_hash.clone(), edge))
+            .collect::<HashMap<String, NewEdge>>();
+
+        let edge_result1 = edges_by_source_hash.get(NewEdge::PATH_START_HASH).unwrap();
         assert_eq!(edge_result1.source_coordinate, -1);
         assert_eq!(edge_result1.target_hash, sequence1_hash);
         assert_eq!(edge_result1.target_coordinate, 1);
-        let edge_result2 = &edges[1];
-        assert_eq!(edge_result2.source_hash, sequence1_hash);
+        let edge_result2 = edges_by_source_hash.get(&sequence1_hash).unwrap();
         assert_eq!(edge_result2.source_coordinate, 2);
         assert_eq!(edge_result2.target_hash, sequence2_hash);
         assert_eq!(edge_result2.target_coordinate, 3);
-        let edge_result3 = &edges[2];
-        assert_eq!(edge_result3.source_hash, sequence2_hash);
+        let edge_result3 = edges_by_source_hash.get(&sequence2_hash).unwrap();
         assert_eq!(edge_result3.source_coordinate, 4);
         assert_eq!(edge_result3.target_hash, NewEdge::PATH_END_HASH);
         assert_eq!(edge_result3.target_coordinate, -1);
@@ -316,21 +318,23 @@ mod tests {
         let edges = NewEdge::bulk_load(conn, edge_ids);
         assert_eq!(edges.len(), 3);
 
-        let edge_result1 = &edges[0];
+        let edges_by_source_hash = edges
+            .into_iter()
+            .map(|edge| (edge.source_hash.clone(), edge))
+            .collect::<HashMap<String, NewEdge>>();
+
+        let edge_result1 = edges_by_source_hash.get(NewEdge::PATH_START_HASH).unwrap();
 
         assert_eq!(edge_result1.id, existing_edge.id);
 
-        assert_eq!(edge_result1.source_hash, NewEdge::PATH_START_HASH);
         assert_eq!(edge_result1.source_coordinate, -1);
         assert_eq!(edge_result1.target_hash, sequence1_hash);
         assert_eq!(edge_result1.target_coordinate, 1);
-        let edge_result2 = &edges[2];
-        assert_eq!(edge_result2.source_hash, sequence1_hash);
+        let edge_result2 = edges_by_source_hash.get(&sequence1_hash).unwrap();
         assert_eq!(edge_result2.source_coordinate, 2);
         assert_eq!(edge_result2.target_hash, sequence2_hash);
         assert_eq!(edge_result2.target_coordinate, 3);
-        let edge_result3 = &edges[1];
-        assert_eq!(edge_result3.source_hash, sequence2_hash);
+        let edge_result3 = edges_by_source_hash.get(&sequence2_hash).unwrap();
         assert_eq!(edge_result3.source_coordinate, 4);
         assert_eq!(edge_result3.target_hash, NewEdge::PATH_END_HASH);
         assert_eq!(edge_result3.target_coordinate, -1);
