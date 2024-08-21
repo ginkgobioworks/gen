@@ -325,6 +325,7 @@ impl Block {
 mod tests {
     use rusqlite::Connection;
     use std::collections::HashSet;
+    use std::path::PathBuf;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
@@ -623,6 +624,35 @@ mod tests {
         assert_eq!(
             Block::get_sequence(conn, block.id),
             ("AAATTTCCC".to_string(), "+".to_string())
+        );
+    }
+
+    #[test]
+    fn get_sequence_from_disk() {
+        let conn = &mut get_connection();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let seq = Sequence::create(
+            conn,
+            &Sequence {
+                sequence_type: "DNA".to_string(),
+                name: "m123".to_string(),
+                file_path: fasta_path.to_str().unwrap().to_string(),
+                ..Default::default()
+            },
+        );
+        Collection::create(conn, "test collection");
+        let bg = BlockGroup::create(conn, "test collection", None, "test");
+        let block = Block::create(conn, &seq, bg.id, 0, 12, "+");
+        assert_eq!(
+            Block::get_sequence(conn, block.id),
+            ("ATCGATCGATCG".to_string(), "+".to_string())
+        );
+
+        let block = Block::create(conn, &seq, bg.id, 0, 9, "+");
+        assert_eq!(
+            Block::get_sequence(conn, block.id),
+            ("ATCGATCGA".to_string(), "+".to_string())
         );
     }
 }

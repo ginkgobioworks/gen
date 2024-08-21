@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use sha2::{Digest, Sha256};
@@ -69,7 +67,11 @@ impl Sequence {
         let mut stmt = conn.prepare_cached(query).unwrap();
         let rows = stmt
             .query_map(params_from_iter(placeholders), |row| {
-                let external_sequence = row.get(4).unwrap_or(false);
+                let file_path: String = row.get(4).unwrap();
+                let mut external_sequence = false;
+                if !file_path.is_empty() {
+                    external_sequence = true;
+                }
                 Ok(Sequence {
                     hash: row.get(0).unwrap(),
                     sequence_type: row.get(1).unwrap(),
@@ -86,5 +88,69 @@ impl Sequence {
             objs.push(row.unwrap());
         }
         objs
+    }
+}
+
+mod tests {
+    use rusqlite::Connection;
+    use std::ops::Deref;
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    use crate::migrations::run_migrations;
+
+    fn get_connection() -> Connection {
+        let mut conn = Connection::open_in_memory()
+            .unwrap_or_else(|_| panic!("Error opening in memory test db"));
+        rusqlite::vtab::array::load_module(&conn).unwrap();
+        run_migrations(&mut conn);
+        conn
+    }
+
+    #[test]
+    fn test_create_sequence_in_db() {
+        let conn = &mut get_connection();
+        let seq_hash = Sequence::create(
+            conn,
+            &Sequence {
+                sequence_type: "DNA".to_string(),
+                sequence: "AACCTT".to_string(),
+                ..Default::default()
+            },
+        );
+        let sequences = Sequence::get_sequences(
+            conn,
+            "select * from sequence where hash = ?1",
+            vec![Value::from(seq_hash)],
+        );
+        let sequence = sequences.first().unwrap();
+        assert_eq!(&sequence.sequence, "AACCTT");
+        assert_eq!(sequence.sequence_type, "DNA");
+        assert!(!sequence.external_sequence);
+    }
+
+    #[test]
+    fn test_create_sequence_on_disk() {
+        let conn = &mut get_connection();
+        let seq_hash = Sequence::create(
+            conn,
+            &Sequence {
+                sequence_type: "DNA".to_string(),
+                name: "chr1".to_string(),
+                file_path: "/some/path.fa".to_string(),
+                ..Default::default()
+            },
+        );
+        let sequences = Sequence::get_sequences(
+            conn,
+            "select * from sequence where hash = ?1",
+            vec![Value::from(seq_hash)],
+        );
+        let sequence = sequences.first().unwrap();
+        assert_eq!(sequence.sequence_type, "DNA");
+        assert_eq!(&sequence.sequence, "");
+        assert_eq!(sequence.name, "chr1");
+        assert_eq!(sequence.file_path, "/some/path.fa");
+        assert!(sequence.external_sequence);
     }
 }
