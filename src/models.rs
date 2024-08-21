@@ -16,7 +16,7 @@ pub mod sequence;
 use crate::graph::all_simple_paths;
 use crate::models::block::Block;
 use crate::models::edge::Edge;
-use crate::models::new_edge::NewEdge;
+use crate::models::new_edge::{EdgeData, NewEdge};
 use crate::models::path::{NewBlock, Path, PathBlock};
 use crate::models::sequence::Sequence;
 use crate::{get_overlap, models};
@@ -513,7 +513,7 @@ impl BlockGroup {
         new_block: &NewBlock,
         chromosome_index: i32,
         phased: i32,
-    ) -> Vec<NewEdge> {
+    ) {
         // todo:
         // cases to check:
         //  change that is the size of a block
@@ -536,8 +536,7 @@ impl BlockGroup {
 
         if new_block.sequence_start == new_block.sequence_end {
             // Deletion
-            let new_edge = NewEdge {
-                id: 0,
+            let new_edge = EdgeData {
                 source_hash: start_block.sequence.hash.clone(),
                 source_coordinate: start - start_block.path_start + start_block.sequence_start,
                 target_hash: end_block.sequence.hash.clone(),
@@ -548,8 +547,7 @@ impl BlockGroup {
             new_edges.push(new_edge);
         } else {
             // Insertion/replacement
-            let new_start_edge = NewEdge {
-                id: 0,
+            let new_start_edge = EdgeData {
                 source_hash: start_block.sequence.hash.clone(),
                 source_coordinate: start - start_block.path_start + start_block.sequence_start,
                 target_hash: new_block.sequence.hash.clone(),
@@ -557,8 +555,7 @@ impl BlockGroup {
                 chromosome_index,
                 phased,
             };
-            let new_end_edge = NewEdge {
-                id: 0,
+            let new_end_edge = EdgeData {
                 source_hash: new_block.sequence.hash.clone(),
                 source_coordinate: new_block.sequence_end,
                 target_hash: end_block.sequence.hash.clone(),
@@ -574,8 +571,7 @@ impl BlockGroup {
         // retrieve it as one node of the overall graph
         if start < start_block.path_end {
             let split_coordinate = start - start_block.path_start + start_block.sequence_start;
-            let new_split_start_edge = NewEdge {
-                id: 0,
+            let new_split_start_edge = EdgeData {
                 source_hash: start_block.sequence.hash.clone(),
                 source_coordinate: split_coordinate,
                 target_hash: start_block.sequence.hash.clone(),
@@ -588,8 +584,7 @@ impl BlockGroup {
 
         if end > end_block.path_start {
             let split_coordinate = end - end_block.path_start + end_block.sequence_start;
-            let new_split_end_edge = NewEdge {
-                id: 0,
+            let new_split_end_edge = EdgeData {
                 source_hash: new_block.sequence.hash.clone(),
                 source_coordinate: split_coordinate,
                 target_hash: end_block.sequence.hash.clone(),
@@ -601,8 +596,7 @@ impl BlockGroup {
             new_edges.push(new_split_end_edge);
         }
 
-        // TODO: bulk create-or-get of new edges
-        new_edges
+        NewEdge::bulk_create(conn, new_edges);
     }
 }
 
