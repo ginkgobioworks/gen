@@ -4,11 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bio = "2.0.0"
 clap = { version = "4.5.8", features = ["derive"] }
 include_dir = "0.7.4"
 rusqlite = { version = "0.31.0", features = ["bundled", "array"] }
 rusqlite_migration = { version = "1.2.0" , features = ["from-directory"]}
 sha2 = "0.10.8"
-noodles = { version = "0.78.0", features = ["vcf", "fasta", "async"] }
+noodles = { version = "0.78.0", features = ["core", "vcf", "fasta", "async"] }
 petgraph = "0.6.5"

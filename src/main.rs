@@ -4,10 +4,10 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::PathBuf;
 
-use bio::io::fasta;
 use gen::migrations::run_migrations;
 use gen::models::{self, block::Block, edge::Edge, path::Path, sequence::Sequence, BlockGroup};
 use gen::{get_connection, parse_genotype};
+use noodles::fasta;
 use noodles::vcf;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use noodles::vcf::variant::record::samples::series::Value;
@@ -66,15 +66,16 @@ enum Commands {
 
 fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection) {
     // TODO: support gz
-    let mut reader = fasta::Reader::from_file(fasta).unwrap();
+    let mut reader = fasta::io::reader::Builder.build_from_path(fasta).unwrap();
 
     if !models::Collection::exists(conn, name) {
         let collection = models::Collection::create(conn, name);
 
         for result in reader.records() {
             let record = result.expect("Error during fasta record parsing");
-            let sequence = String::from_utf8(record.seq().to_vec()).unwrap();
-            let sequence_length = sequence.len() as i32;
+            let sequence = String::from_utf8(record.sequence().as_ref().to_vec()).unwrap();
+            let name = String::from_utf8(record.name().to_vec()).unwrap();
+            let sequence_length = record.sequence().len() as i32;
             let seq_hash = Sequence::create(
                 conn,
                 &Sequence {
@@ -85,11 +86,11 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
                     ..Default::default()
                 },
             );
-            let block_group = BlockGroup::create(conn, &collection.name, None, record.id());
+            let block_group = BlockGroup::create(conn, &collection.name, None, &name);
             let block = Block::create(conn, &seq_hash, block_group.id, 0, sequence_length, "+");
             Edge::create(conn, None, Some(block.id), 0, 0);
             Edge::create(conn, Some(block.id), None, 0, 0);
-            Path::create(conn, record.id(), block_group.id, vec![block.id]);
+            Path::create(conn, &name, block_group.id, vec![block.id]);
         }
         println!("Created it");
     } else {

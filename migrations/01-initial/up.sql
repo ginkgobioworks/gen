@@ -10,6 +10,7 @@ CREATE TABLE sequence (
   hash TEXT PRIMARY KEY NOT NULL,
   sequence_type TEXT NOT NULL,
   sequence TEXT,
+  name TEXT,
   file_path TEXT,
   "length" INTEGER NOT NULL
 );

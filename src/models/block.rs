@@ -1,7 +1,9 @@
-use rusqlite::{params_from_iter, types::Value, Connection};
-
 use crate::models::edge::{Edge, UpdatedEdge};
 use crate::models::path::PathBlock;
+use noodles::core::Position;
+use noodles::fasta;
+use rusqlite::{params_from_iter, types::Value, Connection};
+use std::fs;
 
 #[derive(Clone, Debug)]
 pub struct Block {
@@ -251,11 +253,71 @@ impl Block {
     }
 
     pub fn get_sequence(conn: &Connection, block_id: i32) -> (String, String) {
-        let mut stmt = conn.prepare_cached("select substr(sequence.sequence, block.start + 1, block.end - block.start) as sequence, block.strand from sequence left join block on (block.sequence_hash = sequence.hash) where block.id = ?1").unwrap();
+        let mut stmt = conn.prepare_cached("select name, substr(sequence.sequence, block.start + 1, block.end - block.start) as sequence, block.start, block.end, block.strand, file_path from sequence left join block on (block.sequence_hash = sequence.hash) where block.id = ?1").unwrap();
         let mut rows = stmt
-            .query_map((block_id,), |row| Ok((row.get(0)?, row.get(1)?)))
+            .query_map((block_id,), |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            })
             .unwrap();
-        rows.next().unwrap().unwrap()
+        let (name, mut sequence, mut start, end, strand, external_path): (
+            String,
+            String,
+            i32,
+            i32,
+            String,
+            String,
+        ) = rows.next().unwrap().unwrap();
+        if !external_path.is_empty() {
+            // noodles is 1 based inclusive and we use that for fetching fasta.
+            start += 1;
+            // todo: handle circles
+            let index = format!("{external_path}.fai");
+            if fs::metadata(index).is_ok() {
+                // noodles reader query is 1 based, inclusive
+                let mut reader = fasta::io::indexed_reader::Builder::default()
+                    .build_from_path(external_path)
+                    .unwrap();
+                sequence = String::from_utf8(
+                    reader
+                        .query(&format!("{name}:{start}-{end}").parse().unwrap())
+                        .unwrap()
+                        .sequence()
+                        .as_ref()
+                        .to_vec(),
+                )
+                .unwrap();
+            } else {
+                let mut reader = fasta::io::reader::Builder
+                    .build_from_path(external_path)
+                    .unwrap();
+                for result in reader.records() {
+                    let record = result.unwrap();
+                    if String::from_utf8(record.name().to_vec()).unwrap() == name {
+                        sequence = String::from_utf8(
+                            record
+                                .sequence()
+                                .slice(
+                                    Position::try_from(start as usize).unwrap()
+                                        ..=Position::try_from(end as usize).unwrap(),
+                                )
+                                .unwrap()
+                                .as_ref()
+                                .to_vec(),
+                        )
+                        .unwrap();
+                        break;
+                    }
+                }
+            }
+        }
+        (sequence, strand)
     }
 }
 
