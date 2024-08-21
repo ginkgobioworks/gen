@@ -1,20 +1,30 @@
+use std::sync::Arc;
+
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use sha2::{Digest, Sha256};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Sequence {
     pub hash: String,
     pub sequence_type: String,
     pub sequence: String,
+    pub file_path: String,
     pub length: i32,
+    // by default we want to store the sequence in the db, bools default to false, so our
+    // flag is whether the sequence is stored externally
+    pub external_sequence: bool,
 }
 
 impl Sequence {
-    pub fn create(conn: &Connection, sequence_type: &str, sequence: &str, store: bool) -> String {
+    pub fn create(conn: &Connection, sequence: &Sequence) -> String {
         let mut hasher = Sha256::new();
-        hasher.update(sequence_type);
-        hasher.update(sequence);
+        let sequence_length = &sequence.sequence.len();
+        hasher.update(&sequence.sequence_type);
+        hasher.update(";");
+        hasher.update(&sequence.sequence);
+        hasher.update(";");
+        hasher.update(&sequence.file_path);
         let hash = format!("{:x}", hasher.finalize());
         let mut obj_hash: String = match conn.query_row(
             "SELECT hash from sequence where hash = ?1;",
@@ -28,14 +38,15 @@ impl Sequence {
             }
         };
         if obj_hash.is_empty() {
-            let mut stmt = conn.prepare("INSERT INTO sequence (hash, sequence_type, sequence, length) VALUES (?1, ?2, ?3, ?4) RETURNING (hash);").unwrap();
+            let mut stmt = conn.prepare("INSERT INTO sequence (hash, sequence_type, sequence, file_path, length) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING (hash);").unwrap();
             let mut rows = stmt
                 .query_map(
                     (
                         Value::from(hash.to_string()),
-                        Value::from(sequence_type.to_string()),
-                        Value::from((if store { sequence } else { "" }).to_string()),
-                        Value::from(sequence.len() as i32),
+                        Value::from(sequence.sequence_type.clone()),
+                        Value::from(sequence.sequence.clone()),
+                        Value::from(sequence.file_path.clone()),
+                        Value::from(*sequence_length as u32),
                     ),
                     |row| row.get(0),
                 )
@@ -53,11 +64,14 @@ impl Sequence {
         let mut stmt = conn.prepare_cached(query).unwrap();
         let rows = stmt
             .query_map(params_from_iter(placeholders), |row| {
+                let external_sequence = row.get(3).unwrap_or(false);
                 Ok(Sequence {
                     hash: row.get(0).unwrap(),
                     sequence_type: row.get(1).unwrap(),
                     sequence: row.get(2).unwrap(),
-                    length: row.get(3).unwrap(),
+                    file_path: row.get(3).unwrap(),
+                    length: row.get(4).unwrap(),
+                    external_sequence,
                 })
             })
             .unwrap();

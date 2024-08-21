@@ -290,13 +290,41 @@ mod tests {
         let conn = &mut get_connection();
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
-        let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
+        let sequence1_hash = Sequence::create(
+            conn,
+            &Sequence {
+                sequence_type: "DNA".to_string(),
+                sequence: "ATCGATCG".to_string(),
+                ..Default::default()
+            },
+        );
         let block1 = Block::create(conn, &sequence1_hash, block_group.id, 0, 8, "+");
-        let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
+        let sequence2_hash = Sequence::create(
+            conn,
+            &Sequence {
+                sequence_type: "DNA".to_string(),
+                sequence: "AAAAAAAA".to_string(),
+                ..Default::default()
+            },
+        );
         let block2 = Block::create(conn, &sequence2_hash, block_group.id, 1, 8, "+");
-        let sequence3_hash = Sequence::create(conn, "DNA", "CCCCCCCC", true);
+        let sequence3_hash = Sequence::create(
+            conn,
+            &Sequence {
+                sequence_type: "DNA".to_string(),
+                sequence: "CCCCCCCC".to_string(),
+                ..Default::default()
+            },
+        );
         let block3 = Block::create(conn, &sequence3_hash, block_group.id, 1, 8, "+");
-        let sequence4_hash = Sequence::create(conn, "DNA", "GGGGGGGG", true);
+        let sequence4_hash = Sequence::create(
+            conn,
+            &Sequence {
+                sequence_type: "DNA".to_string(),
+                sequence: "GGGGGGGG".to_string(),
+                ..Default::default()
+            },
+        );
         let block4 = Block::create(conn, &sequence4_hash, block_group.id, 1, 8, "+");
         Edge::create(conn, Some(block1.id), Some(block2.id), 0, 0);
         Edge::create(conn, Some(block2.id), Some(block3.id), 0, 0);
@@ -316,13 +344,41 @@ mod tests {
         let conn = &mut get_connection();
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
-        let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
+        let sequence1_hash = Sequence::create(
+            conn,
+            &Sequence {
+                sequence_type: "DNA".to_string(),
+                sequence: "ATCGATCG".to_string(),
+                ..Default::default()
+            },
+        );
         let block1 = Block::create(conn, &sequence1_hash, block_group.id, 0, 8, "-");
-        let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
+        let sequence2_hash = Sequence::create(
+            conn,
+            &Sequence {
+                sequence_type: "DNA".to_string(),
+                sequence: "AAAAAAAA".to_string(),
+                ..Default::default()
+            },
+        );
         let block2 = Block::create(conn, &sequence2_hash, block_group.id, 1, 8, "-");
-        let sequence3_hash = Sequence::create(conn, "DNA", "CCCCCCCC", true);
+        let sequence3_hash = Sequence::create(
+            conn,
+            &Sequence {
+                sequence_type: "DNA".to_string(),
+                sequence: "CCCCCCCC".to_string(),
+                ..Default::default()
+            },
+        );
         let block3 = Block::create(conn, &sequence3_hash, block_group.id, 1, 8, "-");
-        let sequence4_hash = Sequence::create(conn, "DNA", "GGGGGGGG", true);
+        let sequence4_hash = Sequence::create(
+            conn,
+            &Sequence {
+                sequence_type: "DNA".to_string(),
+                sequence: "GGGGGGGG".to_string(),
+                ..Default::default()
+            },
+        );
         let block4 = Block::create(conn, &sequence4_hash, block_group.id, 1, 8, "-");
         Edge::create(conn, Some(block1.id), Some(block2.id), 0, 0);
         Edge::create(conn, Some(block2.id), Some(block3.id), 0, 0);

@@ -74,16 +74,19 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
         for result in reader.records() {
             let record = result.expect("Error during fasta record parsing");
             let sequence = String::from_utf8(record.seq().to_vec()).unwrap();
-            let seq_hash = Sequence::create(conn, "DNA", &sequence, !shallow);
-            let block_group = BlockGroup::create(conn, &collection.name, None, record.id());
-            let block = Block::create(
+            let sequence_length = sequence.len() as i32;
+            let seq_hash = Sequence::create(
                 conn,
-                &seq_hash,
-                block_group.id,
-                0,
-                (sequence.len() as i32),
-                "+",
+                &Sequence {
+                    sequence_type: "DNA".to_string(),
+                    sequence,
+                    file_path: fasta.clone(),
+                    external_sequence: !shallow,
+                    ..Default::default()
+                },
             );
+            let block_group = BlockGroup::create(conn, &collection.name, None, record.id());
+            let block = Block::create(conn, &seq_hash, block_group.id, 0, sequence_length, "+");
             Edge::create(conn, None, Some(block.id), 0, 0);
             Edge::create(conn, Some(block.id), None, 0, 0);
             Path::create(conn, record.id(), block_group.id, vec![block.id]);
@@ -139,7 +142,14 @@ fn update_with_vcf(
                             Phasing::Unphased => 0,
                         };
                         // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
-                        let new_sequence_hash = Sequence::create(conn, "DNA", alt_seq, true);
+                        let new_sequence_hash = Sequence::create(
+                            conn,
+                            &Sequence {
+                                sequence_type: "DNA".to_string(),
+                                sequence: alt_seq.to_string(),
+                                ..Default::default()
+                            },
+                        );
                         let sample_bg_id = BlockGroup::get_or_create_sample_block_group(
                             conn,
                             collection_name,
@@ -190,8 +200,14 @@ fn update_with_vcf(
                                 if allele != 0 {
                                     let alt_seq = alt_alleles[allele - 1];
                                     // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
-                                    let new_sequence_hash =
-                                        Sequence::create(conn, "DNA", alt_seq, true);
+                                    let new_sequence_hash = Sequence::create(
+                                        conn,
+                                        &Sequence {
+                                            sequence_type: "DNA".to_string(),
+                                            sequence: alt_seq.to_string(),
+                                            ..Default::default()
+                                        },
+                                    );
                                     let sample_bg_id = BlockGroup::get_or_create_sample_block_group(
                                         conn,
                                         collection_name,
