@@ -9,7 +9,7 @@ CREATE TABLE sample (
 CREATE TABLE sequence (
   hash TEXT PRIMARY KEY NOT NULL,
   sequence_type TEXT NOT NULL,
-  sequence TEXT,
+  sequence TEXT NOT NULL,
   "length" INTEGER NOT NULL
 );
 
@@ -83,10 +83,10 @@ CREATE UNIQUE INDEX change_log_uidx ON change_log(hash);
 
 CREATE TABLE new_edges (
   id INTEGER PRIMARY KEY NOT NULL,
-  source_hash TEXT,
-  source_coordinate INTEGER,
-  target_hash TEXT,
-  target_coordinate INTEGER,
+  source_hash TEXT NOT NULL,
+  source_coordinate INTEGER NOT NULL,
+  target_hash TEXT NOT NULL,
+  target_coordinate INTEGER NOT NULL,
   chromosome_index INTEGER NOT NULL,
   phased INTEGER NOT NULL,
   FOREIGN KEY(source_hash) REFERENCES sequence(hash),
@@ -104,3 +104,5 @@ CREATE TABLE path_edges (
   FOREIGN KEY(path_id) REFERENCES path(id)
 );
 CREATE UNIQUE INDEX path_edges_uidx ON path_edges(path_id, edge_id);
+
+INSERT INTO sequence (hash, sequence_type, sequence, "length") values ("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "OTHER", "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", 64), ("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "OTHER", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", 64);

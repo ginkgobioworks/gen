@@ -183,13 +183,6 @@ impl Path {
         sequences_by_hash: &HashMap<String, Sequence>,
         current_path_length: i32,
     ) -> NewBlock {
-        if into.target_hash.is_none() || out_of.source_hash.is_none() {
-            panic!(
-                "Consecutive edges in path {} have None as internal block sequence",
-                path.id
-            );
-        }
-
         if into.target_hash != out_of.source_hash {
             panic!(
                 "Consecutive edges in path {0} don't share the same block",
@@ -197,9 +190,9 @@ impl Path {
             );
         }
 
-        let sequence = sequences_by_hash.get(&into.target_hash.unwrap()).unwrap();
-        let start = into.target_coordinate.unwrap();
-        let end = out_of.source_coordinate.unwrap();
+        let sequence = sequences_by_hash.get(&into.target_hash).unwrap();
+        let start = into.target_coordinate;
+        let end = out_of.source_coordinate;
 
         let strand;
         let block_sequence;
@@ -231,11 +224,11 @@ impl Path {
         let edges = PathEdge::edges_for(conn, path.id);
         let mut sequence_hashes = HashSet::new();
         for edge in &edges {
-            if edge.source_hash.is_some() {
-                sequence_hashes.insert(edge.source_hash.clone().unwrap());
+            if edge.source_hash != NewEdge::PATH_START_HASH {
+                sequence_hashes.insert(edge.source_hash.clone());
             }
-            if edge.target_hash.is_some() {
-                sequence_hashes.insert(edge.target_hash.clone().unwrap());
+            if edge.target_hash != NewEdge::PATH_END_HASH {
+                sequence_hashes.insert(edge.target_hash.clone());
             }
         }
         let sequences_by_hash = Sequence::sequences_by_hash(
@@ -499,49 +492,49 @@ mod tests {
         let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
         let edge1 = NewEdge::create(
             conn,
-            None,
-            None,
-            Some(sequence1_hash.clone()),
-            Some(0),
+            NewEdge::PATH_START_HASH.to_string(),
+            -1,
+            sequence1_hash.clone(),
+            0,
             0,
             0,
         );
         let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
         let edge2 = NewEdge::create(
             conn,
-            Some(sequence1_hash.clone()),
-            Some(8),
-            Some(sequence2_hash.clone()),
-            Some(1),
+            sequence1_hash.clone(),
+            8,
+            sequence2_hash.clone(),
+            1,
             0,
             0,
         );
         let sequence3_hash = Sequence::create(conn, "DNA", "CCCCCCCC", true);
         let edge3 = NewEdge::create(
             conn,
-            Some(sequence2_hash.clone()),
-            Some(8),
-            Some(sequence3_hash.clone()),
-            Some(1),
+            sequence2_hash.clone(),
+            8,
+            sequence3_hash.clone(),
+            1,
             0,
             0,
         );
         let sequence4_hash = Sequence::create(conn, "DNA", "GGGGGGGG", true);
         let edge4 = NewEdge::create(
             conn,
-            Some(sequence3_hash.clone()),
-            Some(8),
-            Some(sequence4_hash.clone()),
-            Some(1),
+            sequence3_hash.clone(),
+            8,
+            sequence4_hash.clone(),
+            1,
             0,
             0,
         );
         let edge5 = NewEdge::create(
             conn,
-            Some(sequence4_hash.clone()),
-            Some(8),
-            None,
-            None,
+            sequence4_hash.clone(),
+            8,
+            NewEdge::PATH_END_HASH.to_string(),
+            -1,
             0,
             0,
         );

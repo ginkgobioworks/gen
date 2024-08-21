@@ -538,12 +538,10 @@ impl BlockGroup {
             // Deletion
             let new_edge = NewEdge {
                 id: 0,
-                source_hash: Some(start_block.sequence.hash.clone()),
-                source_coordinate: Some(
-                    start - start_block.path_start + start_block.sequence_start,
-                ),
-                target_hash: Some(end_block.sequence.hash.clone()),
-                target_coordinate: Some(end - end_block.path_start + end_block.sequence_start),
+                source_hash: start_block.sequence.hash.clone(),
+                source_coordinate: start - start_block.path_start + start_block.sequence_start,
+                target_hash: end_block.sequence.hash.clone(),
+                target_coordinate: end - end_block.path_start + end_block.sequence_start,
                 chromosome_index,
                 phased,
             };
@@ -552,21 +550,19 @@ impl BlockGroup {
             // Insertion/replacement
             let new_start_edge = NewEdge {
                 id: 0,
-                source_hash: Some(start_block.sequence.hash.clone()),
-                source_coordinate: Some(
-                    start - start_block.path_start + start_block.sequence_start,
-                ),
-                target_hash: Some(new_block.sequence.hash.clone()),
-                target_coordinate: Some(new_block.sequence_start),
+                source_hash: start_block.sequence.hash.clone(),
+                source_coordinate: start - start_block.path_start + start_block.sequence_start,
+                target_hash: new_block.sequence.hash.clone(),
+                target_coordinate: new_block.sequence_start,
                 chromosome_index,
                 phased,
             };
             let new_end_edge = NewEdge {
                 id: 0,
-                source_hash: Some(new_block.sequence.hash.clone()),
-                source_coordinate: Some(new_block.sequence_end),
-                target_hash: Some(end_block.sequence.hash.clone()),
-                target_coordinate: Some(end - end_block.path_start + end_block.sequence_start),
+                source_hash: new_block.sequence.hash.clone(),
+                source_coordinate: new_block.sequence_end,
+                target_hash: end_block.sequence.hash.clone(),
+                target_coordinate: end - end_block.path_start + end_block.sequence_start,
                 chromosome_index,
                 phased,
             };
@@ -580,10 +576,10 @@ impl BlockGroup {
             let split_coordinate = start - start_block.path_start + start_block.sequence_start;
             let new_split_start_edge = NewEdge {
                 id: 0,
-                source_hash: Some(start_block.sequence.hash.clone()),
-                source_coordinate: Some(split_coordinate),
-                target_hash: Some(start_block.sequence.hash.clone()),
-                target_coordinate: Some(split_coordinate + 1),
+                source_hash: start_block.sequence.hash.clone(),
+                source_coordinate: split_coordinate,
+                target_hash: start_block.sequence.hash.clone(),
+                target_coordinate: split_coordinate + 1,
                 chromosome_index,
                 phased,
             };
@@ -594,10 +590,10 @@ impl BlockGroup {
             let split_coordinate = end - end_block.path_start + end_block.sequence_start;
             let new_split_end_edge = NewEdge {
                 id: 0,
-                source_hash: Some(new_block.sequence.hash.clone()),
-                source_coordinate: Some(split_coordinate),
-                target_hash: Some(end_block.sequence.hash.clone()),
-                target_coordinate: Some(split_coordinate + 1),
+                source_hash: new_block.sequence.hash.clone(),
+                source_coordinate: split_coordinate,
+                target_hash: end_block.sequence.hash.clone(),
+                target_coordinate: split_coordinate + 1,
                 chromosome_index,
                 phased,
             };
