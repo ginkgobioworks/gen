@@ -19,7 +19,11 @@ pub struct Sequence {
 impl Sequence {
     pub fn create(conn: &Connection, sequence: &Sequence) -> String {
         let mut hasher = Sha256::new();
-        let sequence_length = &sequence.sequence.len();
+        let sequence_length = if sequence.length == 0 {
+            sequence.sequence.len() as u32
+        } else {
+            sequence.length as u32
+        };
         hasher.update(&sequence.sequence_type);
         hasher.update(";");
         hasher.update(&sequence.sequence);
@@ -49,7 +53,7 @@ impl Sequence {
                         Value::from(sequence.sequence.clone()),
                         Value::from(sequence.name.clone()),
                         Value::from(sequence.file_path.clone()),
-                        Value::from(*sequence_length as u32),
+                        Value::from(sequence_length),
                     ),
                     |row| row.get(0),
                 )
