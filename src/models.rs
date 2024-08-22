@@ -718,6 +718,7 @@ impl BlockGroup {
 
     #[allow(clippy::ptr_arg)]
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::needless_late_init)]
     pub fn new_insert_change(
         conn: &mut Connection,
         block_group_id: i32,
@@ -728,19 +729,26 @@ impl BlockGroup {
         chromosome_index: i32,
         phased: i32,
     ) {
-        // todo:
-        // cases to check:
-        //  change that is the size of a block
-        //  change that goes over multiple blocks
-        //  change that hits just start/end boundary, e.g. block is 1,5 and change is 3,5 or 1,3.
-        //  change that deletes block boundary
-
         let tree = Path::intervaltree_for(conn, path);
 
         let start_blocks: Vec<NewBlock> =
             tree.query_point(start).map(|x| x.value.clone()).collect();
         assert_eq!(start_blocks.len(), 1);
-        let start_block = &start_blocks[0];
+        // NOTE: This may not be used but needs to be initialized here instead of inside the if
+        // statement that uses it, so that the borrow checker is happy
+        let previous_start_blocks: Vec<NewBlock> = tree
+            .query_point(start - 1)
+            .map(|x| x.value.clone())
+            .collect();
+        assert_eq!(previous_start_blocks.len(), 1);
+        let start_block;
+        if start_blocks[0].path_start == start {
+            // First part of this block will be replaced/deleted, need to get previous block to add
+            // edge including it
+            start_block = &previous_start_blocks[0];
+        } else {
+            start_block = &start_blocks[0];
+        }
 
         let end_blocks: Vec<NewBlock> = tree.query_point(end).map(|x| x.value.clone()).collect();
         assert_eq!(end_blocks.len(), 1);
@@ -1268,6 +1276,288 @@ mod tests {
             path_end: 15,
             strand: "+".to_string(),
         };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 7, 15, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAANNNNTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_on_block_boundary_middle_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let sequences_by_hash =
+            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
+        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 15,
+            path_end: 15,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 15, 15, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTTTTNNNNTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_within_block_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let sequences_by_hash =
+            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
+        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 12,
+            path_end: 17,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 12, 17, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTNNNNTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_on_block_boundary_start_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let sequences_by_hash =
+            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
+        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 10,
+            path_end: 10,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 10, 10, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAANNNNTTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_on_block_boundary_end_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let sequences_by_hash =
+            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
+        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 9,
+            path_end: 9,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 9, 9, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAANNNNATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_across_entire_block_boundary_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let sequences_by_hash =
+            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
+        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 10,
+            path_end: 20,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 10, 20, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAANNNNCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_across_two_blocks_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let sequences_by_hash =
+            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
+        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 15,
+            path_end: 25,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 15, 25, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTTTTNNNNCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_spanning_blocks_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let sequences_by_hash =
+            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
+        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 5,
+            path_end: 35,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 5, 35, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAANNNNGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn simple_deletion_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let deletion_sequence_hash = Sequence::create(&conn, "DNA", "", true);
+        let sequences_by_hash =
+            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", deletion_sequence_hash)]);
+        let deletion_sequence = sequences_by_hash.get(&deletion_sequence_hash).unwrap();
+        let deletion = NewBlock {
+            id: 0,
+            sequence: deletion_sequence.clone(),
+            block_sequence: deletion_sequence.sequence.clone(),
+            sequence_start: 0,
+            sequence_end: 0,
+            path_start: 19,
+            path_end: 31,
+            strand: "+".to_string(),
+        };
+
+        // take out an entire block.
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 19, 31, &deletion, 1, 0);
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTTTTTTTTGGGGGGGGG".to_string(),
+            ])
+        )
+    }
+
+    #[test]
+    fn doesnt_apply_same_insert_twice_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let sequences_by_hash =
+            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
+        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 7,
+            path_end: 15,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 7, 15, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAANNNNTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+
         BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 7, 15, &insert, 1, 0);
 
         let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);

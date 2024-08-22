@@ -41,7 +41,7 @@ impl NewEdge {
     ) -> NewEdge {
         let query = "INSERT INTO new_edges (source_hash, source_coordinate, target_hash, target_coordinate, chromosome_index, phased) VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING *";
         let id_query = "select id from new_edges where source_hash = ?1 and source_coordinate = ?2 and target_hash = ?3 and target_coordinate = ?4 and chromosome_index = ?5 and phased = ?6";
-        let mut placeholders: Vec<Value> = vec![
+        let placeholders: Vec<Value> = vec![
             source_hash.clone().into(),
             source_coordinate.into(),
             target_hash.clone().into(),
@@ -170,6 +170,11 @@ impl NewEdge {
             );
             edge_rows_to_insert.push(edge_row);
         }
+
+        if edge_rows_to_insert.is_empty() {
+            return existing_edge_ids;
+        }
+
         let formatted_edge_rows_to_insert = edge_rows_to_insert.join(", ");
 
         let insert_statement = format!("INSERT INTO new_edges (source_hash, source_coordinate, target_hash, target_coordinate, chromosome_index, phased) VALUES {0} RETURNING (id);", formatted_edge_rows_to_insert);
