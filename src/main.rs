@@ -83,6 +83,7 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
                 &Sequence {
                     sequence_type: "DNA".to_string(),
                     sequence,
+                    name: name.clone(),
                     file_path: fasta.clone(),
                     external_sequence: !shallow,
                     ..Default::default()
