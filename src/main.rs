@@ -121,8 +121,10 @@ fn new_import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connec
                 conn,
                 NewEdge::PATH_START_HASH.to_string(),
                 0,
+                "+".to_string(),
                 seq_hash.to_string(),
                 0,
+                "+".to_string(),
                 0,
                 0,
             );
@@ -130,8 +132,10 @@ fn new_import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connec
                 conn,
                 seq_hash.to_string(),
                 sequence_length,
+                "+".to_string(),
                 NewEdge::PATH_END_HASH.to_string(),
                 0,
+                "+".to_string(),
                 0,
                 0,
             );
@@ -334,11 +338,8 @@ fn new_update_with_vcf(
                         };
                         // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
                         let new_sequence_hash = Sequence::create(conn, "DNA", alt_seq, true);
-                        let sequences_by_hash = Sequence::sequences_by_hash(
-                            conn,
-                            vec![format!("\"{}\"", new_sequence_hash)],
-                        );
-                        let sequence = sequences_by_hash.get(&new_sequence_hash).unwrap();
+                        let sequence =
+                            Sequence::sequence_from_hash(conn, &new_sequence_hash).unwrap();
                         let sample_bg_id = BlockGroup::get_or_create_sample_block_group(
                             conn,
                             collection_name,
@@ -394,12 +395,9 @@ fn new_update_with_vcf(
                                     // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
                                     let new_sequence_hash =
                                         Sequence::create(conn, "DNA", alt_seq, true);
-                                    let sequences_by_hash = Sequence::sequences_by_hash(
-                                        conn,
-                                        vec![format!("\"{}\"", new_sequence_hash)],
-                                    );
                                     let sequence =
-                                        sequences_by_hash.get(&new_sequence_hash).unwrap();
+                                        Sequence::sequence_from_hash(conn, &new_sequence_hash)
+                                            .unwrap();
                                     let sample_bg_id = BlockGroup::get_or_create_sample_block_group(
                                         conn,
                                         collection_name,

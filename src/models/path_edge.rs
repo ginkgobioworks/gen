@@ -117,8 +117,10 @@ mod tests {
             conn,
             NewEdge::PATH_START_HASH.to_string(),
             -123,
+            "+".to_string(),
             sequence1_hash.clone(),
             0,
+            "+".to_string(),
             0,
             0,
         );
@@ -127,8 +129,10 @@ mod tests {
             conn,
             sequence1_hash.clone(),
             8,
+            "+".to_string(),
             sequence2_hash.clone(),
             1,
+            "+".to_string(),
             0,
             0,
         );
@@ -137,8 +141,10 @@ mod tests {
             conn,
             sequence2_hash.clone(),
             8,
+            "+".to_string(),
             sequence3_hash.clone(),
             1,
+            "+".to_string(),
             0,
             0,
         );
@@ -147,8 +153,10 @@ mod tests {
             conn,
             sequence3_hash.clone(),
             8,
+            "+".to_string(),
             sequence4_hash.clone(),
             1,
+            "+".to_string(),
             0,
             0,
         );
@@ -156,8 +164,10 @@ mod tests {
             conn,
             sequence4_hash.clone(),
             8,
+            "+".to_string(),
             NewEdge::PATH_END_HASH.to_string(),
             -1,
+            "+".to_string(),
             0,
             0,
         );
@@ -183,9 +193,11 @@ mod tests {
         let edge5 = NewEdge::create(
             conn,
             sequence1_hash.clone(),
-            0,
+            8,
+            "-".to_string(),
             NewEdge::PATH_END_HASH.to_string(),
-            -1,
+            0,
+            "-".to_string(),
             0,
             0,
         );
@@ -193,9 +205,11 @@ mod tests {
         let edge4 = NewEdge::create(
             conn,
             sequence2_hash.clone(),
-            1,
-            sequence1_hash.clone(),
             7,
+            "-".to_string(),
+            sequence1_hash.clone(),
+            0,
+            "-".to_string(),
             0,
             0,
         );
@@ -203,9 +217,11 @@ mod tests {
         let edge3 = NewEdge::create(
             conn,
             sequence3_hash.clone(),
-            1,
-            sequence2_hash.clone(),
             7,
+            "-".to_string(),
+            sequence2_hash.clone(),
+            0,
+            "-".to_string(),
             0,
             0,
         );
@@ -213,9 +229,11 @@ mod tests {
         let edge2 = NewEdge::create(
             conn,
             sequence4_hash.clone(),
-            1,
-            sequence3_hash.clone(),
             7,
+            "-".to_string(),
+            sequence3_hash.clone(),
+            0,
+            "-".to_string(),
             0,
             0,
         );
@@ -223,8 +241,10 @@ mod tests {
             conn,
             NewEdge::PATH_START_HASH.to_string(),
             -1,
+            "-".to_string(),
             sequence4_hash.clone(),
-            7,
+            0,
+            "-".to_string(),
             0,
             0,
         );

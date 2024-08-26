@@ -296,7 +296,7 @@ impl BlockGroup {
         }
         let sequence_hashes = block_map
             .values()
-            .map(|block| format!("\"{id}\"", id = block.sequence_hash))
+            .map(|block| block.sequence_hash.clone())
             .collect::<Vec<_>>();
         let sequence_map = Sequence::sequences_by_hash(conn, sequence_hashes);
         let block_ids = block_map
@@ -380,13 +380,8 @@ impl BlockGroup {
             }
         }
 
-        let sequences_by_hash = Sequence::sequences_by_hash(
-            conn,
-            sequence_hashes
-                .into_iter()
-                .map(|hash| format!("\"{hash}\""))
-                .collect(),
-        );
+        let sequences_by_hash =
+            Sequence::sequences_by_hash(conn, sequence_hashes.into_iter().collect::<Vec<String>>());
         let mut blocks = vec![];
 
         let mut block_index = 0;
@@ -761,8 +756,10 @@ impl BlockGroup {
             let new_edge = EdgeData {
                 source_hash: start_block.sequence.hash.clone(),
                 source_coordinate: start - start_block.path_start + start_block.sequence_start,
+                source_strand: "+".to_string(),
                 target_hash: end_block.sequence.hash.clone(),
                 target_coordinate: end - end_block.path_start + end_block.sequence_start,
+                target_strand: "+".to_string(),
                 chromosome_index,
                 phased,
             };
@@ -772,16 +769,20 @@ impl BlockGroup {
             let new_start_edge = EdgeData {
                 source_hash: start_block.sequence.hash.clone(),
                 source_coordinate: start - start_block.path_start + start_block.sequence_start,
+                source_strand: "+".to_string(),
                 target_hash: new_block.sequence.hash.clone(),
                 target_coordinate: new_block.sequence_start,
+                target_strand: "+".to_string(),
                 chromosome_index,
                 phased,
             };
             let new_end_edge = EdgeData {
                 source_hash: new_block.sequence.hash.clone(),
                 source_coordinate: new_block.sequence_end,
+                source_strand: "+".to_string(),
                 target_hash: end_block.sequence.hash.clone(),
                 target_coordinate: end - end_block.path_start + end_block.sequence_start,
+                target_strand: "+".to_string(),
                 chromosome_index,
                 phased,
             };
@@ -796,8 +797,10 @@ impl BlockGroup {
             let new_split_start_edge = EdgeData {
                 source_hash: start_block.sequence.hash.clone(),
                 source_coordinate: split_coordinate,
+                source_strand: "+".to_string(),
                 target_hash: start_block.sequence.hash.clone(),
                 target_coordinate: split_coordinate,
+                target_strand: "+".to_string(),
                 chromosome_index,
                 phased,
             };
@@ -809,8 +812,10 @@ impl BlockGroup {
             let new_split_end_edge = EdgeData {
                 source_hash: end_block.sequence.hash.clone(),
                 source_coordinate: split_coordinate,
+                source_strand: "+".to_string(),
                 target_hash: end_block.sequence.hash.clone(),
                 target_coordinate: split_coordinate,
+                target_strand: "+".to_string(),
                 chromosome_index,
                 phased,
             };
@@ -1169,20 +1174,54 @@ mod tests {
             conn,
             NewEdge::PATH_START_HASH.to_string(),
             0,
+            "+".to_string(),
             a_seq_hash.clone(),
             0,
+            "+".to_string(),
             0,
             0,
         );
-        let edge1 = NewEdge::create(conn, a_seq_hash, 10, t_seq_hash.clone(), 0, 0, 0);
-        let edge2 = NewEdge::create(conn, t_seq_hash, 10, c_seq_hash.clone(), 0, 0, 0);
-        let edge3 = NewEdge::create(conn, c_seq_hash, 10, g_seq_hash.clone(), 0, 0, 0);
+        let edge1 = NewEdge::create(
+            conn,
+            a_seq_hash,
+            10,
+            "+".to_string(),
+            t_seq_hash.clone(),
+            0,
+            "+".to_string(),
+            0,
+            0,
+        );
+        let edge2 = NewEdge::create(
+            conn,
+            t_seq_hash,
+            10,
+            "+".to_string(),
+            c_seq_hash.clone(),
+            0,
+            "+".to_string(),
+            0,
+            0,
+        );
+        let edge3 = NewEdge::create(
+            conn,
+            c_seq_hash,
+            10,
+            "+".to_string(),
+            g_seq_hash.clone(),
+            0,
+            "+".to_string(),
+            0,
+            0,
+        );
         let edge4 = NewEdge::create(
             conn,
             g_seq_hash,
             10,
+            "+".to_string(),
             NewEdge::PATH_END_HASH.to_string(),
             0,
+            "+".to_string(),
             0,
             0,
         );
@@ -1205,9 +1244,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_multipath(&conn);
         let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
-        let sequences_by_hash =
-            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
-        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
@@ -1230,9 +1267,8 @@ mod tests {
         );
 
         let deletion_sequence_hash = Sequence::create(&conn, "DNA", "", true);
-        let sequences_by_hash =
-            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", deletion_sequence_hash)]);
-        let deletion_sequence = sequences_by_hash.get(&deletion_sequence_hash).unwrap();
+        let deletion_sequence =
+            Sequence::sequence_from_hash(&conn, &deletion_sequence_hash).unwrap();
         let deletion = NewBlock {
             id: 0,
             sequence: deletion_sequence.clone(),
@@ -1263,9 +1299,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_multipath(&conn);
         let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
-        let sequences_by_hash =
-            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
-        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
@@ -1293,9 +1327,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_multipath(&conn);
         let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
-        let sequences_by_hash =
-            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
-        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
@@ -1323,9 +1355,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_multipath(&conn);
         let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
-        let sequences_by_hash =
-            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
-        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
@@ -1353,9 +1383,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_multipath(&conn);
         let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
-        let sequences_by_hash =
-            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
-        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
@@ -1383,9 +1411,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_multipath(&conn);
         let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
-        let sequences_by_hash =
-            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
-        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
@@ -1413,9 +1439,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_multipath(&conn);
         let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
-        let sequences_by_hash =
-            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
-        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
@@ -1443,9 +1467,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_multipath(&conn);
         let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
-        let sequences_by_hash =
-            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
-        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
@@ -1473,9 +1495,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_multipath(&conn);
         let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
-        let sequences_by_hash =
-            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
-        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
@@ -1503,9 +1523,8 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_multipath(&conn);
         let deletion_sequence_hash = Sequence::create(&conn, "DNA", "", true);
-        let sequences_by_hash =
-            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", deletion_sequence_hash)]);
-        let deletion_sequence = sequences_by_hash.get(&deletion_sequence_hash).unwrap();
+        let deletion_sequence =
+            Sequence::sequence_from_hash(&conn, &deletion_sequence_hash).unwrap();
         let deletion = NewBlock {
             id: 0,
             sequence: deletion_sequence.clone(),
@@ -1534,9 +1553,7 @@ mod tests {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_multipath(&conn);
         let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
-        let sequences_by_hash =
-            Sequence::sequences_by_hash(&conn, vec![format!("\"{}\"", insert_sequence_hash)]);
-        let insert_sequence = sequences_by_hash.get(&insert_sequence_hash).unwrap();
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
