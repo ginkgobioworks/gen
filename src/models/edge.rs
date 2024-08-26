@@ -1,6 +1,6 @@
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::hash::RandomState;
 
 #[derive(Clone, Debug)]
@@ -230,6 +230,7 @@ mod tests {
     use rusqlite::Connection;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use std::collections::HashMap;
 
     use crate::migrations::run_migrations;
     use crate::models::{sequence::Sequence, Collection};
