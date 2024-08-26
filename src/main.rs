@@ -88,10 +88,6 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
             let sequence_length = record.sequence().len() as i32;
             let seq_hash = Sequence::create(conn, "DNA", &sequence, !shallow);
             let block_group = BlockGroup::create(conn, &collection.name, None, &name);
-            let edge_into = NewEdge::create(
-                conn,
-                NewEdge::PATH_START_HASH.to_string(),
-            let block_group = BlockGroup::create(conn, &collection.name, None, record.id());
             let edge_into = Edge::create(
                 conn,
                 Edge::PATH_START_HASH.to_string(),
