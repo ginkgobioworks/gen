@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
 use rusqlite::types::Value;
@@ -7,14 +8,20 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::*;
 
 pub mod block;
+pub mod block_group_edge;
 pub mod edge;
+pub mod new_edge;
 pub mod path;
+pub mod path_edge;
 pub mod sequence;
 
 use crate::graph::all_simple_paths;
 use crate::models::block::Block;
+use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::Edge;
-use crate::models::path::{Path, PathBlock};
+use crate::models::new_edge::{EdgeData, NewEdge};
+use crate::models::path::{NewBlock, Path, PathBlock};
+use crate::models::path_edge::PathEdge;
 use crate::models::sequence::Sequence;
 use crate::{get_overlap, models};
 
@@ -89,6 +96,21 @@ pub struct BlockGroup {
     pub collection_name: String,
     pub sample_name: Option<String>,
     pub name: String,
+}
+
+#[derive(Clone)]
+pub struct GroupBlock {
+    pub id: i32,
+    pub sequence_hash: String,
+    pub sequence: String,
+    pub start: i32,
+    pub end: i32,
+}
+
+#[derive(Eq, Hash, PartialEq)]
+pub struct BlockKey {
+    pub sequence_hash: String,
+    pub coordinate: i32,
 }
 
 impl BlockGroup {
@@ -214,11 +236,11 @@ impl BlockGroup {
         );
 
         for path in existing_paths {
-            let mut new_blocks = vec![];
-            for block in path.blocks {
-                new_blocks.push(*block_map.get(&block).unwrap());
-            }
-            Path::create(conn, &path.name, target_block_group_id, new_blocks);
+            let edge_ids = PathEdge::edges_for(conn, path.id)
+                .into_iter()
+                .map(|edge| edge.id)
+                .collect();
+            Path::new_create(conn, &path.name, target_block_group_id, edge_ids);
         }
     }
 
@@ -274,17 +296,9 @@ impl BlockGroup {
         }
         let sequence_hashes = block_map
             .values()
-            .map(|block| format!("\"{id}\"", id = block.sequence_hash))
-            .collect::<Vec<_>>()
-            .join(",");
-        let mut sequence_map = HashMap::new();
-        for sequence in Sequence::get_sequences(
-            conn,
-            &format!("select * from sequence where hash in ({sequence_hashes})"),
-            vec![],
-        ) {
-            sequence_map.insert(sequence.hash, sequence.sequence);
-        }
+            .map(|block| block.sequence_hash.clone())
+            .collect::<Vec<_>>();
+        let sequence_map = Sequence::sequences_by_hash(conn, sequence_hashes);
         let block_ids = block_map
             .keys()
             .map(|id| format!("{id}"))
@@ -321,7 +335,8 @@ impl BlockGroup {
                     let block = block_map.get(&start_node).unwrap();
                     let block_sequence = sequence_map.get(&block.sequence_hash).unwrap();
                     sequences.insert(
-                        block_sequence[(block.start as usize)..(block.end as usize)].to_string(),
+                        block_sequence.sequence[(block.start as usize)..(block.end as usize)]
+                            .to_string(),
                     );
                 } else {
                     for path in all_simple_paths(&graph, start_node, *end_node) {
@@ -330,7 +345,8 @@ impl BlockGroup {
                             let block = block_map.get(&node).unwrap();
                             let block_sequence = sequence_map.get(&block.sequence_hash).unwrap();
                             current_sequence.push_str(
-                                &block_sequence[(block.start as usize)..(block.end as usize)],
+                                &block_sequence.sequence
+                                    [(block.start as usize)..(block.end as usize)],
                             );
                         }
                         sequences.insert(current_sequence);
@@ -338,6 +354,195 @@ impl BlockGroup {
                 }
             }
         }
+        sequences
+    }
+
+    pub fn blocks_from_edges(conn: &Connection, edges: Vec<NewEdge>) -> Vec<GroupBlock> {
+        let mut sequence_hashes = HashSet::new();
+        for edge in &edges {
+            if edge.source_hash != NewEdge::PATH_START_HASH {
+                sequence_hashes.insert(edge.source_hash.clone());
+            }
+            if edge.target_hash != NewEdge::PATH_END_HASH {
+                sequence_hashes.insert(edge.target_hash.clone());
+            }
+        }
+
+        let mut boundary_edges_by_hash = HashMap::<String, Vec<NewEdge>>::new();
+        for edge in edges {
+            if (edge.source_hash == edge.target_hash)
+                && (edge.target_coordinate == edge.source_coordinate)
+            {
+                boundary_edges_by_hash
+                    .entry(edge.source_hash.clone())
+                    .and_modify(|current_edges| current_edges.push(edge.clone()))
+                    .or_insert_with(|| vec![edge.clone()]);
+            }
+        }
+
+        let sequences_by_hash =
+            Sequence::sequences_by_hash(conn, sequence_hashes.into_iter().collect::<Vec<String>>());
+        let mut blocks = vec![];
+
+        let mut block_index = 0;
+        for (hash, sequence) in sequences_by_hash.into_iter() {
+            let sequence_edges = boundary_edges_by_hash.get(&hash);
+            if sequence_edges.is_some() {
+                let sorted_sequence_edges: Vec<NewEdge> = sequence_edges
+                    .unwrap()
+                    .iter()
+                    .sorted_by(|edge1, edge2| {
+                        Ord::cmp(&edge1.source_coordinate, &edge2.source_coordinate)
+                    })
+                    .cloned()
+                    .collect();
+                let first_edge = sorted_sequence_edges[0].clone();
+                let start = 0;
+                let end = first_edge.source_coordinate;
+                let block_sequence = sequence.sequence[start as usize..end as usize].to_string();
+                let first_block = GroupBlock {
+                    id: block_index,
+                    sequence_hash: hash.clone(),
+                    sequence: block_sequence,
+                    start,
+                    end,
+                };
+                blocks.push(first_block);
+                block_index += 1;
+                for (into, out_of) in sorted_sequence_edges.clone().into_iter().tuple_windows() {
+                    let start = into.target_coordinate;
+                    let end = out_of.source_coordinate;
+                    let block_sequence =
+                        sequence.sequence[start as usize..end as usize].to_string();
+                    let block = GroupBlock {
+                        id: block_index,
+                        sequence_hash: hash.clone(),
+                        sequence: block_sequence,
+                        start,
+                        end,
+                    };
+                    blocks.push(block);
+                    block_index += 1;
+                }
+                let last_edge = &sorted_sequence_edges[sorted_sequence_edges.len() - 1];
+                let start = last_edge.target_coordinate;
+                let end = sequence.sequence.len() as i32;
+                let block_sequence = sequence.sequence[start as usize..end as usize].to_string();
+                let last_block = GroupBlock {
+                    id: block_index,
+                    sequence_hash: hash.clone(),
+                    sequence: block_sequence,
+                    start,
+                    end,
+                };
+                blocks.push(last_block);
+                block_index += 1;
+            } else {
+                blocks.push(GroupBlock {
+                    id: block_index,
+                    sequence_hash: hash.clone(),
+                    sequence: sequence.sequence.clone(),
+                    start: 0,
+                    end: sequence.sequence.len() as i32,
+                });
+                block_index += 1;
+            }
+        }
+        blocks
+    }
+
+    pub fn new_get_all_sequences(conn: &Connection, block_group_id: i32) -> HashSet<String> {
+        let edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
+        let blocks = BlockGroup::blocks_from_edges(conn, edges.clone());
+
+        let blocks_by_start = blocks
+            .clone()
+            .into_iter()
+            .map(|block| {
+                (
+                    BlockKey {
+                        sequence_hash: block.sequence_hash,
+                        coordinate: block.start,
+                    },
+                    block.id,
+                )
+            })
+            .collect::<HashMap<BlockKey, i32>>();
+        let blocks_by_end = blocks
+            .clone()
+            .into_iter()
+            .map(|block| {
+                (
+                    BlockKey {
+                        sequence_hash: block.sequence_hash,
+                        coordinate: block.end,
+                    },
+                    block.id,
+                )
+            })
+            .collect::<HashMap<BlockKey, i32>>();
+        let blocks_by_id = blocks
+            .clone()
+            .into_iter()
+            .map(|block| (block.id, block))
+            .collect::<HashMap<i32, GroupBlock>>();
+
+        let mut graph: DiGraphMap<i32, ()> = DiGraphMap::new();
+        for block in blocks {
+            graph.add_node(block.id);
+        }
+        for edge in edges {
+            let source_key = BlockKey {
+                sequence_hash: edge.source_hash,
+                coordinate: edge.source_coordinate,
+            };
+            let source_id = blocks_by_end.get(&source_key);
+            let target_key = BlockKey {
+                sequence_hash: edge.target_hash,
+                coordinate: edge.target_coordinate,
+            };
+            let target_id = blocks_by_start.get(&target_key);
+            if let Some(source_id_value) = source_id {
+                if let Some(target_id_value) = target_id {
+                    graph.add_edge(*source_id_value, *target_id_value, ());
+                }
+            }
+        }
+
+        let mut start_nodes = vec![];
+        let mut end_nodes = vec![];
+        for node in graph.nodes() {
+            let has_incoming = graph.neighbors_directed(node, Direction::Incoming).next();
+            let has_outgoing = graph.neighbors_directed(node, Direction::Outgoing).next();
+            if has_incoming.is_none() {
+                start_nodes.push(node);
+            }
+            if has_outgoing.is_none() {
+                end_nodes.push(node);
+            }
+        }
+        let mut sequences = HashSet::<String>::new();
+
+        for start_node in start_nodes {
+            for end_node in &end_nodes {
+                // TODO: maybe make all_simple_paths return a single path id where start == end
+                if start_node == *end_node {
+                    let block = blocks_by_id.get(&start_node).unwrap();
+                    sequences.insert(block.sequence.clone());
+                } else {
+                    for path in all_simple_paths(&graph, start_node, *end_node) {
+                        let mut current_sequence = "".to_string();
+                        for node in path {
+                            let block = blocks_by_id.get(&node).unwrap();
+                            let block_sequence = block.sequence.clone();
+                            current_sequence.push_str(&block_sequence);
+                        }
+                        sequences.insert(current_sequence);
+                    }
+                }
+            }
+        }
+
         sequences
     }
 
@@ -426,20 +631,19 @@ impl BlockGroup {
                 //        |----range---|
                 let start_split_point = block.start + start - path_start;
                 let end_split_point = block.start + end - path_start;
-                let mut next_block;
-                if start_split_point == block.start {
+                let next_block = if start_split_point == block.start {
                     if let Some(pb) = previous_block {
                         new_edges.push((Some(pb.id), Some(new_block_id)));
                     }
-                    next_block = block.clone();
+                    block.clone()
                 } else {
                     let (left_block, right_block) =
                         Block::split(conn, block, start_split_point, chromosome_index, phased)
                             .unwrap();
                     Block::delete(conn, block.id);
                     new_edges.push((Some(left_block.id), Some(new_block_id)));
-                    next_block = right_block.clone();
-                }
+                    right_block.clone()
+                };
 
                 if end_split_point == next_block.start {
                     new_edges.push((Some(new_block_id), Some(next_block.id)));
@@ -505,6 +709,122 @@ impl BlockGroup {
         }
 
         change.save(conn);
+    }
+
+    #[allow(clippy::ptr_arg)]
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::needless_late_init)]
+    pub fn new_insert_change(
+        conn: &mut Connection,
+        block_group_id: i32,
+        path: &Path,
+        start: i32,
+        end: i32,
+        new_block: &NewBlock,
+        chromosome_index: i32,
+        phased: i32,
+    ) {
+        let tree = Path::intervaltree_for(conn, path);
+
+        let start_blocks: Vec<NewBlock> =
+            tree.query_point(start).map(|x| x.value.clone()).collect();
+        assert_eq!(start_blocks.len(), 1);
+        // NOTE: This may not be used but needs to be initialized here instead of inside the if
+        // statement that uses it, so that the borrow checker is happy
+        let previous_start_blocks: Vec<NewBlock> = tree
+            .query_point(start - 1)
+            .map(|x| x.value.clone())
+            .collect();
+        assert_eq!(previous_start_blocks.len(), 1);
+        let start_block;
+        if start_blocks[0].path_start == start {
+            // First part of this block will be replaced/deleted, need to get previous block to add
+            // edge including it
+            start_block = &previous_start_blocks[0];
+        } else {
+            start_block = &start_blocks[0];
+        }
+
+        let end_blocks: Vec<NewBlock> = tree.query_point(end).map(|x| x.value.clone()).collect();
+        assert_eq!(end_blocks.len(), 1);
+        let end_block = &end_blocks[0];
+
+        let mut new_edges = vec![];
+
+        if new_block.sequence_start == new_block.sequence_end {
+            // Deletion
+            let new_edge = EdgeData {
+                source_hash: start_block.sequence.hash.clone(),
+                source_coordinate: start - start_block.path_start + start_block.sequence_start,
+                source_strand: "+".to_string(),
+                target_hash: end_block.sequence.hash.clone(),
+                target_coordinate: end - end_block.path_start + end_block.sequence_start,
+                target_strand: "+".to_string(),
+                chromosome_index,
+                phased,
+            };
+            new_edges.push(new_edge);
+        } else {
+            // Insertion/replacement
+            let new_start_edge = EdgeData {
+                source_hash: start_block.sequence.hash.clone(),
+                source_coordinate: start - start_block.path_start + start_block.sequence_start,
+                source_strand: "+".to_string(),
+                target_hash: new_block.sequence.hash.clone(),
+                target_coordinate: new_block.sequence_start,
+                target_strand: "+".to_string(),
+                chromosome_index,
+                phased,
+            };
+            let new_end_edge = EdgeData {
+                source_hash: new_block.sequence.hash.clone(),
+                source_coordinate: new_block.sequence_end,
+                source_strand: "+".to_string(),
+                target_hash: end_block.sequence.hash.clone(),
+                target_coordinate: end - end_block.path_start + end_block.sequence_start,
+                target_strand: "+".to_string(),
+                chromosome_index,
+                phased,
+            };
+            new_edges.push(new_start_edge);
+            new_edges.push(new_end_edge);
+        }
+
+        // NOTE: Add edges marking the existing part of the sequence that is being substituted out,
+        // so we can retrieve it as one node of the overall graph
+        if start < start_block.path_end {
+            let split_coordinate = start - start_block.path_start + start_block.sequence_start;
+            let new_split_start_edge = EdgeData {
+                source_hash: start_block.sequence.hash.clone(),
+                source_coordinate: split_coordinate,
+                source_strand: "+".to_string(),
+                target_hash: start_block.sequence.hash.clone(),
+                target_coordinate: split_coordinate,
+                target_strand: "+".to_string(),
+                chromosome_index,
+                phased,
+            };
+            new_edges.push(new_split_start_edge);
+        }
+
+        if end > end_block.path_start {
+            let split_coordinate = end - end_block.path_start + end_block.sequence_start;
+            let new_split_end_edge = EdgeData {
+                source_hash: end_block.sequence.hash.clone(),
+                source_coordinate: split_coordinate,
+                source_strand: "+".to_string(),
+                target_hash: end_block.sequence.hash.clone(),
+                target_coordinate: split_coordinate,
+                target_strand: "+".to_string(),
+                chromosome_index,
+                phased,
+            };
+
+            new_edges.push(new_split_end_edge);
+        }
+
+        let edge_ids = NewEdge::bulk_create(conn, new_edges);
+        BlockGroupEdge::bulk_create(conn, block_group_id, edge_ids);
     }
 }
 
@@ -583,7 +903,6 @@ impl ChangeLog {
 mod tests {
     use super::*;
     use crate::migrations::run_migrations;
-    use std::hash::Hash;
 
     fn get_connection() -> Connection {
         let mut conn = Connection::open_in_memory()
@@ -835,6 +1154,430 @@ mod tests {
         BlockGroup::insert_change(&mut conn, path_id, 7, 15, &insert, 1, 0);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAANNNNTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    fn setup_multipath(conn: &Connection) -> (i32, Path) {
+        let a_seq_hash = Sequence::create(conn, "DNA", "AAAAAAAAAA", true);
+        let t_seq_hash = Sequence::create(conn, "DNA", "TTTTTTTTTT", true);
+        let c_seq_hash = Sequence::create(conn, "DNA", "CCCCCCCCCC", true);
+        let g_seq_hash = Sequence::create(conn, "DNA", "GGGGGGGGGG", true);
+        let _collection = Collection::create(conn, "test");
+        let block_group = BlockGroup::create(conn, "test", None, "hg19");
+        let edge0 = NewEdge::create(
+            conn,
+            NewEdge::PATH_START_HASH.to_string(),
+            0,
+            "+".to_string(),
+            a_seq_hash.clone(),
+            0,
+            "+".to_string(),
+            0,
+            0,
+        );
+        let edge1 = NewEdge::create(
+            conn,
+            a_seq_hash,
+            10,
+            "+".to_string(),
+            t_seq_hash.clone(),
+            0,
+            "+".to_string(),
+            0,
+            0,
+        );
+        let edge2 = NewEdge::create(
+            conn,
+            t_seq_hash,
+            10,
+            "+".to_string(),
+            c_seq_hash.clone(),
+            0,
+            "+".to_string(),
+            0,
+            0,
+        );
+        let edge3 = NewEdge::create(
+            conn,
+            c_seq_hash,
+            10,
+            "+".to_string(),
+            g_seq_hash.clone(),
+            0,
+            "+".to_string(),
+            0,
+            0,
+        );
+        let edge4 = NewEdge::create(
+            conn,
+            g_seq_hash,
+            10,
+            "+".to_string(),
+            NewEdge::PATH_END_HASH.to_string(),
+            0,
+            "+".to_string(),
+            0,
+            0,
+        );
+        BlockGroupEdge::bulk_create(
+            conn,
+            block_group.id,
+            vec![edge0.id, edge1.id, edge2.id, edge3.id, edge4.id],
+        );
+        let path = Path::new_create(
+            conn,
+            "chr1",
+            block_group.id,
+            vec![edge0.id, edge1.id, edge2.id, edge3.id, edge4.id],
+        );
+        (block_group.id, path)
+    }
+
+    #[test]
+    fn insert_and_deletion_new_get_all() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 7,
+            path_end: 15,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 7, 15, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAANNNNTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+
+        let deletion_sequence_hash = Sequence::create(&conn, "DNA", "", true);
+        let deletion_sequence =
+            Sequence::sequence_from_hash(&conn, &deletion_sequence_hash).unwrap();
+        let deletion = NewBlock {
+            id: 0,
+            sequence: deletion_sequence.clone(),
+            block_sequence: deletion_sequence.sequence.clone(),
+            sequence_start: 0,
+            sequence_end: 0,
+            path_start: 19,
+            path_end: 31,
+            strand: "+".to_string(),
+        };
+
+        // take out an entire block.
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 19, 31, &deletion, 1, 0);
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAANNNNTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTTTTTTTTGGGGGGGGG".to_string(),
+                "AAAAAAANNNNTTTTGGGGGGGGG".to_string(),
+            ])
+        )
+    }
+
+    #[test]
+    fn simple_insert_new_get_all() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 7,
+            path_end: 15,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 7, 15, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAANNNNTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_on_block_boundary_middle_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 15,
+            path_end: 15,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 15, 15, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTTTTNNNNTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_within_block_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 12,
+            path_end: 17,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 12, 17, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTNNNNTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_on_block_boundary_start_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 10,
+            path_end: 10,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 10, 10, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAANNNNTTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_on_block_boundary_end_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 9,
+            path_end: 9,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 9, 9, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAANNNNATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_across_entire_block_boundary_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 10,
+            path_end: 20,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 10, 20, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAANNNNCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_across_two_blocks_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 15,
+            path_end: 25,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 15, 25, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTTTTNNNNCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_spanning_blocks_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 5,
+            path_end: 35,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 5, 35, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAANNNNGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn simple_deletion_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let deletion_sequence_hash = Sequence::create(&conn, "DNA", "", true);
+        let deletion_sequence =
+            Sequence::sequence_from_hash(&conn, &deletion_sequence_hash).unwrap();
+        let deletion = NewBlock {
+            id: 0,
+            sequence: deletion_sequence.clone(),
+            block_sequence: deletion_sequence.sequence.clone(),
+            sequence_start: 0,
+            sequence_end: 0,
+            path_start: 19,
+            path_end: 31,
+            strand: "+".to_string(),
+        };
+
+        // take out an entire block.
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 19, 31, &deletion, 1, 0);
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTTTTTTTTGGGGGGGGG".to_string(),
+            ])
+        )
+    }
+
+    #[test]
+    fn doesnt_apply_same_insert_twice_new() {
+        let mut conn = get_connection();
+        let (block_group_id, path) = setup_multipath(&conn);
+        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 7,
+            path_end: 15,
+            strand: "+".to_string(),
+        };
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 7, 15, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAANNNNTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+
+        BlockGroup::new_insert_change(&mut conn, block_group_id, &path, 7, 15, &insert, 1, 0);
+
+        let all_sequences = BlockGroup::new_get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![

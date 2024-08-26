@@ -9,7 +9,7 @@ CREATE TABLE sample (
 CREATE TABLE sequence (
   hash TEXT PRIMARY KEY NOT NULL,
   sequence_type TEXT NOT NULL,
-  sequence TEXT,
+  sequence TEXT NOT NULL,
   "length" INTEGER NOT NULL
 );
 
@@ -80,3 +80,40 @@ CREATE TABLE change_log (
   FOREIGN KEY(sequence_hash) REFERENCES sequence(hash)
 );
 CREATE UNIQUE INDEX change_log_uidx ON change_log(hash);
+
+CREATE TABLE new_edges (
+  id INTEGER PRIMARY KEY NOT NULL,
+  source_hash TEXT NOT NULL,
+  source_coordinate INTEGER NOT NULL,
+  source_strand TEXT NOT NULL,
+  target_hash TEXT NOT NULL,
+  target_coordinate INTEGER NOT NULL,
+  target_strand TEXT NOT NULL,
+  chromosome_index INTEGER NOT NULL,
+  phased INTEGER NOT NULL,
+  FOREIGN KEY(source_hash) REFERENCES sequence(hash),
+  FOREIGN KEY(target_hash) REFERENCES sequence(hash),
+  constraint chk_phased check (phased in (0, 1))
+);
+CREATE UNIQUE INDEX new_edge_uidx ON new_edges(source_hash, source_coordinate, source_strand, target_hash, target_coordinate, target_strand, chromosome_index, phased);
+
+CREATE TABLE path_edges (
+  id INTEGER PRIMARY KEY NOT NULL,
+  path_id INTEGER NOT NULL,
+  index_in_path INTEGER NOT NULL,
+  edge_id INTEGER NOT NULL,
+  FOREIGN KEY(edge_id) REFERENCES new_edges(id),
+  FOREIGN KEY(path_id) REFERENCES path(id)
+);
+CREATE UNIQUE INDEX path_edges_uidx ON path_edges(path_id, edge_id);
+
+CREATE TABLE block_group_edges (
+  id INTEGER PRIMARY KEY NOT NULL,
+  block_group_id INTEGER NOT NULL,
+  edge_id INTEGER NOT NULL,
+  FOREIGN KEY(block_group_id) REFERENCES block_group(id),
+  FOREIGN KEY(edge_id) REFERENCES new_edges(id)
+);
+CREATE UNIQUE INDEX block_group_edges_uidx ON block_group_edges(block_group_id, edge_id);
+
+INSERT INTO sequence (hash, sequence_type, sequence, "length") values ("start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "OTHER", "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", 64), ("end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "OTHER", "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", 64);

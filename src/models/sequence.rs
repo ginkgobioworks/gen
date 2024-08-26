@@ -1,8 +1,9 @@
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Sequence {
     pub hash: String,
     pub sequence_type: String,
@@ -45,11 +46,7 @@ impl Sequence {
         obj_hash
     }
 
-    pub fn get_sequences(
-        conn: &Connection,
-        query: &str,
-        placeholders: Vec<Value>,
-    ) -> Vec<Sequence> {
+    pub fn sequences(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Sequence> {
         let mut stmt = conn.prepare_cached(query).unwrap();
         let rows = stmt
             .query_map(params_from_iter(placeholders), |row| {
@@ -66,5 +63,27 @@ impl Sequence {
             objs.push(row.unwrap());
         }
         objs
+    }
+
+    pub fn sequences_by_hash(conn: &Connection, hashes: Vec<String>) -> HashMap<String, Sequence> {
+        let joined_hashes = &hashes
+            .into_iter()
+            .map(|hash| format!("\"{}\"", hash))
+            .collect::<Vec<_>>()
+            .join(",");
+        let sequences = Sequence::sequences(
+            conn,
+            &format!("select * from sequence where hash in ({0})", joined_hashes),
+            vec![],
+        );
+        sequences
+            .into_iter()
+            .map(|sequence| (sequence.hash.clone(), sequence))
+            .collect::<HashMap<String, Sequence>>()
+    }
+
+    pub fn sequence_from_hash(conn: &Connection, hash: &str) -> Option<Sequence> {
+        let sequences_by_hash = Sequence::sequences_by_hash(conn, vec![hash.to_string()]);
+        sequences_by_hash.get(hash).cloned()
     }
 }
