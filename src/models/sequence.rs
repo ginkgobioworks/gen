@@ -66,7 +66,11 @@ impl Sequence {
     }
 
     pub fn sequences_by_hash(conn: &Connection, hashes: Vec<String>) -> HashMap<String, Sequence> {
-        let joined_hashes = &hashes.join(",");
+        let joined_hashes = &hashes
+            .into_iter()
+            .map(|hash| format!("\"{}\"", hash))
+            .collect::<Vec<_>>()
+            .join(",");
         let sequences = Sequence::sequences(
             conn,
             &format!("select * from sequence where hash in ({0})", joined_hashes),
@@ -76,5 +80,10 @@ impl Sequence {
             .into_iter()
             .map(|sequence| (sequence.hash.clone(), sequence))
             .collect::<HashMap<String, Sequence>>()
+    }
+
+    pub fn sequence_from_hash(conn: &Connection, hash: &str) -> Option<Sequence> {
+        let sequences_by_hash = Sequence::sequences_by_hash(conn, vec![hash.to_string()]);
+        sequences_by_hash.get(hash).cloned()
     }
 }

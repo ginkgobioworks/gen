@@ -231,13 +231,8 @@ impl Path {
                 sequence_hashes.insert(edge.target_hash.clone());
             }
         }
-        let sequences_by_hash = Sequence::sequences_by_hash(
-            conn,
-            sequence_hashes
-                .into_iter()
-                .map(|hash| format!("\"{hash}\""))
-                .collect(),
-        );
+        let sequences_by_hash =
+            Sequence::sequences_by_hash(conn, sequence_hashes.into_iter().collect());
 
         let mut blocks = vec![];
         let mut path_length = 0;
