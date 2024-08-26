@@ -120,8 +120,10 @@ fn new_import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connec
                 conn,
                 NewEdge::PATH_START_HASH.to_string(),
                 0,
+                "+".to_string(),
                 seq_hash.to_string(),
                 0,
+                "+".to_string(),
                 0,
                 0,
             );
@@ -129,8 +131,10 @@ fn new_import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connec
                 conn,
                 seq_hash.to_string(),
                 sequence.len() as i32,
+                "+".to_string(),
                 NewEdge::PATH_END_HASH.to_string(),
                 0,
+                "+".to_string(),
                 0,
                 0,
             );

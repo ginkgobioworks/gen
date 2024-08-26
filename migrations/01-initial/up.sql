@@ -85,15 +85,17 @@ CREATE TABLE new_edges (
   id INTEGER PRIMARY KEY NOT NULL,
   source_hash TEXT NOT NULL,
   source_coordinate INTEGER NOT NULL,
+  source_strand TEXT NOT NULL,
   target_hash TEXT NOT NULL,
   target_coordinate INTEGER NOT NULL,
+  target_strand TEXT NOT NULL,
   chromosome_index INTEGER NOT NULL,
   phased INTEGER NOT NULL,
   FOREIGN KEY(source_hash) REFERENCES sequence(hash),
   FOREIGN KEY(target_hash) REFERENCES sequence(hash),
   constraint chk_phased check (phased in (0, 1))
 );
-CREATE UNIQUE INDEX new_edge_uidx ON new_edges(source_hash, source_coordinate, target_hash, target_coordinate, chromosome_index, phased);
+CREATE UNIQUE INDEX new_edge_uidx ON new_edges(source_hash, source_coordinate, source_strand, target_hash, target_coordinate, target_strand, chromosome_index, phased);
 
 CREATE TABLE path_edges (
   id INTEGER PRIMARY KEY NOT NULL,

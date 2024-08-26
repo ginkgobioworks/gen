@@ -195,18 +195,23 @@ impl Path {
         let end = out_of.source_coordinate;
 
         let strand;
-        let block_sequence;
         let block_sequence_length;
 
-        if end >= start {
-            strand = "+";
-            block_sequence = sequence.sequence[start as usize..end as usize].to_string();
+        if into.target_strand == out_of.source_strand {
+            strand = into.target_strand;
             block_sequence_length = end - start;
         } else {
-            strand = "-";
-            block_sequence = revcomp(&sequence.sequence[end as usize..start as usize + 1]);
-            block_sequence_length = start - end;
+            panic!(
+                "Edge pair with target_strand/source_strand mismatch for path {}",
+                path.id
+            );
         }
+
+        let block_sequence = if strand == "-" {
+            revcomp(&sequence.sequence[start as usize..end as usize])
+        } else {
+            sequence.sequence[start as usize..end as usize].to_string()
+        };
 
         NewBlock {
             id: block_id,
@@ -489,8 +494,10 @@ mod tests {
             conn,
             NewEdge::PATH_START_HASH.to_string(),
             -1,
+            "+".to_string(),
             sequence1_hash.clone(),
             0,
+            "+".to_string(),
             0,
             0,
         );
@@ -499,8 +506,10 @@ mod tests {
             conn,
             sequence1_hash.clone(),
             8,
+            "+".to_string(),
             sequence2_hash.clone(),
             1,
+            "+".to_string(),
             0,
             0,
         );
@@ -509,8 +518,10 @@ mod tests {
             conn,
             sequence2_hash.clone(),
             8,
+            "+".to_string(),
             sequence3_hash.clone(),
             1,
+            "+".to_string(),
             0,
             0,
         );
@@ -519,8 +530,10 @@ mod tests {
             conn,
             sequence3_hash.clone(),
             8,
+            "+".to_string(),
             sequence4_hash.clone(),
             1,
+            "+".to_string(),
             0,
             0,
         );
@@ -528,8 +541,10 @@ mod tests {
             conn,
             sequence4_hash.clone(),
             8,
+            "+".to_string(),
             NewEdge::PATH_END_HASH.to_string(),
             -1,
+            "+".to_string(),
             0,
             0,
         );

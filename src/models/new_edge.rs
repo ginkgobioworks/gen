@@ -1,5 +1,5 @@
 use rusqlite::types::Value;
-use rusqlite::{params_from_iter, Connection};
+use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
 use std::collections::{HashMap, HashSet};
 use std::hash::RandomState;
 
@@ -8,8 +8,10 @@ pub struct NewEdge {
     pub id: i32,
     pub source_hash: String,
     pub source_coordinate: i32,
+    pub source_strand: String,
     pub target_hash: String,
     pub target_coordinate: i32,
+    pub target_strand: String,
     pub chromosome_index: i32,
     pub phased: i32,
 }
@@ -18,8 +20,10 @@ pub struct NewEdge {
 pub struct EdgeData {
     pub source_hash: String,
     pub source_coordinate: i32,
+    pub source_strand: String,
     pub target_hash: String,
     pub target_coordinate: i32,
+    pub target_strand: String,
     pub chromosome_index: i32,
     pub phased: i32,
 }
@@ -30,22 +34,27 @@ impl NewEdge {
     pub const PATH_END_HASH: &'static str =
         "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create(
         conn: &Connection,
         source_hash: String,
         source_coordinate: i32,
+        source_strand: String,
         target_hash: String,
         target_coordinate: i32,
+        target_strand: String,
         chromosome_index: i32,
         phased: i32,
     ) -> NewEdge {
-        let query = "INSERT INTO new_edges (source_hash, source_coordinate, target_hash, target_coordinate, chromosome_index, phased) VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING *";
-        let id_query = "select id from new_edges where source_hash = ?1 and source_coordinate = ?2 and target_hash = ?3 and target_coordinate = ?4 and chromosome_index = ?5 and phased = ?6";
+        let query = "INSERT INTO new_edges (source_hash, source_coordinate, source_strand, target_hash, target_coordinate, target_strand, chromosome_index, phased) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) RETURNING *";
+        let id_query = "select id from new_edges where source_hash = ?1 and source_coordinate = ?2 and source_strand = ?3 and target_hash = ?4 and target_coordinate = ?5 and target_strand = ?6 and chromosome_index = ?7 and phased = ?8";
         let placeholders: Vec<Value> = vec![
             source_hash.clone().into(),
             source_coordinate.into(),
+            source_strand.clone().into(),
             target_hash.clone().into(),
             target_coordinate.into(),
+            target_strand.clone().into(),
             chromosome_index.into(),
             phased.into(),
         ];
@@ -56,10 +65,12 @@ impl NewEdge {
                 id: row.get(0)?,
                 source_hash: row.get(1)?,
                 source_coordinate: row.get(2)?,
-                target_hash: row.get(3)?,
-                target_coordinate: row.get(4)?,
-                chromosome_index: row.get(5)?,
-                phased: row.get(6)?,
+                source_strand: row.get(3)?,
+                target_hash: row.get(4)?,
+                target_coordinate: row.get(5)?,
+                target_strand: row.get(6)?,
+                chromosome_index: row.get(7)?,
+                phased: row.get(8)?,
             })
         }) {
             Ok(edge) => edge,
@@ -72,8 +83,10 @@ impl NewEdge {
                             .unwrap(),
                         source_hash,
                         source_coordinate,
+                        source_strand,
                         target_hash,
                         target_coordinate,
+                        target_strand,
                         chromosome_index,
                         phased,
                     }
@@ -93,7 +106,7 @@ impl NewEdge {
             .map(|edge_id| edge_id.to_string())
             .collect::<Vec<_>>()
             .join(",");
-        let query = format!("select id, source_hash, source_coordinate, target_hash, target_coordinate, chromosome_index, phased from new_edges where id in ({});", formatted_edge_ids);
+        let query = format!("select id, source_hash, source_coordinate, source_strand, target_hash, target_coordinate, target_strand, chromosome_index, phased from new_edges where id in ({});", formatted_edge_ids);
         NewEdge::query(conn, &query, vec![])
     }
 
@@ -105,10 +118,12 @@ impl NewEdge {
                     id: row.get(0)?,
                     source_hash: row.get(1)?,
                     source_coordinate: row.get(2)?,
-                    target_hash: row.get(3)?,
-                    target_coordinate: row.get(4)?,
-                    chromosome_index: row.get(5)?,
-                    phased: row.get(6)?,
+                    source_strand: row.get(3)?,
+                    target_hash: row.get(4)?,
+                    target_coordinate: row.get(5)?,
+                    target_strand: row.get(6)?,
+                    chromosome_index: row.get(7)?,
+                    phased: row.get(8)?,
                 })
             })
             .unwrap();
@@ -123,13 +138,17 @@ impl NewEdge {
         let mut edge_rows = vec![];
         for edge in &edges {
             let source_hash = format!("\"{0}\"", edge.source_hash);
+            let source_strand = format!("\"{0}\"", edge.source_strand);
             let target_hash = format!("\"{0}\"", edge.target_hash);
+            let target_strand = format!("\"{0}\"", edge.target_strand);
             let edge_row = format!(
-                "({0}, {1}, {2}, {3}, {4}, {5})",
+                "({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7})",
                 source_hash,
                 edge.source_coordinate,
+                source_strand,
                 target_hash,
                 edge.target_coordinate,
+                target_strand,
                 edge.chromosome_index,
                 edge.phased
             );
@@ -137,7 +156,7 @@ impl NewEdge {
         }
         let formatted_edge_rows = edge_rows.join(", ");
 
-        let select_statement = format!("SELECT * FROM new_edges WHERE (source_hash, source_coordinate, target_hash, target_coordinate, chromosome_index, phased) in ({0});", formatted_edge_rows);
+        let select_statement = format!("SELECT * FROM new_edges WHERE (source_hash, source_coordinate, source_strand, target_hash, target_coordinate, target_strand, chromosome_index, phased) in ({0});", formatted_edge_rows);
         let existing_edges = NewEdge::query(conn, &select_statement, vec![]);
         let mut existing_edge_ids: Vec<i32> = existing_edges
             .clone()
@@ -159,12 +178,16 @@ impl NewEdge {
         for edge in edges_to_insert {
             let source_hash = format!("\"{0}\"", edge.source_hash);
             let target_hash = format!("\"{0}\"", edge.target_hash);
+            let source_strand = format!("\"{0}\"", edge.source_strand);
+            let target_strand = format!("\"{0}\"", edge.target_strand);
             let edge_row = format!(
-                "({0}, {1}, {2}, {3}, {4}, {5})",
+                "({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7})",
                 source_hash,
                 edge.source_coordinate,
+                source_strand,
                 target_hash,
                 edge.target_coordinate,
+                target_strand,
                 edge.chromosome_index,
                 edge.phased
             );
@@ -177,7 +200,7 @@ impl NewEdge {
 
         let formatted_edge_rows_to_insert = edge_rows_to_insert.join(", ");
 
-        let insert_statement = format!("INSERT INTO new_edges (source_hash, source_coordinate, target_hash, target_coordinate, chromosome_index, phased) VALUES {0} RETURNING (id);", formatted_edge_rows_to_insert);
+        let insert_statement = format!("INSERT INTO new_edges (source_hash, source_coordinate, source_strand, target_hash, target_coordinate, target_strand, chromosome_index, phased) VALUES {0} RETURNING (id);", formatted_edge_rows_to_insert);
         let mut stmt = conn.prepare(&insert_statement).unwrap();
         let rows = stmt.query_map([], |row| row.get(0)).unwrap();
         let mut edge_ids: Vec<i32> = vec![];
@@ -193,8 +216,10 @@ impl NewEdge {
         EdgeData {
             source_hash: edge.source_hash,
             source_coordinate: edge.source_coordinate,
+            source_strand: edge.source_strand,
             target_hash: edge.target_hash,
             target_coordinate: edge.target_coordinate,
+            target_strand: edge.target_strand,
             chromosome_index: edge.chromosome_index,
             phased: edge.phased,
         }
@@ -225,8 +250,10 @@ mod tests {
         let edge1 = EdgeData {
             source_hash: NewEdge::PATH_START_HASH.to_string(),
             source_coordinate: -1,
+            source_strand: "+".to_string(),
             target_hash: sequence1_hash.clone(),
             target_coordinate: 1,
+            target_strand: "+".to_string(),
             chromosome_index: 0,
             phased: 0,
         };
@@ -234,16 +261,20 @@ mod tests {
         let edge2 = EdgeData {
             source_hash: sequence1_hash.clone(),
             source_coordinate: 2,
+            source_strand: "+".to_string(),
             target_hash: sequence2_hash.clone(),
             target_coordinate: 3,
+            target_strand: "+".to_string(),
             chromosome_index: 0,
             phased: 0,
         };
         let edge3 = EdgeData {
             source_hash: sequence2_hash.clone(),
             source_coordinate: 4,
+            source_strand: "+".to_string(),
             target_hash: NewEdge::PATH_END_HASH.to_string(),
             target_coordinate: -1,
+            target_strand: "+".to_string(),
             chromosome_index: 0,
             phased: 0,
         };
@@ -282,8 +313,10 @@ mod tests {
             conn,
             NewEdge::PATH_START_HASH.to_string(),
             -1,
+            "+".to_string(),
             sequence1_hash.clone(),
             1,
+            "+".to_string(),
             0,
             0,
         );
@@ -295,8 +328,10 @@ mod tests {
         let edge1 = EdgeData {
             source_hash: NewEdge::PATH_START_HASH.to_string(),
             source_coordinate: -1,
+            source_strand: "+".to_string(),
             target_hash: sequence1_hash.clone(),
             target_coordinate: 1,
+            target_strand: "+".to_string(),
             chromosome_index: 0,
             phased: 0,
         };
@@ -304,16 +339,20 @@ mod tests {
         let edge2 = EdgeData {
             source_hash: sequence1_hash.clone(),
             source_coordinate: 2,
+            source_strand: "+".to_string(),
             target_hash: sequence2_hash.clone(),
             target_coordinate: 3,
+            target_strand: "+".to_string(),
             chromosome_index: 0,
             phased: 0,
         };
         let edge3 = EdgeData {
             source_hash: sequence2_hash.clone(),
             source_coordinate: 4,
+            source_strand: "+".to_string(),
             target_hash: NewEdge::PATH_END_HASH.to_string(),
             target_coordinate: -1,
+            target_strand: "+".to_string(),
             chromosome_index: 0,
             phased: 0,
         };

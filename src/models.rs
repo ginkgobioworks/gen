@@ -756,8 +756,10 @@ impl BlockGroup {
             let new_edge = EdgeData {
                 source_hash: start_block.sequence.hash.clone(),
                 source_coordinate: start - start_block.path_start + start_block.sequence_start,
+                source_strand: "+".to_string(),
                 target_hash: end_block.sequence.hash.clone(),
                 target_coordinate: end - end_block.path_start + end_block.sequence_start,
+                target_strand: "+".to_string(),
                 chromosome_index,
                 phased,
             };
@@ -767,16 +769,20 @@ impl BlockGroup {
             let new_start_edge = EdgeData {
                 source_hash: start_block.sequence.hash.clone(),
                 source_coordinate: start - start_block.path_start + start_block.sequence_start,
+                source_strand: "+".to_string(),
                 target_hash: new_block.sequence.hash.clone(),
                 target_coordinate: new_block.sequence_start,
+                target_strand: "+".to_string(),
                 chromosome_index,
                 phased,
             };
             let new_end_edge = EdgeData {
                 source_hash: new_block.sequence.hash.clone(),
                 source_coordinate: new_block.sequence_end,
+                source_strand: "+".to_string(),
                 target_hash: end_block.sequence.hash.clone(),
                 target_coordinate: end - end_block.path_start + end_block.sequence_start,
+                target_strand: "+".to_string(),
                 chromosome_index,
                 phased,
             };
@@ -791,8 +797,10 @@ impl BlockGroup {
             let new_split_start_edge = EdgeData {
                 source_hash: start_block.sequence.hash.clone(),
                 source_coordinate: split_coordinate,
+                source_strand: "+".to_string(),
                 target_hash: start_block.sequence.hash.clone(),
                 target_coordinate: split_coordinate,
+                target_strand: "+".to_string(),
                 chromosome_index,
                 phased,
             };
@@ -804,8 +812,10 @@ impl BlockGroup {
             let new_split_end_edge = EdgeData {
                 source_hash: end_block.sequence.hash.clone(),
                 source_coordinate: split_coordinate,
+                source_strand: "+".to_string(),
                 target_hash: end_block.sequence.hash.clone(),
                 target_coordinate: split_coordinate,
+                target_strand: "+".to_string(),
                 chromosome_index,
                 phased,
             };
@@ -1164,20 +1174,54 @@ mod tests {
             conn,
             NewEdge::PATH_START_HASH.to_string(),
             0,
+            "+".to_string(),
             a_seq_hash.clone(),
             0,
+            "+".to_string(),
             0,
             0,
         );
-        let edge1 = NewEdge::create(conn, a_seq_hash, 10, t_seq_hash.clone(), 0, 0, 0);
-        let edge2 = NewEdge::create(conn, t_seq_hash, 10, c_seq_hash.clone(), 0, 0, 0);
-        let edge3 = NewEdge::create(conn, c_seq_hash, 10, g_seq_hash.clone(), 0, 0, 0);
+        let edge1 = NewEdge::create(
+            conn,
+            a_seq_hash,
+            10,
+            "+".to_string(),
+            t_seq_hash.clone(),
+            0,
+            "+".to_string(),
+            0,
+            0,
+        );
+        let edge2 = NewEdge::create(
+            conn,
+            t_seq_hash,
+            10,
+            "+".to_string(),
+            c_seq_hash.clone(),
+            0,
+            "+".to_string(),
+            0,
+            0,
+        );
+        let edge3 = NewEdge::create(
+            conn,
+            c_seq_hash,
+            10,
+            "+".to_string(),
+            g_seq_hash.clone(),
+            0,
+            "+".to_string(),
+            0,
+            0,
+        );
         let edge4 = NewEdge::create(
             conn,
             g_seq_hash,
             10,
+            "+".to_string(),
             NewEdge::PATH_END_HASH.to_string(),
             0,
+            "+".to_string(),
             0,
             0,
         );
