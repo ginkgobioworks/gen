@@ -3,8 +3,8 @@ use clap::{Parser, Subcommand};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::PathBuf;
+use std::{io, str};
 
-use bio::io::fasta;
 use gen::migrations::run_migrations;
 use gen::models::{
     self,
@@ -18,6 +18,7 @@ use gen::models::{
     BlockGroup,
 };
 use gen::{get_connection, parse_genotype};
+use noodles::fasta;
 use noodles::vcf;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use noodles::vcf::variant::record::samples::series::Value;
@@ -25,7 +26,6 @@ use noodles::vcf::variant::record::samples::{Sample, Series};
 use noodles::vcf::variant::record::{AlternateBases, ReferenceBases, Samples};
 use noodles::vcf::variant::Record;
 use rusqlite::{types::Value as SQLValue, Connection};
-use std::io;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -76,27 +76,24 @@ enum Commands {
 
 fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection) {
     // TODO: support gz
-    let mut reader = fasta::Reader::from_file(fasta).unwrap();
+    let mut reader = fasta::io::reader::Builder.build_from_path(fasta).unwrap();
 
     if !models::Collection::exists(conn, name) {
         let collection = models::Collection::create(conn, name);
 
         for result in reader.records() {
             let record = result.expect("Error during fasta record parsing");
-            let sequence = String::from_utf8(record.seq().to_vec()).unwrap();
+            let sequence = str::from_utf8(record.sequence().as_ref())
+                .unwrap()
+                .to_string();
+            let name = String::from_utf8(record.name().to_vec()).unwrap();
+            let sequence_length = record.sequence().len() as i32;
             let seq_hash = Sequence::create(conn, "DNA", &sequence, !shallow);
-            let block_group = BlockGroup::create(conn, &collection.name, None, record.id());
-            let block = Block::create(
-                conn,
-                &seq_hash,
-                block_group.id,
-                0,
-                (sequence.len() as i32),
-                "+",
-            );
+            let block_group = BlockGroup::create(conn, &collection.name, None, &name);
+            let block = Block::create(conn, &seq_hash, block_group.id, 0, sequence_length, "+");
             Edge::create(conn, None, Some(block.id), 0, 0);
             Edge::create(conn, Some(block.id), None, 0, 0);
-            Path::create(conn, record.id(), block_group.id, vec![block.id]);
+            Path::create(conn, &name, block_group.id, vec![block.id]);
         }
         println!("Created it");
     } else {
@@ -106,16 +103,20 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
 
 fn new_import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection) {
     // TODO: support gz
-    let mut reader = fasta::Reader::from_file(fasta).unwrap();
+    let mut reader = fasta::io::reader::Builder.build_from_path(fasta).unwrap();
 
     if !models::Collection::exists(conn, name) {
         let collection = models::Collection::create(conn, name);
 
         for result in reader.records() {
             let record = result.expect("Error during fasta record parsing");
-            let sequence = String::from_utf8(record.seq().to_vec()).unwrap();
+            let sequence = str::from_utf8(record.sequence().as_ref())
+                .unwrap()
+                .to_string();
+            let name = String::from_utf8(record.name().to_vec()).unwrap();
+            let sequence_length = record.sequence().len() as i32;
             let seq_hash = Sequence::create(conn, "DNA", &sequence, !shallow);
-            let block_group = BlockGroup::create(conn, &collection.name, None, record.id());
+            let block_group = BlockGroup::create(conn, &collection.name, None, &name);
             let edge_into = NewEdge::create(
                 conn,
                 NewEdge::PATH_START_HASH.to_string(),
@@ -128,7 +129,7 @@ fn new_import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connec
             let edge_out_of = NewEdge::create(
                 conn,
                 seq_hash.to_string(),
-                sequence.len() as i32,
+                sequence_length,
                 NewEdge::PATH_END_HASH.to_string(),
                 0,
                 0,
@@ -137,7 +138,7 @@ fn new_import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connec
             BlockGroupEdge::bulk_create(conn, block_group.id, vec![edge_into.id, edge_out_of.id]);
             Path::new_create(
                 conn,
-                record.id(),
+                &name,
                 block_group.id,
                 vec![edge_into.id, edge_out_of.id],
             );
