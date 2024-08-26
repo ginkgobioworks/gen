@@ -1,4 +1,4 @@
-use crate::models::new_edge::NewEdge;
+use crate::models::edge::Edge;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 
@@ -25,7 +25,7 @@ impl BlockGroupEdge {
         let _ = conn.execute(&insert_statement, ());
     }
 
-    pub fn edges_for_block_group(conn: &Connection, block_group_id: i32) -> Vec<NewEdge> {
+    pub fn edges_for_block_group(conn: &Connection, block_group_id: i32) -> Vec<Edge> {
         let query = format!(
             "select * from block_group_edges where block_group_id = {};",
             block_group_id
@@ -35,7 +35,7 @@ impl BlockGroupEdge {
             .into_iter()
             .map(|block_group_edge| block_group_edge.edge_id)
             .collect();
-        NewEdge::bulk_load(conn, edge_ids)
+        Edge::bulk_load(conn, edge_ids)
     }
 
     pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<BlockGroupEdge> {

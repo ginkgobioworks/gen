@@ -8,10 +8,8 @@ use std::{io, str};
 use gen::migrations::run_migrations;
 use gen::models::{
     self,
-    block::Block,
     block_group_edge::BlockGroupEdge,
     edge::Edge,
-    new_edge::NewEdge,
     path::{NewBlock, Path},
     path_edge::PathEdge,
     sequence::Sequence,
@@ -90,36 +88,13 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
             let sequence_length = record.sequence().len() as i32;
             let seq_hash = Sequence::create(conn, "DNA", &sequence, !shallow);
             let block_group = BlockGroup::create(conn, &collection.name, None, &name);
-            let block = Block::create(conn, &seq_hash, block_group.id, 0, sequence_length, "+");
-            Edge::create(conn, None, Some(block.id), 0, 0);
-            Edge::create(conn, Some(block.id), None, 0, 0);
-            Path::create(conn, &name, block_group.id, vec![block.id]);
-        }
-        println!("Created it");
-    } else {
-        println!("Collection {:1} already exists", name);
-    }
-}
-
-fn new_import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection) {
-    // TODO: support gz
-    let mut reader = fasta::io::reader::Builder.build_from_path(fasta).unwrap();
-
-    if !models::Collection::exists(conn, name) {
-        let collection = models::Collection::create(conn, name);
-
-        for result in reader.records() {
-            let record = result.expect("Error during fasta record parsing");
-            let sequence = str::from_utf8(record.sequence().as_ref())
-                .unwrap()
-                .to_string();
-            let name = String::from_utf8(record.name().to_vec()).unwrap();
-            let sequence_length = record.sequence().len() as i32;
-            let seq_hash = Sequence::create(conn, "DNA", &sequence, !shallow);
-            let block_group = BlockGroup::create(conn, &collection.name, None, &name);
             let edge_into = NewEdge::create(
                 conn,
                 NewEdge::PATH_START_HASH.to_string(),
+            let block_group = BlockGroup::create(conn, &collection.name, None, record.id());
+            let edge_into = Edge::create(
+                conn,
+                Edge::PATH_START_HASH.to_string(),
                 0,
                 "+".to_string(),
                 seq_hash.to_string(),
@@ -128,19 +103,19 @@ fn new_import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connec
                 0,
                 0,
             );
-            let edge_out_of = NewEdge::create(
+            let edge_out_of = Edge::create(
                 conn,
                 seq_hash.to_string(),
                 sequence_length,
                 "+".to_string(),
-                NewEdge::PATH_END_HASH.to_string(),
+                Edge::PATH_END_HASH.to_string(),
                 0,
                 "+".to_string(),
                 0,
                 0,
             );
             BlockGroupEdge::bulk_create(conn, block_group.id, vec![edge_into.id, edge_out_of.id]);
-            Path::new_create(
+            Path::create(
                 conn,
                 &name,
                 block_group.id,
@@ -154,145 +129,6 @@ fn new_import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connec
 }
 
 fn update_with_vcf(
-    vcf_path: &String,
-    collection_name: &String,
-    fixed_genotype: String,
-    fixed_sample: String,
-    conn: &mut Connection,
-) {
-    run_migrations(conn);
-
-    let mut reader = vcf::io::reader::Builder::default()
-        .build_from_path(vcf_path)
-        .expect("Unable to parse");
-    let header = reader.read_header().unwrap();
-    let sample_names = header.sample_names();
-    for name in sample_names {
-        models::Sample::create(conn, name);
-    }
-    if !fixed_sample.is_empty() {
-        models::Sample::create(conn, &fixed_sample);
-    }
-    let mut genotype = vec![];
-    if !fixed_genotype.is_empty() {
-        genotype = parse_genotype(&fixed_genotype);
-    }
-
-    for result in reader.records() {
-        let record = result.unwrap();
-        let seq_name = record.reference_sequence_name().to_string();
-        let ref_allele = record.reference_bases();
-        // this converts the coordinates to be zero based, start inclusive, end exclusive
-        let ref_start = record.variant_start().unwrap().unwrap().get() - 1;
-        let ref_end = record.variant_end(&header).unwrap().get();
-        let alt_bases = record.alternate_bases();
-        let alt_alleles: Vec<_> = alt_bases.iter().collect::<io::Result<_>>().unwrap();
-        // TODO: fix this duplication of handling an insert
-        if !fixed_sample.is_empty() && !genotype.is_empty() {
-            for (chromosome_index, genotype) in genotype.iter().enumerate() {
-                if let Some(gt) = genotype {
-                    if gt.allele != 0 {
-                        let alt_seq = alt_alleles[chromosome_index - 1];
-                        let phased = match gt.phasing {
-                            Phasing::Phased => 1,
-                            Phasing::Unphased => 0,
-                        };
-                        // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
-                        let new_sequence_hash = Sequence::create(conn, "DNA", alt_seq, true);
-                        let sample_bg_id = BlockGroup::get_or_create_sample_block_group(
-                            conn,
-                            collection_name,
-                            &fixed_sample,
-                            &seq_name,
-                        );
-                        let sample_path_id = Path::get_paths(
-                            conn,
-                            "select * from path where block_group_id = ?1 AND name = ?2",
-                            vec![
-                                SQLValue::from(sample_bg_id),
-                                SQLValue::from(seq_name.clone()),
-                            ],
-                        );
-                        let new_block_id = Block::create(
-                            conn,
-                            &new_sequence_hash,
-                            sample_bg_id,
-                            0,
-                            alt_seq.len() as i32,
-                            "+",
-                        );
-                        BlockGroup::insert_change(
-                            conn,
-                            sample_path_id[0].id,
-                            ref_start as i32,
-                            ref_end as i32,
-                            &new_block_id,
-                            chromosome_index as i32,
-                            phased,
-                        );
-                    }
-                }
-            }
-        } else {
-            for (sample_index, sample) in record.samples().iter().enumerate() {
-                let genotype = sample.get(&header, "GT");
-                if genotype.is_some() {
-                    if let Value::Genotype(genotypes) = genotype.unwrap().unwrap().unwrap() {
-                        for (chromosome_index, gt) in genotypes.iter().enumerate() {
-                            if gt.is_ok() {
-                                let (allele, phasing) = gt.unwrap();
-                                let phased = match phasing {
-                                    Phasing::Phased => 1,
-                                    Phasing::Unphased => 0,
-                                };
-                                let allele = allele.unwrap();
-                                if allele != 0 {
-                                    let alt_seq = alt_alleles[allele - 1];
-                                    // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
-                                    let new_sequence_hash =
-                                        Sequence::create(conn, "DNA", alt_seq, true);
-                                    let sample_bg_id = BlockGroup::get_or_create_sample_block_group(
-                                        conn,
-                                        collection_name,
-                                        &sample_names[sample_index],
-                                        &seq_name,
-                                    );
-                                    let sample_path_id = Path::get_paths(
-                                        conn,
-                                        "select * from path where block_group_id = ?1 AND name = ?2",
-                                        vec![
-                                            SQLValue::from(sample_bg_id),
-                                            SQLValue::from(seq_name.clone()),
-                                        ],
-                                    );
-                                    let new_block_id = Block::create(
-                                        conn,
-                                        &new_sequence_hash,
-                                        sample_bg_id,
-                                        0,
-                                        alt_seq.len() as i32,
-                                        "+",
-                                    );
-                                    BlockGroup::insert_change(
-                                        conn,
-                                        sample_path_id[0].id,
-                                        ref_start as i32,
-                                        ref_end as i32,
-                                        &new_block_id,
-                                        chromosome_index as i32,
-                                        phased,
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn new_update_with_vcf(
     vcf_path: &String,
     collection_name: &String,
     fixed_genotype: String,
@@ -451,7 +287,7 @@ fn main() {
             name,
             db,
             shallow,
-        }) => new_import_fasta(fasta, name, *shallow, &mut get_connection(db)),
+        }) => import_fasta(fasta, name, *shallow, &mut get_connection(db)),
         Some(Commands::Update {
             name,
             db,
@@ -459,7 +295,7 @@ fn main() {
             vcf,
             genotype,
             sample,
-        }) => new_update_with_vcf(
+        }) => update_with_vcf(
             vcf,
             name,
             genotype.clone().unwrap_or("".to_string()),
@@ -510,8 +346,10 @@ mod tests {
             BlockGroup::get_all_sequences(&conn, 1),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
+
+        let path = Path::get(&conn, 1);
         assert_eq!(
-            Path::sequence(&conn, 1),
+            Path::sequence(&conn, path),
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()
         );
     }
