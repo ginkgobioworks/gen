@@ -8,12 +8,12 @@ use std::{io, str};
 use gen::migrations::run_migrations;
 use gen::models::{
     self,
+    block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
     edge::Edge,
     path::{NewBlock, Path},
     path_edge::PathEdge,
     sequence::Sequence,
-    BlockGroup,
 };
 use gen::{get_connection, parse_genotype};
 use noodles::fasta;
@@ -196,7 +196,7 @@ fn update_with_vcf(
                             path_end: ref_end as i32,
                             strand: "+".to_string(),
                         };
-                        BlockGroup::new_insert_change(
+                        BlockGroup::insert_change(
                             conn,
                             sample_bg_id,
                             &sample_paths[0],
@@ -254,7 +254,7 @@ fn update_with_vcf(
                                         path_end: ref_end as i32,
                                         strand: "+".to_string(),
                                     };
-                                    BlockGroup::new_insert_change(
+                                    BlockGroup::insert_change(
                                         conn,
                                         sample_bg_id,
                                         &sample_paths[0],

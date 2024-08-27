@@ -1,9 +1,6 @@
 use crate::models::{edge::Edge, path_edge::PathEdge, sequence::Sequence};
 use intervaltree::IntervalTree;
 use itertools::Itertools;
-use petgraph::graphmap::DiGraphMap;
-use petgraph::prelude::Dfs;
-use petgraph::Direction;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use std::collections::{HashMap, HashSet};
@@ -222,7 +219,7 @@ mod tests {
     use super::*;
 
     use crate::migrations::run_migrations;
-    use crate::models::{sequence::Sequence, BlockGroup, Collection};
+    use crate::models::{block_group::BlockGroup, sequence::Sequence, Collection};
 
     fn get_connection() -> Connection {
         let mut conn = Connection::open_in_memory()
