@@ -202,7 +202,7 @@ impl BlockGroup {
                 }
                 let last_edge = &sorted_sequence_edges[sorted_sequence_edges.len() - 1];
                 let start = last_edge.target_coordinate;
-                let end = sequence.sequence.len() as i32;
+                let end = sequence.length;
                 let block_sequence = sequence.get_sequence(start, end).to_string();
                 let last_block = GroupBlock {
                     id: block_index,
@@ -219,7 +219,7 @@ impl BlockGroup {
                     sequence_hash: hash.clone(),
                     sequence: sequence.sequence.clone(),
                     start: 0,
-                    end: sequence.sequence.len() as i32,
+                    end: sequence.length,
                 });
                 block_index += 1;
             }
