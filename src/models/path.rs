@@ -155,9 +155,9 @@ impl Path {
         }
 
         let block_sequence = if strand == "-" {
-            revcomp(&sequence.sequence[start as usize..end as usize])
+            revcomp(&sequence.get_sequence(start, end))
         } else {
-            sequence.sequence[start as usize..end as usize].to_string()
+            sequence.get_sequence(start, end)
         };
 
         NewBlock {

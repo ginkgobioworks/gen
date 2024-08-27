@@ -1,7 +1,10 @@
+use noodles::core::Position;
+use noodles::fasta;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::{fs, path::PathBuf, str};
 
 #[derive(Clone, Debug)]
 pub struct Sequence {
@@ -78,6 +81,7 @@ impl<'a> NewSequence<'a> {
             if let Some(v) = self.sequence {
                 length = v.len() as i32;
             } else {
+                // TODO: if name/path specified, grab length automatically
                 panic!("Sequence length must be specified.");
             }
         }
@@ -137,6 +141,73 @@ impl<'a> NewSequence<'a> {
 }
 
 impl Sequence {
+    pub fn get_sequence(
+        &self,
+        start: impl Into<Option<i32>>,
+        end: impl Into<Option<i32>>,
+    ) -> String {
+        let start: Option<i32> = start.into();
+        let end: Option<i32> = end.into();
+        let mut start = start.unwrap_or(0);
+        let end = end.unwrap_or(self.length);
+        if self.external_sequence {
+            let mut sequence: Option<String> = None;
+            let file_path = self.file_path.clone();
+            let name = self.name.clone();
+            // noodles is 1 index inclusive and we use that for fetching fastas
+            start += 1;
+            // todo: handle circles
+            let index = format!("{file_path}.fai");
+            if fs::metadata(index).is_ok() {
+                // noodles reader query is 1 based, inclusive
+                let mut reader = fasta::io::indexed_reader::Builder::default()
+                    .build_from_path(&file_path)
+                    .unwrap();
+                sequence = Some(
+                    str::from_utf8(
+                        reader
+                            .query(&format!("{name}:{start}-{end}").parse().unwrap())
+                            .unwrap()
+                            .sequence()
+                            .as_ref(),
+                    )
+                    .unwrap()
+                    .to_string(),
+                );
+            } else {
+                let mut reader = fasta::io::reader::Builder
+                    .build_from_path(&file_path)
+                    .unwrap();
+                for result in reader.records() {
+                    let record = result.unwrap();
+                    if String::from_utf8(record.name().to_vec()).unwrap() == name {
+                        sequence = Some(
+                            str::from_utf8(
+                                record
+                                    .sequence()
+                                    .slice(
+                                        Position::try_from(start as usize).unwrap()
+                                            ..=Position::try_from(end as usize).unwrap(),
+                                    )
+                                    .unwrap()
+                                    .as_ref(),
+                            )
+                            .unwrap()
+                            .to_string(),
+                        );
+                        break;
+                    }
+                }
+            }
+            return sequence
+                .unwrap_or_else(|| panic!("{name} not found in fasta file {file_path}"));
+        }
+        if start == 0 && end == self.length {
+            return self.sequence.clone();
+        }
+        self.sequence[start as usize..end as usize].to_string()
+    }
+
     pub fn sequences(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Sequence> {
         let mut stmt = conn.prepare_cached(query).unwrap();
         let rows = stmt
@@ -242,5 +313,47 @@ mod tests {
         assert_eq!(sequence.file_path, "/some/path.fa");
         assert_eq!(sequence.length, 10);
         assert!(sequence.external_sequence);
+    }
+
+    #[test]
+    fn test_get_sequence() {
+        let conn = &mut get_connection();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let seq_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCGATCGATCGATCGGGAACACACAGAGA")
+            .save(conn);
+        let seq = Sequence::sequence_from_hash(conn, &seq_hash).unwrap();
+        assert_eq!(
+            seq.get_sequence(None, None),
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA"
+        );
+        assert_eq!(seq.get_sequence(0, 5), "ATCGA");
+        assert_eq!(seq.get_sequence(10, 15), "CGATC");
+        assert_eq!(seq.get_sequence(3, None), "GATCGATCGATCGATCGGGAACACACAGAGA");
+        assert_eq!(seq.get_sequence(None, 5), "ATCGA");
+    }
+
+    #[test]
+    fn test_get_sequence_from_disk() {
+        let conn = &mut get_connection();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let seq_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .name("m123")
+            .file_path(fasta_path.to_str().unwrap())
+            .length(34)
+            .save(conn);
+        let seq = Sequence::sequence_from_hash(conn, &seq_hash).unwrap();
+        assert_eq!(
+            seq.get_sequence(None, None),
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA"
+        );
+        assert_eq!(seq.get_sequence(0, 5), "ATCGA");
+        assert_eq!(seq.get_sequence(10, 15), "CGATC");
+        assert_eq!(seq.get_sequence(3, None), "GATCGATCGATCGATCGGGAACACACAGAGA");
+        assert_eq!(seq.get_sequence(None, 5), "ATCGA");
     }
 }

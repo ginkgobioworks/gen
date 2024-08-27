@@ -176,7 +176,7 @@ impl BlockGroup {
                 let first_edge = sorted_sequence_edges[0].clone();
                 let start = 0;
                 let end = first_edge.source_coordinate;
-                let block_sequence = sequence.sequence[start as usize..end as usize].to_string();
+                let block_sequence = sequence.get_sequence(start, end).to_string();
                 let first_block = GroupBlock {
                     id: block_index,
                     sequence_hash: hash.clone(),
@@ -189,8 +189,7 @@ impl BlockGroup {
                 for (into, out_of) in sorted_sequence_edges.clone().into_iter().tuple_windows() {
                     let start = into.target_coordinate;
                     let end = out_of.source_coordinate;
-                    let block_sequence =
-                        sequence.sequence[start as usize..end as usize].to_string();
+                    let block_sequence = sequence.get_sequence(start, end).to_string();
                     let block = GroupBlock {
                         id: block_index,
                         sequence_hash: hash.clone(),
@@ -204,7 +203,7 @@ impl BlockGroup {
                 let last_edge = &sorted_sequence_edges[sorted_sequence_edges.len() - 1];
                 let start = last_edge.target_coordinate;
                 let end = sequence.sequence.len() as i32;
-                let block_sequence = sequence.sequence[start as usize..end as usize].to_string();
+                let block_sequence = sequence.get_sequence(start, end).to_string();
                 let last_block = GroupBlock {
                     id: block_index,
                     sequence_hash: hash.clone(),
@@ -553,7 +552,7 @@ mod tests {
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
-            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
             sequence_start: 0,
             sequence_end: 4,
             path_start: 7,
@@ -614,7 +613,7 @@ mod tests {
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
-            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
             sequence_start: 0,
             sequence_end: 4,
             path_start: 7,
@@ -645,7 +644,7 @@ mod tests {
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
-            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
             sequence_start: 0,
             sequence_end: 4,
             path_start: 15,
@@ -676,7 +675,7 @@ mod tests {
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
-            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
             sequence_start: 0,
             sequence_end: 4,
             path_start: 12,
@@ -707,7 +706,7 @@ mod tests {
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
-            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
             sequence_start: 0,
             sequence_end: 4,
             path_start: 10,
@@ -738,7 +737,7 @@ mod tests {
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
-            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
             sequence_start: 0,
             sequence_end: 4,
             path_start: 9,
@@ -769,7 +768,7 @@ mod tests {
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
-            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
             sequence_start: 0,
             sequence_end: 4,
             path_start: 10,
@@ -800,7 +799,7 @@ mod tests {
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
-            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
             sequence_start: 0,
             sequence_end: 4,
             path_start: 15,
@@ -831,7 +830,7 @@ mod tests {
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
-            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
             sequence_start: 0,
             sequence_end: 4,
             path_start: 5,
@@ -895,7 +894,7 @@ mod tests {
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
-            block_sequence: insert_sequence.sequence[0..4].to_string(),
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
             sequence_start: 0,
             sequence_end: 4,
             path_start: 7,
