@@ -217,7 +217,7 @@ impl BlockGroup {
                 blocks.push(GroupBlock {
                     id: block_index,
                     sequence_hash: hash.clone(),
-                    sequence: sequence.sequence.clone(),
+                    sequence: sequence.get_sequence(None, None),
                     start: 0,
                     end: sequence.length,
                 });
@@ -579,7 +579,7 @@ mod tests {
         let deletion = NewBlock {
             id: 0,
             sequence: deletion_sequence.clone(),
-            block_sequence: deletion_sequence.sequence.clone(),
+            block_sequence: deletion_sequence.get_sequence(None, None),
             sequence_start: 0,
             sequence_end: 0,
             path_start: 19,
@@ -862,7 +862,7 @@ mod tests {
         let deletion = NewBlock {
             id: 0,
             sequence: deletion_sequence.clone(),
-            block_sequence: deletion_sequence.sequence.clone(),
+            block_sequence: deletion_sequence.get_sequence(None, None),
             sequence_start: 0,
             sequence_end: 0,
             path_start: 19,

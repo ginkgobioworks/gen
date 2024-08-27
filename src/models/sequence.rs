@@ -10,7 +10,7 @@ use std::{fs, path::PathBuf, str};
 pub struct Sequence {
     pub hash: String,
     pub sequence_type: String,
-    pub sequence: String,
+    sequence: String,
     // these 2 fields are only relevant when the sequence is stored externally
     pub name: String,
     pub file_path: String,
