@@ -348,33 +348,28 @@ impl BlockGroup {
         change: &PathChange,
         tree: &IntervalTree<i32, NewBlock>,
     ) {
-        let start_blocks: Vec<NewBlock> = tree
-            .query_point(change.start)
-            .map(|x| x.value.clone())
-            .collect();
+        let start_blocks: Vec<&NewBlock> =
+            tree.query_point(change.start).map(|x| &x.value).collect();
         assert_eq!(start_blocks.len(), 1);
         // NOTE: This may not be used but needs to be initialized here instead of inside the if
         // statement that uses it, so that the borrow checker is happy
-        let previous_start_blocks: Vec<NewBlock> = tree
+        let previous_start_blocks: Vec<&NewBlock> = tree
             .query_point(change.start - 1)
-            .map(|x| x.value.clone())
+            .map(|x| &x.value)
             .collect();
         assert_eq!(previous_start_blocks.len(), 1);
         let start_block;
         if start_blocks[0].path_start == change.start {
             // First part of this block will be replaced/deleted, need to get previous block to add
             // edge including it
-            start_block = &previous_start_blocks[0];
+            start_block = previous_start_blocks[0];
         } else {
-            start_block = &start_blocks[0];
+            start_block = start_blocks[0];
         }
 
-        let end_blocks: Vec<NewBlock> = tree
-            .query_point(change.end)
-            .map(|x| x.value.clone())
-            .collect();
+        let end_blocks: Vec<&NewBlock> = tree.query_point(change.end).map(|x| &x.value).collect();
         assert_eq!(end_blocks.len(), 1);
-        let end_block = &end_blocks[0];
+        let end_block = end_blocks[0];
 
         let mut new_edges = vec![];
 

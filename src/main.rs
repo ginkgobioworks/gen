@@ -169,7 +169,14 @@ fn update_with_vcf(
     for result in reader.records() {
         let record = result.unwrap();
         let seq_name = record.reference_sequence_name().to_string();
-        if !fixed_sample.is_empty() {
+        let ref_allele = record.reference_bases();
+        // this converts the coordinates to be zero based, start inclusive, end exclusive
+        let ref_start = record.variant_start().unwrap().unwrap().get() - 1;
+        let ref_end = record.variant_end(&header).unwrap().get();
+        let alt_bases = record.alternate_bases();
+        let alt_alleles: Vec<_> = alt_bases.iter().collect::<io::Result<_>>().unwrap();
+        // TODO: fix this duplication of handling an insert
+        if !fixed_sample.is_empty() && !genotype.is_empty() {
             let block_group_key = BlockGroupData {
                 collection_name: collection_name.to_string(),
                 sample_name: Some(fixed_sample.clone()),
@@ -211,20 +218,6 @@ fn update_with_vcf(
                 interval_trees_by_path.insert(new_path.clone(), tree);
                 new_path
             };
-        }
-    }
-
-    for result in reader.records() {
-        let record = result.unwrap();
-        let seq_name = record.reference_sequence_name().to_string();
-        let ref_allele = record.reference_bases();
-        // this converts the coordinates to be zero based, start inclusive, end exclusive
-        let ref_start = record.variant_start().unwrap().unwrap().get() - 1;
-        let ref_end = record.variant_end(&header).unwrap().get();
-        let alt_bases = record.alternate_bases();
-        let alt_alleles: Vec<_> = alt_bases.iter().collect::<io::Result<_>>().unwrap();
-        // TODO: fix this duplication of handling an insert
-        if !fixed_sample.is_empty() && !genotype.is_empty() {
             for (chromosome_index, genotype) in genotype.iter().enumerate() {
                 if let Some(gt) = genotype {
                     if gt.allele != 0 {
