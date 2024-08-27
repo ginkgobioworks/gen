@@ -234,7 +234,7 @@ mod tests {
         let conn = &mut get_connection();
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
-        let sequence1_hash = NewSequence::new()
+        let sequence1_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
@@ -249,7 +249,7 @@ mod tests {
             0,
             0,
         );
-        let sequence2_hash = NewSequence::new()
+        let sequence2_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
@@ -264,7 +264,7 @@ mod tests {
             0,
             0,
         );
-        let sequence3_hash = NewSequence::new()
+        let sequence3_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("CCCCCCCC")
             .save(conn);
@@ -279,7 +279,7 @@ mod tests {
             0,
             0,
         );
-        let sequence4_hash = NewSequence::new()
+        let sequence4_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("GGGGGGGG")
             .save(conn);
@@ -320,7 +320,7 @@ mod tests {
         let conn = &mut get_connection();
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
-        let sequence1_hash = NewSequence::new()
+        let sequence1_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
@@ -335,7 +335,7 @@ mod tests {
             0,
             0,
         );
-        let sequence2_hash = NewSequence::new()
+        let sequence2_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
@@ -350,7 +350,7 @@ mod tests {
             0,
             0,
         );
-        let sequence3_hash = NewSequence::new()
+        let sequence3_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("CCCCCCCC")
             .save(conn);
@@ -365,7 +365,7 @@ mod tests {
             0,
             0,
         );
-        let sequence4_hash = NewSequence::new()
+        let sequence4_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("GGGGGGGG")
             .save(conn);
@@ -413,7 +413,7 @@ mod tests {
         let conn = &mut get_connection();
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
-        let sequence1_hash = NewSequence::new()
+        let sequence1_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
@@ -428,7 +428,7 @@ mod tests {
             0,
             0,
         );
-        let sequence2_hash = NewSequence::new()
+        let sequence2_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
@@ -443,7 +443,7 @@ mod tests {
             0,
             0,
         );
-        let sequence3_hash = NewSequence::new()
+        let sequence3_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("CCCCCCCC")
             .save(conn);
@@ -458,7 +458,7 @@ mod tests {
             0,
             0,
         );
-        let sequence4_hash = NewSequence::new()
+        let sequence4_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("GGGGGGGG")
             .save(conn);

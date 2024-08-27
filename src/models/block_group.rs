@@ -453,19 +453,19 @@ mod tests {
     }
 
     fn setup_block_group(conn: &Connection) -> (i32, Path) {
-        let a_seq_hash = NewSequence::new()
+        let a_seq_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("AAAAAAAAAA")
             .save(conn);
-        let t_seq_hash = NewSequence::new()
+        let t_seq_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("TTTTTTTTTT")
             .save(conn);
-        let c_seq_hash = NewSequence::new()
+        let c_seq_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("CCCCCCCCCC")
             .save(conn);
-        let g_seq_hash = NewSequence::new()
+        let g_seq_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("GGGGGGGGGG")
             .save(conn);
@@ -544,7 +544,7 @@ mod tests {
     fn insert_and_deletion_new_get_all() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = NewSequence::new()
+        let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
@@ -570,7 +570,7 @@ mod tests {
             ])
         );
 
-        let deletion_sequence_hash = NewSequence::new()
+        let deletion_sequence_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
@@ -605,7 +605,7 @@ mod tests {
     fn simple_insert_new_get_all() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = NewSequence::new()
+        let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
@@ -636,7 +636,7 @@ mod tests {
     fn insert_on_block_boundary_middle_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = NewSequence::new()
+        let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
@@ -667,7 +667,7 @@ mod tests {
     fn insert_within_block_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = NewSequence::new()
+        let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
@@ -698,7 +698,7 @@ mod tests {
     fn insert_on_block_boundary_start_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = NewSequence::new()
+        let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
@@ -729,7 +729,7 @@ mod tests {
     fn insert_on_block_boundary_end_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = NewSequence::new()
+        let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
@@ -760,7 +760,7 @@ mod tests {
     fn insert_across_entire_block_boundary_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = NewSequence::new()
+        let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
@@ -791,7 +791,7 @@ mod tests {
     fn insert_across_two_blocks_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = NewSequence::new()
+        let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
@@ -822,7 +822,7 @@ mod tests {
     fn insert_spanning_blocks_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = NewSequence::new()
+        let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
@@ -853,7 +853,7 @@ mod tests {
     fn simple_deletion_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let deletion_sequence_hash = NewSequence::new()
+        let deletion_sequence_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
@@ -886,7 +886,7 @@ mod tests {
     fn doesnt_apply_same_insert_twice_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = NewSequence::new()
+        let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);

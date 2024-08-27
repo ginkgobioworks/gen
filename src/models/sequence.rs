@@ -31,13 +31,6 @@ pub struct NewSequence<'a> {
 }
 
 impl<'a> NewSequence<'a> {
-    pub fn new() -> NewSequence<'static> {
-        NewSequence {
-            shallow: false,
-            ..NewSequence::default()
-        }
-    }
-
     pub fn shallow(mut self, setting: bool) -> Self {
         self.shallow = setting;
         self
@@ -50,6 +43,7 @@ impl<'a> NewSequence<'a> {
 
     pub fn sequence(mut self, sequence: &'a str) -> Self {
         self.sequence = Some(sequence);
+        self.length = Some(sequence.len() as i32);
         self
     }
 
@@ -69,6 +63,39 @@ impl<'a> NewSequence<'a> {
         self
     }
 
+    pub fn hash(&self) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(self.sequence_type.expect("Sequence type must be defined."));
+        hasher.update(";");
+        if let Some(v) = self.sequence {
+            hasher.update(v);
+            hasher.update(";");
+        }
+        if let Some(v) = self.name {
+            hasher.update(v);
+            hasher.update(";");
+        }
+        if let Some(v) = self.file_path {
+            hasher.update(v);
+            hasher.update(";");
+        }
+        format!("{:x}", hasher.finalize())
+    }
+
+    pub fn build(self) -> Sequence {
+        let file_path = self.file_path.unwrap_or("").to_string();
+        let external_sequence = !file_path.is_empty();
+        Sequence {
+            hash: self.hash(),
+            sequence_type: self.sequence_type.unwrap().to_string(),
+            sequence: self.sequence.unwrap_or("").to_string(),
+            name: self.name.unwrap_or("").to_string(),
+            file_path,
+            length: self.length.unwrap(),
+            external_sequence,
+        }
+    }
+
     pub fn save(mut self, conn: &Connection) -> String {
         let mut length = 0;
         if self.sequence.is_none() && self.file_path.is_none() {
@@ -85,22 +112,7 @@ impl<'a> NewSequence<'a> {
                 panic!("Sequence length must be specified.");
             }
         }
-        let mut hasher = Sha256::new();
-        hasher.update(self.sequence_type.expect("Sequence type must be defined."));
-        hasher.update(";");
-        if let Some(v) = self.sequence {
-            hasher.update(v);
-            hasher.update(";");
-        }
-        if let Some(v) = self.name {
-            hasher.update(v);
-            hasher.update(";");
-        }
-        if let Some(v) = self.file_path {
-            hasher.update(v);
-            hasher.update(";");
-        }
-        let hash = format!("{:x}", hasher.finalize());
+        let hash = self.hash();
         let mut obj_hash: String = match conn.query_row(
             "SELECT hash from sequence where hash = ?1;",
             [hash.clone()],
@@ -141,6 +153,13 @@ impl<'a> NewSequence<'a> {
 }
 
 impl Sequence {
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new() -> NewSequence<'static> {
+        NewSequence {
+            shallow: false,
+            ..NewSequence::default()
+        }
+    }
     pub fn get_sequence(
         &self,
         start: impl Into<Option<i32>>,
@@ -275,9 +294,31 @@ mod tests {
     }
 
     #[test]
+    fn test_builder() {
+        let sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCG")
+            .build();
+        assert_eq!(sequence.length, 4);
+        assert_eq!(sequence.sequence, "ATCG");
+    }
+
+    #[test]
+    fn test_builder_with_from_disk() {
+        let sequence = Sequence::new()
+            .sequence_type("DNA")
+            .name("chr1")
+            .file_path("/foo/bar")
+            .length(50)
+            .build();
+        assert_eq!(sequence.length, 50);
+        assert_eq!(sequence.sequence, "");
+    }
+
+    #[test]
     fn test_create_sequence_in_db() {
         let conn = &mut get_connection();
-        let seq_hash = NewSequence::new()
+        let seq_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("AACCTT")
             .save(conn);
@@ -295,7 +336,7 @@ mod tests {
     #[test]
     fn test_create_sequence_on_disk() {
         let conn = &mut get_connection();
-        let seq_hash = NewSequence::new()
+        let seq_hash = Sequence::new()
             .sequence_type("DNA")
             .name("chr1")
             .file_path("/some/path.fa")
@@ -320,7 +361,7 @@ mod tests {
         let conn = &mut get_connection();
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
-        let seq_hash = NewSequence::new()
+        let seq_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("ATCGATCGATCGATCGATCGGGAACACACAGAGA")
             .save(conn);
@@ -340,7 +381,7 @@ mod tests {
         let conn = &mut get_connection();
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
-        let seq_hash = NewSequence::new()
+        let seq_hash = Sequence::new()
             .sequence_type("DNA")
             .name("m123")
             .file_path(fasta_path.to_str().unwrap())

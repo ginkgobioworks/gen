@@ -233,7 +233,7 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::migrations::run_migrations;
-    use crate::models::{sequence::NewSequence, Collection};
+    use crate::models::{sequence::Sequence, Collection};
 
     fn get_connection() -> Connection {
         let mut conn = Connection::open_in_memory()
@@ -247,7 +247,7 @@ mod tests {
     fn test_bulk_create() {
         let conn = &mut get_connection();
         Collection::create(conn, "test collection");
-        let sequence1_hash = NewSequence::new()
+        let sequence1_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
@@ -261,7 +261,7 @@ mod tests {
             chromosome_index: 0,
             phased: 0,
         };
-        let sequence2_hash = NewSequence::new()
+        let sequence2_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
@@ -314,7 +314,7 @@ mod tests {
     fn test_bulk_create_with_existing_edge() {
         let conn = &mut get_connection();
         Collection::create(conn, "test collection");
-        let sequence1_hash = NewSequence::new()
+        let sequence1_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
@@ -345,7 +345,7 @@ mod tests {
             chromosome_index: 0,
             phased: 0,
         };
-        let sequence2_hash = NewSequence::new()
+        let sequence2_hash = Sequence::new()
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);

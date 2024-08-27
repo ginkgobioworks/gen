@@ -87,13 +87,13 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
             let name = String::from_utf8(record.name().to_vec()).unwrap();
             let sequence_length = record.sequence().len() as i32;
             let seq_hash = if shallow {
-                NewSequence::new()
+                Sequence::new()
                     .sequence_type("DNA")
                     .name(&name)
                     .file_path(fasta)
                     .save(conn)
             } else {
-                NewSequence::new()
+                Sequence::new()
                     .sequence_type("DNA")
                     .sequence(&sequence)
                     .save(conn)
@@ -180,7 +180,7 @@ fn update_with_vcf(
                             Phasing::Unphased => 0,
                         };
                         // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
-                        let new_sequence_hash = NewSequence::new()
+                        let new_sequence_hash = Sequence::new()
                             .sequence_type("DNA")
                             .sequence(alt_seq)
                             .save(conn);
@@ -239,7 +239,7 @@ fn update_with_vcf(
                                 if allele != 0 {
                                     let alt_seq = alt_alleles[allele - 1];
                                     // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
-                                    let new_sequence_hash = NewSequence::new()
+                                    let new_sequence_hash = Sequence::new()
                                         .sequence_type("DNA")
                                         .sequence(alt_seq)
                                         .save(conn);
