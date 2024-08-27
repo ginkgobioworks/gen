@@ -31,6 +31,13 @@ pub struct NewSequence<'a> {
 }
 
 impl<'a> NewSequence<'a> {
+    pub fn new() -> NewSequence<'static> {
+        NewSequence {
+            shallow: false,
+            ..NewSequence::default()
+        }
+    }
+
     pub fn shallow(mut self, setting: bool) -> Self {
         self.shallow = setting;
         self
@@ -155,11 +162,9 @@ impl<'a> NewSequence<'a> {
 impl Sequence {
     #[allow(clippy::new_ret_no_self)]
     pub fn new() -> NewSequence<'static> {
-        NewSequence {
-            shallow: false,
-            ..NewSequence::default()
-        }
+        NewSequence::new()
     }
+
     pub fn get_sequence(
         &self,
         start: impl Into<Option<i32>>,
