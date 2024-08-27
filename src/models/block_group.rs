@@ -1,3 +1,4 @@
+use intervaltree::IntervalTree;
 use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
@@ -19,6 +20,13 @@ pub struct BlockGroup {
     pub name: String,
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct BlockGroupData {
+    pub collection_name: String,
+    pub sample_name: Option<String>,
+    pub name: String,
+}
+
 #[derive(Clone)]
 pub struct GroupBlock {
     pub id: i32,
@@ -32,6 +40,17 @@ pub struct GroupBlock {
 pub struct BlockKey {
     pub sequence_hash: String,
     pub coordinate: i32,
+}
+
+#[derive(Clone, Debug)]
+pub struct PathChange {
+    pub block_group_id: i32,
+    pub path: Path,
+    pub start: i32,
+    pub end: i32,
+    pub block: NewBlock,
+    pub chromosome_index: i32,
+    pub phased: i32,
 }
 
 impl BlockGroup {
@@ -323,32 +342,26 @@ impl BlockGroup {
     }
 
     #[allow(clippy::ptr_arg)]
-    #[allow(clippy::too_many_arguments)]
     #[allow(clippy::needless_late_init)]
     pub fn insert_change(
         conn: &mut Connection,
-        block_group_id: i32,
-        path: &Path,
-        start: i32,
-        end: i32,
-        new_block: &NewBlock,
-        chromosome_index: i32,
-        phased: i32,
+        change: &PathChange,
+        tree: &IntervalTree<i32, NewBlock>,
     ) {
-        let tree = Path::intervaltree_for(conn, path);
-
-        let start_blocks: Vec<NewBlock> =
-            tree.query_point(start).map(|x| x.value.clone()).collect();
+        let start_blocks: Vec<NewBlock> = tree
+            .query_point(change.start)
+            .map(|x| x.value.clone())
+            .collect();
         assert_eq!(start_blocks.len(), 1);
         // NOTE: This may not be used but needs to be initialized here instead of inside the if
         // statement that uses it, so that the borrow checker is happy
         let previous_start_blocks: Vec<NewBlock> = tree
-            .query_point(start - 1)
+            .query_point(change.start - 1)
             .map(|x| x.value.clone())
             .collect();
         assert_eq!(previous_start_blocks.len(), 1);
         let start_block;
-        if start_blocks[0].path_start == start {
+        if start_blocks[0].path_start == change.start {
             // First part of this block will be replaced/deleted, need to get previous block to add
             // edge including it
             start_block = &previous_start_blocks[0];
@@ -356,46 +369,51 @@ impl BlockGroup {
             start_block = &start_blocks[0];
         }
 
-        let end_blocks: Vec<NewBlock> = tree.query_point(end).map(|x| x.value.clone()).collect();
+        let end_blocks: Vec<NewBlock> = tree
+            .query_point(change.end)
+            .map(|x| x.value.clone())
+            .collect();
         assert_eq!(end_blocks.len(), 1);
         let end_block = &end_blocks[0];
 
         let mut new_edges = vec![];
 
-        if new_block.sequence_start == new_block.sequence_end {
+        if change.block.sequence_start == change.block.sequence_end {
             // Deletion
             let new_edge = EdgeData {
                 source_hash: start_block.sequence.hash.clone(),
-                source_coordinate: start - start_block.path_start + start_block.sequence_start,
+                source_coordinate: change.start - start_block.path_start
+                    + start_block.sequence_start,
                 source_strand: "+".to_string(),
                 target_hash: end_block.sequence.hash.clone(),
-                target_coordinate: end - end_block.path_start + end_block.sequence_start,
+                target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
                 target_strand: "+".to_string(),
-                chromosome_index,
-                phased,
+                chromosome_index: change.chromosome_index,
+                phased: change.phased,
             };
             new_edges.push(new_edge);
         } else {
             // Insertion/replacement
             let new_start_edge = EdgeData {
                 source_hash: start_block.sequence.hash.clone(),
-                source_coordinate: start - start_block.path_start + start_block.sequence_start,
+                source_coordinate: change.start - start_block.path_start
+                    + start_block.sequence_start,
                 source_strand: "+".to_string(),
-                target_hash: new_block.sequence.hash.clone(),
-                target_coordinate: new_block.sequence_start,
+                target_hash: change.block.sequence.hash.clone(),
+                target_coordinate: change.block.sequence_start,
                 target_strand: "+".to_string(),
-                chromosome_index,
-                phased,
+                chromosome_index: change.chromosome_index,
+                phased: change.phased,
             };
             let new_end_edge = EdgeData {
-                source_hash: new_block.sequence.hash.clone(),
-                source_coordinate: new_block.sequence_end,
+                source_hash: change.block.sequence.hash.clone(),
+                source_coordinate: change.block.sequence_end,
                 source_strand: "+".to_string(),
                 target_hash: end_block.sequence.hash.clone(),
-                target_coordinate: end - end_block.path_start + end_block.sequence_start,
+                target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
                 target_strand: "+".to_string(),
-                chromosome_index,
-                phased,
+                chromosome_index: change.chromosome_index,
+                phased: change.phased,
             };
             new_edges.push(new_start_edge);
             new_edges.push(new_end_edge);
@@ -403,8 +421,9 @@ impl BlockGroup {
 
         // NOTE: Add edges marking the existing part of the sequence that is being substituted out,
         // so we can retrieve it as one node of the overall graph
-        if start < start_block.path_end {
-            let split_coordinate = start - start_block.path_start + start_block.sequence_start;
+        if change.start < start_block.path_end {
+            let split_coordinate =
+                change.start - start_block.path_start + start_block.sequence_start;
             let new_split_start_edge = EdgeData {
                 source_hash: start_block.sequence.hash.clone(),
                 source_coordinate: split_coordinate,
@@ -412,14 +431,14 @@ impl BlockGroup {
                 target_hash: start_block.sequence.hash.clone(),
                 target_coordinate: split_coordinate,
                 target_strand: "+".to_string(),
-                chromosome_index,
-                phased,
+                chromosome_index: change.chromosome_index,
+                phased: change.phased,
             };
             new_edges.push(new_split_start_edge);
         }
 
-        if end > end_block.path_start {
-            let split_coordinate = end - end_block.path_start + end_block.sequence_start;
+        if change.end > end_block.path_start {
+            let split_coordinate = change.end - end_block.path_start + end_block.sequence_start;
             let new_split_end_edge = EdgeData {
                 source_hash: end_block.sequence.hash.clone(),
                 source_coordinate: split_coordinate,
@@ -427,15 +446,15 @@ impl BlockGroup {
                 target_hash: end_block.sequence.hash.clone(),
                 target_coordinate: split_coordinate,
                 target_strand: "+".to_string(),
-                chromosome_index,
-                phased,
+                chromosome_index: change.chromosome_index,
+                phased: change.phased,
             };
 
             new_edges.push(new_split_end_edge);
         }
 
         let edge_ids = Edge::bulk_create(conn, new_edges);
-        BlockGroupEdge::bulk_create(conn, block_group_id, edge_ids);
+        BlockGroupEdge::bulk_create(conn, change.block_group_id, edge_ids);
     }
 }
 
@@ -559,7 +578,17 @@ mod tests {
             path_end: 15,
             strand: "+".to_string(),
         };
-        BlockGroup::insert_change(&mut conn, block_group_id, &path, 7, 15, &insert, 1, 0);
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 7,
+            end: 15,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&mut conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -587,8 +616,18 @@ mod tests {
             strand: "+".to_string(),
         };
 
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 19,
+            end: 31,
+            block: deletion,
+            chromosome_index: 1,
+            phased: 0,
+        };
         // take out an entire block.
-        BlockGroup::insert_change(&mut conn, block_group_id, &path, 19, 31, &deletion, 1, 0);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&mut conn, &change, &tree);
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
@@ -620,7 +659,17 @@ mod tests {
             path_end: 15,
             strand: "+".to_string(),
         };
-        BlockGroup::insert_change(&mut conn, block_group_id, &path, 7, 15, &insert, 1, 0);
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 7,
+            end: 15,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&mut conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -651,7 +700,17 @@ mod tests {
             path_end: 15,
             strand: "+".to_string(),
         };
-        BlockGroup::insert_change(&mut conn, block_group_id, &path, 15, 15, &insert, 1, 0);
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 15,
+            end: 15,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&mut conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -682,7 +741,17 @@ mod tests {
             path_end: 17,
             strand: "+".to_string(),
         };
-        BlockGroup::insert_change(&mut conn, block_group_id, &path, 12, 17, &insert, 1, 0);
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 12,
+            end: 17,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&mut conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -713,7 +782,17 @@ mod tests {
             path_end: 10,
             strand: "+".to_string(),
         };
-        BlockGroup::insert_change(&mut conn, block_group_id, &path, 10, 10, &insert, 1, 0);
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 10,
+            end: 10,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&mut conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -744,7 +823,17 @@ mod tests {
             path_end: 9,
             strand: "+".to_string(),
         };
-        BlockGroup::insert_change(&mut conn, block_group_id, &path, 9, 9, &insert, 1, 0);
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 9,
+            end: 9,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&mut conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -775,7 +864,17 @@ mod tests {
             path_end: 20,
             strand: "+".to_string(),
         };
-        BlockGroup::insert_change(&mut conn, block_group_id, &path, 10, 20, &insert, 1, 0);
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 10,
+            end: 20,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&mut conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -806,7 +905,17 @@ mod tests {
             path_end: 25,
             strand: "+".to_string(),
         };
-        BlockGroup::insert_change(&mut conn, block_group_id, &path, 15, 25, &insert, 1, 0);
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 15,
+            end: 25,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&mut conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -837,7 +946,17 @@ mod tests {
             path_end: 35,
             strand: "+".to_string(),
         };
-        BlockGroup::insert_change(&mut conn, block_group_id, &path, 5, 35, &insert, 1, 0);
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 5,
+            end: 35,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&mut conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -870,8 +989,19 @@ mod tests {
             strand: "+".to_string(),
         };
 
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 19,
+            end: 31,
+            block: deletion,
+            chromosome_index: 1,
+            phased: 0,
+        };
+
         // take out an entire block.
-        BlockGroup::insert_change(&mut conn, block_group_id, &path, 19, 31, &deletion, 1, 0);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&mut conn, &change, &tree);
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
@@ -901,7 +1031,17 @@ mod tests {
             path_end: 15,
             strand: "+".to_string(),
         };
-        BlockGroup::insert_change(&mut conn, block_group_id, &path, 7, 15, &insert, 1, 0);
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 7,
+            end: 15,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&mut conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -912,7 +1052,8 @@ mod tests {
             ])
         );
 
-        BlockGroup::insert_change(&mut conn, block_group_id, &path, 7, 15, &insert, 1, 0);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&mut conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(

@@ -5,9 +5,15 @@ use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use std::collections::{HashMap, HashSet};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Path {
     pub id: i32,
+    pub name: String,
+    pub block_group_id: i32,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct PathData {
     pub name: String,
     pub block_group_id: i32,
 }

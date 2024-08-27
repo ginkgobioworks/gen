@@ -1,5 +1,6 @@
 #![allow(warnings)]
 use clap::{Parser, Subcommand};
+use intervaltree::IntervalTree;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::PathBuf;
@@ -8,10 +9,10 @@ use std::{io, str};
 use gen::migrations::run_migrations;
 use gen::models::{
     self,
-    block_group::BlockGroup,
+    block_group::{BlockGroup, BlockGroupData, PathChange},
     block_group_edge::BlockGroupEdge,
     edge::Edge,
-    path::{NewBlock, Path},
+    path::{NewBlock, Path, PathData},
     path_edge::PathEdge,
     sequence::{NewSequence, Sequence},
 };
@@ -160,6 +161,59 @@ fn update_with_vcf(
         genotype = parse_genotype(&fixed_genotype);
     }
 
+    // Cache a bunch of data ahead of making changes
+    let mut block_group_ids_by_data = HashMap::<BlockGroupData, i32>::new();
+    let mut paths_by_data = HashMap::<PathData, Path>::new();
+    let mut interval_trees_by_path = HashMap::<Path, IntervalTree<i32, NewBlock>>::new();
+
+    for result in reader.records() {
+        let record = result.unwrap();
+        let seq_name = record.reference_sequence_name().to_string();
+        if !fixed_sample.is_empty() {
+            let block_group_key = BlockGroupData {
+                collection_name: collection_name.to_string(),
+                sample_name: Some(fixed_sample.clone()),
+                name: seq_name.clone(),
+            };
+            let block_group_lookup = block_group_ids_by_data.get(&block_group_key);
+            let block_group_id = if let Some(block_group_id) = block_group_lookup {
+                *block_group_id
+            } else {
+                let new_block_group_id = BlockGroup::get_or_create_sample_block_group(
+                    conn,
+                    collection_name,
+                    &fixed_sample,
+                    &seq_name,
+                );
+                block_group_ids_by_data.insert(block_group_key, new_block_group_id);
+                new_block_group_id
+            };
+
+            let path_key = PathData {
+                name: seq_name.clone(),
+                block_group_id,
+            };
+            let path_lookup = paths_by_data.get(&path_key);
+            let path = if let Some(path) = path_lookup {
+                path.clone()
+            } else {
+                let new_path = Path::get_paths(
+                    conn,
+                    "select * from path where block_group_id = ?1 AND name = ?2",
+                    vec![
+                        SQLValue::from(block_group_id),
+                        SQLValue::from(seq_name.clone()),
+                    ],
+                )[0]
+                .clone();
+                paths_by_data.insert(path_key, new_path.clone());
+                let tree = Path::intervaltree_for(conn, &new_path);
+                interval_trees_by_path.insert(new_path.clone(), tree);
+                new_path
+            };
+        }
+    }
+
     for result in reader.records() {
         let record = result.unwrap();
         let seq_name = record.reference_sequence_name().to_string();
@@ -186,20 +240,19 @@ fn update_with_vcf(
                             .save(conn);
                         let sequence =
                             Sequence::sequence_from_hash(conn, &new_sequence_hash).unwrap();
-                        let sample_bg_id = BlockGroup::get_or_create_sample_block_group(
-                            conn,
-                            collection_name,
-                            &fixed_sample,
-                            &seq_name,
-                        );
-                        let sample_paths = Path::get_paths(
-                            conn,
-                            "select * from path where block_group_id = ?1 AND name = ?2",
-                            vec![
-                                SQLValue::from(sample_bg_id),
-                                SQLValue::from(seq_name.clone()),
-                            ],
-                        );
+                        let sample_bg_id = block_group_ids_by_data
+                            .get(&BlockGroupData {
+                                collection_name: collection_name.to_string(),
+                                sample_name: Some(fixed_sample.clone()),
+                                name: seq_name.clone(),
+                            })
+                            .unwrap();
+                        let sample_path = paths_by_data
+                            .get(&PathData {
+                                name: seq_name.clone(),
+                                block_group_id: *sample_bg_id,
+                            })
+                            .unwrap();
                         let new_block = NewBlock {
                             id: 0,
                             sequence: sequence.clone(),
@@ -210,16 +263,17 @@ fn update_with_vcf(
                             path_end: ref_end as i32,
                             strand: "+".to_string(),
                         };
-                        BlockGroup::insert_change(
-                            conn,
-                            sample_bg_id,
-                            &sample_paths[0],
-                            ref_start as i32,
-                            ref_end as i32,
-                            &new_block,
-                            chromosome_index as i32,
+                        let change = PathChange {
+                            block_group_id: *sample_bg_id,
+                            path: sample_path.clone(),
+                            start: ref_start as i32,
+                            end: ref_end as i32,
+                            block: new_block,
+                            chromosome_index: chromosome_index as i32,
                             phased,
-                        );
+                        };
+                        let tree = interval_trees_by_path.get(sample_path).unwrap();
+                        BlockGroup::insert_change(conn, &change, tree);
                     }
                 }
             }
@@ -270,16 +324,17 @@ fn update_with_vcf(
                                         path_end: ref_end as i32,
                                         strand: "+".to_string(),
                                     };
-                                    BlockGroup::insert_change(
-                                        conn,
-                                        sample_bg_id,
-                                        &sample_paths[0],
-                                        ref_start as i32,
-                                        ref_end as i32,
-                                        &new_block,
-                                        chromosome_index as i32,
+                                    let change = PathChange {
+                                        block_group_id: sample_bg_id,
+                                        path: sample_paths[0].clone(),
+                                        start: ref_start as i32,
+                                        end: ref_end as i32,
+                                        block: new_block,
+                                        chromosome_index: chromosome_index as i32,
                                         phased,
-                                    );
+                                    };
+                                    let tree = Path::intervaltree_for(conn, &change.path);
+                                    BlockGroup::insert_change(conn, &change, &tree);
                                 }
                             }
                         }
