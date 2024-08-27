@@ -10,7 +10,9 @@ CREATE TABLE sequence (
   hash TEXT PRIMARY KEY NOT NULL,
   sequence_type TEXT NOT NULL,
   sequence TEXT NOT NULL,
-  "length" INTEGER NOT NULL
+  name TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  length INTEGER NOT NULL
 );
 
 CREATE TABLE block_group (
@@ -80,4 +82,4 @@ CREATE TABLE block_group_edges (
 );
 CREATE UNIQUE INDEX block_group_edges_uidx ON block_group_edges(block_group_id, edge_id);
 
-INSERT INTO sequence (hash, sequence_type, sequence, "length") values ("start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "OTHER", "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", 64), ("end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "OTHER", "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", 64);
+INSERT INTO sequence (hash, sequence_type, sequence, name, file_path, "length") values ("start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "OTHER", "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "", "", 64), ("end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "OTHER", "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "", "", 64);

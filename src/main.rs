@@ -13,7 +13,7 @@ use gen::models::{
     edge::Edge,
     path::{NewBlock, Path},
     path_edge::PathEdge,
-    sequence::Sequence,
+    sequence::{NewSequence, Sequence},
 };
 use gen::{get_connection, parse_genotype};
 use noodles::fasta;
@@ -86,7 +86,18 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
                 .to_string();
             let name = String::from_utf8(record.name().to_vec()).unwrap();
             let sequence_length = record.sequence().len() as i32;
-            let seq_hash = Sequence::create(conn, "DNA", &sequence, !shallow);
+            let seq_hash = if shallow {
+                NewSequence::new()
+                    .sequence_type("DNA")
+                    .name(&name)
+                    .file_path(fasta)
+                    .save(conn)
+            } else {
+                NewSequence::new()
+                    .sequence_type("DNA")
+                    .sequence(&sequence)
+                    .save(conn)
+            };
             let block_group = BlockGroup::create(conn, &collection.name, None, &name);
             let edge_into = Edge::create(
                 conn,
@@ -169,7 +180,10 @@ fn update_with_vcf(
                             Phasing::Unphased => 0,
                         };
                         // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
-                        let new_sequence_hash = Sequence::create(conn, "DNA", alt_seq, true);
+                        let new_sequence_hash = NewSequence::new()
+                            .sequence_type("DNA")
+                            .sequence(alt_seq)
+                            .save(conn);
                         let sequence =
                             Sequence::sequence_from_hash(conn, &new_sequence_hash).unwrap();
                         let sample_bg_id = BlockGroup::get_or_create_sample_block_group(
@@ -225,8 +239,10 @@ fn update_with_vcf(
                                 if allele != 0 {
                                     let alt_seq = alt_alleles[allele - 1];
                                     // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
-                                    let new_sequence_hash =
-                                        Sequence::create(conn, "DNA", alt_seq, true);
+                                    let new_sequence_hash = NewSequence::new()
+                                        .sequence_type("DNA")
+                                        .sequence(alt_seq)
+                                        .save(conn);
                                     let sequence =
                                         Sequence::sequence_from_hash(conn, &new_sequence_hash)
                                             .unwrap();

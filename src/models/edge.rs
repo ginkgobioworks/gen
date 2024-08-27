@@ -233,7 +233,7 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::migrations::run_migrations;
-    use crate::models::{sequence::Sequence, Collection};
+    use crate::models::{sequence::NewSequence, Collection};
 
     fn get_connection() -> Connection {
         let mut conn = Connection::open_in_memory()
@@ -247,7 +247,10 @@ mod tests {
     fn test_bulk_create() {
         let conn = &mut get_connection();
         Collection::create(conn, "test collection");
-        let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
+        let sequence1_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
         let edge1 = EdgeData {
             source_hash: Edge::PATH_START_HASH.to_string(),
             source_coordinate: -1,
@@ -258,7 +261,10 @@ mod tests {
             chromosome_index: 0,
             phased: 0,
         };
-        let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
+        let sequence2_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(conn);
         let edge2 = EdgeData {
             source_hash: sequence1_hash.clone(),
             source_coordinate: 2,
@@ -308,7 +314,10 @@ mod tests {
     fn test_bulk_create_with_existing_edge() {
         let conn = &mut get_connection();
         Collection::create(conn, "test collection");
-        let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
+        let sequence1_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
         // NOTE: Create one edge ahead of time to confirm an existing row ID gets returned in the bulk create
         let existing_edge = Edge::create(
             conn,
@@ -336,7 +345,10 @@ mod tests {
             chromosome_index: 0,
             phased: 0,
         };
-        let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
+        let sequence2_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(conn);
         let edge2 = EdgeData {
             source_hash: sequence1_hash.clone(),
             source_coordinate: 2,

@@ -9,7 +9,7 @@ use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::path::{NewBlock, Path};
 use crate::models::path_edge::PathEdge;
-use crate::models::sequence::Sequence;
+use crate::models::sequence::{NewSequence, Sequence};
 
 #[derive(Debug)]
 pub struct BlockGroup {
@@ -454,10 +454,22 @@ mod tests {
     }
 
     fn setup_block_group(conn: &Connection) -> (i32, Path) {
-        let a_seq_hash = Sequence::create(conn, "DNA", "AAAAAAAAAA", true);
-        let t_seq_hash = Sequence::create(conn, "DNA", "TTTTTTTTTT", true);
-        let c_seq_hash = Sequence::create(conn, "DNA", "CCCCCCCCCC", true);
-        let g_seq_hash = Sequence::create(conn, "DNA", "GGGGGGGGGG", true);
+        let a_seq_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAAAA")
+            .save(conn);
+        let t_seq_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTTTT")
+            .save(conn);
+        let c_seq_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("CCCCCCCCCC")
+            .save(conn);
+        let g_seq_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("GGGGGGGGGG")
+            .save(conn);
         let _collection = Collection::create(conn, "test");
         let block_group = BlockGroup::create(conn, "test", None, "hg19");
         let edge0 = Edge::create(
@@ -533,7 +545,10 @@ mod tests {
     fn insert_and_deletion_new_get_all() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
         let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
@@ -556,7 +571,10 @@ mod tests {
             ])
         );
 
-        let deletion_sequence_hash = Sequence::create(&conn, "DNA", "", true);
+        let deletion_sequence_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("")
+            .save(&conn);
         let deletion_sequence =
             Sequence::sequence_from_hash(&conn, &deletion_sequence_hash).unwrap();
         let deletion = NewBlock {
@@ -588,7 +606,10 @@ mod tests {
     fn simple_insert_new_get_all() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
         let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
@@ -616,7 +637,10 @@ mod tests {
     fn insert_on_block_boundary_middle_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
         let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
@@ -644,7 +668,10 @@ mod tests {
     fn insert_within_block_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
         let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
@@ -672,7 +699,10 @@ mod tests {
     fn insert_on_block_boundary_start_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
         let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
@@ -700,7 +730,10 @@ mod tests {
     fn insert_on_block_boundary_end_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
         let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
@@ -728,7 +761,10 @@ mod tests {
     fn insert_across_entire_block_boundary_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
         let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
@@ -756,7 +792,10 @@ mod tests {
     fn insert_across_two_blocks_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
         let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
@@ -784,7 +823,10 @@ mod tests {
     fn insert_spanning_blocks_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
         let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
@@ -812,7 +854,10 @@ mod tests {
     fn simple_deletion_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let deletion_sequence_hash = Sequence::create(&conn, "DNA", "", true);
+        let deletion_sequence_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("")
+            .save(&conn);
         let deletion_sequence =
             Sequence::sequence_from_hash(&conn, &deletion_sequence_hash).unwrap();
         let deletion = NewBlock {
@@ -842,7 +887,10 @@ mod tests {
     fn doesnt_apply_same_insert_twice_new() {
         let mut conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = Sequence::create(&conn, "DNA", "NNNN", true);
+        let insert_sequence_hash = NewSequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
         let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
