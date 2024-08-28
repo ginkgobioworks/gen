@@ -155,9 +155,9 @@ impl Path {
         }
 
         let block_sequence = if strand == "-" {
-            revcomp(&sequence.sequence[start as usize..end as usize])
+            revcomp(&sequence.get_sequence(start, end))
         } else {
-            sequence.sequence[start as usize..end as usize].to_string()
+            sequence.get_sequence(start, end)
         };
 
         NewBlock {
@@ -219,7 +219,7 @@ mod tests {
     use super::*;
 
     use crate::migrations::run_migrations;
-    use crate::models::{block_group::BlockGroup, sequence::Sequence, Collection};
+    use crate::models::{block_group::BlockGroup, sequence::NewSequence, Collection};
 
     fn get_connection() -> Connection {
         let mut conn = Connection::open_in_memory()
@@ -234,7 +234,10 @@ mod tests {
         let conn = &mut get_connection();
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
-        let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
+        let sequence1_hash = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
         let edge1 = Edge::create(
             conn,
             Edge::PATH_START_HASH.to_string(),
@@ -246,7 +249,10 @@ mod tests {
             0,
             0,
         );
-        let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
+        let sequence2_hash = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(conn);
         let edge2 = Edge::create(
             conn,
             sequence1_hash.clone(),
@@ -258,7 +264,10 @@ mod tests {
             0,
             0,
         );
-        let sequence3_hash = Sequence::create(conn, "DNA", "CCCCCCCC", true);
+        let sequence3_hash = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("CCCCCCCC")
+            .save(conn);
         let edge3 = Edge::create(
             conn,
             sequence2_hash.clone(),
@@ -270,7 +279,10 @@ mod tests {
             0,
             0,
         );
-        let sequence4_hash = Sequence::create(conn, "DNA", "GGGGGGGG", true);
+        let sequence4_hash = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("GGGGGGGG")
+            .save(conn);
         let edge4 = Edge::create(
             conn,
             sequence3_hash.clone(),
@@ -308,7 +320,10 @@ mod tests {
         let conn = &mut get_connection();
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
-        let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
+        let sequence1_hash = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
         let edge5 = Edge::create(
             conn,
             sequence1_hash.clone(),
@@ -320,7 +335,10 @@ mod tests {
             0,
             0,
         );
-        let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
+        let sequence2_hash = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(conn);
         let edge4 = Edge::create(
             conn,
             sequence2_hash.clone(),
@@ -332,7 +350,10 @@ mod tests {
             0,
             0,
         );
-        let sequence3_hash = Sequence::create(conn, "DNA", "CCCCCCCC", true);
+        let sequence3_hash = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("CCCCCCCC")
+            .save(conn);
         let edge3 = Edge::create(
             conn,
             sequence3_hash.clone(),
@@ -344,7 +365,10 @@ mod tests {
             0,
             0,
         );
-        let sequence4_hash = Sequence::create(conn, "DNA", "GGGGGGGG", true);
+        let sequence4_hash = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("GGGGGGGG")
+            .save(conn);
         let edge2 = Edge::create(
             conn,
             sequence4_hash.clone(),
@@ -389,7 +413,10 @@ mod tests {
         let conn = &mut get_connection();
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
-        let sequence1_hash = Sequence::create(conn, "DNA", "ATCGATCG", true);
+        let sequence1_hash = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
         let edge1 = Edge::create(
             conn,
             Edge::PATH_START_HASH.to_string(),
@@ -401,7 +428,10 @@ mod tests {
             0,
             0,
         );
-        let sequence2_hash = Sequence::create(conn, "DNA", "AAAAAAAA", true);
+        let sequence2_hash = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(conn);
         let edge2 = Edge::create(
             conn,
             sequence1_hash.clone(),
@@ -413,7 +443,10 @@ mod tests {
             0,
             0,
         );
-        let sequence3_hash = Sequence::create(conn, "DNA", "CCCCCCCC", true);
+        let sequence3_hash = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("CCCCCCCC")
+            .save(conn);
         let edge3 = Edge::create(
             conn,
             sequence2_hash.clone(),
@@ -425,7 +458,10 @@ mod tests {
             0,
             0,
         );
-        let sequence4_hash = Sequence::create(conn, "DNA", "GGGGGGGG", true);
+        let sequence4_hash = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("GGGGGGGG")
+            .save(conn);
         let edge4 = Edge::create(
             conn,
             sequence3_hash.clone(),
