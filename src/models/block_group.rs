@@ -2,13 +2,13 @@ use intervaltree::IntervalTree;
 use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
-use rusqlite::{types::Value, Connection};
+use rusqlite::{types::Value as SQLValue, Connection};
 use std::collections::{HashMap, HashSet};
 
 use crate::graph::all_simple_paths;
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData};
-use crate::models::path::{NewBlock, Path};
+use crate::models::path::{NewBlock, Path, PathData};
 use crate::models::path_edge::PathEdge;
 use crate::models::sequence::{NewSequence, Sequence};
 
@@ -51,6 +51,52 @@ pub struct PathChange {
     pub block: NewBlock,
     pub chromosome_index: i32,
     pub phased: i32,
+}
+
+pub struct PathCache<'a> {
+    pub cache: HashMap<PathData, Path>,
+    pub intervaltree_cache: HashMap<Path, IntervalTree<i32, NewBlock>>,
+    pub conn: &'a Connection,
+}
+
+impl PathCache<'_> {
+    pub fn new(conn: &Connection) -> PathCache {
+        PathCache {
+            cache: HashMap::<PathData, Path>::new(),
+            intervaltree_cache: HashMap::<Path, IntervalTree<i32, NewBlock>>::new(),
+            conn,
+        }
+    }
+
+    pub fn lookup(path_cache: &mut PathCache, block_group_id: i32, name: String) -> Path {
+        let path_key = PathData {
+            name: name.clone(),
+            block_group_id,
+        };
+        let path_lookup = path_cache.cache.get(&path_key);
+        if let Some(path) = path_lookup {
+            path.clone()
+        } else {
+            let new_path = Path::get_paths(
+                path_cache.conn,
+                "select * from path where block_group_id = ?1 AND name = ?2",
+                vec![SQLValue::from(block_group_id), SQLValue::from(name.clone())],
+            )[0]
+            .clone();
+
+            path_cache.cache.insert(path_key, new_path.clone());
+            let tree = Path::intervaltree_for(path_cache.conn, &new_path);
+            path_cache.intervaltree_cache.insert(new_path.clone(), tree);
+            new_path
+        }
+    }
+
+    pub fn get_intervaltree<'a>(
+        path_cache: &'a PathCache<'a>,
+        path: &'a Path,
+    ) -> Option<&'a IntervalTree<i32, NewBlock>> {
+        path_cache.intervaltree_cache.get(path)
+    }
 }
 
 impl BlockGroup {
@@ -96,11 +142,11 @@ impl BlockGroup {
         }
     }
 
-    pub fn clone(conn: &mut Connection, source_block_group_id: i32, target_block_group_id: i32) {
+    pub fn clone(conn: &Connection, source_block_group_id: i32, target_block_group_id: i32) {
         let existing_paths = Path::get_paths(
             conn,
             "SELECT * from path where block_group_id = ?1",
-            vec![Value::from(source_block_group_id)],
+            vec![SQLValue::from(source_block_group_id)],
         );
 
         for path in existing_paths {
@@ -113,7 +159,7 @@ impl BlockGroup {
     }
 
     pub fn get_or_create_sample_block_group(
-        conn: &mut Connection,
+        conn: &Connection,
         collection_name: &String,
         sample_name: &String,
         group_name: &String,
@@ -341,13 +387,39 @@ impl BlockGroup {
         sequences
     }
 
+    pub fn insert_changes(conn: &Connection, changes: &Vec<PathChange>, cache: &PathCache) {
+        let mut new_edges_by_block_group = HashMap::<i32, Vec<EdgeData>>::new();
+        for change in changes {
+            let tree = PathCache::get_intervaltree(cache, &change.path).unwrap();
+            let new_edges = BlockGroup::set_up_new_edges(change, tree);
+            new_edges_by_block_group
+                .entry(change.block_group_id)
+                .and_modify(|new_edge_data| new_edge_data.extend(new_edges.clone()))
+                .or_insert_with(|| new_edges.clone());
+        }
+
+        for (block_group_id, new_edges) in new_edges_by_block_group {
+            let edge_ids = Edge::bulk_create(conn, new_edges);
+            BlockGroupEdge::bulk_create(conn, block_group_id, edge_ids);
+        }
+    }
+
     #[allow(clippy::ptr_arg)]
     #[allow(clippy::needless_late_init)]
     pub fn insert_change(
-        conn: &mut Connection,
+        conn: &Connection,
         change: &PathChange,
         tree: &IntervalTree<i32, NewBlock>,
     ) {
+        let new_edges = BlockGroup::set_up_new_edges(change, tree);
+        let edge_ids = Edge::bulk_create(conn, new_edges);
+        BlockGroupEdge::bulk_create(conn, change.block_group_id, edge_ids);
+    }
+
+    pub fn set_up_new_edges(
+        change: &PathChange,
+        tree: &IntervalTree<i32, NewBlock>,
+    ) -> Vec<EdgeData> {
         let start_blocks: Vec<&NewBlock> =
             tree.query_point(change.start).map(|x| &x.value).collect();
         assert_eq!(start_blocks.len(), 1);
@@ -358,14 +430,13 @@ impl BlockGroup {
             .map(|x| &x.value)
             .collect();
         assert_eq!(previous_start_blocks.len(), 1);
-        let start_block;
-        if start_blocks[0].path_start == change.start {
+        let start_block = if start_blocks[0].path_start == change.start {
             // First part of this block will be replaced/deleted, need to get previous block to add
             // edge including it
-            start_block = previous_start_blocks[0];
+            previous_start_blocks[0]
         } else {
-            start_block = start_blocks[0];
-        }
+            start_blocks[0]
+        };
 
         let end_blocks: Vec<&NewBlock> = tree.query_point(change.end).map(|x| &x.value).collect();
         assert_eq!(end_blocks.len(), 1);
@@ -448,8 +519,7 @@ impl BlockGroup {
             new_edges.push(new_split_end_edge);
         }
 
-        let edge_ids = Edge::bulk_create(conn, new_edges);
-        BlockGroupEdge::bulk_create(conn, change.block_group_id, edge_ids);
+        new_edges
     }
 }
 
@@ -556,7 +626,7 @@ mod tests {
 
     #[test]
     fn insert_and_deletion_new_get_all() {
-        let mut conn = get_connection();
+        let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
@@ -583,7 +653,7 @@ mod tests {
             phased: 0,
         };
         let tree = Path::intervaltree_for(&conn, &path);
-        BlockGroup::insert_change(&mut conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -622,7 +692,7 @@ mod tests {
         };
         // take out an entire block.
         let tree = Path::intervaltree_for(&conn, &path);
-        BlockGroup::insert_change(&mut conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree);
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
@@ -637,7 +707,7 @@ mod tests {
 
     #[test]
     fn simple_insert_new_get_all() {
-        let mut conn = get_connection();
+        let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
@@ -664,7 +734,7 @@ mod tests {
             phased: 0,
         };
         let tree = Path::intervaltree_for(&conn, &path);
-        BlockGroup::insert_change(&mut conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -678,7 +748,7 @@ mod tests {
 
     #[test]
     fn insert_on_block_boundary_middle_new() {
-        let mut conn = get_connection();
+        let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
@@ -705,7 +775,7 @@ mod tests {
             phased: 0,
         };
         let tree = Path::intervaltree_for(&conn, &path);
-        BlockGroup::insert_change(&mut conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -719,7 +789,7 @@ mod tests {
 
     #[test]
     fn insert_within_block_new() {
-        let mut conn = get_connection();
+        let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
@@ -746,7 +816,7 @@ mod tests {
             phased: 0,
         };
         let tree = Path::intervaltree_for(&conn, &path);
-        BlockGroup::insert_change(&mut conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -760,7 +830,7 @@ mod tests {
 
     #[test]
     fn insert_on_block_boundary_start_new() {
-        let mut conn = get_connection();
+        let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
@@ -787,7 +857,7 @@ mod tests {
             phased: 0,
         };
         let tree = Path::intervaltree_for(&conn, &path);
-        BlockGroup::insert_change(&mut conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -801,7 +871,7 @@ mod tests {
 
     #[test]
     fn insert_on_block_boundary_end_new() {
-        let mut conn = get_connection();
+        let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
@@ -828,7 +898,7 @@ mod tests {
             phased: 0,
         };
         let tree = Path::intervaltree_for(&conn, &path);
-        BlockGroup::insert_change(&mut conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -842,7 +912,7 @@ mod tests {
 
     #[test]
     fn insert_across_entire_block_boundary_new() {
-        let mut conn = get_connection();
+        let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
@@ -869,7 +939,7 @@ mod tests {
             phased: 0,
         };
         let tree = Path::intervaltree_for(&conn, &path);
-        BlockGroup::insert_change(&mut conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -883,7 +953,7 @@ mod tests {
 
     #[test]
     fn insert_across_two_blocks_new() {
-        let mut conn = get_connection();
+        let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
@@ -910,7 +980,7 @@ mod tests {
             phased: 0,
         };
         let tree = Path::intervaltree_for(&conn, &path);
-        BlockGroup::insert_change(&mut conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -924,7 +994,7 @@ mod tests {
 
     #[test]
     fn insert_spanning_blocks_new() {
-        let mut conn = get_connection();
+        let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
@@ -951,7 +1021,7 @@ mod tests {
             phased: 0,
         };
         let tree = Path::intervaltree_for(&conn, &path);
-        BlockGroup::insert_change(&mut conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -965,7 +1035,7 @@ mod tests {
 
     #[test]
     fn simple_deletion_new() {
-        let mut conn = get_connection();
+        let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
         let deletion_sequence_hash = Sequence::new()
             .sequence_type("DNA")
@@ -996,7 +1066,7 @@ mod tests {
 
         // take out an entire block.
         let tree = Path::intervaltree_for(&conn, &path);
-        BlockGroup::insert_change(&mut conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree);
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
@@ -1009,7 +1079,7 @@ mod tests {
 
     #[test]
     fn doesnt_apply_same_insert_twice_new() {
-        let mut conn = get_connection();
+        let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence_hash = Sequence::new()
             .sequence_type("DNA")
@@ -1036,7 +1106,7 @@ mod tests {
             phased: 0,
         };
         let tree = Path::intervaltree_for(&conn, &path);
-        BlockGroup::insert_change(&mut conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -1048,7 +1118,7 @@ mod tests {
         );
 
         let tree = Path::intervaltree_for(&conn, &path);
-        BlockGroup::insert_change(&mut conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
