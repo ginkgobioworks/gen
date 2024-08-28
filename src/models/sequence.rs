@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::{fs, path::PathBuf, str};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Sequence {
     pub hash: String,
     pub sequence_type: String,
