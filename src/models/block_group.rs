@@ -21,9 +21,9 @@ pub struct BlockGroup {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct BlockGroupData {
-    pub collection_name: String,
-    pub sample_name: Option<String>,
+pub struct BlockGroupData<'a> {
+    pub collection_name: &'a str,
+    pub sample_name: Option<&'a str>,
     pub name: String,
 }
 
@@ -80,7 +80,7 @@ impl PathCache<'_> {
             let new_path = Path::get_paths(
                 path_cache.conn,
                 "select * from path where block_group_id = ?1 AND name = ?2",
-                vec![SQLValue::from(block_group_id), SQLValue::from(name.clone())],
+                vec![SQLValue::from(block_group_id), SQLValue::from(name)],
             )[0]
             .clone();
 
@@ -160,13 +160,13 @@ impl BlockGroup {
 
     pub fn get_or_create_sample_block_group(
         conn: &Connection,
-        collection_name: &String,
-        sample_name: &String,
-        group_name: &String,
+        collection_name: &str,
+        sample_name: &str,
+        group_name: String,
     ) -> i32 {
         let mut bg_id : i32 = match conn.query_row(
             "select id from block_group where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
-            (collection_name, sample_name, group_name),
+            (collection_name, sample_name, group_name.clone()),
             |row| row.get(0),
         ) {
             Ok(res) => res,
@@ -181,7 +181,7 @@ impl BlockGroup {
             // use the base reference group if it exists
             bg_id = match conn.query_row(
             "select id from block_group where collection_name = ?1 AND sample_name IS null AND name = ?2",
-            (collection_name, group_name),
+            (collection_name, group_name.clone()),
             |row| row.get(0),
             ) {
                 Ok(res) => res,
@@ -191,7 +191,7 @@ impl BlockGroup {
                 }
             }
         }
-        let new_bg_id = BlockGroup::create(conn, collection_name, Some(sample_name), group_name);
+        let new_bg_id = BlockGroup::create(conn, collection_name, Some(sample_name), &group_name);
 
         // clone parent blocks/edges/path
         BlockGroup::clone(conn, bg_id, new_bg_id.id);

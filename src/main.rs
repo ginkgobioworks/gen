@@ -138,11 +138,11 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
 
 #[derive(Debug)]
 struct BlockGroupCache<'a> {
-    pub cache: HashMap<BlockGroupData, i32>,
+    pub cache: HashMap<BlockGroupData<'a>, i32>,
     pub conn: &'a Connection,
 }
 
-impl BlockGroupCache<'_> {
+impl<'a> BlockGroupCache<'_> {
     pub fn new(conn: &Connection) -> BlockGroupCache {
         BlockGroupCache {
             cache: HashMap::<BlockGroupData, i32>::new(),
@@ -151,14 +151,14 @@ impl BlockGroupCache<'_> {
     }
 
     pub fn lookup(
-        block_group_cache: &mut BlockGroupCache,
-        collection_name: String,
-        sample_name: String,
+        block_group_cache: &mut BlockGroupCache<'a>,
+        collection_name: &'a str,
+        sample_name: &'a str,
         name: String,
     ) -> i32 {
         let block_group_key = BlockGroupData {
-            collection_name: collection_name.to_string(),
-            sample_name: Some(sample_name.clone()),
+            collection_name,
+            sample_name: Some(sample_name),
             name: name.clone(),
         };
         let block_group_lookup = block_group_cache.cache.get(&block_group_key);
@@ -167,9 +167,9 @@ impl BlockGroupCache<'_> {
         } else {
             let new_block_group_id = BlockGroup::get_or_create_sample_block_group(
                 block_group_cache.conn,
-                &collection_name,
-                &sample_name,
-                &name,
+                collection_name,
+                sample_name,
+                name.clone(),
             );
             block_group_cache
                 .cache
@@ -195,16 +195,15 @@ fn prepare_change(
         .sequence_type("DNA")
         .sequence(alt_seq)
         .save(conn);
-    let sequence =
-        Sequence::sequence_from_hash(conn, &new_sequence_hash).unwrap();
+    let sequence = Sequence::sequence_from_hash(conn, &new_sequence_hash).unwrap();
     let new_block = NewBlock {
         id: 0,
         sequence: sequence.clone(),
         block_sequence: alt_seq.to_string(),
         sequence_start: 0,
         sequence_end: alt_seq.len() as i32,
-        path_start: ref_start as i32,
-        path_end: ref_end as i32,
+        path_start: ref_start,
+        path_end: ref_end,
         strand: "+".to_string(),
     };
     PathChange {
@@ -251,7 +250,7 @@ fn update_with_vcf(
 
     for result in reader.records() {
         let record = result.unwrap();
-        let seq_name = record.reference_sequence_name().to_string();
+        let seq_name: String = record.reference_sequence_name().to_string();
         let ref_allele = record.reference_bases();
         // this converts the coordinates to be zero based, start inclusive, end exclusive
         let ref_start = record.variant_start().unwrap().unwrap().get() - 1;
@@ -262,8 +261,8 @@ fn update_with_vcf(
         if !fixed_sample.is_empty() && !genotype.is_empty() {
             let sample_bg_id = BlockGroupCache::lookup(
                 &mut block_group_cache,
-                collection_name.to_owned(),
-                fixed_sample.clone(),
+                collection_name,
+                &fixed_sample,
                 seq_name.clone(),
             );
             let sample_path = PathCache::lookup(&mut path_cache, sample_bg_id, seq_name.clone());
@@ -294,8 +293,8 @@ fn update_with_vcf(
             for (sample_index, sample) in record.samples().iter().enumerate() {
                 let sample_bg_id = BlockGroupCache::lookup(
                     &mut block_group_cache,
-                    collection_name.to_owned(),
-                    sample_names[sample_index].clone(),
+                    collection_name,
+                    &sample_names[sample_index],
                     seq_name.clone(),
                 );
                 let sample_path =
