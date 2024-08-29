@@ -200,7 +200,7 @@ impl Edge {
 
         let formatted_edge_rows_to_insert = edge_rows_to_insert.join(", ");
 
-        let insert_statement = format!("INSERT INTO edges (source_hash, source_coordinate, source_strand, target_hash, target_coordinate, target_strand, chromosome_index, phased) VALUES {0} RETURNING (id);", formatted_edge_rows_to_insert);
+        let insert_statement = format!("INSERT OR IGNORE INTO edges (source_hash, source_coordinate, source_strand, target_hash, target_coordinate, target_strand, chromosome_index, phased) VALUES {0} RETURNING (id);", formatted_edge_rows_to_insert);
         let mut stmt = conn.prepare(&insert_statement).unwrap();
         let rows = stmt.query_map([], |row| row.get(0)).unwrap();
         let mut edge_ids: Vec<i32> = vec![];
