@@ -3,7 +3,7 @@ use rusqlite::{params_from_iter, Connection};
 use std::collections::HashSet;
 use std::hash::RandomState;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Edge {
     pub id: i32,
     pub source_hash: String,

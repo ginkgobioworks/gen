@@ -56,16 +56,20 @@ pub struct Sample {
 }
 
 impl Sample {
-    pub fn create(conn: &Connection, name: &String) -> Sample {
+    pub fn create(conn: &Connection, name: &str) -> Sample {
         let mut stmt = conn
             .prepare("INSERT INTO sample (name) VALUES (?1)")
             .unwrap();
         match stmt.execute((name,)) {
-            Ok(_) => Sample { name: name.clone() },
+            Ok(_) => Sample {
+                name: name.to_string(),
+            },
             Err(rusqlite::Error::SqliteFailure(err, details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
                     println!("{err:?} {details:?}");
-                    Sample { name: name.clone() }
+                    Sample {
+                        name: name.to_string(),
+                    }
                 } else {
                     panic!("something bad happened querying the database")
                 }

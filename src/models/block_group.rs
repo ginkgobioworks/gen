@@ -77,7 +77,7 @@ impl BlockGroup {
         }
     }
 
-    pub fn clone(conn: &mut Connection, source_block_group_id: i32, target_block_group_id: i32) {
+    pub fn clone(conn: &Connection, source_block_group_id: i32, target_block_group_id: i32) {
         let existing_paths = Path::get_paths(
             conn,
             "SELECT * from path where block_group_id = ?1",
@@ -100,10 +100,10 @@ impl BlockGroup {
     }
 
     pub fn get_or_create_sample_block_group(
-        conn: &mut Connection,
-        collection_name: &String,
-        sample_name: &String,
-        group_name: &String,
+        conn: &Connection,
+        collection_name: &str,
+        sample_name: &str,
+        group_name: &str,
     ) -> i32 {
         let mut bg_id : i32 = match conn.query_row(
             "select id from block_group where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
@@ -449,7 +449,7 @@ impl BlockGroup {
 mod tests {
     use super::*;
     use crate::migrations::run_migrations;
-    use crate::models::Collection;
+    use crate::models::{Collection, Sample};
 
     fn get_connection() -> Connection {
         let mut conn = Connection::open_in_memory()
@@ -544,6 +544,36 @@ mod tests {
             vec![edge0.id, edge1.id, edge2.id, edge3.id, edge4.id],
         );
         (block_group.id, path)
+    }
+
+    #[test]
+    fn test_blockgroup_create() {
+        let conn = &get_connection();
+        Collection::create(conn, "test");
+        let bg1 = BlockGroup::create(conn, "test", None, "hg19");
+        assert_eq!(bg1.collection_name, "test");
+        assert_eq!(bg1.name, "hg19");
+        Sample::create(conn, "sample");
+        let bg2 = BlockGroup::create(conn, "test", Some("sample"), "hg19");
+        assert_eq!(bg2.collection_name, "test");
+        assert_eq!(bg2.name, "hg19");
+        assert_eq!(bg2.sample_name, Some("sample".to_string()));
+        assert_ne!(bg1.id, bg2.id);
+    }
+
+    #[test]
+    fn test_blockgroup_clone() {
+        let conn = &get_connection();
+        Collection::create(conn, "test");
+        let bg1 = BlockGroup::create(conn, "test", None, "hg19");
+        assert_eq!(bg1.collection_name, "test");
+        assert_eq!(bg1.name, "hg19");
+        Sample::create(conn, "sample");
+        let bg2 = BlockGroup::get_or_create_sample_block_group(conn, "test", "sample", "hg19");
+        assert_eq!(
+            BlockGroupEdge::edges_for_block_group(conn, bg1.id),
+            BlockGroupEdge::edges_for_block_group(conn, bg2)
+        );
     }
 
     #[test]

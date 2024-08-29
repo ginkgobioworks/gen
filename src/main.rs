@@ -137,7 +137,7 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
 
 fn update_with_vcf(
     vcf_path: &String,
-    collection_name: &String,
+    collection_name: &str,
     fixed_genotype: String,
     fixed_sample: String,
     conn: &mut Connection,
