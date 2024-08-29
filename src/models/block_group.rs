@@ -197,7 +197,7 @@ impl BlockGroup {
                 }
             }
         }
-        let new_bg_id = BlockGroup::create(conn, collection_name, Some(sample_name), &group_name);
+        let new_bg_id = BlockGroup::create(conn, collection_name, Some(sample_name), group_name);
 
         // clone parent blocks/edges/path
         BlockGroup::clone(conn, bg_id, new_bg_id.id);

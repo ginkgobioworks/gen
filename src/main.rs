@@ -169,7 +169,7 @@ impl<'a> BlockGroupCache<'_> {
                 block_group_cache.conn,
                 collection_name,
                 sample_name,
-                name.clone(),
+                &name.clone(),
             );
             block_group_cache
                 .cache
@@ -179,29 +179,74 @@ impl<'a> BlockGroupCache<'_> {
     }
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct SequenceKey<'a> {
+    sequence_type: &'a str,
+    sequence: String,
+}
+
+#[derive(Debug)]
+pub struct SequenceCache<'a> {
+    pub cache: HashMap<SequenceKey<'a>, Sequence>,
+    pub conn: &'a Connection,
+}
+
+impl<'a> SequenceCache<'_> {
+    pub fn new(conn: &Connection) -> SequenceCache {
+        SequenceCache {
+            cache: HashMap::<SequenceKey, Sequence>::new(),
+            conn,
+        }
+    }
+
+    pub fn lookup(
+        sequence_cache: &mut SequenceCache<'a>,
+        sequence_type: &'a str,
+        sequence: String,
+    ) -> Sequence {
+        let sequence_key = SequenceKey {
+            sequence_type,
+            sequence: sequence.clone(),
+        };
+        let sequence_lookup = sequence_cache.cache.get(&sequence_key);
+        if let Some(found_sequence) = sequence_lookup {
+            found_sequence.clone()
+        } else {
+            let new_sequence_hash = Sequence::new()
+                .sequence_type("DNA")
+                .sequence(&sequence)
+                .save(sequence_cache.conn);
+            let new_sequence = NewSequence::new()
+                .sequence_type(sequence_type)
+                .sequence(&sequence)
+                .build();
+
+            sequence_cache
+                .cache
+                .insert(sequence_key, new_sequence.clone());
+            new_sequence
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn prepare_change(
     conn: &Connection,
     sample_bg_id: i32,
     sample_path: &Path,
-    alt_seq: &str,
     ref_start: i32,
     ref_end: i32,
     chromosome_index: i32,
     phased: i32,
+    sequence: Sequence,
 ) -> PathChange {
     // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
-    let new_sequence_hash = Sequence::new()
-        .sequence_type("DNA")
-        .sequence(alt_seq)
-        .save(conn);
-    let sequence = Sequence::sequence_from_hash(conn, &new_sequence_hash).unwrap();
     let new_block = NewBlock {
         id: 0,
         sequence: sequence.clone(),
-        block_sequence: alt_seq.to_string(),
+        block_sequence: sequence.get_sequence(None, None),
         sequence_start: 0,
-        sequence_end: alt_seq.len() as i32,
+        sequence_end: sequence.length,
         path_start: ref_start,
         path_end: ref_end,
         strand: "+".to_string(),
@@ -215,6 +260,14 @@ fn prepare_change(
         chromosome_index,
         phased,
     }
+}
+
+struct VcfEntry<'a> {
+    block_group_id: i32,
+    path: Path,
+    alt_seq: &'a str,
+    chromosome_index: i32,
+    phased: i32,
 }
 
 fn update_with_vcf(
@@ -245,6 +298,7 @@ fn update_with_vcf(
     // Cache a bunch of data ahead of making changes
     let mut block_group_cache = BlockGroupCache::new(conn);
     let mut path_cache = PathCache::new(conn);
+    let mut sequence_cache = SequenceCache::new(conn);
 
     let mut changes: Vec<PathChange> = vec![];
 
@@ -257,7 +311,8 @@ fn update_with_vcf(
         let ref_end = record.variant_end(&header).unwrap().get();
         let alt_bases = record.alternate_bases();
         let alt_alleles: Vec<_> = alt_bases.iter().collect::<io::Result<_>>().unwrap();
-        // TODO: fix this duplication of handling an insert
+        let mut vcf_entries = vec![];
+
         if !fixed_sample.is_empty() && !genotype.is_empty() {
             let sample_bg_id = BlockGroupCache::lookup(
                 &mut block_group_cache,
@@ -275,17 +330,13 @@ fn update_with_vcf(
                             Phasing::Phased => 1,
                             Phasing::Unphased => 0,
                         };
-                        let change = prepare_change(
-                            conn,
-                            sample_bg_id,
-                            &sample_path,
+                        vcf_entries.push(VcfEntry {
+                            block_group_id: sample_bg_id,
+                            path: sample_path.clone(),
                             alt_seq,
-                            ref_start as i32,
-                            ref_end as i32,
-                            chromosome_index as i32,
+                            chromosome_index: chromosome_index as i32,
                             phased,
-                        );
-                        changes.push(change);
+                        });
                     }
                 }
             }
@@ -313,23 +364,35 @@ fn update_with_vcf(
                                 let allele = allele.unwrap();
                                 if allele != 0 {
                                     let alt_seq = alt_alleles[allele - 1];
-                                    let change = prepare_change(
-                                        conn,
-                                        sample_bg_id,
-                                        &sample_path,
+                                    vcf_entries.push(VcfEntry {
+                                        block_group_id: sample_bg_id,
+                                        path: sample_path.clone(),
                                         alt_seq,
-                                        ref_start as i32,
-                                        ref_end as i32,
-                                        chromosome_index as i32,
+                                        chromosome_index: chromosome_index as i32,
                                         phased,
-                                    );
-                                    changes.push(change);
+                                    });
                                 }
                             }
                         }
                     }
                 }
             }
+        }
+
+        for vcf_entry in vcf_entries {
+            let sequence =
+                SequenceCache::lookup(&mut sequence_cache, "DNA", vcf_entry.alt_seq.to_string());
+            let change = prepare_change(
+                conn,
+                vcf_entry.block_group_id,
+                &vcf_entry.path,
+                ref_start as i32,
+                ref_end as i32,
+                vcf_entry.chromosome_index,
+                vcf_entry.phased,
+                sequence,
+            );
+            changes.push(change);
         }
     }
 
