@@ -169,7 +169,7 @@ impl<'a> BlockGroupCache<'_> {
                 block_group_cache.conn,
                 collection_name,
                 sample_name,
-                name.clone(),
+                &name.clone(),
             );
             block_group_cache
                 .cache
@@ -216,8 +216,10 @@ impl<'a> SequenceCache<'_> {
                 .sequence_type("DNA")
                 .sequence(&sequence)
                 .save(sequence_cache.conn);
-            let new_sequence =
-                Sequence::sequence_from_hash(sequence_cache.conn, &new_sequence_hash).unwrap();
+            let new_sequence = NewSequence::new()
+                .sequence_type(sequence_type)
+                .sequence(&sequence)
+                .build();
 
             sequence_cache
                 .cache
