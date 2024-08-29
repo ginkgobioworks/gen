@@ -84,6 +84,12 @@ impl BlockGroup {
             vec![Value::from(source_block_group_id)],
         );
 
+        let edge_ids = BlockGroupEdge::edges_for_block_group(conn, source_block_group_id)
+            .iter()
+            .map(|edge| edge.id)
+            .collect();
+        BlockGroupEdge::bulk_create(conn, target_block_group_id, edge_ids);
+
         for path in existing_paths {
             let edge_ids = PathEdge::edges_for(conn, path.id)
                 .into_iter()
