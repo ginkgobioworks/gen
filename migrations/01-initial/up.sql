@@ -23,7 +23,17 @@ CREATE TABLE block_group (
   FOREIGN KEY(collection_name) REFERENCES collection(name),
   FOREIGN KEY(sample_name) REFERENCES sample(name)
 );
-CREATE UNIQUE INDEX block_group_uidx ON block_group(collection_name, sample_name, name);
+CREATE UNIQUE INDEX block_group_uidx ON block_group(collection_name, sample_name, name) WHERE sample_name is not null;
+CREATE UNIQUE INDEX block_group_null_sample_uidx ON block_group(collection_name, name) WHERE sample_name is null;
+
+CREATE TABLE block_group_lineage (
+  id INTEGER PRIMARY KEY NOT NULL,
+  source_id INTEGER NOT NULL,
+  target_id INTEGER NOT NULL,
+  FOREIGN KEY(source_id) REFERENCES block_group(id),
+  FOREIGN KEY(target_id) REFERENCES block_group(id)
+);
+CREATE UNIQUE INDEX block_group_lineage_uidx ON block_group_lineage(source_id, target_id);
 
 CREATE TABLE path (
   id INTEGER PRIMARY KEY NOT NULL,

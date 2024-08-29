@@ -10,7 +10,8 @@ use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::path::{NewBlock, Path, PathData};
 use crate::models::path_edge::PathEdge;
-use crate::models::sequence::{NewSequence, Sequence};
+use crate::models::sequence::Sequence;
+use std::ops::Deref;
 
 #[derive(Debug)]
 pub struct BlockGroup {
@@ -97,6 +98,16 @@ impl PathCache<'_> {
     ) -> Option<&'a IntervalTree<i32, NewBlock>> {
         path_cache.intervaltree_cache.get(path)
     }
+}
+
+struct DiffBlock {
+    sequence_hash: String,
+    source_start: i32,
+    source_end: i32,
+    source_strand: String,
+    target_start: i32,
+    target_end: i32,
+    target_strand: String,
 }
 
 impl BlockGroup {
@@ -197,7 +208,7 @@ impl BlockGroup {
                 }
             }
         }
-        let new_bg_id = BlockGroup::create(conn, collection_name, Some(sample_name), &group_name);
+        let new_bg_id = BlockGroup::create(conn, collection_name, Some(sample_name), group_name);
 
         // clone parent blocks/edges/path
         BlockGroup::clone(conn, bg_id, new_bg_id.id);
@@ -527,6 +538,36 @@ impl BlockGroup {
 
         new_edges
     }
+
+    pub fn diff(conn: &Connection, source_id: i32, target_id: i32) {
+        let source_bg_edges: HashMap<i32, Edge> = HashMap::from_iter(
+            BlockGroupEdge::edges_for_block_group(conn, source_id)
+                .iter()
+                .map(|edge| (edge.id, edge.clone()))
+                .collect::<Vec<(i32, Edge)>>(),
+        );
+        let target_bg_edges: HashMap<i32, Edge> = HashMap::from_iter(
+            BlockGroupEdge::edges_for_block_group(conn, target_id)
+                .iter()
+                .map(|edge| (edge.id, edge.clone()))
+                .collect::<Vec<(i32, Edge)>>(),
+        );
+        let mut added_edges = vec![];
+        let mut removed_edges = vec![];
+        for (edge_id, _) in source_bg_edges.iter() {
+            if !target_bg_edges.contains_key(edge_id) {
+                removed_edges.push(edge_id);
+            }
+        }
+        for (edge_id, _) in target_bg_edges.iter() {
+            if !source_bg_edges.contains_key(edge_id) {
+                added_edges.push(edge_id);
+            }
+        }
+        println!("source: {source_bg_edges:?}\ntarget: {target_bg_edges:?}");
+        println!("{removed_edges:?}");
+        println!("{added_edges:?}");
+    }
 }
 
 #[cfg(test)]
@@ -658,6 +699,46 @@ mod tests {
             BlockGroupEdge::edges_for_block_group(conn, bg1.id),
             BlockGroupEdge::edges_for_block_group(conn, bg2)
         );
+    }
+
+    #[test]
+    fn test_diff() {
+        let conn = &get_connection();
+        let (block_group_id, path) = setup_block_group(conn);
+        let insert_sequence_hash = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(conn);
+        let insert_sequence = Sequence::sequence_from_hash(conn, &insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 7,
+            path_end: 15,
+            strand: "+".to_string(),
+        };
+        Sample::create(conn, "target");
+        let new_bg = BlockGroup::get_or_create_sample_block_group(conn, "test", "target", "hg19");
+        let new_paths = Path::get_paths(
+            conn,
+            "select * from path where block_group_id = ?1 AND name = ?2",
+            vec![SQLValue::from(new_bg), SQLValue::from("chr1".to_string())],
+        );
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 7,
+            end: 15,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(conn, &path);
+        BlockGroup::insert_change(conn, &change, &tree);
+        BlockGroup::diff(conn, block_group_id, new_bg);
     }
 
     #[test]

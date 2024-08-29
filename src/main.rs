@@ -154,12 +154,12 @@ impl<'a> BlockGroupCache<'_> {
         block_group_cache: &mut BlockGroupCache<'a>,
         collection_name: &'a str,
         sample_name: &'a str,
-        name: String,
+        name: &str,
     ) -> i32 {
         let block_group_key = BlockGroupData {
             collection_name,
             sample_name: Some(sample_name),
-            name: name.clone(),
+            name: name.to_string(),
         };
         let block_group_lookup = block_group_cache.cache.get(&block_group_key);
         if let Some(block_group_id) = block_group_lookup {
@@ -169,7 +169,7 @@ impl<'a> BlockGroupCache<'_> {
                 block_group_cache.conn,
                 collection_name,
                 sample_name,
-                name.clone(),
+                name,
             );
             block_group_cache
                 .cache
@@ -263,7 +263,7 @@ fn update_with_vcf(
                 &mut block_group_cache,
                 collection_name,
                 &fixed_sample,
-                seq_name.clone(),
+                &seq_name,
             );
             let sample_path = PathCache::lookup(&mut path_cache, sample_bg_id, seq_name.clone());
 
@@ -295,7 +295,7 @@ fn update_with_vcf(
                     &mut block_group_cache,
                     collection_name,
                     &sample_names[sample_index],
-                    seq_name.clone(),
+                    &seq_name,
                 );
                 let sample_path =
                     PathCache::lookup(&mut path_cache, sample_bg_id, seq_name.clone());
