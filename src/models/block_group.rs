@@ -887,6 +887,7 @@ mod tests {
                 }
             ]
         );
+        assert_eq!(GroupBlock::diff(&b, &a), vec![],);
     }
 
     #[test]
