@@ -1,6 +1,5 @@
 #![allow(warnings)]
 use clap::{Parser, Subcommand};
-use intervaltree::IntervalTree;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::PathBuf;

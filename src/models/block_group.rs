@@ -1,8 +1,9 @@
 use intervaltree::IntervalTree;
-use itertools::Itertools;
+use itertools::{Group, Itertools};
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
 use rusqlite::{types::Value as SQLValue, Connection};
+use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
 
 use crate::graph::all_simple_paths;
@@ -28,13 +29,79 @@ pub struct BlockGroupData<'a> {
     pub name: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GroupBlock {
     pub id: i32,
     pub sequence_hash: String,
     pub sequence: String,
     pub start: i32,
     pub end: i32,
+}
+
+impl GroupBlock {
+    fn merge_blocks(blocks: &[GroupBlock]) -> Vec<GroupBlock> {
+        let mut merged = vec![blocks.first().unwrap().clone()];
+        if blocks.len() > 1 {
+            for block in blocks[1..].iter() {
+                if block.start == merged.last().unwrap().end {
+                    merged.last_mut().unwrap().end = block.end;
+                } else {
+                    merged.push(block.clone());
+                }
+            }
+        }
+        merged
+    }
+
+    pub fn diff(a: &[GroupBlock], b: &[GroupBlock]) -> Vec<GroupBlock> {
+        // Find elements in b which are not in a
+        // To do this, we take a, and invert it to provide the spaces
+        // not covered by a.
+        // Then we take b, and if there is an overlap with an inverted region,
+        // we keep the minimal shared area between the two regions.
+        let mut intervals: Vec<GroupBlock> = vec![];
+        let mut invert_a: Vec<(i32, i32)> = vec![];
+        let mut a_end = 0;
+        for (index, a_block) in a.iter().enumerate() {
+            if index == 0 {
+                invert_a.push((-1, a_block.start));
+            } else if a_end != a_block.start {
+                invert_a.push((a_end, a_block.start))
+            }
+            a_end = a_block.end;
+            if index == a.len() - 1 {
+                invert_a.push((a_end, -1));
+            }
+        }
+
+        for b_block in b {
+            for (a_start, a_end) in invert_a.iter() {
+                let overlaps = *a_start <= b_block.end && b_block.start <= *a_end;
+                if overlaps {
+                    let mut interval_start = *a_start;
+                    let mut interval_end = *a_end;
+                    if *a_start == -1 {
+                        interval_start = b_block.start;
+                    }
+                    if *a_end == -1 {
+                        interval_end = b_block.end;
+                    }
+                    if interval_start == interval_end {
+                        continue;
+                    }
+                    intervals.push(GroupBlock {
+                        id: 0,
+                        sequence_hash: b_block.sequence_hash.clone(),
+                        sequence: "".to_string(),
+                        start: max(b_block.start, interval_start),
+                        end: min(b_block.end, interval_end),
+                    });
+                }
+            }
+        }
+
+        intervals
+    }
 }
 
 #[derive(Eq, Hash, PartialEq)]
@@ -216,7 +283,11 @@ impl BlockGroup {
         new_bg_id.id
     }
 
-    pub fn blocks_from_edges(conn: &Connection, edges: Vec<Edge>) -> Vec<GroupBlock> {
+    pub fn blocks_from_edges(
+        conn: &Connection,
+        edges: Vec<Edge>,
+        shallow: bool,
+    ) -> Vec<GroupBlock> {
         let mut sequence_hashes = HashSet::new();
         for edge in &edges {
             if edge.source_hash != Edge::PATH_START_HASH {
@@ -258,11 +329,14 @@ impl BlockGroup {
                 let first_edge = sorted_sequence_edges[0].clone();
                 let start = 0;
                 let end = first_edge.source_coordinate;
-                let block_sequence = sequence.get_sequence(start, end).to_string();
                 let first_block = GroupBlock {
                     id: block_index,
                     sequence_hash: hash.clone(),
-                    sequence: block_sequence,
+                    sequence: if shallow {
+                        "".to_string()
+                    } else {
+                        sequence.get_sequence(start, end).to_string()
+                    },
                     start,
                     end,
                 };
@@ -271,11 +345,14 @@ impl BlockGroup {
                 for (into, out_of) in sorted_sequence_edges.clone().into_iter().tuple_windows() {
                     let start = into.target_coordinate;
                     let end = out_of.source_coordinate;
-                    let block_sequence = sequence.get_sequence(start, end).to_string();
                     let block = GroupBlock {
                         id: block_index,
                         sequence_hash: hash.clone(),
-                        sequence: block_sequence,
+                        sequence: if shallow {
+                            "".to_string()
+                        } else {
+                            sequence.get_sequence(start, end).to_string()
+                        },
                         start,
                         end,
                     };
@@ -285,11 +362,14 @@ impl BlockGroup {
                 let last_edge = &sorted_sequence_edges[sorted_sequence_edges.len() - 1];
                 let start = last_edge.target_coordinate;
                 let end = sequence.length;
-                let block_sequence = sequence.get_sequence(start, end).to_string();
                 let last_block = GroupBlock {
                     id: block_index,
                     sequence_hash: hash.clone(),
-                    sequence: block_sequence,
+                    sequence: if shallow {
+                        "".to_string()
+                    } else {
+                        sequence.get_sequence(start, end).to_string()
+                    },
                     start,
                     end,
                 };
@@ -299,7 +379,11 @@ impl BlockGroup {
                 blocks.push(GroupBlock {
                     id: block_index,
                     sequence_hash: hash.clone(),
-                    sequence: sequence.get_sequence(None, None),
+                    sequence: if shallow {
+                        "".to_string()
+                    } else {
+                        sequence.get_sequence(None, None).to_string()
+                    },
                     start: 0,
                     end: sequence.length,
                 });
@@ -311,7 +395,7 @@ impl BlockGroup {
 
     pub fn get_all_sequences(conn: &Connection, block_group_id: i32) -> HashSet<String> {
         let edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
-        let blocks = BlockGroup::blocks_from_edges(conn, edges.clone());
+        let blocks = BlockGroup::blocks_from_edges(conn, edges.clone(), false);
 
         let blocks_by_start = blocks
             .clone()
@@ -540,33 +624,53 @@ impl BlockGroup {
     }
 
     pub fn diff(conn: &Connection, source_id: i32, target_id: i32) {
-        let source_bg_edges: HashMap<i32, Edge> = HashMap::from_iter(
-            BlockGroupEdge::edges_for_block_group(conn, source_id)
-                .iter()
-                .map(|edge| (edge.id, edge.clone()))
-                .collect::<Vec<(i32, Edge)>>(),
-        );
-        let target_bg_edges: HashMap<i32, Edge> = HashMap::from_iter(
-            BlockGroupEdge::edges_for_block_group(conn, target_id)
-                .iter()
-                .map(|edge| (edge.id, edge.clone()))
-                .collect::<Vec<(i32, Edge)>>(),
-        );
-        let mut added_edges = vec![];
-        let mut removed_edges = vec![];
-        for (edge_id, _) in source_bg_edges.iter() {
-            if !target_bg_edges.contains_key(edge_id) {
-                removed_edges.push(edge_id);
+        let source_bg_edges = BlockGroupEdge::edges_for_block_group(conn, source_id);
+        let mut source_seq_blocks: HashMap<String, Vec<GroupBlock>> = HashMap::new();
+        for block in BlockGroup::blocks_from_edges(conn, source_bg_edges, true) {
+            source_seq_blocks
+                .entry(block.sequence_hash.clone())
+                .or_default()
+                .push(block.clone());
+        }
+        for blocks in source_seq_blocks.values_mut() {
+            blocks.sort_by(|a, b| a.start.cmp(&b.start));
+        }
+        let target_bg_edges = BlockGroupEdge::edges_for_block_group(conn, target_id);
+        let mut target_seq_blocks: HashMap<String, Vec<GroupBlock>> = HashMap::new();
+        for block in BlockGroup::blocks_from_edges(conn, target_bg_edges, true) {
+            target_seq_blocks
+                .entry(block.sequence_hash.clone())
+                .or_default()
+                .push(block.clone());
+        }
+        for blocks in target_seq_blocks.values_mut() {
+            blocks.sort_by(|a, b| a.start.cmp(&b.start));
+        }
+        let mut added_seqs = HashMap::new();
+        let mut removed_seqs = HashMap::new();
+
+        for (seq, blocks) in source_seq_blocks.iter() {
+            // what is in target_blocks that is not in source_blocks
+            if let Some(target_blocks) = target_seq_blocks.get(seq) {
+                added_seqs.insert(seq, GroupBlock::diff(blocks, target_blocks));
+            } else {
+                added_seqs.insert(seq, blocks.clone());
             }
         }
-        for (edge_id, _) in target_bg_edges.iter() {
-            if !source_bg_edges.contains_key(edge_id) {
-                added_edges.push(edge_id);
+        for (seq, blocks) in target_seq_blocks.iter() {
+            // what is in target_blocks that is not in source_blocks
+            if let Some(target_blocks) = source_seq_blocks.get(seq) {
+                removed_seqs.insert(seq, GroupBlock::diff(blocks, target_blocks));
+            } else {
+                removed_seqs.insert(seq, blocks.clone());
             }
         }
-        println!("source: {source_bg_edges:?}\ntarget: {target_bg_edges:?}");
-        println!("{removed_edges:?}");
-        println!("{added_edges:?}");
+        // what is in source_blocks that is not in target_blocks
+
+        println!("{source_seq_blocks:?}");
+        println!("{target_seq_blocks:?}");
+        println!("added {added_seqs:?}");
+        println!("removed {removed_seqs:?}");
     }
 }
 
@@ -672,6 +776,120 @@ mod tests {
     }
 
     #[test]
+    fn test_blockgroup_diff() {
+        let a = vec![
+            GroupBlock {
+                id: 0,
+                sequence_hash: "chr1".to_string(),
+                start: 0,
+                end: 3,
+                sequence: "".to_string(),
+            },
+            GroupBlock {
+                id: 0,
+                sequence_hash: "chr1".to_string(),
+                start: 3,
+                end: 4,
+                sequence: "".to_string(),
+            },
+            GroupBlock {
+                id: 0,
+                sequence_hash: "chr1".to_string(),
+                start: 4,
+                end: 10,
+                sequence: "".to_string(),
+            },
+            GroupBlock {
+                id: 0,
+                sequence_hash: "chr1".to_string(),
+                start: 10,
+                end: 20,
+                sequence: "".to_string(),
+            },
+        ];
+        let b = vec![
+            GroupBlock {
+                id: 0,
+                sequence_hash: "chr1".to_string(),
+                start: 0,
+                end: 4,
+                sequence: "".to_string(),
+            },
+            GroupBlock {
+                id: 0,
+                sequence_hash: "chr1".to_string(),
+                start: 4,
+                end: 10,
+                sequence: "".to_string(),
+            },
+            GroupBlock {
+                id: 0,
+                sequence_hash: "chr1".to_string(),
+                start: 10,
+                end: 20,
+                sequence: "".to_string(),
+            },
+        ];
+        assert_eq!(GroupBlock::diff(&a, &b), vec![]);
+        let a = vec![
+            GroupBlock {
+                id: 0,
+                sequence_hash: "chr1".to_string(),
+                start: 0,
+                end: 2,
+                sequence: "".to_string(),
+            },
+            GroupBlock {
+                id: 0,
+                sequence_hash: "chr1".to_string(),
+                start: 5,
+                end: 6,
+                sequence: "".to_string(),
+            },
+            GroupBlock {
+                id: 0,
+                sequence_hash: "chr1".to_string(),
+                start: 9,
+                end: 10,
+                sequence: "".to_string(),
+            },
+            GroupBlock {
+                id: 0,
+                sequence_hash: "chr1".to_string(),
+                start: 10,
+                end: 20,
+                sequence: "".to_string(),
+            },
+        ];
+        let b = vec![GroupBlock {
+            id: 0,
+            sequence_hash: "chr1".to_string(),
+            start: 0,
+            end: 10,
+            sequence: "".to_string(),
+        }];
+        assert_eq!(
+            GroupBlock::diff(&a, &b),
+            vec![
+                GroupBlock {
+                    id: 0,
+                    sequence_hash: "chr1".to_string(),
+                    sequence: "".to_string(),
+                    start: 2,
+                    end: 5
+                },
+                GroupBlock {
+                    id: 0,
+                    sequence_hash: "chr1".to_string(),
+                    sequence: "".to_string(),
+                    start: 6,
+                    end: 9
+                }
+            ]
+        );
+    }
+
+    #[test]
     fn test_blockgroup_create() {
         let conn = &get_connection();
         Collection::create(conn, "test");
@@ -728,7 +946,7 @@ mod tests {
             vec![SQLValue::from(new_bg), SQLValue::from("chr1".to_string())],
         );
         let change = PathChange {
-            block_group_id,
+            block_group_id: new_bg,
             path: path.clone(),
             start: 7,
             end: 15,
