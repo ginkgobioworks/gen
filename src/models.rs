@@ -5,6 +5,7 @@ use std::fmt::*;
 
 pub mod block_group;
 pub mod block_group_edge;
+mod diff_block;
 pub mod edge;
 pub mod path;
 pub mod path_edge;

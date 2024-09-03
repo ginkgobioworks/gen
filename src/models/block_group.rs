@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::graph::all_simple_paths;
 use crate::models::block_group_edge::BlockGroupEdge;
+use crate::models::diff_block::{ChangeType, DiffBlock, NewDiffBlock};
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::path::{NewBlock, Path, PathData};
 use crate::models::path_edge::PathEdge;
@@ -167,16 +168,6 @@ impl PathCache<'_> {
     }
 }
 
-struct DiffBlock {
-    sequence_hash: String,
-    source_start: i32,
-    source_end: i32,
-    source_strand: String,
-    target_start: i32,
-    target_end: i32,
-    target_strand: String,
-}
-
 impl BlockGroup {
     pub fn create(
         conn: &Connection,
@@ -285,11 +276,11 @@ impl BlockGroup {
 
     pub fn blocks_from_edges(
         conn: &Connection,
-        edges: Vec<Edge>,
+        edges: &Vec<Edge>,
         shallow: bool,
     ) -> Vec<GroupBlock> {
         let mut sequence_hashes = HashSet::new();
-        for edge in &edges {
+        for edge in edges {
             if edge.source_hash != Edge::PATH_START_HASH {
                 sequence_hashes.insert(edge.source_hash.clone());
             }
@@ -395,7 +386,7 @@ impl BlockGroup {
 
     pub fn get_all_sequences(conn: &Connection, block_group_id: i32) -> HashSet<String> {
         let edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
-        let blocks = BlockGroup::blocks_from_edges(conn, edges.clone(), false);
+        let blocks = BlockGroup::blocks_from_edges(conn, &edges, false);
 
         let blocks_by_start = blocks
             .clone()
@@ -626,7 +617,7 @@ impl BlockGroup {
     pub fn diff(conn: &Connection, source_id: i32, target_id: i32) {
         let source_bg_edges = BlockGroupEdge::edges_for_block_group(conn, source_id);
         let mut source_seq_blocks: HashMap<String, Vec<GroupBlock>> = HashMap::new();
-        for block in BlockGroup::blocks_from_edges(conn, source_bg_edges, true) {
+        for block in BlockGroup::blocks_from_edges(conn, &source_bg_edges, true) {
             source_seq_blocks
                 .entry(block.sequence_hash.clone())
                 .or_default()
@@ -637,7 +628,7 @@ impl BlockGroup {
         }
         let target_bg_edges = BlockGroupEdge::edges_for_block_group(conn, target_id);
         let mut target_seq_blocks: HashMap<String, Vec<GroupBlock>> = HashMap::new();
-        for block in BlockGroup::blocks_from_edges(conn, target_bg_edges, true) {
+        for block in BlockGroup::blocks_from_edges(conn, &target_bg_edges, true) {
             target_seq_blocks
                 .entry(block.sequence_hash.clone())
                 .or_default()
@@ -652,25 +643,174 @@ impl BlockGroup {
         for (seq, blocks) in source_seq_blocks.iter() {
             // what is in target_blocks that is not in source_blocks
             if let Some(target_blocks) = target_seq_blocks.get(seq) {
-                added_seqs.insert(seq, GroupBlock::diff(blocks, target_blocks));
+                let changes = GroupBlock::diff(blocks, target_blocks);
+                if !changes.is_empty() {
+                    added_seqs.insert(seq, changes);
+                }
             } else {
-                added_seqs.insert(seq, blocks.clone());
+                removed_seqs.insert(seq, blocks.clone());
             }
         }
         for (seq, blocks) in target_seq_blocks.iter() {
             // what is in target_blocks that is not in source_blocks
             if let Some(target_blocks) = source_seq_blocks.get(seq) {
-                removed_seqs.insert(seq, GroupBlock::diff(blocks, target_blocks));
+                let changes = GroupBlock::diff(blocks, target_blocks);
+                if !changes.is_empty() {
+                    removed_seqs.insert(seq, changes);
+                }
             } else {
-                removed_seqs.insert(seq, blocks.clone());
+                added_seqs.insert(seq, blocks.clone());
             }
         }
-        // what is in source_blocks that is not in target_blocks
+
+        let mut diff_blocks: HashMap<(String, i32, i32), NewDiffBlock> = HashMap::new();
+
+        // Identify which edges added the new sequences
+        // for edge in source_bg_edges.iter() {
+        //     if added_seqs.contains_key(&edge.source_hash) {
+        //         for block in added_seqs[&edge.source_hash].iter() {
+        //             if block.start == edge.source_coordinate  {
+        //                 diff_blocks.entry((block.sequence_hash.clone(), block.start, block.end)).or_default().source_edge(edge).block(block);
+        //                 println!("this one added {edge:?} {block:?}");
+        //             }
+        //             if block.end == edge.source_coordinate {
+        //                 diff_blocks.entry((block.sequence_hash.clone(), block.start, block.end)).or_default().dest_edge(edge).block(block);
+        //                 println!("exit point {edge:?} {block:?} {diff_blocks:?}");
+        //             }
+        //         }
+        //     }
+        //     if added_seqs.contains_key(&edge.target_hash) {
+        //         for block in added_seqs[&edge.target_hash].iter() {
+        //             if block.start == edge.target_coordinate {
+        //                 println!("this one added {edge:?} {block:?}");
+        //             }
+        //             if block.end == edge.source_coordinate {
+        //                 println!("exit point {edge:?} {block:?}");
+        //             }
+        //         }
+        //     }
+        //     if removed_seqs.contains_key(&edge.source_hash) {
+        //         for block in removed_seqs[&edge.source_hash].iter() {
+        //             if block.start == edge.source_coordinate {
+        //                 println!("this one removed {edge:?} {block:?}");
+        //             }
+        //             if block.end == edge.source_coordinate {
+        //                 println!("exit point {edge:?} {block:?}");
+        //             }
+        //         }
+        //     }
+        //     if removed_seqs.contains_key(&edge.target_hash) {
+        //         for block in removed_seqs[&edge.target_hash].iter() {
+        //             if block.start == edge.target_coordinate {
+        //                 println!("this one removed {edge:?} {block:?}");
+        //             }
+        //             if block.end == edge.source_coordinate {
+        //                 println!("exit point {edge:?} {block:?}");
+        //             }
+        //         }
+        //     }
+        // }
+
+        // unsure if all we need is to go over target_bg_edges, it should have all edges of source.
+        println!("target");
+        for edge in target_bg_edges.iter() {
+            if added_seqs.contains_key(&edge.source_hash) {
+                for block in added_seqs[&edge.source_hash].iter() {
+                    if block.start == edge.source_coordinate {
+                        diff_blocks
+                            .entry((block.sequence_hash.clone(), block.start, block.end))
+                            .or_default()
+                            .source_edge(edge)
+                            .block(block)
+                            .change_type(ChangeType::Addition);
+                        println!("this one added {edge:?} {block:?}");
+                    }
+                    if block.end == edge.source_coordinate {
+                        diff_blocks
+                            .entry((block.sequence_hash.clone(), block.start, block.end))
+                            .or_default()
+                            .dest_edge(edge)
+                            .block(block)
+                            .change_type(ChangeType::Addition);
+                        println!("exit point {edge:?} {block:?}");
+                    }
+                }
+            }
+            if added_seqs.contains_key(&edge.target_hash) {
+                for block in added_seqs[&edge.target_hash].iter() {
+                    if block.start == edge.target_coordinate {
+                        diff_blocks
+                            .entry((block.sequence_hash.clone(), block.start, block.end))
+                            .or_default()
+                            .source_edge(edge)
+                            .block(block)
+                            .change_type(ChangeType::Addition);
+                        println!("this one added {edge:?} {block:?}");
+                    }
+                    if block.end == edge.source_coordinate {
+                        diff_blocks
+                            .entry((block.sequence_hash.clone(), block.start, block.end))
+                            .or_default()
+                            .dest_edge(edge)
+                            .block(block)
+                            .change_type(ChangeType::Addition);
+                        println!("exit point {edge:?} {block:?}");
+                    }
+                }
+            }
+            if removed_seqs.contains_key(&edge.source_hash) {
+                for block in removed_seqs[&edge.source_hash].iter() {
+                    if block.start == edge.source_coordinate {
+                        diff_blocks
+                            .entry((block.sequence_hash.clone(), block.start, block.end))
+                            .or_default()
+                            .source_edge(edge)
+                            .block(block)
+                            .change_type(ChangeType::Deletion);
+                        println!("this one removed {edge:?} {block:?}");
+                    }
+                    if block.end == edge.source_coordinate {
+                        diff_blocks
+                            .entry((block.sequence_hash.clone(), block.start, block.end))
+                            .or_default()
+                            .dest_edge(edge)
+                            .block(block)
+                            .change_type(ChangeType::Deletion);
+                        println!("exit point {edge:?} {block:?}");
+                    }
+                }
+            }
+            if removed_seqs.contains_key(&edge.target_hash) {
+                for block in removed_seqs[&edge.target_hash].iter() {
+                    if block.start == edge.target_coordinate {
+                        diff_blocks
+                            .entry((block.sequence_hash.clone(), block.start, block.end))
+                            .or_default()
+                            .source_edge(edge)
+                            .block(block)
+                            .change_type(ChangeType::Deletion);
+                        println!("this one removed {edge:?} {block:?}");
+                    }
+                    if block.end == edge.source_coordinate {
+                        diff_blocks
+                            .entry((block.sequence_hash.clone(), block.start, block.end))
+                            .or_default()
+                            .dest_edge(edge)
+                            .block(block)
+                            .change_type(ChangeType::Deletion);
+                        println!("exit point {edge:?} {block:?}");
+                    }
+                }
+            }
+        }
 
         println!("{source_seq_blocks:?}");
+        println!("{source_bg_edges:?}");
         println!("{target_seq_blocks:?}");
+        println!("{target_bg_edges:?}");
         println!("added {added_seqs:?}");
         println!("removed {removed_seqs:?}");
+        println!("{diff_blocks:?}");
     }
 }
 
@@ -958,6 +1098,8 @@ mod tests {
         let tree = Path::intervaltree_for(conn, &path);
         BlockGroup::insert_change(conn, &change, &tree);
         BlockGroup::diff(conn, block_group_id, new_bg);
+
+        // TODO: add the same insert twice in 2 blockgroups to see if we catch it
     }
 
     #[test]
