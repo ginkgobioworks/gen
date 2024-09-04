@@ -423,6 +423,7 @@ fn main() {
             sample,
         }) => {
             let mut conn = get_connection(db);
+            conn.execute("PRAGMA cache_size=50000;", []).unwrap();
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             update_with_vcf(
                 vcf,
@@ -431,6 +432,7 @@ fn main() {
                 sample.clone().unwrap_or("".to_string()),
                 &mut conn,
             );
+
             conn.execute("END TRANSACTION", []).unwrap();
         }
         None => {}

@@ -11,18 +11,21 @@ pub struct BlockGroupEdge {
 
 impl BlockGroupEdge {
     pub fn bulk_create(conn: &Connection, block_group_id: i32, edge_ids: Vec<i32>) {
-        let mut rows_to_insert = vec![];
-        for edge_id in edge_ids {
-            let row = format!("({0}, {1})", block_group_id, edge_id);
-            rows_to_insert.push(row);
-        }
-        let formatted_rows_to_insert = rows_to_insert.join(", ");
+        for chunk in edge_ids.chunks(100000) {
+            let mut rows_to_insert = vec![];
+            for edge_id in chunk {
+                let row = format!("({0}, {1})", block_group_id, edge_id);
+                rows_to_insert.push(row);
+            }
 
-        let insert_statement = format!(
-            "INSERT OR IGNORE INTO block_group_edges (block_group_id, edge_id) VALUES {0};",
-            formatted_rows_to_insert
-        );
-        let _ = conn.execute(&insert_statement, ());
+            let formatted_rows_to_insert = rows_to_insert.join(", ");
+
+            let insert_statement = format!(
+                "INSERT OR IGNORE INTO block_group_edges (block_group_id, edge_id) VALUES {0};",
+                formatted_rows_to_insert
+            );
+            let _ = conn.execute(&insert_statement, ());
+        }
     }
 
     pub fn edges_for_block_group(conn: &Connection, block_group_id: i32) -> Vec<Edge> {
