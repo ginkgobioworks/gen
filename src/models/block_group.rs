@@ -284,8 +284,7 @@ impl BlockGroup {
                 });
             }
 
-            #[allow(clippy::len_zero)]
-            if block_boundaries.len() > 0 {
+            if !block_boundaries.is_empty() {
                 let start = 0;
                 let end = block_boundaries[0];
                 let block_sequence = sequence.get_sequence(start, end).to_string();
