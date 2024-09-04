@@ -116,12 +116,12 @@ pub struct ChangeSet {
 }
 
 impl ChangeSet {
-    pub fn new(author: String, message: String) -> ChangeSet {
+    pub fn new(author: &str, message: &str) -> ChangeSet {
         ChangeSet {
             id: None,
             created: Utc::now(),
-            author,
-            message,
+            author: author.to_string(),
+            message: message.to_string(),
         }
     }
 
@@ -145,6 +145,15 @@ impl ChangeSet {
             author: self.author.clone(),
             message: self.message.clone(),
         }
+    }
+
+    pub fn add_changes(conn: &Connection, change_set_id: i32, change_log_id: i32) {
+        let mut stmt = conn
+            .prepare(
+                "INSERT INTO change_set_changes (change_set_id, change_log_id) VALUES (?1, ?2);",
+            )
+            .unwrap();
+        stmt.execute((change_set_id, change_log_id)).unwrap();
     }
 }
 
@@ -287,5 +296,8 @@ mod tests {
         assert_eq!(changes[0].seq_hash, insert.sequence.hash);
         assert_eq!(changes[0].seq_start, 0);
         assert_eq!(changes[0].seq_end, 4);
+
+        let change_set = ChangeSet::new("chris", "test change").save(conn);
+        ChangeSet::add_changes(conn, change_set.id.unwrap(), 1);
     }
 }
