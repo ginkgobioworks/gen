@@ -1,10 +1,10 @@
 CREATE TABLE collection (
   name TEXT PRIMARY KEY NOT NULL
-);
+) STRICT;
 
 CREATE TABLE sample (
   name TEXT PRIMARY KEY NOT NULL
-);
+) STRICT;
 
 CREATE TABLE sequence (
   hash TEXT PRIMARY KEY NOT NULL,
@@ -13,7 +13,7 @@ CREATE TABLE sequence (
   name TEXT NOT NULL,
   file_path TEXT NOT NULL,
   length INTEGER NOT NULL
-);
+) STRICT;
 
 CREATE TABLE block_group (
   id INTEGER PRIMARY KEY NOT NULL,
@@ -22,7 +22,7 @@ CREATE TABLE block_group (
   name TEXT NOT NULL,
   FOREIGN KEY(collection_name) REFERENCES collection(name),
   FOREIGN KEY(sample_name) REFERENCES sample(name)
-);
+) STRICT;
 CREATE UNIQUE INDEX block_group_uidx ON block_group(collection_name, sample_name, name);
 
 CREATE TABLE path (
@@ -30,7 +30,7 @@ CREATE TABLE path (
   block_group_id INTEGER NOT NULL,
   name TEXT NOT NULL,
   FOREIGN KEY(block_group_id) REFERENCES block_group(id)
-);
+) STRICT;
 CREATE UNIQUE INDEX path_uidx ON path(block_group_id, name);
 
 CREATE TABLE change_log (
@@ -44,7 +44,7 @@ CREATE TABLE change_log (
   sequence_strand TEXT NOT NULL,
   FOREIGN KEY(path_id) REFERENCES path(id),
   FOREIGN KEY(sequence_hash) REFERENCES sequence(hash)
-);
+) STRICT;
 CREATE UNIQUE INDEX change_log_uidx ON change_log(hash);
 
 CREATE TABLE edges (
@@ -60,7 +60,7 @@ CREATE TABLE edges (
   FOREIGN KEY(source_hash) REFERENCES sequence(hash),
   FOREIGN KEY(target_hash) REFERENCES sequence(hash),
   constraint chk_phased check (phased in (0, 1))
-);
+) STRICT;
 CREATE UNIQUE INDEX edge_uidx ON edges(source_hash, source_coordinate, source_strand, target_hash, target_coordinate, target_strand, chromosome_index, phased);
 
 CREATE TABLE path_edges (
@@ -70,7 +70,7 @@ CREATE TABLE path_edges (
   edge_id INTEGER NOT NULL,
   FOREIGN KEY(edge_id) REFERENCES edges(id),
   FOREIGN KEY(path_id) REFERENCES path(id)
-);
+) STRICT;
 CREATE UNIQUE INDEX path_edges_uidx ON path_edges(path_id, edge_id);
 
 CREATE TABLE block_group_edges (
@@ -79,7 +79,7 @@ CREATE TABLE block_group_edges (
   edge_id INTEGER NOT NULL,
   FOREIGN KEY(block_group_id) REFERENCES block_group(id),
   FOREIGN KEY(edge_id) REFERENCES edges(id)
-);
+) STRICT;
 CREATE UNIQUE INDEX block_group_edges_uidx ON block_group_edges(block_group_id, edge_id);
 
 INSERT INTO sequence (hash, sequence_type, sequence, name, file_path, "length") values ("start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "OTHER", "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "", "", 64), ("end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "OTHER", "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "", "", 64);
