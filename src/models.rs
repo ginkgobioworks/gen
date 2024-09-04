@@ -5,6 +5,7 @@ use std::fmt::*;
 
 pub mod block_group;
 pub mod block_group_edge;
+pub mod change_log;
 mod diff_block;
 pub mod edge;
 pub mod path;
@@ -79,76 +80,5 @@ impl Sample {
                 panic!("something bad happened querying the database")
             }
         }
-    }
-}
-
-pub struct ChangeLog {
-    hash: String,
-    path_id: i32,
-    path_start: i32,
-    path_end: i32,
-    seq_hash: String,
-    seq_start: i32,
-    seq_end: i32,
-    strand: String,
-}
-
-impl ChangeLog {
-    pub fn new(
-        path_id: i32,
-        path_start: i32,
-        path_end: i32,
-        seq_hash: String,
-        seq_start: i32,
-        seq_end: i32,
-        seq_strand: String,
-    ) -> ChangeLog {
-        let mut hasher = Sha256::new();
-        hasher.update(path_id.to_string());
-        hasher.update(path_start.to_string());
-        hasher.update(path_end.to_string());
-        hasher.update(&seq_hash);
-        hasher.update(seq_start.to_string());
-        hasher.update(seq_end.to_string());
-        hasher.update(&seq_strand);
-        let result = hasher.finalize();
-        let hash = format!("{:x}", result);
-        ChangeLog {
-            hash,
-            path_id,
-            path_start,
-            path_end,
-            seq_hash,
-            seq_start,
-            seq_end,
-            strand: seq_strand,
-        }
-    }
-
-    pub fn save(&self, conn: &Connection) {
-        ChangeLog::create(conn, self);
-    }
-
-    pub fn create(conn: &Connection, change_log: &ChangeLog) {
-        let mut stmt = conn
-            .prepare("INSERT INTO change_log (hash, path_id, path_start, path_end, sequence_hash, sequence_start, sequence_end, sequence_strand) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);")
-            .unwrap();
-        let placeholders = vec![
-            Value::from(change_log.hash.clone()),
-            Value::from(change_log.path_id),
-            Value::from(change_log.path_start),
-            Value::from(change_log.path_end),
-            Value::from(change_log.seq_hash.clone()),
-            Value::from(change_log.seq_start),
-            Value::from(change_log.seq_end),
-            Value::from(change_log.strand.clone()),
-        ];
-        stmt.execute(params_from_iter(placeholders)).unwrap();
-    }
-
-    pub fn exists(conn: &mut Connection, hash: &String) -> bool {
-        let query = "SELECT hash from change_log where hash = ?1;";
-        let mut stmt = conn.prepare(query).unwrap();
-        stmt.exists((hash,)).unwrap()
     }
 }

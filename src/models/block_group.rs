@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::graph::all_simple_paths;
 use crate::models::block_group_edge::BlockGroupEdge;
+use crate::models::change_log::ChangeLog;
 use crate::models::diff_block::{ChangeType, DiffBlock, NewDiffBlock};
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::path::{NewBlock, Path, PathData};
@@ -494,6 +495,22 @@ impl BlockGroup {
             let edge_ids = Edge::bulk_create(conn, new_edges);
             BlockGroupEdge::bulk_create(conn, block_group_id, edge_ids);
         }
+        ChangeLog::bulk_create(
+            conn,
+            &changes
+                .iter()
+                .map(|change| ChangeLog {
+                    id: None,
+                    path_id: change.path.id,
+                    path_start: change.start,
+                    path_end: change.end,
+                    seq_hash: change.block.sequence.hash.clone(),
+                    seq_start: change.block.sequence_start,
+                    seq_end: change.block.sequence_end,
+                    strand: change.block.strand.clone(),
+                })
+                .collect::<Vec<ChangeLog>>(),
+        );
     }
 
     #[allow(clippy::ptr_arg)]
@@ -506,6 +523,16 @@ impl BlockGroup {
         let new_edges = BlockGroup::set_up_new_edges(change, tree);
         let edge_ids = Edge::bulk_create(conn, new_edges);
         BlockGroupEdge::bulk_create(conn, change.block_group_id, edge_ids);
+        ChangeLog::new(
+            change.path.id,
+            change.start,
+            change.end,
+            change.block.sequence.hash.clone(),
+            change.block.sequence_start,
+            change.block.sequence_end,
+            change.block.strand.clone(),
+        )
+        .save(conn);
     }
 
     pub fn set_up_new_edges(
@@ -614,10 +641,10 @@ impl BlockGroup {
         new_edges
     }
 
-    pub fn diff(conn: &Connection, source_id: i32, target_id: i32) {
+    pub fn diff(conn: &Connection, source_id: i32, target_id: i32) -> Vec<DiffBlock> {
         let source_bg_edges = BlockGroupEdge::edges_for_block_group(conn, source_id);
         let mut source_seq_blocks: HashMap<String, Vec<GroupBlock>> = HashMap::new();
-        for block in BlockGroup::blocks_from_edges(conn, &source_bg_edges, true) {
+        for block in BlockGroup::blocks_from_edges(conn, &source_bg_edges, false) {
             source_seq_blocks
                 .entry(block.sequence_hash.clone())
                 .or_default()
@@ -628,7 +655,7 @@ impl BlockGroup {
         }
         let target_bg_edges = BlockGroupEdge::edges_for_block_group(conn, target_id);
         let mut target_seq_blocks: HashMap<String, Vec<GroupBlock>> = HashMap::new();
-        for block in BlockGroup::blocks_from_edges(conn, &target_bg_edges, true) {
+        for block in BlockGroup::blocks_from_edges(conn, &target_bg_edges, false) {
             target_seq_blocks
                 .entry(block.sequence_hash.clone())
                 .or_default()
@@ -713,25 +740,30 @@ impl BlockGroup {
 
         // unsure if all we need is to go over target_bg_edges, it should have all edges of source.
         println!("target");
+
         for edge in target_bg_edges.iter() {
             if added_seqs.contains_key(&edge.source_hash) {
                 for block in added_seqs[&edge.source_hash].iter() {
                     if block.start == edge.source_coordinate {
-                        diff_blocks
+                        let mut diff_block = diff_blocks
                             .entry((block.sequence_hash.clone(), block.start, block.end))
-                            .or_default()
-                            .source_edge(edge)
-                            .block(block)
-                            .change_type(ChangeType::Addition);
+                            .or_insert_with(|| NewDiffBlock {
+                                change_type: ChangeType::Addition,
+                                ..NewDiffBlock::default()
+                            });
+                        diff_block.source_edge = Some(edge.clone());
+                        diff_block.block = Some(block.clone());
                         println!("this one added {edge:?} {block:?}");
                     }
                     if block.end == edge.source_coordinate {
-                        diff_blocks
+                        let mut diff_block = diff_blocks
                             .entry((block.sequence_hash.clone(), block.start, block.end))
-                            .or_default()
-                            .dest_edge(edge)
-                            .block(block)
-                            .change_type(ChangeType::Addition);
+                            .or_insert_with(|| NewDiffBlock {
+                                change_type: ChangeType::Addition,
+                                ..NewDiffBlock::default()
+                            });
+                        diff_block.dest_edge = Some(edge.clone());
+                        diff_block.block = Some(block.clone());
                         println!("exit point {edge:?} {block:?}");
                     }
                 }
@@ -739,21 +771,25 @@ impl BlockGroup {
             if added_seqs.contains_key(&edge.target_hash) {
                 for block in added_seqs[&edge.target_hash].iter() {
                     if block.start == edge.target_coordinate {
-                        diff_blocks
+                        let mut diff_block = diff_blocks
                             .entry((block.sequence_hash.clone(), block.start, block.end))
-                            .or_default()
-                            .source_edge(edge)
-                            .block(block)
-                            .change_type(ChangeType::Addition);
+                            .or_insert_with(|| NewDiffBlock {
+                                change_type: ChangeType::Addition,
+                                ..NewDiffBlock::default()
+                            });
+                        diff_block.source_edge = Some(edge.clone());
+                        diff_block.block = Some(block.clone());
                         println!("this one added {edge:?} {block:?}");
                     }
                     if block.end == edge.source_coordinate {
-                        diff_blocks
+                        let mut diff_block = diff_blocks
                             .entry((block.sequence_hash.clone(), block.start, block.end))
-                            .or_default()
-                            .dest_edge(edge)
-                            .block(block)
-                            .change_type(ChangeType::Addition);
+                            .or_insert_with(|| NewDiffBlock {
+                                change_type: ChangeType::Addition,
+                                ..NewDiffBlock::default()
+                            });
+                        diff_block.dest_edge = Some(edge.clone());
+                        diff_block.block = Some(block.clone());
                         println!("exit point {edge:?} {block:?}");
                     }
                 }
@@ -761,21 +797,25 @@ impl BlockGroup {
             if removed_seqs.contains_key(&edge.source_hash) {
                 for block in removed_seqs[&edge.source_hash].iter() {
                     if block.start == edge.source_coordinate {
-                        diff_blocks
+                        let mut diff_block = diff_blocks
                             .entry((block.sequence_hash.clone(), block.start, block.end))
-                            .or_default()
-                            .source_edge(edge)
-                            .block(block)
-                            .change_type(ChangeType::Deletion);
+                            .or_insert_with(|| NewDiffBlock {
+                                change_type: ChangeType::Deletion,
+                                ..NewDiffBlock::default()
+                            });
+                        diff_block.source_edge = Some(edge.clone());
+                        diff_block.block = Some(block.clone());
                         println!("this one removed {edge:?} {block:?}");
                     }
                     if block.end == edge.source_coordinate {
-                        diff_blocks
+                        let mut diff_block = diff_blocks
                             .entry((block.sequence_hash.clone(), block.start, block.end))
-                            .or_default()
-                            .dest_edge(edge)
-                            .block(block)
-                            .change_type(ChangeType::Deletion);
+                            .or_insert_with(|| NewDiffBlock {
+                                change_type: ChangeType::Deletion,
+                                ..NewDiffBlock::default()
+                            });
+                        diff_block.dest_edge = Some(edge.clone());
+                        diff_block.block = Some(block.clone());
                         println!("exit point {edge:?} {block:?}");
                     }
                 }
@@ -783,34 +823,43 @@ impl BlockGroup {
             if removed_seqs.contains_key(&edge.target_hash) {
                 for block in removed_seqs[&edge.target_hash].iter() {
                     if block.start == edge.target_coordinate {
-                        diff_blocks
+                        let mut diff_block = diff_blocks
                             .entry((block.sequence_hash.clone(), block.start, block.end))
-                            .or_default()
-                            .source_edge(edge)
-                            .block(block)
-                            .change_type(ChangeType::Deletion);
+                            .or_insert_with(|| NewDiffBlock {
+                                change_type: ChangeType::Deletion,
+                                ..NewDiffBlock::default()
+                            });
+                        diff_block.source_edge = Some(edge.clone());
+                        diff_block.block = Some(block.clone());
                         println!("this one removed {edge:?} {block:?}");
                     }
                     if block.end == edge.source_coordinate {
-                        diff_blocks
+                        let mut diff_block = diff_blocks
                             .entry((block.sequence_hash.clone(), block.start, block.end))
-                            .or_default()
-                            .dest_edge(edge)
-                            .block(block)
-                            .change_type(ChangeType::Deletion);
+                            .or_insert_with(|| NewDiffBlock {
+                                change_type: ChangeType::Deletion,
+                                ..NewDiffBlock::default()
+                            });
+                        diff_block.dest_edge = Some(edge.clone());
+                        diff_block.block = Some(block.clone());
                         println!("exit point {edge:?} {block:?}");
                     }
                 }
             }
         }
 
-        println!("{source_seq_blocks:?}");
         println!("{source_bg_edges:?}");
-        println!("{target_seq_blocks:?}");
         println!("{target_bg_edges:?}");
-        println!("added {added_seqs:?}");
-        println!("removed {removed_seqs:?}");
-        println!("{diff_blocks:?}");
+
+        diff_blocks
+            .values()
+            .map(|diff_block| DiffBlock {
+                source_edge: diff_block.source_edge.as_ref().unwrap().clone(),
+                block: diff_block.block.as_ref().unwrap().clone(),
+                dest_edge: diff_block.dest_edge.as_ref().unwrap().clone(),
+                change_type: diff_block.change_type,
+            })
+            .collect()
     }
 }
 
@@ -1061,7 +1110,7 @@ mod tests {
     }
 
     #[test]
-    fn test_diff() {
+    fn test_simple_insert_diff() {
         let conn = &get_connection();
         let (block_group_id, path) = setup_block_group(conn);
         let insert_sequence_hash = Sequence::new()
@@ -1097,9 +1146,73 @@ mod tests {
         };
         let tree = Path::intervaltree_for(conn, &path);
         BlockGroup::insert_change(conn, &change, &tree);
-        BlockGroup::diff(conn, block_group_id, new_bg);
+        let diff = BlockGroup::diff(conn, block_group_id, new_bg);
+        assert_eq!(diff[0].change_type, ChangeType::Addition);
+        assert_eq!(diff[0].source_edge.source_coordinate, 7);
+        assert_eq!(diff[0].source_edge.target_coordinate, 0);
+        assert_eq!(diff[0].dest_edge.source_coordinate, 4);
+        // this is NOT 15 because our path is made up of sequences of length 10, so 15 would be
+        // 5 in the second sequence
+        assert_eq!(diff[0].dest_edge.target_coordinate, 5);
+    }
 
-        // TODO: add the same insert twice in 2 blockgroups to see if we catch it
+    #[test]
+    fn test_duplicate_insert_diff() {
+        let conn = &get_connection();
+        let (block_group_id, path) = setup_block_group(conn);
+        let insert_sequence_hash = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(conn);
+        let insert_sequence = Sequence::sequence_from_hash(conn, &insert_sequence_hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 7,
+            path_end: 15,
+            strand: "+".to_string(),
+        };
+        Sample::create(conn, "target");
+        let new_bg = BlockGroup::get_or_create_sample_block_group(conn, "test", "target", "hg19");
+        let new_paths = Path::get_paths(
+            conn,
+            "select * from path where block_group_id = ?1 AND name = ?2",
+            vec![SQLValue::from(new_bg), SQLValue::from("chr1".to_string())],
+        );
+        let change = PathChange {
+            block_group_id: new_bg,
+            path: path.clone(),
+            start: 7,
+            end: 15,
+            block: insert.clone(),
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(conn, &path);
+        BlockGroup::insert_change(conn, &change, &tree);
+        let change = PathChange {
+            block_group_id: new_bg,
+            path: path.clone(),
+            start: 25,
+            end: 35,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(conn, &path);
+        BlockGroup::insert_change(conn, &change, &tree);
+        let diff = BlockGroup::diff(conn, block_group_id, new_bg);
+        println!("{diff:?}");
+        assert_eq!(diff[0].change_type, ChangeType::Addition);
+        assert_eq!(diff[0].source_edge.source_coordinate, 7);
+        assert_eq!(diff[0].source_edge.target_coordinate, 0);
+        assert_eq!(diff[0].dest_edge.source_coordinate, 4);
+        // this is NOT 15 because our path is made up of sequences of length 10, so 15 would be
+        // 5 in the second sequence
+        assert_eq!(diff[0].dest_edge.target_coordinate, 5);
     }
 
     #[test]
