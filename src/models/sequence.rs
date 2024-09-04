@@ -103,7 +103,7 @@ impl<'a> NewSequence<'a> {
         }
     }
 
-    pub fn save(mut self, conn: &Connection) -> String {
+    pub fn save(mut self, conn: &Connection) -> Sequence {
         let mut length = 0;
         if self.sequence.is_none() && self.file_path.is_none() {
             panic!("Sequence or file_path must be set.");
@@ -155,7 +155,15 @@ impl<'a> NewSequence<'a> {
                 .unwrap();
             obj_hash = rows.next().unwrap().unwrap();
         }
-        obj_hash
+        Sequence {
+            hash: obj_hash,
+            sequence_type: self.sequence_type.unwrap().to_string(),
+            sequence: self.sequence.unwrap_or("").to_string(),
+            name: self.name.unwrap_or("").to_string(),
+            file_path: self.file_path.unwrap_or("").to_string(),
+            length: self.length.unwrap_or(length),
+            external_sequence: !self.file_path.unwrap_or("").is_empty(),
+        }
     }
 }
 
@@ -323,16 +331,10 @@ mod tests {
     #[test]
     fn test_create_sequence_in_db() {
         let conn = &mut get_connection();
-        let seq_hash = Sequence::new()
+        let sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("AACCTT")
             .save(conn);
-        let sequences = Sequence::sequences(
-            conn,
-            "select * from sequence where hash = ?1",
-            vec![Value::from(seq_hash)],
-        );
-        let sequence = sequences.first().unwrap();
         assert_eq!(&sequence.sequence, "AACCTT");
         assert_eq!(sequence.sequence_type, "DNA");
         assert!(!sequence.external_sequence);
@@ -341,18 +343,12 @@ mod tests {
     #[test]
     fn test_create_sequence_on_disk() {
         let conn = &mut get_connection();
-        let seq_hash = Sequence::new()
+        let sequence = Sequence::new()
             .sequence_type("DNA")
             .name("chr1")
             .file_path("/some/path.fa")
             .length(10)
             .save(conn);
-        let sequences = Sequence::sequences(
-            conn,
-            "select * from sequence where hash = ?1",
-            vec![Value::from(seq_hash)],
-        );
-        let sequence = sequences.first().unwrap();
         assert_eq!(sequence.sequence_type, "DNA");
         assert_eq!(&sequence.sequence, "");
         assert_eq!(sequence.name, "chr1");
@@ -366,19 +362,21 @@ mod tests {
         let conn = &mut get_connection();
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
-        let seq_hash = Sequence::new()
+        let sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("ATCGATCGATCGATCGATCGGGAACACACAGAGA")
             .save(conn);
-        let seq = Sequence::sequence_from_hash(conn, &seq_hash).unwrap();
         assert_eq!(
-            seq.get_sequence(None, None),
+            sequence.get_sequence(None, None),
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA"
         );
-        assert_eq!(seq.get_sequence(0, 5), "ATCGA");
-        assert_eq!(seq.get_sequence(10, 15), "CGATC");
-        assert_eq!(seq.get_sequence(3, None), "GATCGATCGATCGATCGGGAACACACAGAGA");
-        assert_eq!(seq.get_sequence(None, 5), "ATCGA");
+        assert_eq!(sequence.get_sequence(0, 5), "ATCGA");
+        assert_eq!(sequence.get_sequence(10, 15), "CGATC");
+        assert_eq!(
+            sequence.get_sequence(3, None),
+            "GATCGATCGATCGATCGGGAACACACAGAGA"
+        );
+        assert_eq!(sequence.get_sequence(None, 5), "ATCGA");
     }
 
     #[test]
@@ -386,13 +384,12 @@ mod tests {
         let conn = &mut get_connection();
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
-        let seq_hash = Sequence::new()
+        let seq = Sequence::new()
             .sequence_type("DNA")
             .name("m123")
             .file_path(fasta_path.to_str().unwrap())
             .length(34)
             .save(conn);
-        let seq = Sequence::sequence_from_hash(conn, &seq_hash).unwrap();
         assert_eq!(
             seq.get_sequence(None, None),
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA"
