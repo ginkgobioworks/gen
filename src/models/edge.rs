@@ -235,20 +235,12 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    use crate::migrations::run_migrations;
     use crate::models::{sequence::Sequence, Collection};
-
-    fn get_connection() -> Connection {
-        let mut conn = Connection::open_in_memory()
-            .unwrap_or_else(|_| panic!("Error opening in memory test db"));
-        rusqlite::vtab::array::load_module(&conn).unwrap();
-        run_migrations(&mut conn);
-        conn
-    }
+    use crate::test_helpers::get_connection;
 
     #[test]
     fn test_bulk_create() {
-        let conn = &mut get_connection();
+        let conn = &mut get_connection(None);
         Collection::create(conn, "test collection");
         let sequence1 = Sequence::new()
             .sequence_type("DNA")
@@ -315,7 +307,7 @@ mod tests {
 
     #[test]
     fn test_bulk_create_with_existing_edge() {
-        let conn = &mut get_connection();
+        let conn = &mut get_connection(None);
         Collection::create(conn, "test collection");
         let sequence1 = Sequence::new()
             .sequence_type("DNA")

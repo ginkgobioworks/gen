@@ -296,15 +296,7 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
-    use crate::migrations::run_migrations;
-
-    fn get_connection() -> Connection {
-        let mut conn = Connection::open_in_memory()
-            .unwrap_or_else(|_| panic!("Error opening in memory test db"));
-        rusqlite::vtab::array::load_module(&conn).unwrap();
-        run_migrations(&mut conn);
-        conn
-    }
+    use crate::test_helpers::get_connection;
 
     #[test]
     fn test_builder() {
@@ -330,7 +322,7 @@ mod tests {
 
     #[test]
     fn test_create_sequence_in_db() {
-        let conn = &mut get_connection();
+        let conn = &mut get_connection(None);
         let sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("AACCTT")
@@ -342,7 +334,7 @@ mod tests {
 
     #[test]
     fn test_create_sequence_on_disk() {
-        let conn = &mut get_connection();
+        let conn = &mut get_connection(None);
         let sequence = Sequence::new()
             .sequence_type("DNA")
             .name("chr1")
@@ -359,7 +351,7 @@ mod tests {
 
     #[test]
     fn test_get_sequence() {
-        let conn = &mut get_connection();
+        let conn = &mut get_connection(None);
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
         let sequence = Sequence::new()
@@ -381,7 +373,7 @@ mod tests {
 
     #[test]
     fn test_get_sequence_from_disk() {
-        let conn = &mut get_connection();
+        let conn = &mut get_connection(None);
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
         let seq = Sequence::new()
