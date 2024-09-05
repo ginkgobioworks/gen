@@ -183,14 +183,14 @@ impl Path {
         let mut sequence_hashes = HashSet::new();
         for edge in &edges {
             if edge.source_hash != Edge::PATH_START_HASH {
-                sequence_hashes.insert(edge.source_hash.clone());
+                sequence_hashes.insert(edge.source_hash.as_str());
             }
             if edge.target_hash != Edge::PATH_END_HASH {
-                sequence_hashes.insert(edge.target_hash.clone());
+                sequence_hashes.insert(edge.target_hash.as_str());
             }
         }
         let sequences_by_hash =
-            Sequence::sequences_by_hash(conn, sequence_hashes.into_iter().collect());
+            Sequence::sequences_by_hash(conn, sequence_hashes.into_iter().collect::<Vec<&str>>());
 
         let mut blocks = vec![];
         let mut path_length = 0;
