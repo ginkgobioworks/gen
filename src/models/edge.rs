@@ -250,7 +250,7 @@ mod tests {
     fn test_bulk_create() {
         let conn = &mut get_connection();
         Collection::create(conn, "test collection");
-        let sequence1_hash = Sequence::new()
+        let sequence1 = Sequence::new()
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
@@ -258,28 +258,28 @@ mod tests {
             source_hash: Edge::PATH_START_HASH.to_string(),
             source_coordinate: -1,
             source_strand: "+".to_string(),
-            target_hash: sequence1_hash.clone(),
+            target_hash: sequence1.hash.clone(),
             target_coordinate: 1,
             target_strand: "+".to_string(),
             chromosome_index: 0,
             phased: 0,
         };
-        let sequence2_hash = Sequence::new()
+        let sequence2 = Sequence::new()
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
         let edge2 = EdgeData {
-            source_hash: sequence1_hash.clone(),
+            source_hash: sequence1.hash.clone(),
             source_coordinate: 2,
             source_strand: "+".to_string(),
-            target_hash: sequence2_hash.clone(),
+            target_hash: sequence2.hash.clone(),
             target_coordinate: 3,
             target_strand: "+".to_string(),
             chromosome_index: 0,
             phased: 0,
         };
         let edge3 = EdgeData {
-            source_hash: sequence2_hash.clone(),
+            source_hash: sequence2.hash.clone(),
             source_coordinate: 4,
             source_strand: "+".to_string(),
             target_hash: Edge::PATH_END_HASH.to_string(),
@@ -301,13 +301,13 @@ mod tests {
 
         let edge_result1 = edges_by_source_hash.get(Edge::PATH_START_HASH).unwrap();
         assert_eq!(edge_result1.source_coordinate, -1);
-        assert_eq!(edge_result1.target_hash, sequence1_hash);
+        assert_eq!(edge_result1.target_hash, sequence1.hash);
         assert_eq!(edge_result1.target_coordinate, 1);
-        let edge_result2 = edges_by_source_hash.get(&sequence1_hash).unwrap();
+        let edge_result2 = edges_by_source_hash.get(&sequence1.hash).unwrap();
         assert_eq!(edge_result2.source_coordinate, 2);
-        assert_eq!(edge_result2.target_hash, sequence2_hash);
+        assert_eq!(edge_result2.target_hash, sequence2.hash);
         assert_eq!(edge_result2.target_coordinate, 3);
-        let edge_result3 = edges_by_source_hash.get(&sequence2_hash).unwrap();
+        let edge_result3 = edges_by_source_hash.get(&sequence2.hash).unwrap();
         assert_eq!(edge_result3.source_coordinate, 4);
         assert_eq!(edge_result3.target_hash, Edge::PATH_END_HASH);
         assert_eq!(edge_result3.target_coordinate, -1);
@@ -317,7 +317,7 @@ mod tests {
     fn test_bulk_create_with_existing_edge() {
         let conn = &mut get_connection();
         Collection::create(conn, "test collection");
-        let sequence1_hash = Sequence::new()
+        let sequence1 = Sequence::new()
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
@@ -327,7 +327,7 @@ mod tests {
             Edge::PATH_START_HASH.to_string(),
             -1,
             "+".to_string(),
-            sequence1_hash.clone(),
+            sequence1.hash.clone(),
             1,
             "+".to_string(),
             0,
@@ -335,35 +335,35 @@ mod tests {
         );
         assert_eq!(existing_edge.source_hash, Edge::PATH_START_HASH);
         assert_eq!(existing_edge.source_coordinate, -1);
-        assert_eq!(existing_edge.target_hash, sequence1_hash);
+        assert_eq!(existing_edge.target_hash, sequence1.hash);
         assert_eq!(existing_edge.target_coordinate, 1);
 
         let edge1 = EdgeData {
             source_hash: Edge::PATH_START_HASH.to_string(),
             source_coordinate: -1,
             source_strand: "+".to_string(),
-            target_hash: sequence1_hash.clone(),
+            target_hash: sequence1.hash.clone(),
             target_coordinate: 1,
             target_strand: "+".to_string(),
             chromosome_index: 0,
             phased: 0,
         };
-        let sequence2_hash = Sequence::new()
+        let sequence2 = Sequence::new()
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
         let edge2 = EdgeData {
-            source_hash: sequence1_hash.clone(),
+            source_hash: sequence1.hash.clone(),
             source_coordinate: 2,
             source_strand: "+".to_string(),
-            target_hash: sequence2_hash.clone(),
+            target_hash: sequence2.hash.clone(),
             target_coordinate: 3,
             target_strand: "+".to_string(),
             chromosome_index: 0,
             phased: 0,
         };
         let edge3 = EdgeData {
-            source_hash: sequence2_hash.clone(),
+            source_hash: sequence2.hash.clone(),
             source_coordinate: 4,
             source_strand: "+".to_string(),
             target_hash: Edge::PATH_END_HASH.to_string(),
@@ -388,13 +388,13 @@ mod tests {
         assert_eq!(edge_result1.id, existing_edge.id);
 
         assert_eq!(edge_result1.source_coordinate, -1);
-        assert_eq!(edge_result1.target_hash, sequence1_hash);
+        assert_eq!(edge_result1.target_hash, sequence1.hash);
         assert_eq!(edge_result1.target_coordinate, 1);
-        let edge_result2 = edges_by_source_hash.get(&sequence1_hash).unwrap();
+        let edge_result2 = edges_by_source_hash.get(&sequence1.hash).unwrap();
         assert_eq!(edge_result2.source_coordinate, 2);
-        assert_eq!(edge_result2.target_hash, sequence2_hash);
+        assert_eq!(edge_result2.target_hash, sequence2.hash);
         assert_eq!(edge_result2.target_coordinate, 3);
-        let edge_result3 = edges_by_source_hash.get(&sequence2_hash).unwrap();
+        let edge_result3 = edges_by_source_hash.get(&sequence2.hash).unwrap();
         assert_eq!(edge_result3.source_coordinate, 4);
         assert_eq!(edge_result3.target_hash, Edge::PATH_END_HASH);
         assert_eq!(edge_result3.target_coordinate, -1);

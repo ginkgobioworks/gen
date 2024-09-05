@@ -87,7 +87,7 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
                 .to_string();
             let name = String::from_utf8(record.name().to_vec()).unwrap();
             let sequence_length = record.sequence().len() as i32;
-            let seq_hash = if shallow {
+            let seq = if shallow {
                 Sequence::new()
                     .sequence_type("DNA")
                     .name(&name)
@@ -105,7 +105,7 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
                 Edge::PATH_START_HASH.to_string(),
                 0,
                 "+".to_string(),
-                seq_hash.to_string(),
+                seq.hash.to_string(),
                 0,
                 "+".to_string(),
                 0,
@@ -113,7 +113,7 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
             );
             let edge_out_of = Edge::create(
                 conn,
-                seq_hash.to_string(),
+                seq.hash.to_string(),
                 sequence_length,
                 "+".to_string(),
                 Edge::PATH_END_HASH.to_string(),
@@ -212,14 +212,10 @@ impl<'a> SequenceCache<'_> {
         if let Some(found_sequence) = sequence_lookup {
             found_sequence.clone()
         } else {
-            let new_sequence_hash = Sequence::new()
+            let new_sequence = Sequence::new()
                 .sequence_type("DNA")
                 .sequence(&sequence)
                 .save(sequence_cache.conn);
-            let new_sequence = NewSequence::new()
-                .sequence_type(sequence_type)
-                .sequence(&sequence)
-                .build();
 
             sequence_cache
                 .cache
