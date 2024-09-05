@@ -169,7 +169,7 @@ impl<'a> BlockGroupCache<'_> {
                 block_group_cache.conn,
                 collection_name,
                 sample_name,
-                &name.clone(),
+                &name,
             );
             block_group_cache
                 .cache

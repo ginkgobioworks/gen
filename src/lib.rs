@@ -3,6 +3,7 @@ use std::str;
 pub mod graph;
 pub mod migrations;
 pub mod models;
+mod test_helpers;
 
 use crate::migrations::run_migrations;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;

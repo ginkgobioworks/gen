@@ -7,10 +7,11 @@ use std::collections::{HashMap, HashSet};
 
 use crate::graph::all_simple_paths;
 use crate::models::block_group_edge::BlockGroupEdge;
+use crate::models::change_log::ChangeLog;
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::path::{NewBlock, Path, PathData};
 use crate::models::path_edge::PathEdge;
-use crate::models::sequence::{NewSequence, Sequence};
+use crate::models::sequence::Sequence;
 
 #[derive(Debug)]
 pub struct BlockGroup {
@@ -446,6 +447,22 @@ impl BlockGroup {
             let edge_ids = Edge::bulk_create(conn, new_edges);
             BlockGroupEdge::bulk_create(conn, block_group_id, edge_ids);
         }
+        ChangeLog::bulk_create(
+            conn,
+            &changes
+                .iter()
+                .map(|change| ChangeLog {
+                    id: None,
+                    path_id: change.path.id,
+                    path_start: change.start,
+                    path_end: change.end,
+                    seq_hash: change.block.sequence.hash.clone(),
+                    seq_start: change.block.sequence_start,
+                    seq_end: change.block.sequence_end,
+                    strand: change.block.strand.clone(),
+                })
+                .collect::<Vec<ChangeLog>>(),
+        );
     }
 
     #[allow(clippy::ptr_arg)]
@@ -458,6 +475,16 @@ impl BlockGroup {
         let new_edges = BlockGroup::set_up_new_edges(change, tree);
         let edge_ids = Edge::bulk_create(conn, new_edges);
         BlockGroupEdge::bulk_create(conn, change.block_group_id, edge_ids);
+        ChangeLog::new(
+            change.path.id,
+            change.start,
+            change.end,
+            change.block.sequence.hash.clone(),
+            change.block.sequence_start,
+            change.block.sequence_end,
+            change.block.strand.clone(),
+        )
+        .save(conn);
     }
 
     pub fn set_up_new_edges(

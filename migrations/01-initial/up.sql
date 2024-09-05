@@ -23,7 +23,8 @@ CREATE TABLE block_group (
   FOREIGN KEY(collection_name) REFERENCES collection(name),
   FOREIGN KEY(sample_name) REFERENCES sample(name)
 ) STRICT;
-CREATE UNIQUE INDEX block_group_uidx ON block_group(collection_name, sample_name, name);
+CREATE UNIQUE INDEX block_group_uidx ON block_group(collection_name, sample_name, name) WHERE sample_name is not null;
+CREATE UNIQUE INDEX block_group_null_sample_uidx ON block_group(collection_name, name) WHERE sample_name is null;
 
 CREATE TABLE path (
   id INTEGER PRIMARY KEY NOT NULL,
@@ -33,8 +34,15 @@ CREATE TABLE path (
 ) STRICT;
 CREATE UNIQUE INDEX path_uidx ON path(block_group_id, name);
 
+CREATE TABLE change_set (
+  id INTEGER PRIMARY KEY NOT NULL,
+  created INTEGER NOT NULL,
+  author TEXT NOT NULL,
+  message TEXT NOT NULL
+) STRICT;
+
 CREATE TABLE change_log (
-  hash TEXT PRIMARY KEY NOT NULL,
+  id INTEGER PRIMARY KEY NOT NULL,
   path_id INTEGER NOT NULL,
   path_start INTEGER NOT NULL,
   path_end INTEGER NOT NULL,
@@ -45,7 +53,15 @@ CREATE TABLE change_log (
   FOREIGN KEY(path_id) REFERENCES path(id),
   FOREIGN KEY(sequence_hash) REFERENCES sequence(hash)
 ) STRICT;
-CREATE UNIQUE INDEX change_log_uidx ON change_log(hash);
+
+CREATE TABLE change_set_changes (
+  id INTEGER PRIMARY KEY NOT NULL,
+  change_set_id INTEGER NOT NULL,
+  change_log_id INTEGER NOT NULL,
+  FOREIGN KEY(change_set_id) REFERENCES change_set(id),
+  FOREIGN KEY(change_log_id) REFERENCES change_log(id)
+) STRICT;
+CREATE UNIQUE INDEX change_set_changes_uidx ON change_set_changes(change_set_id, change_log_id);
 
 CREATE TABLE edges (
   id INTEGER PRIMARY KEY NOT NULL,
