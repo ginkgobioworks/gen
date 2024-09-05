@@ -211,19 +211,19 @@ mod tests {
     use crate::test_helpers::get_connection;
 
     fn setup_block_group(conn: &Connection) -> (i32, Path) {
-        let a_seq_hash = Sequence::new()
+        let a_seq = Sequence::new()
             .sequence_type("DNA")
             .sequence("AAAAAAAAAA")
             .save(conn);
-        let t_seq_hash = Sequence::new()
+        let t_seq = Sequence::new()
             .sequence_type("DNA")
             .sequence("TTTTTTTTTT")
             .save(conn);
-        let c_seq_hash = Sequence::new()
+        let c_seq = Sequence::new()
             .sequence_type("DNA")
             .sequence("CCCCCCCCCC")
             .save(conn);
-        let g_seq_hash = Sequence::new()
+        let g_seq = Sequence::new()
             .sequence_type("DNA")
             .sequence("GGGGGGGGGG")
             .save(conn);
@@ -234,7 +234,7 @@ mod tests {
             Edge::PATH_START_HASH.to_string(),
             0,
             "+".to_string(),
-            a_seq_hash.clone(),
+            a_seq.hash.clone(),
             0,
             "+".to_string(),
             0,
@@ -242,10 +242,10 @@ mod tests {
         );
         let edge1 = Edge::create(
             conn,
-            a_seq_hash,
+            a_seq.hash,
             10,
             "+".to_string(),
-            t_seq_hash.clone(),
+            t_seq.hash.clone(),
             0,
             "+".to_string(),
             0,
@@ -253,10 +253,10 @@ mod tests {
         );
         let edge2 = Edge::create(
             conn,
-            t_seq_hash,
+            t_seq.hash,
             10,
             "+".to_string(),
-            c_seq_hash.clone(),
+            c_seq.hash.clone(),
             0,
             "+".to_string(),
             0,
@@ -264,10 +264,10 @@ mod tests {
         );
         let edge3 = Edge::create(
             conn,
-            c_seq_hash,
+            c_seq.hash,
             10,
             "+".to_string(),
-            g_seq_hash.clone(),
+            g_seq.hash.clone(),
             0,
             "+".to_string(),
             0,
@@ -275,7 +275,7 @@ mod tests {
         );
         let edge4 = Edge::create(
             conn,
-            g_seq_hash,
+            g_seq.hash,
             10,
             "+".to_string(),
             Edge::PATH_END_HASH.to_string(),
@@ -302,11 +302,11 @@ mod tests {
     fn test_simple_insert_change() {
         let conn = &get_connection(None);
         let (block_group_id, path) = setup_block_group(conn);
-        let insert_sequence_hash = Sequence::new()
+        let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(conn);
-        let insert_sequence = Sequence::sequence_from_hash(conn, &insert_sequence_hash).unwrap();
+        let insert_sequence = Sequence::sequence_from_hash(conn, &insert_sequence.hash).unwrap();
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
