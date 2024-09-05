@@ -335,6 +335,10 @@ impl BlockGroup {
             }
         }
 
+        // NOTE: We need a dedicated start node and a dedicated end node for the graph formed by the
+        // block group, since different paths in the block group may start or end at different
+        // places on sequences.  These two "start sequence" and "end sequence" blocks will serve
+        // that role.
         let start_sequence = Sequence::sequence_from_hash(conn, Sequence::PATH_START_HASH).unwrap();
         let start_block = GroupBlock {
             id: block_index + 1,
@@ -550,6 +554,10 @@ impl BlockGroup {
                 phased: change.phased,
             };
             new_edges.push(new_edge);
+
+            // NOTE: If the deletion is happening at the very beginning of a path, we need to add
+            // an edge from the dedicated start node to the end of the deletion, to indicate it's
+            // another start point in the block group DAG.
             if change.start == 0 {
                 let new_beginning_edge = EdgeData {
                     source_hash: Sequence::PATH_START_HASH.to_string(),
@@ -563,6 +571,9 @@ impl BlockGroup {
                 };
                 new_edges.push(new_beginning_edge);
             }
+        // NOTE: If the deletion is happening at the very end of a path, we might add an edge
+        // from the beginning of the deletion to the dedicated end node, but in practice it
+        // doesn't affect sequence readouts, so it may not be worth it.
         } else {
             // Insertion/replacement
             let new_start_edge = EdgeData {
@@ -1214,11 +1225,10 @@ mod tests {
     fn insert_at_beginning_of_path() {
         let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = Sequence::new()
+        let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
@@ -1256,11 +1266,10 @@ mod tests {
         let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
 
-        let insert_sequence_hash = Sequence::new()
+        let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
@@ -1297,11 +1306,10 @@ mod tests {
     fn insert_at_one_bp_into_block() {
         let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = Sequence::new()
+        let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
@@ -1338,11 +1346,10 @@ mod tests {
     fn insert_at_one_bp_from_end_of_block() {
         let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let insert_sequence_hash = Sequence::new()
+        let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_sequence = Sequence::sequence_from_hash(&conn, &insert_sequence_hash).unwrap();
         let insert = NewBlock {
             id: 0,
             sequence: insert_sequence.clone(),
@@ -1379,12 +1386,10 @@ mod tests {
     fn delete_at_beginning_of_path() {
         let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let deletion_sequence_hash = Sequence::new()
+        let deletion_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
-        let deletion_sequence =
-            Sequence::sequence_from_hash(&conn, &deletion_sequence_hash).unwrap();
         let deletion = NewBlock {
             id: 0,
             sequence: deletion_sequence.clone(),
@@ -1421,12 +1426,10 @@ mod tests {
     fn delete_at_end_of_path() {
         let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let deletion_sequence_hash = Sequence::new()
+        let deletion_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
-        let deletion_sequence =
-            Sequence::sequence_from_hash(&conn, &deletion_sequence_hash).unwrap();
         let deletion = NewBlock {
             id: 0,
             sequence: deletion_sequence.clone(),
@@ -1463,12 +1466,10 @@ mod tests {
     fn deletion_starting_at_block_boundary() {
         let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let deletion_sequence_hash = Sequence::new()
+        let deletion_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
-        let deletion_sequence =
-            Sequence::sequence_from_hash(&conn, &deletion_sequence_hash).unwrap();
         let deletion = NewBlock {
             id: 0,
             sequence: deletion_sequence.clone(),
@@ -1505,12 +1506,10 @@ mod tests {
     fn deletion_ending_at_block_boundary() {
         let conn = get_connection();
         let (block_group_id, path) = setup_block_group(&conn);
-        let deletion_sequence_hash = Sequence::new()
+        let deletion_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
-        let deletion_sequence =
-            Sequence::sequence_from_hash(&conn, &deletion_sequence_hash).unwrap();
         let deletion = NewBlock {
             id: 0,
             sequence: deletion_sequence.clone(),

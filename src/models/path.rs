@@ -195,6 +195,9 @@ impl Path {
         let mut blocks = vec![];
         let mut path_length = 0;
 
+        // NOTE: Adding a "start block" for the dedicated start sequence with a range from i32::MIN
+        // to 0 makes interval tree lookups work better.  If the point being looked up is -1 (or
+        // below), it will return this block.
         let start_sequence = Sequence::sequence_from_hash(conn, Sequence::PATH_START_HASH).unwrap();
         blocks.push(NewBlock {
             id: -1,
@@ -220,6 +223,9 @@ impl Path {
             blocks.push(block);
         }
 
+        // NOTE: Adding an "end block" for the dedicated end sequence with a range from the path
+        // length to i32::MAX makes interval tree lookups work better.  If the point being looked up
+        // is the path length (or higher), it will return this block.
         let end_sequence = Sequence::sequence_from_hash(conn, Sequence::PATH_END_HASH).unwrap();
         blocks.push(NewBlock {
             id: -2,
