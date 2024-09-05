@@ -3,7 +3,7 @@ use std::str;
 pub mod graph;
 pub mod migrations;
 pub mod models;
-mod test_helpers;
+pub mod test_helpers;
 
 use crate::migrations::run_migrations;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
@@ -81,14 +81,7 @@ pub fn get_overlap(a: i32, b: i32, x: i32, y: i32) -> (bool, bool, bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::migrations::run_migrations;
-
-    fn get_connection() -> Connection {
-        let mut conn = Connection::open_in_memory()
-            .unwrap_or_else(|_| panic!("Error opening in memory test db"));
-        run_migrations(&mut conn);
-        conn
-    }
+    use crate::test_helpers::get_connection;
 
     #[test]
     fn it_hashes() {
@@ -100,7 +93,7 @@ mod tests {
 
     #[test]
     fn it_queries() {
-        let conn = get_connection();
+        let conn = get_connection(None);
         let sequence_count: i32 = conn
             .query_row(
                 "SELECT count(*) from sequence where hash = 'foo'",

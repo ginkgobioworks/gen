@@ -441,24 +441,7 @@ mod tests {
     use std::fs;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-    use gen::migrations::run_migrations;
-
-    fn get_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Connection {
-        let path: Option<&str> = db_path.into();
-        let mut conn;
-        if let Some(v) = path {
-            if fs::metadata(v).is_ok() {
-                fs::remove_file(v).unwrap();
-            }
-            conn = Connection::open(v).unwrap_or_else(|_| panic!("Error connecting to {}", v));
-        } else {
-            conn = Connection::open_in_memory()
-                .unwrap_or_else(|_| panic!("Error opening in memory test db"));
-        }
-        rusqlite::vtab::array::load_module(&conn).unwrap();
-        run_migrations(&mut conn);
-        conn
-    }
+    use gen::test_helpers::get_connection;
 
     #[test]
     fn test_add_fasta() {

@@ -224,20 +224,12 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
-    use crate::migrations::run_migrations;
     use crate::models::{block_group::BlockGroup, sequence::NewSequence, Collection};
-
-    fn get_connection() -> Connection {
-        let mut conn = Connection::open_in_memory()
-            .unwrap_or_else(|_| panic!("Error opening in memory test db"));
-        rusqlite::vtab::array::load_module(&conn).unwrap();
-        run_migrations(&mut conn);
-        conn
-    }
+    use crate::test_helpers::get_connection;
 
     #[test]
     fn test_gets_sequence() {
-        let conn = &mut get_connection();
+        let conn = &mut get_connection(None);
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
         let sequence1 = Sequence::new()
@@ -323,7 +315,7 @@ mod tests {
 
     #[test]
     fn test_gets_sequence_with_rc() {
-        let conn = &mut get_connection();
+        let conn = &mut get_connection(None);
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
         let sequence1 = Sequence::new()
@@ -416,7 +408,7 @@ mod tests {
 
     #[test]
     fn test_intervaltree() {
-        let conn = &mut get_connection();
+        let conn = &mut get_connection(None);
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
         let sequence1 = Sequence::new()
