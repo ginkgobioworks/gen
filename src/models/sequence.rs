@@ -103,7 +103,7 @@ impl<'a> NewSequence<'a> {
         }
     }
 
-    pub fn save(mut self, conn: &Connection) -> Sequence {
+    pub fn save(self, conn: &Connection) -> Sequence {
         let mut length = 0;
         if self.sequence.is_none() && self.file_path.is_none() {
             panic!("Sequence or file_path must be set.");
@@ -168,6 +168,10 @@ impl<'a> NewSequence<'a> {
 }
 
 impl Sequence {
+    pub const PATH_START_HASH: &'static str =
+        "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
+    pub const PATH_END_HASH: &'static str =
+        "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
     #[allow(clippy::new_ret_no_self)]
     pub fn new() -> NewSequence<'static> {
         NewSequence::new()
@@ -240,6 +244,10 @@ impl Sequence {
         self.sequence[start as usize..end as usize].to_string()
     }
 
+    fn is_delimiter_hash(hash: &str) -> bool {
+        hash == Self::PATH_START_HASH || hash == Self::PATH_END_HASH
+    }
+
     pub fn sequences(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Sequence> {
         let mut stmt = conn.prepare_cached(query).unwrap();
         let rows = stmt
@@ -249,10 +257,20 @@ impl Sequence {
                 if !file_path.is_empty() {
                     external_sequence = true;
                 }
+                let hash: String = row.get(0).unwrap();
+                // NOTE: "Delimiter" sequences are present to point to the actual start or end of a
+                // path or node in a block group.  They are stored with a non-empty sequence in the
+                // database in order to satisfy foreign key constraints, so we must make them empty
+                // here.
+                let sequence: String = if Sequence::is_delimiter_hash(&hash) {
+                    "".to_string()
+                } else {
+                    row.get(2).unwrap()
+                };
                 Ok(Sequence {
-                    hash: row.get(0).unwrap(),
+                    hash,
                     sequence_type: row.get(1).unwrap(),
-                    sequence: row.get(2).unwrap(),
+                    sequence,
                     name: row.get(3).unwrap(),
                     file_path,
                     length: row.get(5).unwrap(),
@@ -292,7 +310,6 @@ impl Sequence {
 
 mod tests {
     use rusqlite::Connection;
-    use std::ops::Deref;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 

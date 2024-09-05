@@ -1,4 +1,4 @@
-use crate::models::{edge::Edge, path::Path};
+use crate::models::edge::Edge;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use std::collections::HashMap;

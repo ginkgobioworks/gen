@@ -31,11 +31,6 @@ pub struct EdgeData {
 }
 
 impl Edge {
-    pub const PATH_START_HASH: &'static str =
-        "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
-    pub const PATH_END_HASH: &'static str =
-        "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
-
     #[allow(clippy::too_many_arguments)]
     pub fn create(
         conn: &Connection,
@@ -249,7 +244,7 @@ mod tests {
             .sequence("ATCGATCG")
             .save(conn);
         let edge1 = EdgeData {
-            source_hash: Edge::PATH_START_HASH.to_string(),
+            source_hash: Sequence::PATH_START_HASH.to_string(),
             source_coordinate: -1,
             source_strand: Strand::Forward,
             target_hash: sequence1.hash.clone(),
@@ -276,7 +271,7 @@ mod tests {
             source_hash: sequence2.hash.clone(),
             source_coordinate: 4,
             source_strand: Strand::Forward,
-            target_hash: Edge::PATH_END_HASH.to_string(),
+            target_hash: Sequence::PATH_END_HASH.to_string(),
             target_coordinate: -1,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -293,7 +288,7 @@ mod tests {
             .map(|edge| (edge.source_hash.clone(), edge))
             .collect::<HashMap<String, Edge>>();
 
-        let edge_result1 = edges_by_source_hash.get(Edge::PATH_START_HASH).unwrap();
+        let edge_result1 = edges_by_source_hash.get(Sequence::PATH_START_HASH).unwrap();
         assert_eq!(edge_result1.source_coordinate, -1);
         assert_eq!(edge_result1.target_hash, sequence1.hash);
         assert_eq!(edge_result1.target_coordinate, 1);
@@ -303,7 +298,7 @@ mod tests {
         assert_eq!(edge_result2.target_coordinate, 3);
         let edge_result3 = edges_by_source_hash.get(&sequence2.hash).unwrap();
         assert_eq!(edge_result3.source_coordinate, 4);
-        assert_eq!(edge_result3.target_hash, Edge::PATH_END_HASH);
+        assert_eq!(edge_result3.target_hash, Sequence::PATH_END_HASH);
         assert_eq!(edge_result3.target_coordinate, -1);
     }
 
@@ -318,7 +313,7 @@ mod tests {
         // NOTE: Create one edge ahead of time to confirm an existing row ID gets returned in the bulk create
         let existing_edge = Edge::create(
             conn,
-            Edge::PATH_START_HASH.to_string(),
+            Sequence::PATH_START_HASH.to_string(),
             -1,
             Strand::Forward,
             sequence1.hash.clone(),
@@ -327,13 +322,13 @@ mod tests {
             0,
             0,
         );
-        assert_eq!(existing_edge.source_hash, Edge::PATH_START_HASH);
+        assert_eq!(existing_edge.source_hash, Sequence::PATH_START_HASH);
         assert_eq!(existing_edge.source_coordinate, -1);
         assert_eq!(existing_edge.target_hash, sequence1.hash);
         assert_eq!(existing_edge.target_coordinate, 1);
 
         let edge1 = EdgeData {
-            source_hash: Edge::PATH_START_HASH.to_string(),
+            source_hash: Sequence::PATH_START_HASH.to_string(),
             source_coordinate: -1,
             source_strand: Strand::Forward,
             target_hash: sequence1.hash.clone(),
@@ -360,7 +355,7 @@ mod tests {
             source_hash: sequence2.hash.clone(),
             source_coordinate: 4,
             source_strand: Strand::Forward,
-            target_hash: Edge::PATH_END_HASH.to_string(),
+            target_hash: Sequence::PATH_END_HASH.to_string(),
             target_coordinate: -1,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -377,7 +372,7 @@ mod tests {
             .map(|edge| (edge.source_hash.clone(), edge))
             .collect::<HashMap<String, Edge>>();
 
-        let edge_result1 = edges_by_source_hash.get(Edge::PATH_START_HASH).unwrap();
+        let edge_result1 = edges_by_source_hash.get(Sequence::PATH_START_HASH).unwrap();
 
         assert_eq!(edge_result1.id, existing_edge.id);
 
@@ -390,7 +385,7 @@ mod tests {
         assert_eq!(edge_result2.target_coordinate, 3);
         let edge_result3 = edges_by_source_hash.get(&sequence2.hash).unwrap();
         assert_eq!(edge_result3.source_coordinate, 4);
-        assert_eq!(edge_result3.target_hash, Edge::PATH_END_HASH);
+        assert_eq!(edge_result3.target_hash, Sequence::PATH_END_HASH);
         assert_eq!(edge_result3.target_coordinate, -1);
     }
 }
