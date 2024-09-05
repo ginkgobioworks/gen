@@ -19,6 +19,16 @@ pub struct ChangeLog {
     pub strand: String,
 }
 
+#[derive(Debug, PartialEq)]
+struct ChangeLogSummary {
+    id: i32,
+    parent_region: (String, i32, i32),
+    parent_left: String,
+    parent_impacted: String,
+    parent_right: String,
+    new_sequence: String,
+}
+
 impl ChangeLog {
     pub fn new(
         path_id: i32,
@@ -101,6 +111,65 @@ impl ChangeLog {
             "INSERT INTO change_log (path_id, path_start, path_end, sequence_hash, sequence_start, sequence_end, sequence_strand) VALUES {formatted_rows_to_insert};",
         );
         let _ = conn.execute(&insert_statement, ()).unwrap();
+    }
+
+    pub fn summary(conn: &Connection, change_log_id: i32) -> ChangeLogSummary {
+        let change_log = ChangeLog::query(
+            conn,
+            "select * from change_log where id = ?1",
+            vec![Value::from(change_log_id)],
+        );
+        let path_id = change_log[0].path_id;
+        let path_start = change_log[0].path_start;
+        let path_end = change_log[0].path_end;
+        let seq_hash = change_log[0].seq_hash.clone();
+        let seq_start = change_log[0].seq_start;
+        let seq_end = change_log[0].seq_end;
+        let path = Path::get(conn, path_id);
+        let path_name = path.name.clone();
+        let sequence = Path::sequence(conn, path);
+        let mut left_bound = path_start - 20;
+        if left_bound < 0 {
+            left_bound = 0
+        };
+        let mut right_bound = path_end + 20;
+        if right_bound > sequence.len() as i32 {
+            right_bound = sequence.len() as i32;
+        }
+        let mut impacted_sequence = sequence[path_start as usize..path_end as usize].to_string();
+        if impacted_sequence.len() > 20 {
+            impacted_sequence = format!(
+                "{ls}...{rs}",
+                ls = &impacted_sequence[..8],
+                rs = &impacted_sequence[impacted_sequence.len() - 8..]
+            );
+        }
+        let new_sequence = Sequence::sequence_from_hash(conn, &seq_hash).unwrap();
+        let mut updated_sequence = new_sequence.get_sequence(seq_start, seq_end);
+        if updated_sequence.len() > 20 {
+            updated_sequence = format!(
+                "{ls}...{rs}",
+                ls = &updated_sequence[..8],
+                rs = &updated_sequence[updated_sequence.len() - 8..]
+            );
+        }
+        let left_sequence = sequence[left_bound as usize..path_start as usize].to_string();
+        let right_sequence = sequence[path_end as usize..right_bound as usize].to_string();
+        println!(
+            "
+Parental Sequence: {left_sequence:>20} {impacted_sequence} {right_sequence:<20}
+Modification {blank:26} {updated_sequence}
+            ",
+            blank = " "
+        );
+        ChangeLogSummary {
+            id: change_log_id,
+            parent_region: (path_name, path_start, path_end),
+            parent_left: left_sequence,
+            parent_impacted: impacted_sequence,
+            parent_right: right_sequence,
+            new_sequence: updated_sequence,
+        }
     }
 }
 
@@ -349,5 +418,57 @@ mod tests {
         ChangeSet::add_changes(conn, change_set_id, 1);
         let changes = ChangeSet::get_changes(conn, change_set_id);
         assert_eq!(changes.change_set, change_set);
+    }
+
+    #[test]
+    fn test_summary() {
+        let conn = &get_connection(None);
+        let (block_group_id, path) = setup_block_group(conn);
+        let insert_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNNAAATCATAGCATCATCANNNNAAATCATAGCATCATCANNNNAAATCATAGCATCATCANNNNAAATCATAGCATCATCANNNNAAATCATAGCATCATCANNNNAAATCATAGCATCATCANNNNAAATCATAGCATCATCANNNNAAATCATAGCATCATCANNNNAAATCATAGCATCATCA")
+            .save(conn);
+        let insert_sequence = Sequence::sequence_from_hash(conn, &insert_sequence.hash).unwrap();
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.get_sequence(0, 189).to_string(),
+            sequence_start: 0,
+            sequence_end: 189,
+            path_start: 7,
+            path_end: 15,
+            strand: "+".to_string(),
+        };
+        Sample::create(conn, "target");
+        let new_bg = BlockGroup::get_or_create_sample_block_group(conn, "test", "target", "hg19");
+        let new_paths = Path::get_paths(
+            conn,
+            "select * from path where block_group_id = ?1 AND name = ?2",
+            vec![Value::from(new_bg), Value::from("chr1".to_string())],
+        );
+        let change = PathChange {
+            block_group_id: new_bg,
+            path: path.clone(),
+            start: 7,
+            end: 15,
+            block: insert.clone(),
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(conn, &path);
+        BlockGroup::insert_change(conn, &change, &tree);
+        let changes = ChangeLog::query(conn, "select * from change_log", vec![]);
+        let change_id = changes[0].id.unwrap();
+        assert_eq!(
+            ChangeLog::summary(conn, change_id),
+            ChangeLogSummary {
+                id: change_id,
+                parent_region: (path.name.clone(), 7, 15),
+                parent_left: "AAAAAAA".to_string(),
+                parent_right: "TTTTTCCCCCCCCCCGGGGG".to_string(),
+                parent_impacted: "AAATTTTT".to_string(),
+                new_sequence: "NNNNAAAT...CATCATCA".to_string(),
+            }
+        );
     }
 }
