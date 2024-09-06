@@ -154,8 +154,8 @@ impl BlockGroup {
         let edge_ids = BlockGroupEdge::edges_for_block_group(conn, source_block_group_id)
             .iter()
             .map(|edge| edge.id)
-            .collect();
-        BlockGroupEdge::bulk_create(conn, target_block_group_id, edge_ids);
+            .collect::<Vec<i32>>();
+        BlockGroupEdge::bulk_create(conn, target_block_group_id, &edge_ids);
 
         for path in existing_paths {
             let edge_ids = PathEdge::edges_for(conn, path.id)
@@ -205,6 +205,35 @@ impl BlockGroup {
         BlockGroup::clone(conn, bg_id, new_bg_id.id);
 
         new_bg_id.id
+    }
+
+    pub fn get_id(
+        conn: &Connection,
+        collection_name: &str,
+        sample_name: Option<&str>,
+        group_name: &str,
+    ) -> i32 {
+        let result = if sample_name.is_some() {
+            conn.query_row(
+		"select id from block_group where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
+		(collection_name, sample_name, group_name.clone()),
+		|row| row.get(0),
+            )
+        } else {
+            conn.query_row(
+		"select id from block_group where collection_name = ?1 AND sample_name IS NULL AND name = ?2",
+		(collection_name, group_name.clone()),
+		|row| row.get(0),
+            )
+        };
+
+        match result {
+            Ok(res) => res,
+            Err(rusqlite::Error::QueryReturnedNoRows) => 0,
+            Err(_e) => {
+                panic!("Error querying the database: {_e}");
+            }
+        }
     }
 
     pub fn get_block_boundaries(
@@ -470,7 +499,7 @@ impl BlockGroup {
 
         for (block_group_id, new_edges) in new_edges_by_block_group {
             let edge_ids = Edge::bulk_create(conn, new_edges);
-            BlockGroupEdge::bulk_create(conn, block_group_id, edge_ids);
+            BlockGroupEdge::bulk_create(conn, block_group_id, &edge_ids);
         }
         ChangeLog::bulk_create(
             conn,
@@ -499,7 +528,7 @@ impl BlockGroup {
     ) {
         let new_edges = BlockGroup::set_up_new_edges(change, tree);
         let edge_ids = Edge::bulk_create(conn, new_edges);
-        BlockGroupEdge::bulk_create(conn, change.block_group_id, edge_ids);
+        BlockGroupEdge::bulk_create(conn, change.block_group_id, &edge_ids);
         ChangeLog::new(
             change.path.id,
             change.start,
@@ -688,7 +717,7 @@ mod tests {
         BlockGroupEdge::bulk_create(
             conn,
             block_group.id,
-            vec![edge0.id, edge1.id, edge2.id, edge3.id, edge4.id],
+            &[edge0.id, edge1.id, edge2.id, edge3.id, edge4.id],
         );
         let path = Path::create(
             conn,

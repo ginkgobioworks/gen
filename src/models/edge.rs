@@ -97,9 +97,9 @@ impl Edge {
         }
     }
 
-    pub fn bulk_load(conn: &Connection, edge_ids: Vec<i32>) -> Vec<Edge> {
+    pub fn bulk_load(conn: &Connection, edge_ids: &[i32]) -> Vec<Edge> {
         let formatted_edge_ids = edge_ids
-            .into_iter()
+            .iter()
             .map(|edge_id| edge_id.to_string())
             .collect::<Vec<_>>()
             .join(",");
@@ -280,7 +280,7 @@ mod tests {
 
         let edge_ids = Edge::bulk_create(conn, vec![edge1, edge2, edge3]);
         assert_eq!(edge_ids.len(), 3);
-        let edges = Edge::bulk_load(conn, edge_ids);
+        let edges = Edge::bulk_load(conn, &edge_ids);
         assert_eq!(edges.len(), 3);
 
         let edges_by_source_hash = edges
@@ -364,7 +364,7 @@ mod tests {
 
         let edge_ids = Edge::bulk_create(conn, vec![edge1, edge2, edge3]);
         assert_eq!(edge_ids.len(), 3);
-        let edges = Edge::bulk_load(conn, edge_ids);
+        let edges = Edge::bulk_load(conn, &edge_ids);
         assert_eq!(edges.len(), 3);
 
         let edges_by_source_hash = edges

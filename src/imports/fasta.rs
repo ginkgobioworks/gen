@@ -57,7 +57,7 @@ pub fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connec
                 0,
                 0,
             );
-            BlockGroupEdge::bulk_create(conn, block_group.id, vec![edge_into.id, edge_out_of.id]);
+            BlockGroupEdge::bulk_create(conn, block_group.id, &[edge_into.id, edge_out_of.id]);
             Path::create(
                 conn,
                 &name,

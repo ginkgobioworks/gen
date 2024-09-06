@@ -138,7 +138,7 @@ impl Path {
     ) -> NewBlock {
         if into.target_hash != out_of.source_hash {
             panic!(
-                "Consecutive edges in path {0} don't share the same block",
+                "Consecutive edges in path {0} don't share the same sequence",
                 path.id
             );
         }
