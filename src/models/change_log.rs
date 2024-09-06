@@ -301,7 +301,7 @@ mod tests {
         let block_group = BlockGroup::create(conn, "test", None, "hg19");
         let edge0 = Edge::create(
             conn,
-            Edge::PATH_START_HASH.to_string(),
+            Sequence::PATH_START_HASH.to_string(),
             0,
             Strand::Forward,
             a_seq.hash.clone(),
@@ -348,7 +348,7 @@ mod tests {
             g_seq.hash,
             10,
             Strand::Forward,
-            Edge::PATH_END_HASH.to_string(),
+            Sequence::PATH_END_HASH.to_string(),
             0,
             Strand::Forward,
             0,

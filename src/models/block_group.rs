@@ -174,7 +174,7 @@ impl BlockGroup {
     ) -> i32 {
         let mut bg_id : i32 = match conn.query_row(
             "select id from block_group where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
-            (collection_name, sample_name, group_name.clone()),
+            (collection_name, sample_name, group_name),
             |row| row.get(0),
         ) {
             Ok(res) => res,
@@ -189,7 +189,7 @@ impl BlockGroup {
             // use the base reference group if it exists
             bg_id = match conn.query_row(
             "select id from block_group where collection_name = ?1 AND sample_name IS null AND name = ?2",
-            (collection_name, group_name.clone()),
+            (collection_name, group_name),
             |row| row.get(0),
             ) {
                 Ok(res) => res,
@@ -243,14 +243,14 @@ impl BlockGroup {
         let mut edges_by_source_hash: HashMap<&str, Vec<&Edge>> = HashMap::new();
         let mut edges_by_target_hash: HashMap<&str, Vec<&Edge>> = HashMap::new();
         for edge in edges {
-            if edge.source_hash != Edge::PATH_START_HASH {
+            if edge.source_hash != Sequence::PATH_START_HASH {
                 sequence_hashes.insert(edge.source_hash.as_str());
                 edges_by_source_hash
                     .entry(&edge.source_hash)
                     .and_modify(|edges| edges.push(edge))
                     .or_default();
             }
-            if edge.target_hash != Edge::PATH_END_HASH {
+            if edge.target_hash != Sequence::PATH_END_HASH {
                 sequence_hashes.insert(edge.target_hash.as_str());
                 edges_by_target_hash
                     .entry(&edge.target_hash)
@@ -334,6 +334,29 @@ impl BlockGroup {
                 block_index += 1;
             }
         }
+
+        // NOTE: We need a dedicated start node and a dedicated end node for the graph formed by the
+        // block group, since different paths in the block group may start or end at different
+        // places on sequences.  These two "start sequence" and "end sequence" blocks will serve
+        // that role.
+        let start_sequence = Sequence::sequence_from_hash(conn, Sequence::PATH_START_HASH).unwrap();
+        let start_block = GroupBlock {
+            id: block_index + 1,
+            sequence_hash: start_sequence.hash.clone(),
+            sequence: "".to_string(),
+            start: 0,
+            end: 0,
+        };
+        blocks.push(start_block);
+        let end_sequence = Sequence::sequence_from_hash(conn, Sequence::PATH_END_HASH).unwrap();
+        let end_block = GroupBlock {
+            id: block_index + 2,
+            sequence_hash: end_sequence.hash.clone(),
+            sequence: "".to_string(),
+            start: 0,
+            end: 0,
+        };
+        blocks.push(end_block);
         (blocks, boundary_edges)
     }
 
@@ -389,6 +412,7 @@ impl BlockGroup {
                 coordinate: edge.target_coordinate,
             };
             let target_id = blocks_by_start.get(&target_key);
+
             if let Some(source_id_value) = source_id {
                 if let Some(target_id_value) = target_id {
                     graph.add_edge(*source_id_value, *target_id_value, ());
@@ -530,6 +554,26 @@ impl BlockGroup {
                 phased: change.phased,
             };
             new_edges.push(new_edge);
+
+            // NOTE: If the deletion is happening at the very beginning of a path, we need to add
+            // an edge from the dedicated start node to the end of the deletion, to indicate it's
+            // another start point in the block group DAG.
+            if change.start == 0 {
+                let new_beginning_edge = EdgeData {
+                    source_hash: Sequence::PATH_START_HASH.to_string(),
+                    source_coordinate: 0,
+                    source_strand: Strand::Forward,
+                    target_hash: end_block.sequence.hash.clone(),
+                    target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
+                    target_strand: Strand::Forward,
+                    chromosome_index: change.chromosome_index,
+                    phased: change.phased,
+                };
+                new_edges.push(new_beginning_edge);
+            }
+        // NOTE: If the deletion is happening at the very end of a path, we might add an edge
+        // from the beginning of the deletion to the dedicated end node, but in practice it
+        // doesn't affect sequence readouts, so it may not be worth it.
         } else {
             // Insertion/replacement
             let new_start_edge = EdgeData {
@@ -588,7 +632,7 @@ mod tests {
         let block_group = BlockGroup::create(conn, "test", None, "hg19");
         let edge0 = Edge::create(
             conn,
-            Edge::PATH_START_HASH.to_string(),
+            Sequence::PATH_START_HASH.to_string(),
             0,
             Strand::Forward,
             a_seq.hash.clone(),
@@ -635,7 +679,7 @@ mod tests {
             g_seq.hash,
             10,
             Strand::Forward,
-            Edge::PATH_END_HASH.to_string(),
+            Sequence::PATH_END_HASH.to_string(),
             0,
             Strand::Forward,
             0,
@@ -1173,6 +1217,327 @@ mod tests {
             HashSet::from_iter(vec![
                 "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
                 "AAAAAAANNNNTTTTTCCCCCCCCCCGGGGGGGGGG".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_at_beginning_of_path() {
+        let conn = get_connection(None);
+        let (block_group_id, path) = setup_block_group(&conn);
+        let insert_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 0,
+            path_end: 0,
+            strand: Strand::Forward,
+        };
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 0,
+            end: 0,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
+
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "NNNNAAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_at_end_of_path() {
+        let conn = get_connection(None);
+        let (block_group_id, path) = setup_block_group(&conn);
+
+        let insert_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 40,
+            path_end: 40,
+            strand: Strand::Forward,
+        };
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 40,
+            end: 40,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
+
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGGNNNN".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_at_one_bp_into_block() {
+        let conn = get_connection(None);
+        let (block_group_id, path) = setup_block_group(&conn);
+        let insert_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 10,
+            path_end: 11,
+            strand: Strand::Forward,
+        };
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 10,
+            end: 11,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
+
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAANNNNTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn insert_at_one_bp_from_end_of_block() {
+        let conn = get_connection(None);
+        let (block_group_id, path) = setup_block_group(&conn);
+        let insert_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
+        let insert = NewBlock {
+            id: 0,
+            sequence: insert_sequence.clone(),
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 19,
+            path_end: 20,
+            strand: Strand::Forward,
+        };
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 19,
+            end: 20,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
+
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTTTTTTTTNNNNCCCCCCCCCCGGGGGGGGGG".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn delete_at_beginning_of_path() {
+        let conn = get_connection(None);
+        let (block_group_id, path) = setup_block_group(&conn);
+        let deletion_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("")
+            .save(&conn);
+        let deletion = NewBlock {
+            id: 0,
+            sequence: deletion_sequence.clone(),
+            block_sequence: deletion_sequence.get_sequence(None, None),
+            sequence_start: 0,
+            sequence_end: 0,
+            path_start: 0,
+            path_end: 1,
+            strand: Strand::Forward,
+        };
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 0,
+            end: 1,
+            block: deletion,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
+
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn delete_at_end_of_path() {
+        let conn = get_connection(None);
+        let (block_group_id, path) = setup_block_group(&conn);
+        let deletion_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("")
+            .save(&conn);
+        let deletion = NewBlock {
+            id: 0,
+            sequence: deletion_sequence.clone(),
+            block_sequence: deletion_sequence.get_sequence(None, None),
+            sequence_start: 0,
+            sequence_end: 0,
+            path_start: 35,
+            path_end: 40,
+            strand: Strand::Forward,
+        };
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 35,
+            end: 40,
+            block: deletion,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
+
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGG".to_string(),
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn deletion_starting_at_block_boundary() {
+        let conn = get_connection(None);
+        let (block_group_id, path) = setup_block_group(&conn);
+        let deletion_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("")
+            .save(&conn);
+        let deletion = NewBlock {
+            id: 0,
+            sequence: deletion_sequence.clone(),
+            block_sequence: deletion_sequence.get_sequence(None, None),
+            sequence_start: 0,
+            sequence_end: 0,
+            path_start: 10,
+            path_end: 12,
+            strand: Strand::Forward,
+        };
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 10,
+            end: 12,
+            block: deletion,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
+
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn deletion_ending_at_block_boundary() {
+        let conn = get_connection(None);
+        let (block_group_id, path) = setup_block_group(&conn);
+        let deletion_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("")
+            .save(&conn);
+        let deletion = NewBlock {
+            id: 0,
+            sequence: deletion_sequence.clone(),
+            block_sequence: deletion_sequence.get_sequence(None, None),
+            sequence_start: 0,
+            sequence_end: 0,
+            path_start: 18,
+            path_end: 20,
+            strand: Strand::Forward,
+        };
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 18,
+            end: 20,
+            block: deletion,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
+
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
             ])
         );
     }

@@ -37,7 +37,7 @@ pub fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connec
             let block_group = BlockGroup::create(conn, &collection.name, None, &name);
             let edge_into = Edge::create(
                 conn,
-                Edge::PATH_START_HASH.to_string(),
+                Sequence::PATH_START_HASH.to_string(),
                 0,
                 Strand::Forward,
                 seq.hash.to_string(),
@@ -51,7 +51,7 @@ pub fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connec
                 seq.hash.to_string(),
                 sequence_length,
                 Strand::Forward,
-                Edge::PATH_END_HASH.to_string(),
+                Sequence::PATH_END_HASH.to_string(),
                 0,
                 Strand::Forward,
                 0,

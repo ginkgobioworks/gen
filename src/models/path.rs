@@ -182,10 +182,10 @@ impl Path {
         let edges = PathEdge::edges_for(conn, path.id);
         let mut sequence_hashes = HashSet::new();
         for edge in &edges {
-            if edge.source_hash != Edge::PATH_START_HASH {
+            if edge.source_hash != Sequence::PATH_START_HASH {
                 sequence_hashes.insert(edge.source_hash.as_str());
             }
-            if edge.target_hash != Edge::PATH_END_HASH {
+            if edge.target_hash != Sequence::PATH_END_HASH {
                 sequence_hashes.insert(edge.target_hash.as_str());
             }
         }
@@ -194,6 +194,22 @@ impl Path {
 
         let mut blocks = vec![];
         let mut path_length = 0;
+
+        // NOTE: Adding a "start block" for the dedicated start sequence with a range from i32::MIN
+        // to 0 makes interval tree lookups work better.  If the point being looked up is -1 (or
+        // below), it will return this block.
+        let start_sequence = Sequence::sequence_from_hash(conn, Sequence::PATH_START_HASH).unwrap();
+        blocks.push(NewBlock {
+            id: -1,
+            sequence: start_sequence,
+            block_sequence: "".to_string(),
+            sequence_start: 0,
+            sequence_end: 0,
+            path_start: i32::MIN + 1,
+            path_end: 0,
+            strand: Strand::Forward,
+        });
+
         for (index, (into, out_of)) in edges.into_iter().tuple_windows().enumerate() {
             let block = Path::edge_pairs_to_block(
                 index as i32,
@@ -206,6 +222,22 @@ impl Path {
             path_length += block.block_sequence.len() as i32;
             blocks.push(block);
         }
+
+        // NOTE: Adding an "end block" for the dedicated end sequence with a range from the path
+        // length to i32::MAX makes interval tree lookups work better.  If the point being looked up
+        // is the path length (or higher), it will return this block.
+        let end_sequence = Sequence::sequence_from_hash(conn, Sequence::PATH_END_HASH).unwrap();
+        blocks.push(NewBlock {
+            id: -2,
+            sequence: end_sequence,
+            block_sequence: "".to_string(),
+            sequence_start: 0,
+            sequence_end: 0,
+            path_start: path_length,
+            path_end: i32::MAX - 1,
+            strand: Strand::Forward,
+        });
+
         blocks
     }
 
@@ -238,7 +270,7 @@ mod tests {
             .save(conn);
         let edge1 = Edge::create(
             conn,
-            Edge::PATH_START_HASH.to_string(),
+            Sequence::PATH_START_HASH.to_string(),
             -123,
             Strand::Forward,
             sequence1.hash.clone(),
@@ -297,7 +329,7 @@ mod tests {
             sequence4.hash.clone(),
             8,
             Strand::Forward,
-            Edge::PATH_END_HASH.to_string(),
+            Sequence::PATH_END_HASH.to_string(),
             -1,
             Strand::Forward,
             0,
@@ -327,7 +359,7 @@ mod tests {
             sequence1.hash.clone(),
             8,
             Strand::Reverse,
-            Edge::PATH_END_HASH.to_string(),
+            Sequence::PATH_END_HASH.to_string(),
             0,
             Strand::Reverse,
             0,
@@ -380,7 +412,7 @@ mod tests {
         );
         let edge1 = Edge::create(
             conn,
-            Edge::PATH_START_HASH.to_string(),
+            Sequence::PATH_START_HASH.to_string(),
             -1,
             Strand::Reverse,
             sequence4.hash.clone(),
@@ -417,7 +449,7 @@ mod tests {
             .save(conn);
         let edge1 = Edge::create(
             conn,
-            Edge::PATH_START_HASH.to_string(),
+            Sequence::PATH_START_HASH.to_string(),
             -1,
             Strand::Forward,
             sequence1.hash.clone(),
@@ -476,7 +508,7 @@ mod tests {
             sequence4.hash.clone(),
             8,
             Strand::Forward,
-            Edge::PATH_END_HASH.to_string(),
+            Sequence::PATH_END_HASH.to_string(),
             -1,
             Strand::Forward,
             0,
