@@ -78,8 +78,11 @@ impl PathEdge {
             "select * from path_edges where path_id = ?1 order by index_in_path ASC",
             vec![Value::from(path_id)],
         );
-        let edge_ids = path_edges.into_iter().map(|path_edge| path_edge.edge_id);
-        let edges = Edge::bulk_load(conn, edge_ids.clone().collect());
+        let edge_ids = path_edges
+            .into_iter()
+            .map(|path_edge| path_edge.edge_id)
+            .collect::<Vec<i32>>();
+        let edges = Edge::bulk_load(conn, &edge_ids);
         let edges_by_id = edges
             .into_iter()
             .map(|edge| (edge.id, edge))

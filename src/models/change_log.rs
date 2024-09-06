@@ -357,7 +357,7 @@ mod tests {
         BlockGroupEdge::bulk_create(
             conn,
             block_group.id,
-            vec![edge0.id, edge1.id, edge2.id, edge3.id, edge4.id],
+            &[edge0.id, edge1.id, edge2.id, edge3.id, edge4.id],
         );
         let path = Path::create(
             conn,
