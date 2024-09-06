@@ -3,9 +3,10 @@ use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::Edge;
 use crate::models::path::{NewBlock, Path};
 use crate::models::sequence::Sequence;
+use crate::models::strand::Strand;
 use chrono::prelude::*;
 use rusqlite::types::Value;
-use rusqlite::{params_from_iter, Connection};
+use rusqlite::{params_from_iter, Connection, ToSql};
 
 #[derive(Debug)]
 pub struct ChangeLog {
@@ -16,7 +17,7 @@ pub struct ChangeLog {
     pub seq_hash: String,
     pub seq_start: i32,
     pub seq_end: i32,
-    pub strand: String,
+    pub strand: Strand,
 }
 
 #[derive(Debug, PartialEq)]
@@ -37,7 +38,7 @@ impl ChangeLog {
         seq_hash: String,
         seq_start: i32,
         seq_end: i32,
-        seq_strand: String,
+        seq_strand: Strand,
     ) -> ChangeLog {
         ChangeLog {
             id: None,
@@ -85,7 +86,7 @@ impl ChangeLog {
             Value::from(change_log.seq_hash.to_string()),
             Value::from(change_log.seq_start),
             Value::from(change_log.seq_end),
-            Value::from(change_log.strand.to_string()),
+            Value::from(change_log.strand),
         ];
         stmt.execute(params_from_iter(placeholders)).unwrap();
     }
@@ -302,10 +303,10 @@ mod tests {
             conn,
             Edge::PATH_START_HASH.to_string(),
             0,
-            "+".to_string(),
+            Strand::Forward,
             a_seq.hash.clone(),
             0,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -313,10 +314,10 @@ mod tests {
             conn,
             a_seq.hash,
             10,
-            "+".to_string(),
+            Strand::Forward,
             t_seq.hash.clone(),
             0,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -324,10 +325,10 @@ mod tests {
             conn,
             t_seq.hash,
             10,
-            "+".to_string(),
+            Strand::Forward,
             c_seq.hash.clone(),
             0,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -335,10 +336,10 @@ mod tests {
             conn,
             c_seq.hash,
             10,
-            "+".to_string(),
+            Strand::Forward,
             g_seq.hash.clone(),
             0,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -346,10 +347,10 @@ mod tests {
             conn,
             g_seq.hash,
             10,
-            "+".to_string(),
+            Strand::Forward,
             Edge::PATH_END_HASH.to_string(),
             0,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -384,7 +385,7 @@ mod tests {
             sequence_end: 4,
             path_start: 7,
             path_end: 15,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         Sample::create(conn, "target");
         let new_bg = BlockGroup::get_or_create_sample_block_group(conn, "test", "target", "hg19");
@@ -437,7 +438,7 @@ mod tests {
             sequence_end: 189,
             path_start: 7,
             path_end: 15,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         Sample::create(conn, "target");
         let new_bg = BlockGroup::get_or_create_sample_block_group(conn, "test", "target", "hg19");

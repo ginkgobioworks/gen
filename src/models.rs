@@ -10,6 +10,7 @@ pub mod edge;
 pub mod path;
 pub mod path_edge;
 pub mod sequence;
+pub mod strand;
 
 use crate::models;
 

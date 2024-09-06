@@ -15,6 +15,7 @@ use gen::models::{
     path::{NewBlock, Path, PathData},
     path_edge::PathEdge,
     sequence::{NewSequence, Sequence},
+    strand::Strand,
 };
 use gen::{get_connection, parse_genotype};
 use noodles::fasta;
@@ -104,10 +105,10 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
                 conn,
                 Edge::PATH_START_HASH.to_string(),
                 0,
-                "+".to_string(),
+                Strand::Forward,
                 seq.hash.to_string(),
                 0,
-                "+".to_string(),
+                Strand::Forward,
                 0,
                 0,
             );
@@ -115,10 +116,10 @@ fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection
                 conn,
                 seq.hash.to_string(),
                 sequence_length,
-                "+".to_string(),
+                Strand::Forward,
                 Edge::PATH_END_HASH.to_string(),
                 0,
-                "+".to_string(),
+                Strand::Forward,
                 0,
                 0,
             );
@@ -245,7 +246,7 @@ fn prepare_change(
         sequence_end: sequence.length,
         path_start: ref_start,
         path_end: ref_end,
-        strand: "+".to_string(),
+        strand: Strand::Forward,
     };
     PathChange {
         block_group_id: sample_bg_id,
