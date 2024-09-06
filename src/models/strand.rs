@@ -71,4 +71,24 @@ mod tests {
         assert_eq!(format!("{v}", v = Strand::ImportantButUnknown), "?");
         assert_eq!(format!("{v}", v = Strand::Unknown), ".");
     }
+
+    #[test]
+    fn test_column_conversion() {
+        assert_eq!(
+            Strand::column_result(ValueRef::Text("+".as_bytes())).unwrap(),
+            Strand::Forward
+        );
+        assert_eq!(
+            Strand::column_result(ValueRef::Text("-".as_bytes())).unwrap(),
+            Strand::Reverse
+        );
+        assert_eq!(
+            Strand::column_result(ValueRef::Text(".".as_bytes())).unwrap(),
+            Strand::Unknown
+        );
+        assert_eq!(
+            Strand::column_result(ValueRef::Text("?".as_bytes())).unwrap(),
+            Strand::ImportantButUnknown
+        );
+    }
 }
