@@ -1,7 +1,6 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::Debug;
-use std::path::PathBuf;
-use std::{io, str};
+use std::{io, path::PathBuf, str};
 
 use crate::migrations::run_migrations;
 use crate::models::{
@@ -15,8 +14,8 @@ use crate::parse_genotype;
 use noodles::vcf;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use noodles::vcf::variant::record::samples::series::Value;
-use noodles::vcf::variant::record::samples::{Sample, Series};
-use noodles::vcf::variant::record::{AlternateBases, ReferenceBases, Samples};
+use noodles::vcf::variant::record::samples::Sample;
+use noodles::vcf::variant::record::AlternateBases;
 use noodles::vcf::variant::Record;
 use rusqlite::Connection;
 
@@ -285,6 +284,7 @@ mod tests {
     use super::*;
     use crate::imports::fasta::import_fasta;
     use crate::test_helpers::get_connection;
+    use std::collections::HashSet;
 
     #[test]
     fn test_update_fasta_with_vcf() {

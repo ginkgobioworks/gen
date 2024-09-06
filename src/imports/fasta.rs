@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-use std::fmt::Debug;
 use std::path::PathBuf;
 use std::str;
 
@@ -8,9 +6,6 @@ use crate::models::{
     sequence::Sequence, strand::Strand,
 };
 use noodles::fasta;
-use noodles::vcf::variant::record::samples::{Sample, Series};
-use noodles::vcf::variant::record::{AlternateBases, ReferenceBases, Samples};
-use noodles::vcf::variant::Record;
 use rusqlite::Connection;
 
 pub fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &mut Connection) {
@@ -81,6 +76,7 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use crate::test_helpers::get_connection;
+    use std::collections::HashSet;
 
     #[test]
     fn test_add_fasta() {
