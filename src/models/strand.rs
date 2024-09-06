@@ -59,3 +59,16 @@ impl fmt::Display for Strand {
         formatter.write_str(result)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_formats() {
+        assert_eq!(format!("{v}", v = Strand::Forward), "+");
+        assert_eq!(format!("{v}", v = Strand::Reverse), "-");
+        assert_eq!(format!("{v}", v = Strand::ImportantButUnknown), "?");
+        assert_eq!(format!("{v}", v = Strand::Unknown), ".");
+    }
+}
