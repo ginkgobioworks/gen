@@ -12,6 +12,7 @@ use crate::models::edge::{Edge, EdgeData};
 use crate::models::path::{NewBlock, Path, PathData};
 use crate::models::path_edge::PathEdge;
 use crate::models::sequence::Sequence;
+use crate::models::strand::Strand;
 
 #[derive(Debug)]
 pub struct BlockGroup {
@@ -276,10 +277,10 @@ impl BlockGroup {
                     id: -1,
                     source_hash: hash.clone(),
                     source_coordinate: *block_boundary,
-                    source_strand: String::from(""),
+                    source_strand: Strand::Unknown,
                     target_hash: hash.clone(),
                     target_coordinate: *block_boundary,
-                    target_strand: String::from(""),
+                    target_strand: Strand::Unknown,
                     chromosome_index: 0,
                     phased: 0,
                 });
@@ -459,7 +460,7 @@ impl BlockGroup {
                     seq_hash: change.block.sequence.hash.clone(),
                     seq_start: change.block.sequence_start,
                     seq_end: change.block.sequence_end,
-                    strand: change.block.strand.clone(),
+                    strand: change.block.strand,
                 })
                 .collect::<Vec<ChangeLog>>(),
         );
@@ -482,7 +483,7 @@ impl BlockGroup {
             change.block.sequence.hash.clone(),
             change.block.sequence_start,
             change.block.sequence_end,
-            change.block.strand.clone(),
+            change.block.strand,
         )
         .save(conn);
     }
@@ -521,10 +522,10 @@ impl BlockGroup {
                 source_hash: start_block.sequence.hash.clone(),
                 source_coordinate: change.start - start_block.path_start
                     + start_block.sequence_start,
-                source_strand: "+".to_string(),
+                source_strand: Strand::Forward,
                 target_hash: end_block.sequence.hash.clone(),
                 target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
-                target_strand: "+".to_string(),
+                target_strand: Strand::Forward,
                 chromosome_index: change.chromosome_index,
                 phased: change.phased,
             };
@@ -535,20 +536,20 @@ impl BlockGroup {
                 source_hash: start_block.sequence.hash.clone(),
                 source_coordinate: change.start - start_block.path_start
                     + start_block.sequence_start,
-                source_strand: "+".to_string(),
+                source_strand: Strand::Forward,
                 target_hash: change.block.sequence.hash.clone(),
                 target_coordinate: change.block.sequence_start,
-                target_strand: "+".to_string(),
+                target_strand: Strand::Forward,
                 chromosome_index: change.chromosome_index,
                 phased: change.phased,
             };
             let new_end_edge = EdgeData {
                 source_hash: change.block.sequence.hash.clone(),
                 source_coordinate: change.block.sequence_end,
-                source_strand: "+".to_string(),
+                source_strand: Strand::Forward,
                 target_hash: end_block.sequence.hash.clone(),
                 target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
-                target_strand: "+".to_string(),
+                target_strand: Strand::Forward,
                 chromosome_index: change.chromosome_index,
                 phased: change.phased,
             };
@@ -589,10 +590,10 @@ mod tests {
             conn,
             Edge::PATH_START_HASH.to_string(),
             0,
-            "+".to_string(),
+            Strand::Forward,
             a_seq.hash.clone(),
             0,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -600,10 +601,10 @@ mod tests {
             conn,
             a_seq.hash,
             10,
-            "+".to_string(),
+            Strand::Forward,
             t_seq.hash.clone(),
             0,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -611,10 +612,10 @@ mod tests {
             conn,
             t_seq.hash,
             10,
-            "+".to_string(),
+            Strand::Forward,
             c_seq.hash.clone(),
             0,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -622,10 +623,10 @@ mod tests {
             conn,
             c_seq.hash,
             10,
-            "+".to_string(),
+            Strand::Forward,
             g_seq.hash.clone(),
             0,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -633,10 +634,10 @@ mod tests {
             conn,
             g_seq.hash,
             10,
-            "+".to_string(),
+            Strand::Forward,
             Edge::PATH_END_HASH.to_string(),
             0,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -700,7 +701,7 @@ mod tests {
             sequence_end: 4,
             path_start: 7,
             path_end: 15,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,
@@ -735,7 +736,7 @@ mod tests {
             sequence_end: 0,
             path_start: 19,
             path_end: 31,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
 
         let change = PathChange {
@@ -778,7 +779,7 @@ mod tests {
             sequence_end: 4,
             path_start: 7,
             path_end: 15,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,
@@ -818,7 +819,7 @@ mod tests {
             sequence_end: 4,
             path_start: 15,
             path_end: 15,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,
@@ -858,7 +859,7 @@ mod tests {
             sequence_end: 4,
             path_start: 12,
             path_end: 17,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,
@@ -898,7 +899,7 @@ mod tests {
             sequence_end: 4,
             path_start: 10,
             path_end: 10,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,
@@ -938,7 +939,7 @@ mod tests {
             sequence_end: 4,
             path_start: 9,
             path_end: 9,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,
@@ -978,7 +979,7 @@ mod tests {
             sequence_end: 4,
             path_start: 10,
             path_end: 20,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,
@@ -1018,7 +1019,7 @@ mod tests {
             sequence_end: 4,
             path_start: 15,
             path_end: 25,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,
@@ -1058,7 +1059,7 @@ mod tests {
             sequence_end: 4,
             path_start: 5,
             path_end: 35,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,
@@ -1098,7 +1099,7 @@ mod tests {
             sequence_end: 0,
             path_start: 19,
             path_end: 31,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
 
         let change = PathChange {
@@ -1140,7 +1141,7 @@ mod tests {
             sequence_end: 4,
             path_start: 7,
             path_end: 15,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,

@@ -3,15 +3,17 @@ use rusqlite::{params_from_iter, Connection};
 use std::collections::HashSet;
 use std::hash::RandomState;
 
+use crate::models::strand::Strand;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Edge {
     pub id: i32,
     pub source_hash: String,
     pub source_coordinate: i32,
-    pub source_strand: String,
+    pub source_strand: Strand,
     pub target_hash: String,
     pub target_coordinate: i32,
-    pub target_strand: String,
+    pub target_strand: Strand,
     pub chromosome_index: i32,
     pub phased: i32,
 }
@@ -20,10 +22,10 @@ pub struct Edge {
 pub struct EdgeData {
     pub source_hash: String,
     pub source_coordinate: i32,
-    pub source_strand: String,
+    pub source_strand: Strand,
     pub target_hash: String,
     pub target_coordinate: i32,
-    pub target_strand: String,
+    pub target_strand: Strand,
     pub chromosome_index: i32,
     pub phased: i32,
 }
@@ -39,10 +41,10 @@ impl Edge {
         conn: &Connection,
         source_hash: String,
         source_coordinate: i32,
-        source_strand: String,
+        source_strand: Strand,
         target_hash: String,
         target_coordinate: i32,
-        target_strand: String,
+        target_strand: Strand,
         chromosome_index: i32,
         phased: i32,
     ) -> Edge {
@@ -51,10 +53,10 @@ impl Edge {
         let placeholders: Vec<Value> = vec![
             source_hash.clone().into(),
             source_coordinate.into(),
-            source_strand.clone().into(),
+            source_strand.into(),
             target_hash.clone().into(),
             target_coordinate.into(),
-            target_strand.clone().into(),
+            target_strand.into(),
             chromosome_index.into(),
             phased.into(),
         ];
@@ -249,10 +251,10 @@ mod tests {
         let edge1 = EdgeData {
             source_hash: Edge::PATH_START_HASH.to_string(),
             source_coordinate: -1,
-            source_strand: "+".to_string(),
+            source_strand: Strand::Forward,
             target_hash: sequence1.hash.clone(),
             target_coordinate: 1,
-            target_strand: "+".to_string(),
+            target_strand: Strand::Forward,
             chromosome_index: 0,
             phased: 0,
         };
@@ -263,20 +265,20 @@ mod tests {
         let edge2 = EdgeData {
             source_hash: sequence1.hash.clone(),
             source_coordinate: 2,
-            source_strand: "+".to_string(),
+            source_strand: Strand::Forward,
             target_hash: sequence2.hash.clone(),
             target_coordinate: 3,
-            target_strand: "+".to_string(),
+            target_strand: Strand::Forward,
             chromosome_index: 0,
             phased: 0,
         };
         let edge3 = EdgeData {
             source_hash: sequence2.hash.clone(),
             source_coordinate: 4,
-            source_strand: "+".to_string(),
+            source_strand: Strand::Forward,
             target_hash: Edge::PATH_END_HASH.to_string(),
             target_coordinate: -1,
-            target_strand: "+".to_string(),
+            target_strand: Strand::Forward,
             chromosome_index: 0,
             phased: 0,
         };
@@ -318,10 +320,10 @@ mod tests {
             conn,
             Edge::PATH_START_HASH.to_string(),
             -1,
-            "+".to_string(),
+            Strand::Forward,
             sequence1.hash.clone(),
             1,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -333,10 +335,10 @@ mod tests {
         let edge1 = EdgeData {
             source_hash: Edge::PATH_START_HASH.to_string(),
             source_coordinate: -1,
-            source_strand: "+".to_string(),
+            source_strand: Strand::Forward,
             target_hash: sequence1.hash.clone(),
             target_coordinate: 1,
-            target_strand: "+".to_string(),
+            target_strand: Strand::Forward,
             chromosome_index: 0,
             phased: 0,
         };
@@ -347,20 +349,20 @@ mod tests {
         let edge2 = EdgeData {
             source_hash: sequence1.hash.clone(),
             source_coordinate: 2,
-            source_strand: "+".to_string(),
+            source_strand: Strand::Forward,
             target_hash: sequence2.hash.clone(),
             target_coordinate: 3,
-            target_strand: "+".to_string(),
+            target_strand: Strand::Forward,
             chromosome_index: 0,
             phased: 0,
         };
         let edge3 = EdgeData {
             source_hash: sequence2.hash.clone(),
             source_coordinate: 4,
-            source_strand: "+".to_string(),
+            source_strand: Strand::Forward,
             target_hash: Edge::PATH_END_HASH.to_string(),
             target_coordinate: -1,
-            target_strand: "+".to_string(),
+            target_strand: Strand::Forward,
             chromosome_index: 0,
             phased: 0,
         };

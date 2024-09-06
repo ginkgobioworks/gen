@@ -1,4 +1,4 @@
-use crate::models::{edge::Edge, path_edge::PathEdge, sequence::Sequence};
+use crate::models::{edge::Edge, path_edge::PathEdge, sequence::Sequence, strand::Strand};
 use intervaltree::IntervalTree;
 use itertools::Itertools;
 use rusqlite::types::Value;
@@ -60,7 +60,7 @@ pub struct NewBlock {
     pub sequence_end: i32,
     pub path_start: i32,
     pub path_end: i32,
-    pub strand: String,
+    pub strand: Strand,
 }
 
 impl Path {
@@ -160,7 +160,7 @@ impl Path {
             );
         }
 
-        let block_sequence = if strand == "-" {
+        let block_sequence = if strand == Strand::Reverse {
             revcomp(&sequence.get_sequence(start, end))
         } else {
             sequence.get_sequence(start, end)
@@ -174,7 +174,7 @@ impl Path {
             sequence_end: end,
             path_start: current_path_length,
             path_end: current_path_length + block_sequence_length,
-            strand: strand.to_string(),
+            strand,
         }
     }
 
@@ -240,10 +240,10 @@ mod tests {
             conn,
             Edge::PATH_START_HASH.to_string(),
             -123,
-            "+".to_string(),
+            Strand::Forward,
             sequence1.hash.clone(),
             0,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -255,10 +255,10 @@ mod tests {
             conn,
             sequence1.hash.clone(),
             8,
-            "+".to_string(),
+            Strand::Forward,
             sequence2.hash.clone(),
             1,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -270,10 +270,10 @@ mod tests {
             conn,
             sequence2.hash.clone(),
             8,
-            "+".to_string(),
+            Strand::Forward,
             sequence3.hash.clone(),
             1,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -285,10 +285,10 @@ mod tests {
             conn,
             sequence3.hash.clone(),
             8,
-            "+".to_string(),
+            Strand::Forward,
             sequence4.hash.clone(),
             1,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -296,10 +296,10 @@ mod tests {
             conn,
             sequence4.hash.clone(),
             8,
-            "+".to_string(),
+            Strand::Forward,
             Edge::PATH_END_HASH.to_string(),
             -1,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -326,10 +326,10 @@ mod tests {
             conn,
             sequence1.hash.clone(),
             8,
-            "-".to_string(),
+            Strand::Reverse,
             Edge::PATH_END_HASH.to_string(),
             0,
-            "-".to_string(),
+            Strand::Reverse,
             0,
             0,
         );
@@ -341,10 +341,10 @@ mod tests {
             conn,
             sequence2.hash.clone(),
             7,
-            "-".to_string(),
+            Strand::Reverse,
             sequence1.hash.clone(),
             0,
-            "-".to_string(),
+            Strand::Reverse,
             0,
             0,
         );
@@ -356,10 +356,10 @@ mod tests {
             conn,
             sequence3.hash.clone(),
             7,
-            "-".to_string(),
+            Strand::Reverse,
             sequence2.hash.clone(),
             0,
-            "-".to_string(),
+            Strand::Reverse,
             0,
             0,
         );
@@ -371,10 +371,10 @@ mod tests {
             conn,
             sequence4.hash.clone(),
             7,
-            "-".to_string(),
+            Strand::Reverse,
             sequence3.hash.clone(),
             0,
-            "-".to_string(),
+            Strand::Reverse,
             0,
             0,
         );
@@ -382,10 +382,10 @@ mod tests {
             conn,
             Edge::PATH_START_HASH.to_string(),
             -1,
-            "-".to_string(),
+            Strand::Reverse,
             sequence4.hash.clone(),
             0,
-            "-".to_string(),
+            Strand::Reverse,
             0,
             0,
         );
@@ -419,10 +419,10 @@ mod tests {
             conn,
             Edge::PATH_START_HASH.to_string(),
             -1,
-            "+".to_string(),
+            Strand::Forward,
             sequence1.hash.clone(),
             0,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -434,10 +434,10 @@ mod tests {
             conn,
             sequence1.hash.clone(),
             8,
-            "+".to_string(),
+            Strand::Forward,
             sequence2.hash.clone(),
             1,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -449,10 +449,10 @@ mod tests {
             conn,
             sequence2.hash.clone(),
             8,
-            "+".to_string(),
+            Strand::Forward,
             sequence3.hash.clone(),
             1,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -464,10 +464,10 @@ mod tests {
             conn,
             sequence3.hash.clone(),
             8,
-            "+".to_string(),
+            Strand::Forward,
             sequence4.hash.clone(),
             1,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -475,10 +475,10 @@ mod tests {
             conn,
             sequence4.hash.clone(),
             8,
-            "+".to_string(),
+            Strand::Forward,
             Edge::PATH_END_HASH.to_string(),
             -1,
-            "+".to_string(),
+            Strand::Forward,
             0,
             0,
         );
@@ -498,7 +498,7 @@ mod tests {
         assert_eq!(block1.sequence_end, 8);
         assert_eq!(block1.path_start, 0);
         assert_eq!(block1.path_end, 8);
-        assert_eq!(block1.strand, "+");
+        assert_eq!(block1.strand, Strand::Forward);
 
         let blocks2: Vec<_> = tree.query_point(12).map(|x| x.value.clone()).collect();
         assert_eq!(blocks2.len(), 1);
@@ -508,7 +508,7 @@ mod tests {
         assert_eq!(block2.sequence_end, 8);
         assert_eq!(block2.path_start, 8);
         assert_eq!(block2.path_end, 15);
-        assert_eq!(block2.strand, "+");
+        assert_eq!(block2.strand, Strand::Forward);
 
         let blocks4: Vec<_> = tree.query_point(25).map(|x| x.value.clone()).collect();
         assert_eq!(blocks4.len(), 1);
@@ -518,6 +518,6 @@ mod tests {
         assert_eq!(block4.sequence_end, 8);
         assert_eq!(block4.path_start, 22);
         assert_eq!(block4.path_end, 29);
-        assert_eq!(block4.strand, "+");
+        assert_eq!(block4.strand, Strand::Forward);
     }
 }
