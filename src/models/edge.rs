@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use std::collections::HashSet;
@@ -207,12 +206,7 @@ impl Edge {
                 edge_ids.push(row.unwrap());
             }
 
-            existing_edge_ids.extend(
-                edge_ids
-                    .into_iter()
-                    .sorted_by(|c1, c2| Ord::cmp(&c1, &c2))
-                    .collect::<Vec<i32>>(),
-            );
+            existing_edge_ids.extend(edge_ids);
         }
 
         existing_edge_ids
