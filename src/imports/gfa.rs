@@ -39,7 +39,7 @@ fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
     }
 
     for input_path in &gfa.paths {
-        let mut source_hash = Edge::PATH_START_HASH;
+        let mut source_hash = Sequence::PATH_START_HASH;
         let mut source_coordinate = 0;
         for segment_id in input_path.nodes.iter() {
             let target = sequences_by_segment_id.get(segment_id).unwrap();
@@ -54,12 +54,12 @@ fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
         edges.insert(edge_data_from_fields(
             source_hash,
             source_coordinate,
-            Edge::PATH_END_HASH,
+            Sequence::PATH_END_HASH,
         ));
     }
 
     for input_walk in &gfa.walk {
-        let mut source_hash = Edge::PATH_START_HASH;
+        let mut source_hash = Sequence::PATH_START_HASH;
         let mut source_coordinate = 0;
         for segment_id in input_walk.walk_id.iter() {
             let target = sequences_by_segment_id.get(segment_id).unwrap();
@@ -74,7 +74,7 @@ fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
         edges.insert(edge_data_from_fields(
             source_hash,
             source_coordinate,
-            Edge::PATH_END_HASH,
+            Sequence::PATH_END_HASH,
         ));
     }
 
@@ -91,7 +91,7 @@ fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
 
     for input_path in &gfa.paths {
         let path_name = &input_path.name;
-        let mut source_hash = Edge::PATH_START_HASH;
+        let mut source_hash = Sequence::PATH_START_HASH;
         let mut source_coordinate = 0;
         let mut path_edge_ids = vec![];
         for segment_id in input_path.nodes.iter() {
@@ -102,7 +102,7 @@ fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
             source_hash = &target.hash;
             source_coordinate = target.length;
         }
-        let key = edge_data_from_fields(source_hash, source_coordinate, Edge::PATH_END_HASH);
+        let key = edge_data_from_fields(source_hash, source_coordinate, Sequence::PATH_END_HASH);
         let edge_id = *edge_ids_by_data.get(&key).unwrap();
         path_edge_ids.push(edge_id);
         Path::create(conn, path_name, block_group.id, path_edge_ids);
@@ -110,7 +110,7 @@ fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
 
     for input_walk in &gfa.walk {
         let path_name = &input_walk.sample_id;
-        let mut source_hash = Edge::PATH_START_HASH;
+        let mut source_hash = Sequence::PATH_START_HASH;
         let mut source_coordinate = 0;
         let mut path_edge_ids = vec![];
         for segment_id in input_walk.walk_id.iter() {
@@ -121,7 +121,7 @@ fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
             source_hash = &target.hash;
             source_coordinate = target.length;
         }
-        let key = edge_data_from_fields(source_hash, source_coordinate, Edge::PATH_END_HASH);
+        let key = edge_data_from_fields(source_hash, source_coordinate, Sequence::PATH_END_HASH);
         let edge_id = *edge_ids_by_data.get(&key).unwrap();
         path_edge_ids.push(edge_id);
         Path::create(conn, path_name, block_group.id, path_edge_ids);

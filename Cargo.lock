@@ -502,7 +502,7 @@ dependencies = [
 [[package]]
 name = "gfa-reader"
 version = "0.1.4"
-source = "git+https://github.com/MoinSebi/gfa-reader?branch=master#9db57c80e34eb137c1d641eabe513101e0de5955"
+source = "git+https://github.com/MoinSebi/gfa-reader?rev=9db57c80e34eb137c1d641eabe513101e0de5955#9db57c80e34eb137c1d641eabe513101e0de5955"
 dependencies = [
  "flate2",
  "memmap2",
