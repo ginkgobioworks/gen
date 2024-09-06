@@ -562,10 +562,10 @@ impl BlockGroup {
                 let new_beginning_edge = EdgeData {
                     source_hash: Sequence::PATH_START_HASH.to_string(),
                     source_coordinate: 0,
-                    source_strand: "+".to_string(),
+                    source_strand: Strand::Forward,
                     target_hash: end_block.sequence.hash.clone(),
                     target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
-                    target_strand: "+".to_string(),
+                    target_strand: Strand::Forward,
                     chromosome_index: change.chromosome_index,
                     phased: change.phased,
                 };
@@ -1223,7 +1223,7 @@ mod tests {
 
     #[test]
     fn insert_at_beginning_of_path() {
-        let conn = get_connection();
+        let conn = get_connection(None);
         let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
@@ -1237,7 +1237,7 @@ mod tests {
             sequence_end: 4,
             path_start: 0,
             path_end: 0,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,
@@ -1263,7 +1263,7 @@ mod tests {
 
     #[test]
     fn insert_at_end_of_path() {
-        let conn = get_connection();
+        let conn = get_connection(None);
         let (block_group_id, path) = setup_block_group(&conn);
 
         let insert_sequence = Sequence::new()
@@ -1278,7 +1278,7 @@ mod tests {
             sequence_end: 4,
             path_start: 40,
             path_end: 40,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,
@@ -1304,7 +1304,7 @@ mod tests {
 
     #[test]
     fn insert_at_one_bp_into_block() {
-        let conn = get_connection();
+        let conn = get_connection(None);
         let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
@@ -1318,7 +1318,7 @@ mod tests {
             sequence_end: 4,
             path_start: 10,
             path_end: 11,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,
@@ -1344,7 +1344,7 @@ mod tests {
 
     #[test]
     fn insert_at_one_bp_from_end_of_block() {
-        let conn = get_connection();
+        let conn = get_connection(None);
         let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
@@ -1358,7 +1358,7 @@ mod tests {
             sequence_end: 4,
             path_start: 19,
             path_end: 20,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,
@@ -1384,7 +1384,7 @@ mod tests {
 
     #[test]
     fn delete_at_beginning_of_path() {
-        let conn = get_connection();
+        let conn = get_connection(None);
         let (block_group_id, path) = setup_block_group(&conn);
         let deletion_sequence = Sequence::new()
             .sequence_type("DNA")
@@ -1398,7 +1398,7 @@ mod tests {
             sequence_end: 0,
             path_start: 0,
             path_end: 1,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,
@@ -1424,7 +1424,7 @@ mod tests {
 
     #[test]
     fn delete_at_end_of_path() {
-        let conn = get_connection();
+        let conn = get_connection(None);
         let (block_group_id, path) = setup_block_group(&conn);
         let deletion_sequence = Sequence::new()
             .sequence_type("DNA")
@@ -1438,7 +1438,7 @@ mod tests {
             sequence_end: 0,
             path_start: 35,
             path_end: 40,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,
@@ -1464,7 +1464,7 @@ mod tests {
 
     #[test]
     fn deletion_starting_at_block_boundary() {
-        let conn = get_connection();
+        let conn = get_connection(None);
         let (block_group_id, path) = setup_block_group(&conn);
         let deletion_sequence = Sequence::new()
             .sequence_type("DNA")
@@ -1478,7 +1478,7 @@ mod tests {
             sequence_end: 0,
             path_start: 10,
             path_end: 12,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,
@@ -1504,7 +1504,7 @@ mod tests {
 
     #[test]
     fn deletion_ending_at_block_boundary() {
-        let conn = get_connection();
+        let conn = get_connection(None);
         let (block_group_id, path) = setup_block_group(&conn);
         let deletion_sequence = Sequence::new()
             .sequence_type("DNA")
@@ -1518,7 +1518,7 @@ mod tests {
             sequence_end: 0,
             path_start: 18,
             path_end: 20,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         };
         let change = PathChange {
             block_group_id,

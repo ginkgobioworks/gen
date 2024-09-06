@@ -207,7 +207,7 @@ impl Path {
             sequence_end: 0,
             path_start: i32::MIN + 1,
             path_end: 0,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         });
 
         for (index, (into, out_of)) in edges.into_iter().tuple_windows().enumerate() {
@@ -235,7 +235,7 @@ impl Path {
             sequence_end: 0,
             path_start: path_length,
             path_end: i32::MAX - 1,
-            strand: "+".to_string(),
+            strand: Strand::Forward,
         });
 
         blocks
