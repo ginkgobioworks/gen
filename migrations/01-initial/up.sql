@@ -36,9 +36,11 @@ CREATE UNIQUE INDEX path_uidx ON path(block_group_id, name);
 
 CREATE TABLE change_set (
   id INTEGER PRIMARY KEY NOT NULL,
+  collection_name TEXT NOT NULL,
   created INTEGER NOT NULL,
   author TEXT NOT NULL,
-  message TEXT NOT NULL
+  message TEXT NOT NULL,
+  FOREIGN KEY(collection_name) REFERENCES collection(name)
 ) STRICT;
 
 CREATE TABLE change_log (

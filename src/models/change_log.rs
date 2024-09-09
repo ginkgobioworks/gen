@@ -7,6 +7,8 @@ use crate::models::strand::Strand;
 use chrono::prelude::*;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection, ToSql};
+use std::fmt;
+use std::fmt::Formatter;
 
 #[derive(Debug)]
 pub struct ChangeLog {
@@ -21,13 +23,13 @@ pub struct ChangeLog {
 }
 
 #[derive(Debug, PartialEq)]
-struct ChangeLogSummary {
-    id: i32,
-    parent_region: (String, i32, i32),
-    parent_left: String,
-    parent_impacted: String,
-    parent_right: String,
-    new_sequence: String,
+pub struct ChangeLogSummary {
+    pub id: i32,
+    pub parent_region: (String, i32, i32),
+    pub parent_left: String,
+    pub parent_impacted: String,
+    pub parent_right: String,
+    pub new_sequence: String,
 }
 
 impl ChangeLog {
@@ -92,26 +94,28 @@ impl ChangeLog {
     }
 
     pub fn bulk_create(conn: &Connection, change_logs: &[ChangeLog]) {
-        let mut rows_to_insert = vec![];
-        for change_log in change_logs.iter() {
-            let row = format!(
-                "({0}, {1}, {2}, \"{3}\", {4}, {5}, \"{6}\")",
-                change_log.path_id,
-                change_log.path_start,
-                change_log.path_end,
-                change_log.seq_hash,
-                change_log.seq_start,
-                change_log.seq_end,
-                change_log.strand
-            );
-            rows_to_insert.push(row);
-        }
-        let formatted_rows_to_insert = rows_to_insert.join(", ");
+        if !change_logs.is_empty() {
+            let mut rows_to_insert = vec![];
+            for change_log in change_logs.iter() {
+                let row = format!(
+                    "({0}, {1}, {2}, \"{3}\", {4}, {5}, \"{6}\")",
+                    change_log.path_id,
+                    change_log.path_start,
+                    change_log.path_end,
+                    change_log.seq_hash,
+                    change_log.seq_start,
+                    change_log.seq_end,
+                    change_log.strand
+                );
+                rows_to_insert.push(row);
+            }
+            let formatted_rows_to_insert = rows_to_insert.join(", ");
 
-        let insert_statement = format!(
-            "INSERT INTO change_log (path_id, path_start, path_end, sequence_hash, sequence_start, sequence_end, sequence_strand) VALUES {formatted_rows_to_insert};",
-        );
-        let _ = conn.execute(&insert_statement, ()).unwrap();
+            let insert_statement = format!(
+                "INSERT INTO change_log (path_id, path_start, path_end, sequence_hash, sequence_start, sequence_end, sequence_strand) VALUES {formatted_rows_to_insert};",
+            );
+            let _ = conn.execute(&insert_statement, ()).unwrap();
+        }
     }
 
     pub fn summary(conn: &Connection, change_log_id: i32) -> ChangeLogSummary {
@@ -156,13 +160,7 @@ impl ChangeLog {
         }
         let left_sequence = sequence[left_bound as usize..path_start as usize].to_string();
         let right_sequence = sequence[path_end as usize..right_bound as usize].to_string();
-        println!(
-            "
-Parental Sequence: {left_sequence:>20} {impacted_sequence} {right_sequence:<20}
-Modification {blank:26} {updated_sequence}
-            ",
-            blank = " "
-        );
+
         ChangeLogSummary {
             id: change_log_id,
             parent_region: (path_name, path_start, path_end),
@@ -176,10 +174,11 @@ Modification {blank:26} {updated_sequence}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ChangeSet {
-    id: Option<i32>,
-    created: DateTime<Utc>,
-    author: String,
-    message: String,
+    pub id: Option<i32>,
+    pub collection_name: String,
+    pub created: DateTime<Utc>,
+    pub author: String,
+    pub message: String,
 }
 
 struct ChangeSummary {
@@ -188,9 +187,10 @@ struct ChangeSummary {
 }
 
 impl ChangeSet {
-    pub fn new(author: &str, message: &str) -> ChangeSet {
+    pub fn new(collection_name: &str, author: &str, message: &str) -> ChangeSet {
         ChangeSet {
             id: None,
+            collection_name: collection_name.to_string(),
             created: Utc::now(),
             author: author.to_string(),
             message: message.to_string(),
@@ -199,10 +199,11 @@ impl ChangeSet {
 
     pub fn save(self, conn: &Connection) -> ChangeSet {
         let mut stmt = conn
-            .prepare("INSERT INTO change_set (created, author, message) VALUES (?1, ?2, ?3) RETURNING (id);")
+            .prepare("INSERT INTO change_set (collection_name, created, author, message) VALUES (?1, ?2, ?3, ?4) RETURNING (id);")
             .unwrap();
         let created = Utc::now();
         let placeholders = vec![
+            Value::from(self.collection_name.clone()),
             Value::from(created.timestamp_nanos_opt()),
             Value::from(self.author.clone()),
             Value::from(self.message.clone()),
@@ -213,6 +214,7 @@ impl ChangeSet {
         let id = rows.next().unwrap().unwrap();
         ChangeSet {
             id,
+            collection_name: self.collection_name.clone(),
             created,
             author: self.author.clone(),
             message: self.message.clone(),
@@ -225,9 +227,10 @@ impl ChangeSet {
             .query_map(params_from_iter(placeholders), |row| {
                 Ok(ChangeSet {
                     id: Some(row.get(0)?),
-                    created: DateTime::from_timestamp_nanos(row.get(1)?),
-                    author: row.get(2)?,
-                    message: row.get(3)?,
+                    collection_name: row.get(1)?,
+                    created: DateTime::from_timestamp_nanos(row.get(2)?),
+                    author: row.get(3)?,
+                    message: row.get(4)?,
                 })
             })
             .unwrap();
@@ -414,7 +417,7 @@ mod tests {
         assert_eq!(changes[0].seq_start, 0);
         assert_eq!(changes[0].seq_end, 4);
 
-        let change_set = ChangeSet::new("chris", "test change").save(conn);
+        let change_set = ChangeSet::new("test", "chris", "test change").save(conn);
         let change_set_id = change_set.id.unwrap();
         ChangeSet::add_changes(conn, change_set_id, 1);
         let changes = ChangeSet::get_changes(conn, change_set_id);
