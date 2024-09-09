@@ -29,13 +29,13 @@ enum ChangeLogCommands {
     Create {
         /// The name of the collection to store the entry under
         #[arg(short, long)]
-        name: String,
+        name: Option<String>,
         /// Who authored the changeset
         #[arg(short, long)]
-        author: String,
+        author: Option<String>,
         /// Description of the changeset
         #[arg(short, long)]
-        message: String,
+        message: Option<String>,
     },
     /// View changes within a changeset
     View {},
@@ -122,7 +122,7 @@ fn main() {
                 author,
                 message,
             }) => {
-                change_log::ChangeSet::new(name, author, message).save(&conn);
+                change_log_command::create::ui(&conn, name, author, message);
             }
             Some(ChangeLogCommands::View {}) => {
                 change_log_command::view::ui(&conn);
