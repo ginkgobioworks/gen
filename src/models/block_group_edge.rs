@@ -10,7 +10,12 @@ pub struct BlockGroupEdge {
 }
 
 impl BlockGroupEdge {
-    pub fn bulk_create(conn: &Connection, block_group_id: i32, edge_ids: Vec<i32>) {
+    pub fn bulk_create(
+        conn: &Connection,
+        block_group_id: i32,
+        edge_ids: Vec<i32>,
+    ) -> Vec<BlockGroupEdge> {
+        let mut results = vec![];
         for chunk in edge_ids.chunks(100000) {
             let mut rows_to_insert = vec![];
             for edge_id in chunk {
@@ -25,7 +30,22 @@ impl BlockGroupEdge {
                 formatted_rows_to_insert
             );
             let _ = conn.execute(&insert_statement, ());
+            let query_stmt = conn.prepare_cached(&format!("select * from block_group_edges where (block_group_id, edge_id) IN ({formatted_rows_to_insert})"));
+            for res in query_stmt
+                .unwrap()
+                .query_map((), |row| {
+                    Ok(BlockGroupEdge {
+                        id: row.get(0)?,
+                        block_group_id: row.get(1)?,
+                        edge_id: row.get(2)?,
+                    })
+                })
+                .unwrap()
+            {
+                results.push(res.unwrap());
+            }
         }
+        results
     }
 
     pub fn edges_for_block_group(conn: &Connection, block_group_id: i32) -> Vec<Edge> {

@@ -43,6 +43,46 @@ CREATE TABLE change_set (
   FOREIGN KEY(collection_name) REFERENCES collection(name)
 ) STRICT;
 
+-- an operation from a vcf can impact multiple paths and samples, so operation is not faceted on that, those
+-- are put into the operation_edge for now.
+CREATE TABLE operation (
+  id INTEGER PRIMARY KEY NOT NULL,
+  collection_name TEXT NOT NULL,
+  change_type TEXT NOT NULL,
+  change_id INTEGER NOT NULL
+) STRICT;
+
+CREATE TABLE file_addition (
+  id INTEGER PRIMARY KEY NOT NULL,
+  file_path TEXT NOT NULL,
+  file_type TEXT NOT NULL
+);
+
+CREATE TABLE operation_summary (
+  id INTEGER PRIMARY KEY NOT NULL,
+  operation_id INTEGER NOT NULL,
+  summary TEXT NOT NULL
+) STRICT;
+
+-- TODO: evaluate if we should have this appended to the block_group_edge table. Done this way because
+-- two changes can result in the same block group edge being made, and this join table lets us
+-- track that change can come from both applications. e.g. suppose we applied 2 vcf files from 2 separate
+-- programs, we wouldn't want to lose all the changes from the 2nd vcf that were contained in the first.
+CREATE TABLE operation_edge (
+  id INTEGER PRIMARY KEY NOT NULL,
+  operation_id INTEGER NOT NULL,
+-- it seems possible this should be nullable, though it's not certain we would actually supporting any updates
+-- not grounded on some path for coordinates
+  path_id INTEGER NOT NULL,
+  sample_name TEXT,
+  block_group_edge_id INTEGER NOT NULL,
+  FOREIGN KEY(block_group_edge_id) REFERENCES block_group_edges(id),
+  FOREIGN KEY(operation_id) REFERENCES operation(id),
+  FOREIGN KEY(path_id) REFERENCES path(id)
+) STRICT;
+CREATE UNIQUE INDEX operation_edge_uidx ON operation_edge(operation_id, path_id, block_group_edge_id);
+
+-- NOT USED ATM
 CREATE TABLE change_log (
   id INTEGER PRIMARY KEY NOT NULL,
   path_id INTEGER NOT NULL,
@@ -64,6 +104,16 @@ CREATE TABLE change_set_changes (
   FOREIGN KEY(change_log_id) REFERENCES change_log(id)
 ) STRICT;
 CREATE UNIQUE INDEX change_set_changes_uidx ON change_set_changes(change_set_id, change_log_id);
+-- END
+
+CREATE TABLE change_set_operations (
+  id INTEGER PRIMARY KEY NOT NULL,
+  change_set_id INTEGER NOT NULL,
+  operation_id INTEGER NOT NULL,
+  FOREIGN KEY(change_set_id) REFERENCES change_set(id),
+  FOREIGN KEY(operation_id) REFERENCES operation(id)
+) STRICT;
+CREATE UNIQUE INDEX change_set_operations_uidx ON change_set_operations(change_set_id, operation_id);
 
 CREATE TABLE edges (
   id INTEGER PRIMARY KEY NOT NULL,

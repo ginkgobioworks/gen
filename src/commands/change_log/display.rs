@@ -1,4 +1,5 @@
 use gen::models::change_log::{ChangeLogSummary, ChangeSet};
+use gen::models::operations::OperationSummary;
 use gen::models::Collection;
 use std::fmt;
 
@@ -36,5 +37,17 @@ pub struct CollectionDisplay(pub Collection);
 impl fmt::Display for CollectionDisplay {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_fmt(format_args!("{name}", name = self.0.name,))
+    }
+}
+
+pub struct OperationSummaryDisplay(pub OperationSummary);
+
+impl fmt::Display for OperationSummaryDisplay {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_fmt(format_args!(
+            "{id}\n  {summary}",
+            id = self.0.operation_id,
+            summary = self.0.summary,
+        ))
     }
 }

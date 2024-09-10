@@ -1,6 +1,7 @@
 use crate::models::block_group::{BlockGroup, PathChange};
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::Edge;
+use crate::models::file_types::FileTypes;
 use crate::models::path::{NewBlock, Path};
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
@@ -244,6 +245,15 @@ impl ChangeSet {
             )
             .unwrap();
         stmt.execute((change_set_id, change_log_id)).unwrap();
+    }
+
+    pub fn add_operation(conn: &Connection, change_set_id: i32, operation_id: i32) {
+        let mut stmt = conn
+            .prepare(
+                "INSERT INTO change_set_operations (change_set_id, operation_id) VALUES (?1, ?2);",
+            )
+            .unwrap();
+        stmt.execute((change_set_id, operation_id)).unwrap();
     }
 
     pub fn get_changes(conn: &Connection, change_set_id: i32) -> ChangeSummary {

@@ -7,6 +7,8 @@ pub mod block_group;
 pub mod block_group_edge;
 pub mod change_log;
 pub mod edge;
+pub mod file_types;
+pub mod operations;
 pub mod path;
 pub mod path_edge;
 pub mod sequence;
