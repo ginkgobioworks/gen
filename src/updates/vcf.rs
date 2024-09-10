@@ -305,7 +305,7 @@ pub fn update_with_vcf(
     for (sample_name, sample_changes) in summary.iter() {
         summary_str.push_str(&format!("Sample {sample_name}\n"));
         for (path_name, change_count) in sample_changes.iter() {
-            summary_str.push_str(&format!(" Path {path_name}: {change_count} changes.\n"));
+            summary_str.push_str(&format!(" {path_name}: {change_count} changes.\n"));
         }
     }
     OperationSummary::create(conn, operation.id, &summary_str);
