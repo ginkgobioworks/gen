@@ -13,3 +13,6 @@ target/
 
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
+
+# Mac droppings
+*.DS_Store
