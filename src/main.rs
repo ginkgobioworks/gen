@@ -5,6 +5,7 @@ use std::str;
 
 use gen::get_connection;
 use gen::imports::fasta::import_fasta;
+use gen::imports::gfa::import_gfa;
 use gen::updates::vcf::update_with_vcf;
 
 #[derive(Parser)]
@@ -27,7 +28,10 @@ enum Commands {
     Import {
         /// Fasta file path
         #[arg(short, long)]
-        fasta: String,
+        fasta: Option<String>,
+        /// GFA file path
+        #[arg(short, long)]
+        gfa: Option<String>,
         /// The name of the collection to store the entry under
         #[arg(short, long)]
         name: String,
@@ -71,13 +75,35 @@ fn main() {
     match &cli.command {
         Some(Commands::Import {
             fasta,
+            gfa,
             name,
             db,
             shallow,
         }) => {
             let mut conn = get_connection(db);
             conn.execute("BEGIN TRANSACTION", []).unwrap();
-            import_fasta(fasta, name, *shallow, &mut conn);
+            if fasta.is_some() {
+                import_fasta(
+                    &<Option<std::string::String> as Clone>::clone(fasta)
+                        .unwrap()
+                        .clone(),
+                    name,
+                    *shallow,
+                    &mut conn,
+                );
+            } else if gfa.is_some() {
+                import_gfa(
+                    &<Option<std::string::String> as Clone>::clone(gfa)
+                        .unwrap()
+                        .clone(),
+                    name,
+                    &conn,
+                );
+            } else {
+                panic!(
+                    "ERROR: Import command attempted but no recognized file format was specified"
+                );
+            }
             conn.execute("END TRANSACTION", []).unwrap();
         }
         Some(Commands::Update {
