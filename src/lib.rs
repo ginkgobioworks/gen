@@ -1,5 +1,6 @@
 use std::str;
 
+pub mod config;
 pub mod graph;
 pub mod imports;
 pub mod migrations;

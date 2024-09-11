@@ -1,10 +1,4 @@
-use intervaltree::IntervalTree;
-use itertools::Itertools;
-use petgraph::graphmap::DiGraphMap;
-use petgraph::Direction;
-use rusqlite::{types::Value as SQLValue, Connection};
-use std::collections::{HashMap, HashSet};
-
+use crate::config::get_operation;
 use crate::graph::all_simple_paths;
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::change_log::ChangeLog;
@@ -14,6 +8,12 @@ use crate::models::path::{NewBlock, Path, PathData};
 use crate::models::path_edge::PathEdge;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
+use intervaltree::IntervalTree;
+use itertools::Itertools;
+use petgraph::graphmap::DiGraphMap;
+use petgraph::Direction;
+use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
 pub struct BlockGroup {
@@ -145,7 +145,34 @@ impl BlockGroup {
         }
     }
 
+    pub fn query(conn: &Connection, query: &str, placeholders: Vec<SQLValue>) -> Vec<BlockGroup> {
+        let mut stmt = conn.prepare(query).unwrap();
+        let rows = stmt
+            .query_map(params_from_iter(placeholders), |row| {
+                Ok(BlockGroup {
+                    id: row.get(0)?,
+                    collection_name: row.get(1)?,
+                    sample_name: row.get(2)?,
+                    name: row.get(3)?,
+                })
+            })
+            .unwrap();
+        let mut objs = vec![];
+        for row in rows {
+            objs.push(row.unwrap());
+        }
+        objs
+    }
+
     pub fn clone(conn: &Connection, source_block_group_id: i32, target_block_group_id: i32) {
+        let operation_id = get_operation();
+        let binding = BlockGroup::query(
+            conn,
+            "select * from block_group where id = ?1",
+            vec![SQLValue::from(target_block_group_id)],
+        );
+        let target_block_group = binding.first().unwrap();
+        let target_sample = target_block_group.sample_name.clone();
         let existing_paths = Path::get_paths(
             conn,
             "SELECT * from path where block_group_id = ?1",
@@ -156,15 +183,46 @@ impl BlockGroup {
             .iter()
             .map(|edge| edge.id)
             .collect();
-        BlockGroupEdge::bulk_create(conn, target_block_group_id, edge_ids);
+        println!("cloning edges {edge_ids:?}");
+        let bg_edges = BlockGroupEdge::bulk_create(conn, target_block_group_id, edge_ids);
+        let mut edge_id_to_bg_edge_id: HashMap<i32, i32> = HashMap::new();
+        for bg_edge in bg_edges.iter() {
+            edge_id_to_bg_edge_id.insert(bg_edge.edge_id, bg_edge.id);
+        }
+        let mut added_edges: HashSet<i32> = HashSet::new();
 
         for path in existing_paths {
             let edge_ids = PathEdge::edges_for(conn, path.id)
                 .into_iter()
                 .map(|edge| edge.id)
-                .collect();
-            Path::create(conn, &path.name, target_block_group_id, edge_ids);
+                .collect::<Vec<i32>>();
+            let path = Path::create(conn, &path.name, target_block_group_id, &edge_ids);
+            let path_bg_edits = edge_ids
+                .iter()
+                .map(|id| edge_id_to_bg_edge_id[id])
+                .collect::<Vec<i32>>();
+            OperationEdge::bulk_create(
+                conn,
+                operation_id.unwrap(),
+                Some(path.id),
+                target_sample.clone(),
+                &path_bg_edits,
+            );
+            for id in path_bg_edits.iter() {
+                added_edges.insert(*id);
+            }
         }
+        OperationEdge::bulk_create(
+            conn,
+            operation_id.unwrap(),
+            None,
+            target_sample,
+            &bg_edges
+                .iter()
+                .filter(|bg_edge| !added_edges.contains(&(bg_edge.id)))
+                .map(|bg_edge| bg_edge.id)
+                .collect::<Vec<i32>>(),
+        );
     }
 
     pub fn get_or_create_sample_block_group(
@@ -632,7 +690,7 @@ mod tests {
             conn,
             "chr1",
             block_group.id,
-            vec![edge0.id, edge1.id, edge2.id, edge3.id, edge4.id],
+            &[edge0.id, edge1.id, edge2.id, edge3.id, edge4.id],
         );
         (block_group.id, path)
     }

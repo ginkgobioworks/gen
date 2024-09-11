@@ -162,6 +162,7 @@ pub fn update_with_vcf(
     run_migrations(conn);
 
     let change = FileAddition::create(conn, vcf_path, FileTypes::VCF);
+    let operation = Operation::create(conn, collection_name, "vcf_addition", change.id);
 
     let mut reader = vcf::io::reader::Builder::default()
         .build_from_path(vcf_path)
@@ -284,16 +285,16 @@ pub fn update_with_vcf(
                 .push(change);
         }
     }
-    let operation = Operation::create(conn, collection_name, "vcf_addition", change.id);
     let mut summary: HashMap<String, HashMap<String, i32>> = HashMap::new();
     for ((path, sample_name), path_changes) in changes {
         let bg_edges = BlockGroup::insert_changes(conn, &path_changes, &path_cache);
+        println!("making oes {bg_edges:?}");
         OperationEdge::bulk_create(
             conn,
             operation.id,
-            path.id,
-            sample_name.clone(),
-            bg_edges.iter().map(|v| v.id).collect(),
+            Some(path.id),
+            Some(sample_name.clone()),
+            &bg_edges.iter().map(|v| v.id).collect::<Vec<i32>>(),
         );
         summary
             .entry(sample_name)

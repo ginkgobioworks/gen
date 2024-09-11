@@ -47,16 +47,18 @@ CREATE TABLE change_set (
 -- are put into the operation_edge for now.
 CREATE TABLE operation (
   id INTEGER PRIMARY KEY NOT NULL,
+  parent_id INTEGER,
   collection_name TEXT NOT NULL,
   change_type TEXT NOT NULL,
-  change_id INTEGER NOT NULL
+  change_id INTEGER NOT NULL,
+  FOREIGN KEY(parent_id) REFERENCES operation(id)
 ) STRICT;
 
 CREATE TABLE file_addition (
   id INTEGER PRIMARY KEY NOT NULL,
   file_path TEXT NOT NULL,
   file_type TEXT NOT NULL
-);
+) STRICT;
 
 CREATE TABLE operation_summary (
   id INTEGER PRIMARY KEY NOT NULL,
@@ -73,14 +75,14 @@ CREATE TABLE operation_edge (
   operation_id INTEGER NOT NULL,
 -- it seems possible this should be nullable, though it's not certain we would actually supporting any updates
 -- not grounded on some path for coordinates
-  path_id INTEGER NOT NULL,
+  path_id INTEGER,
   sample_name TEXT,
   block_group_edge_id INTEGER NOT NULL,
   FOREIGN KEY(block_group_edge_id) REFERENCES block_group_edges(id),
   FOREIGN KEY(operation_id) REFERENCES operation(id),
   FOREIGN KEY(path_id) REFERENCES path(id)
 ) STRICT;
-CREATE UNIQUE INDEX operation_edge_uidx ON operation_edge(operation_id, path_id, block_group_edge_id);
+CREATE UNIQUE INDEX operation_edge_uidx ON operation_edge(operation_id, block_group_edge_id);
 
 -- NOT USED ATM
 CREATE TABLE change_log (

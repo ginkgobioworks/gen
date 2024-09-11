@@ -64,7 +64,7 @@ pub struct NewBlock {
 }
 
 impl Path {
-    pub fn create(conn: &Connection, name: &str, block_group_id: i32, edge_ids: Vec<i32>) -> Path {
+    pub fn create(conn: &Connection, name: &str, block_group_id: i32, edge_ids: &[i32]) -> Path {
         let query = "INSERT INTO path (name, block_group_id) VALUES (?1, ?2) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
@@ -308,7 +308,7 @@ mod tests {
             conn,
             "chr1",
             block_group.id,
-            vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
+            &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
         );
         assert_eq!(Path::sequence(conn, path), "ATCGATCGAAAAAAACCCCCCCGGGGGGG");
     }
@@ -394,7 +394,7 @@ mod tests {
             conn,
             "chr1",
             block_group.id,
-            vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
+            &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
         );
         assert_eq!(Path::sequence(conn, path), "CCCCCCCGGGGGGGTTTTTTTCGATCGAT");
     }
@@ -487,7 +487,7 @@ mod tests {
             conn,
             "chr1",
             block_group.id,
-            vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
+            &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
         );
         let tree = Path::intervaltree_for(conn, &path);
         let blocks1: Vec<_> = tree.query_point(2).map(|x| x.value.clone()).collect();

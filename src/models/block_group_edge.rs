@@ -1,4 +1,5 @@
 use crate::models::edge::Edge;
+use crate::models::operations::Operation;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 
@@ -49,15 +50,23 @@ impl BlockGroupEdge {
     }
 
     pub fn edges_for_block_group(conn: &Connection, block_group_id: i32) -> Vec<Edge> {
-        let query = format!(
-            "select * from block_group_edges where block_group_id = {};",
-            block_group_id
-        );
+        let valid_bg_edge_ids = Operation::get_valid_blockgroup_edge_ids(conn);
+        let query = match valid_bg_edge_ids {
+            Some(v) => format!(
+            "select * from block_group_edges where block_group_id = {block_group_id} AND id IN ({ids});", ids=v.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(", ")
+                ),
+            None => format!(
+                "select * from block_group_edges where block_group_id = {block_group_id};",
+            )
+        };
+
+        println!("vg {query:?}");
         let block_group_edges = BlockGroupEdge::query(conn, &query, vec![]);
         let edge_ids = block_group_edges
             .into_iter()
             .map(|block_group_edge| block_group_edge.edge_id)
             .collect();
+        println!("found edge ids {edge_ids:?}");
         Edge::bulk_load(conn, edge_ids)
     }
 
