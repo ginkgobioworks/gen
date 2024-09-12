@@ -14,7 +14,7 @@ use rusqlite::{session, Connection};
 
 pub fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &Connection) {
     let mut session = session::Session::new(conn).unwrap();
-    session.attach(None).unwrap();
+    operation_management::attach_session(&mut session);
     let change = FileAddition::create(conn, fasta, FileTypes::Fasta);
 
     let mut reader = fasta::io::reader::Builder.build_from_path(fasta).unwrap();
