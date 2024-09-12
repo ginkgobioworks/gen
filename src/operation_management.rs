@@ -8,24 +8,32 @@ use rusqlite::{session, Connection};
 
 use crate::config::{get_gen_dir, get_operation_path};
 
-pub fn read_operation_file() -> fs::File {
+enum FileMode {
+    Read,
+    Write,
+}
+
+pub fn get_operation_file(mode: FileMode) -> fs::File {
     let operation_path = get_operation_path();
     let mut file;
-    if fs::metadata(&operation_path).is_ok() {
-        file = fs::File::open(operation_path);
-    } else {
-        file = fs::File::create_new(operation_path);
+    match mode {
+        FileMode::Read => {
+            if fs::metadata(&operation_path).is_ok() {
+                file = fs::File::open(operation_path);
+            } else {
+                file = fs::File::create_new(operation_path);
+            }
+        }
+        FileMode::Write => {
+            file = fs::File::create(operation_path);
+        }
     }
+
     file.unwrap()
 }
 
-pub fn write_operation_file() -> fs::File {
-    let operation_path = get_operation_path();
-    fs::File::create(operation_path).unwrap()
-}
-
 pub fn get_operation() -> Option<i32> {
-    let mut file = read_operation_file();
+    let mut file = get_operation_file(FileMode::Read);
     let mut contents: String = "".to_string();
     file.read_to_string(&mut contents).unwrap();
     match contents.parse::<i32>().unwrap_or(0) {
@@ -35,7 +43,7 @@ pub fn get_operation() -> Option<i32> {
 }
 
 pub fn set_operation(op_id: i32) {
-    let mut file = write_operation_file();
+    let mut file = get_operation_file(FileMode::Write);
     file.write_all(&format!("{op_id}").into_bytes());
 }
 
