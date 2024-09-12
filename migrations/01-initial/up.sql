@@ -34,34 +34,27 @@ CREATE TABLE path (
 ) STRICT;
 CREATE UNIQUE INDEX path_uidx ON path(block_group_id, name);
 
-CREATE TABLE change_set (
+-- an operation from a vcf can impact multiple paths and samples, so operation is not faceted on that
+CREATE TABLE operation (
   id INTEGER PRIMARY KEY NOT NULL,
-  created INTEGER NOT NULL,
-  author TEXT NOT NULL,
-  message TEXT NOT NULL
+  parent_id INTEGER,
+  collection_name TEXT NOT NULL,
+  change_type TEXT NOT NULL,
+  change_id INTEGER NOT NULL,
+  FOREIGN KEY(parent_id) REFERENCES operation(id)
 ) STRICT;
 
-CREATE TABLE change_log (
+CREATE TABLE file_addition (
   id INTEGER PRIMARY KEY NOT NULL,
-  path_id INTEGER NOT NULL,
-  path_start INTEGER NOT NULL,
-  path_end INTEGER NOT NULL,
-  sequence_hash TEXT NOT NULL,
-  sequence_start INTEGER NOT NULL,
-  sequence_end INTEGER NOT NULL,
-  sequence_strand TEXT NOT NULL,
-  FOREIGN KEY(path_id) REFERENCES path(id),
-  FOREIGN KEY(sequence_hash) REFERENCES sequence(hash)
+  file_path TEXT NOT NULL,
+  file_type TEXT NOT NULL
 ) STRICT;
 
-CREATE TABLE change_set_changes (
+CREATE TABLE operation_summary (
   id INTEGER PRIMARY KEY NOT NULL,
-  change_set_id INTEGER NOT NULL,
-  change_log_id INTEGER NOT NULL,
-  FOREIGN KEY(change_set_id) REFERENCES change_set(id),
-  FOREIGN KEY(change_log_id) REFERENCES change_log(id)
+  operation_id INTEGER NOT NULL,
+  summary TEXT NOT NULL
 ) STRICT;
-CREATE UNIQUE INDEX change_set_changes_uidx ON change_set_changes(change_set_id, change_log_id);
 
 CREATE TABLE edges (
   id INTEGER PRIMARY KEY NOT NULL,

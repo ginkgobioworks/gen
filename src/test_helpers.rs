@@ -1,4 +1,4 @@
-use std::fs;
+use std::{env, fs};
 
 use rusqlite::Connection;
 
@@ -19,4 +19,14 @@ pub fn get_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Connection {
     rusqlite::vtab::array::load_module(&conn).unwrap();
     run_migrations(&mut conn);
     conn
+}
+
+pub fn setup_gen_dir() {
+    let cur_dir = env::current_dir().unwrap();
+    let mut gen_path = cur_dir.join(".gen");
+
+    if gen_path.is_dir() {
+        fs::remove_dir_all(&gen_path).unwrap()
+    }
+    fs::create_dir(&gen_path).unwrap();
 }

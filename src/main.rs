@@ -10,15 +10,11 @@ use gen::updates::vcf::update_with_vcf;
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
+    /// The path to the database you wish to utilize
+    #[arg(short, long)]
+    db: String,
     #[command(subcommand)]
     command: Option<Commands>,
-}
-
-#[derive(Subcommand)]
-enum ChangeLogCommands {
-    /// does testing things
-    Add {},
-    View {},
 }
 
 #[derive(Subcommand)]
@@ -31,9 +27,6 @@ enum Commands {
         /// The name of the collection to store the entry under
         #[arg(short, long)]
         name: String,
-        /// The path to the database you wish to utilize
-        #[arg(short, long)]
-        db: String,
         /// Don't store the sequence in the database, instead store the filename
         #[arg(short, long, action)]
         shallow: bool,
@@ -43,9 +36,6 @@ enum Commands {
         /// The name of the collection to update
         #[arg(short, long)]
         name: String,
-        /// The path to the database you wish to utilize
-        #[arg(short, long)]
-        db: String,
         /// A fasta file to insert
         #[arg(short, long)]
         fasta: Option<String>,
@@ -59,37 +49,30 @@ enum Commands {
         #[arg(short, long)]
         sample: Option<String>,
     },
-    ChangeLog {
-        #[command(subcommand)]
-        command: Option<ChangeLogCommands>,
-    },
 }
 
 fn main() {
     let cli = Cli::parse();
+    let db = cli.db.as_str();
+    let mut conn = get_connection(db);
 
     match &cli.command {
         Some(Commands::Import {
             fasta,
             name,
-            db,
             shallow,
         }) => {
-            let mut conn = get_connection(db);
             conn.execute("BEGIN TRANSACTION", []).unwrap();
-            import_fasta(fasta, name, *shallow, &mut conn);
+            import_fasta(fasta, name, *shallow, &conn);
             conn.execute("END TRANSACTION", []).unwrap();
         }
         Some(Commands::Update {
             name,
-            db,
             fasta,
             vcf,
             genotype,
             sample,
         }) => {
-            let mut conn = get_connection(db);
-            conn.execute("PRAGMA cache_size=50000;", []).unwrap();
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             update_with_vcf(
                 vcf,
@@ -101,11 +84,6 @@ fn main() {
 
             conn.execute("END TRANSACTION", []).unwrap();
         }
-        Some(Commands::ChangeLog { command }) => match &command {
-            Some(ChangeLogCommands::Add {}) => {}
-            Some(ChangeLogCommands::View {}) => {}
-            _ => {}
-        },
         None => {}
     }
 }

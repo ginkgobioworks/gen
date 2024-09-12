@@ -1,23 +1,25 @@
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{format, Debug};
 use std::{io, path::PathBuf, str};
 
 use crate::migrations::run_migrations;
 use crate::models::{
     self,
     block_group::{BlockGroup, BlockGroupData, PathCache, PathChange},
+    file_types::FileTypes,
+    operations::{FileAddition, Operation, OperationSummary},
     path::{NewBlock, Path},
     sequence::Sequence,
     strand::Strand,
 };
-use crate::parse_genotype;
+use crate::{config, operation_management, parse_genotype};
 use noodles::vcf;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use noodles::vcf::variant::record::samples::series::Value;
 use noodles::vcf::variant::record::samples::Sample;
 use noodles::vcf::variant::record::AlternateBases;
 use noodles::vcf::variant::Record;
-use rusqlite::Connection;
+use rusqlite::{session, Connection};
 
 #[derive(Debug)]
 struct BlockGroupCache<'a> {
@@ -143,6 +145,7 @@ fn prepare_change(
 
 struct VcfEntry<'a> {
     block_group_id: i32,
+    sample_name: String,
     path: Path,
     alt_seq: &'a str,
     chromosome_index: i32,
@@ -157,6 +160,11 @@ pub fn update_with_vcf(
     conn: &mut Connection,
 ) {
     run_migrations(conn);
+    let mut session = session::Session::new(conn).unwrap();
+    operation_management::attach_session(&mut session);
+
+    let change = FileAddition::create(conn, vcf_path, FileTypes::VCF);
+    let operation = Operation::create(conn, collection_name, "vcf_addition", change.id);
 
     let mut reader = vcf::io::reader::Builder::default()
         .build_from_path(vcf_path)
@@ -179,7 +187,7 @@ pub fn update_with_vcf(
     let mut path_cache = PathCache::new(conn);
     let mut sequence_cache = SequenceCache::new(conn);
 
-    let mut changes: Vec<PathChange> = vec![];
+    let mut changes: HashMap<(Path, String), Vec<PathChange>> = HashMap::new();
 
     for result in reader.records() {
         let record = result.unwrap();
@@ -212,6 +220,7 @@ pub fn update_with_vcf(
                         vcf_entries.push(VcfEntry {
                             block_group_id: sample_bg_id,
                             path: sample_path.clone(),
+                            sample_name: fixed_sample.clone(),
                             alt_seq,
                             chromosome_index: chromosome_index as i32,
                             phased,
@@ -246,6 +255,7 @@ pub fn update_with_vcf(
                                     vcf_entries.push(VcfEntry {
                                         block_group_id: sample_bg_id,
                                         path: sample_path.clone(),
+                                        sample_name: sample_names[sample_index].clone(),
                                         alt_seq,
                                         chromosome_index: chromosome_index as i32,
                                         phased,
@@ -271,11 +281,32 @@ pub fn update_with_vcf(
                 vcf_entry.phased,
                 sequence,
             );
-            changes.push(change);
+            changes
+                .entry((vcf_entry.path, vcf_entry.sample_name))
+                .or_default()
+                .push(change);
         }
     }
-
-    BlockGroup::insert_changes(conn, &changes, &path_cache);
+    let mut summary: HashMap<String, HashMap<String, i32>> = HashMap::new();
+    for ((path, sample_name), path_changes) in changes {
+        BlockGroup::insert_changes(conn, &path_changes, &path_cache);
+        summary
+            .entry(sample_name)
+            .or_default()
+            .entry(path.name)
+            .or_insert(path_changes.len() as i32);
+    }
+    let mut summary_str = "".to_string();
+    for (sample_name, sample_changes) in summary.iter() {
+        summary_str.push_str(&format!("Sample {sample_name}\n"));
+        for (path_name, change_count) in sample_changes.iter() {
+            summary_str.push_str(&format!(" {path_name}: {change_count} changes.\n"));
+        }
+    }
+    OperationSummary::create(conn, operation.id, &summary_str);
+    let mut output = Vec::new();
+    session.changeset_strm(&mut output).unwrap();
+    operation_management::write_changeset(operation_management::get_operation().unwrap(), &output);
 }
 
 #[cfg(test)]

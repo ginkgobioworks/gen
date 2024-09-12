@@ -5,8 +5,9 @@ use std::fmt::*;
 
 pub mod block_group;
 pub mod block_group_edge;
-pub mod change_log;
 pub mod edge;
+pub mod file_types;
+pub mod operations;
 pub mod path;
 pub mod path_edge;
 pub mod sequence;
@@ -14,7 +15,7 @@ pub mod strand;
 
 use crate::models;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Collection {
     pub name: String,
 }
@@ -50,6 +51,16 @@ impl Collection {
             .unwrap();
         rows.map(|row| row.unwrap()).collect()
     }
+
+    pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Collection> {
+        let mut stmt = conn.prepare(query).unwrap();
+        let rows = stmt
+            .query_map(params_from_iter(placeholders), |row| {
+                Ok(Collection { name: row.get(0)? })
+            })
+            .unwrap();
+        rows.map(|row| row.unwrap()).collect()
+    }
 }
 
 #[derive(Debug)]
@@ -80,5 +91,19 @@ impl Sample {
                 panic!("something bad happened querying the database")
             }
         }
+    }
+
+    pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Sample> {
+        let mut stmt = conn.prepare(query).unwrap();
+        let rows = stmt
+            .query_map(params_from_iter(placeholders), |row| {
+                Ok(Sample { name: row.get(0)? })
+            })
+            .unwrap();
+        let mut objs = vec![];
+        for row in rows {
+            objs.push(row.unwrap());
+        }
+        objs
     }
 }
