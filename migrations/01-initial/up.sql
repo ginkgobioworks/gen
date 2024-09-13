@@ -53,7 +53,8 @@ CREATE TABLE file_addition (
 CREATE TABLE operation_summary (
   id INTEGER PRIMARY KEY NOT NULL,
   operation_id INTEGER NOT NULL,
-  summary TEXT NOT NULL
+  summary TEXT NOT NULL,
+  FOREIGN KEY(operation_id) REFERENCES operation(id)
 ) STRICT;
 
 CREATE TABLE edges (
