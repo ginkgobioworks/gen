@@ -83,22 +83,9 @@ fn main() {
             let mut conn = get_connection(db);
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             if fasta.is_some() {
-                import_fasta(
-                    &<Option<std::string::String> as Clone>::clone(fasta)
-                        .unwrap()
-                        .clone(),
-                    name,
-                    *shallow,
-                    &mut conn,
-                );
+                import_fasta(&fasta.clone().unwrap(), name, *shallow, &mut conn);
             } else if gfa.is_some() {
-                import_gfa(
-                    &<Option<std::string::String> as Clone>::clone(gfa)
-                        .unwrap()
-                        .clone(),
-                    name,
-                    &conn,
-                );
+                import_gfa(&gfa.clone().unwrap(), name, &conn);
             } else {
                 panic!(
                     "ERROR: Import command attempted but no recognized file format was specified"
