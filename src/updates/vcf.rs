@@ -306,7 +306,11 @@ pub fn update_with_vcf(
     OperationSummary::create(conn, operation.id, &summary_str);
     let mut output = Vec::new();
     session.changeset_strm(&mut output).unwrap();
-    operation_management::write_changeset(operation_management::get_operation().unwrap(), &output);
+    operation_management::write_changeset(
+        conn,
+        operation_management::get_operation(conn).unwrap(),
+        &output,
+    );
 }
 
 #[cfg(test)]

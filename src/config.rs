@@ -1,8 +1,24 @@
+use rusqlite::Connection;
 use std::io::{IsTerminal, Read, Write};
 use std::{
-    env,
+    env, fs,
     path::{Path, PathBuf},
 };
+
+use crate::models::metadata;
+
+fn ensure_dir(path: &PathBuf) {
+    if !path.is_dir() {
+        fs::create_dir_all(path).unwrap();
+    }
+}
+
+pub fn get_or_create_gen_dir() {
+    let start_dir = env::current_dir().unwrap();
+    let mut cur_dir = start_dir.as_path();
+    let gen_path = cur_dir.join(".gen");
+    ensure_dir(&gen_path);
+}
 
 // TODO: maybe just store all these things in a sqlite file too in .gen
 pub fn get_gen_dir() -> String {
@@ -24,9 +40,18 @@ pub fn get_gen_dir() -> String {
     return gen_path.to_str().unwrap().to_string();
 }
 
-// TODO: make a random database uuid each time a db is made to make operations unique to a given db
-pub fn get_operation_path() -> PathBuf {
-    Path::new(&get_gen_dir()).join("operation")
+pub fn get_operation_path(conn: &Connection) -> PathBuf {
+    let db_id = metadata::get_db_uuid(conn);
+    let path = Path::new(&get_gen_dir()).join(db_id);
+    ensure_dir(&path);
+    path.join("operation")
+}
+
+pub fn get_changeset_path(conn: &Connection) -> PathBuf {
+    let db_id = metadata::get_db_uuid(conn);
+    let path = Path::new(&get_gen_dir()).join(db_id).join("changeset");
+    ensure_dir(&path);
+    path
 }
 
 #[cfg(test)]

@@ -4,57 +4,61 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use petgraph::Direction;
 use rusqlite::{session, Connection};
 
-use crate::config::{get_gen_dir, get_operation_path};
+use crate::config::{get_changeset_path, get_gen_dir, get_operation_path};
+use crate::models::operations::Operation;
 
 enum FileMode {
     Read,
     Write,
 }
 
-pub fn get_operation_file(mode: FileMode) -> fs::File {
-    let operation_path = get_operation_path();
+pub fn get_file(path: &PathBuf, mode: FileMode) -> fs::File {
     let mut file;
     match mode {
         FileMode::Read => {
-            if fs::metadata(&operation_path).is_ok() {
-                file = fs::File::open(operation_path);
+            if fs::metadata(path).is_ok() {
+                file = fs::File::open(path);
             } else {
-                file = fs::File::create_new(operation_path);
+                file = fs::File::create_new(path);
             }
         }
         FileMode::Write => {
-            file = fs::File::create(operation_path);
+            file = fs::File::create(path);
         }
     }
 
     file.unwrap()
 }
 
-pub fn get_operation() -> Option<i32> {
-    let mut file = get_operation_file(FileMode::Read);
+pub fn get_operation(conn: &Connection) -> Option<i32> {
+    let path = get_operation_path(conn);
+    let mut file = get_file(&path, FileMode::Read);
     let mut contents: String = "".to_string();
-    file.read_to_string(&mut contents).unwrap();
-    match contents.parse::<i32>().unwrap_or(0) {
+    file.read_to_string(&mut contents)
+        .expect("Cannot read contents");
+    match contents.trim().parse::<i32>().unwrap_or(0) {
         0 => None,
         v => Some(v),
     }
 }
 
-pub fn set_operation(op_id: i32) {
-    let mut file = get_operation_file(FileMode::Write);
+pub fn set_operation(conn: &Connection, op_id: i32) {
+    let path = get_operation_path(conn);
+    let mut file = get_file(&path, FileMode::Write);
     file.write_all(&format!("{op_id}").into_bytes());
 }
 
-pub fn write_changeset(op_id: i32, changes: &[u8]) {
-    let change_path = Path::new(&get_gen_dir()).join(format!("{op_id}.cs"));
+pub fn write_changeset(conn: &Connection, op_id: i32, changes: &[u8]) {
+    let change_path = get_changeset_path(conn).join(format!("{op_id}.cs"));
     let mut file = fs::File::create_new(change_path).unwrap();
     file.write_all(changes).unwrap()
 }
 
 pub fn apply_changeset(conn: &Connection, op_id: i32) {
-    let change_path = Path::new(&get_gen_dir()).join(format!("{op_id}.cs"));
+    let change_path = get_changeset_path(conn).join(format!("{op_id}.cs"));
     let mut file = fs::File::open(change_path).unwrap();
     let mut contents = vec![];
     file.read_to_end(&mut contents).unwrap();
@@ -69,7 +73,7 @@ pub fn apply_changeset(conn: &Connection, op_id: i32) {
 }
 
 pub fn revert_changeset(conn: &Connection, op_id: i32) {
-    let change_path = Path::new(&get_gen_dir()).join(format!("{op_id}.cs"));
+    let change_path = get_changeset_path(conn).join(format!("{op_id}.cs"));
     let mut file = fs::File::open(change_path).unwrap();
     let mut contents = vec![];
     file.read_to_end(&mut contents).unwrap();
@@ -83,6 +87,29 @@ pub fn revert_changeset(conn: &Connection, op_id: i32) {
         |_conflict_type, _item| session::ConflictAction::SQLITE_CHANGESET_OMIT,
     );
     conn.pragma_update(None, "foreign_keys", "1").unwrap();
+}
+
+pub fn move_to(conn: &Connection, op_id: i32) {
+    let current_op_id = get_operation(conn).unwrap();
+    let path = Operation::get_path_between(conn, current_op_id, op_id);
+    if path.is_empty() {
+        println!("No path exists from {current_op_id} to {op_id}.");
+        return;
+    }
+    for (operation_id, direction, next_op) in path.iter() {
+        match direction {
+            Direction::Outgoing => {
+                println!("Reverting operation {operation_id}");
+                revert_changeset(conn, *operation_id);
+                set_operation(conn, *next_op);
+            }
+            Direction::Incoming => {
+                println!("Applying operation {operation_id}");
+                apply_changeset(conn, *operation_id);
+                set_operation(conn, *operation_id);
+            }
+        }
+    }
 }
 
 pub fn attach_session(session: &mut session::Session) {
@@ -111,9 +138,10 @@ mod tests {
 
     #[test]
     fn test_writes_operation_id() {
+        let conn = get_connection(None);
         setup_gen_dir();
-        set_operation(1);
-        assert_eq!(get_operation().unwrap(), 1);
+        set_operation(&conn, 1);
+        assert_eq!(get_operation(&conn).unwrap(), 1);
     }
 
     #[test]
@@ -152,7 +180,7 @@ mod tests {
         assert_eq!(op_count, 2);
 
         // revert back to state 1 where vcf samples and blockpaths do not exist
-        revert_changeset(conn, get_operation().unwrap());
+        revert_changeset(conn, get_operation(conn).unwrap());
 
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
@@ -161,7 +189,7 @@ mod tests {
         assert_eq!(sample_count, 0);
         assert_eq!(op_count, 2);
 
-        apply_changeset(conn, get_operation().unwrap());
+        apply_changeset(conn, get_operation(conn).unwrap());
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
         let op_count = Operation::query(conn, "select * from operation", vec![]).len() as i32;

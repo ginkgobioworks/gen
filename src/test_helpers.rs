@@ -2,6 +2,7 @@ use std::{env, fs};
 
 use rusqlite::Connection;
 
+use crate::config::get_or_create_gen_dir;
 use crate::migrations::run_migrations;
 
 pub fn get_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Connection {
@@ -22,11 +23,5 @@ pub fn get_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Connection {
 }
 
 pub fn setup_gen_dir() {
-    let cur_dir = env::current_dir().unwrap();
-    let mut gen_path = cur_dir.join(".gen");
-
-    if gen_path.is_dir() {
-        fs::remove_dir_all(&gen_path).unwrap()
-    }
-    fs::create_dir(&gen_path).unwrap();
+    get_or_create_gen_dir();
 }

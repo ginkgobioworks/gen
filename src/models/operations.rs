@@ -1,6 +1,9 @@
+use crate::graph::all_simple_paths;
 use crate::models::file_types::FileTypes;
 use crate::operation_management::{get_operation, set_operation};
 use itertools::Itertools;
+use petgraph::graphmap::{DiGraphMap, UnGraphMap};
+use petgraph::Direction;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 
@@ -20,7 +23,7 @@ impl Operation {
         change_type: &str,
         change_id: i32,
     ) -> Operation {
-        let current_op = get_operation();
+        let current_op = get_operation(conn);
         let query = "INSERT INTO operation (collection_name, change_type, change_id, parent_id) VALUES (?1, ?2, ?3, ?4) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
@@ -44,7 +47,7 @@ impl Operation {
             .unwrap();
         let operation = rows.next().unwrap().unwrap();
         // TODO: error condition here where we can write to disk but transaction fails
-        set_operation(operation.id);
+        set_operation(conn, operation.id);
         operation
     }
 
@@ -58,6 +61,65 @@ impl Operation {
             .unwrap()
             .map(|id| id.unwrap())
             .collect::<Vec<i32>>()
+    }
+
+    pub fn get_operation_graph(conn: &Connection) -> DiGraphMap<i32, ()> {
+        let mut graph: DiGraphMap<i32, ()> = DiGraphMap::new();
+        let operations = Operation::query(conn, "select * from operation;", vec![]);
+        for op in operations.iter() {
+            graph.add_node(op.id);
+            if let Some(v) = op.parent_id {
+                graph.add_node(v);
+                graph.add_edge(op.id, v, ());
+            }
+        }
+        graph
+    }
+
+    pub fn get_path_between(
+        conn: &Connection,
+        source_id: i32,
+        target_id: i32,
+    ) -> Vec<(i32, Direction, i32)> {
+        let directed_graph = Operation::get_operation_graph(conn);
+        let mut undirected_graph: UnGraphMap<i32, ()> = Default::default();
+
+        for node in directed_graph.nodes() {
+            undirected_graph.add_node(node);
+        }
+        for (source, target, weight) in directed_graph.all_edges() {
+            undirected_graph.add_edge(source, target, ());
+        }
+        let mut patch_path: Vec<(i32, Direction, i32)> = vec![];
+        for path in all_simple_paths(&undirected_graph, source_id, target_id) {
+            println!("{path:?}");
+            let mut last_node = 0;
+            for node in path {
+                if node != source_id {
+                    for (edge_src, edge_target, edge_weight) in
+                        directed_graph.edges_directed(last_node, Direction::Outgoing)
+                    {
+                        println!("out {edge_src} {edge_target}");
+                        if edge_target == node {
+                            patch_path.push((last_node, Direction::Outgoing, node));
+                            break;
+                        }
+                    }
+                    for (edge_src, edge_target, edge_weight) in
+                        directed_graph.edges_directed(last_node, Direction::Incoming)
+                    {
+                        println!("in {edge_src} {edge_target}");
+                        if edge_src == node {
+                            patch_path.push((node, Direction::Incoming, last_node));
+                            break;
+                        }
+                    }
+                }
+                last_node = node;
+            }
+        }
+        println!("{patch_path:?}");
+        patch_path
     }
 
     pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Operation> {
