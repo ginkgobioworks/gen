@@ -70,10 +70,6 @@ pub fn export_gfa(conn: &Connection, collection_name: &str, filename: &str) {
                 )
             });
     }
-
-    // Split up sequence by edge boundaries into blocks
-    // Load paths
-    // Write paths
 }
 
 fn segment_line(sequence: &str, index: usize) -> String {
