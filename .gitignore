@@ -14,5 +14,9 @@ target/
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
 
+# Python notebooks and environment used to generate unit tests
+fixtures/*.ipynb
+.venv/
+
 # Mac droppings
-*.DS_Store
+.DS_Store
