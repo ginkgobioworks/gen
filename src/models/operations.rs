@@ -92,14 +92,12 @@ impl Operation {
         }
         let mut patch_path: Vec<(i32, Direction, i32)> = vec![];
         for path in all_simple_paths(&undirected_graph, source_id, target_id) {
-            println!("{path:?}");
             let mut last_node = 0;
             for node in path {
                 if node != source_id {
                     for (edge_src, edge_target, edge_weight) in
                         directed_graph.edges_directed(last_node, Direction::Outgoing)
                     {
-                        println!("out {edge_src} {edge_target}");
                         if edge_target == node {
                             patch_path.push((last_node, Direction::Outgoing, node));
                             break;
@@ -108,7 +106,6 @@ impl Operation {
                     for (edge_src, edge_target, edge_weight) in
                         directed_graph.edges_directed(last_node, Direction::Incoming)
                     {
-                        println!("in {edge_src} {edge_target}");
                         if edge_src == node {
                             patch_path.push((node, Direction::Incoming, last_node));
                             break;
@@ -118,7 +115,6 @@ impl Operation {
                 last_node = node;
             }
         }
-        println!("{patch_path:?}");
         patch_path
     }
 
