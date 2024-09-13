@@ -12,7 +12,15 @@ use crate::models::{
     strand::Strand,
 };
 
-fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
+fn bool_to_strand(direction: bool) -> Strand {
+    if direction {
+        Strand::Forward
+    } else {
+        Strand::Reverse
+    }
+}
+
+pub fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
     models::Collection::create(conn, collection_name);
     let block_group = BlockGroup::create(conn, collection_name, None, "");
     let gfa: Gfa<u64, (), ()> = Gfa::parse_gfa_file(gfa_path);
@@ -34,47 +42,63 @@ fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
         edges.insert(edge_data_from_fields(
             &source.hash,
             source.length,
+            bool_to_strand(link.from_dir),
             &target.hash,
+            bool_to_strand(link.to_dir),
         ));
     }
 
     for input_path in &gfa.paths {
         let mut source_hash = Sequence::PATH_START_HASH;
         let mut source_coordinate = 0;
-        for segment_id in input_path.nodes.iter() {
+        let mut source_strand = Strand::Forward;
+        for (index, segment_id) in input_path.nodes.iter().enumerate() {
             let target = sequences_by_segment_id.get(segment_id).unwrap();
+            let target_strand = bool_to_strand(input_path.dir[index]);
             edges.insert(edge_data_from_fields(
                 source_hash,
                 source_coordinate,
+                source_strand,
                 &target.hash,
+                target_strand,
             ));
             source_hash = &target.hash;
             source_coordinate = target.length;
+            source_strand = target_strand;
         }
         edges.insert(edge_data_from_fields(
             source_hash,
             source_coordinate,
+            source_strand,
             Sequence::PATH_END_HASH,
+            Strand::Forward,
         ));
     }
 
     for input_walk in &gfa.walk {
         let mut source_hash = Sequence::PATH_START_HASH;
         let mut source_coordinate = 0;
-        for segment_id in input_walk.walk_id.iter() {
+        let mut source_strand = Strand::Forward;
+        for (index, segment_id) in input_walk.walk_id.iter().enumerate() {
             let target = sequences_by_segment_id.get(segment_id).unwrap();
+            let target_strand = bool_to_strand(input_walk.walk_dir[index]);
             edges.insert(edge_data_from_fields(
                 source_hash,
                 source_coordinate,
+                source_strand,
                 &target.hash,
+                target_strand,
             ));
             source_hash = &target.hash;
             source_coordinate = target.length;
+            source_strand = target_strand;
         }
         edges.insert(edge_data_from_fields(
             source_hash,
             source_coordinate,
+            source_strand,
             Sequence::PATH_END_HASH,
+            Strand::Forward,
         ));
     }
 
@@ -84,8 +108,13 @@ fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
     let saved_edges = Edge::bulk_load(conn, &edge_ids);
     let mut edge_ids_by_data = HashMap::new();
     for edge in saved_edges {
-        let key =
-            edge_data_from_fields(&edge.source_hash, edge.source_coordinate, &edge.target_hash);
+        let key = edge_data_from_fields(
+            &edge.source_hash,
+            edge.source_coordinate,
+            edge.source_strand,
+            &edge.target_hash,
+            edge.target_strand,
+        );
         edge_ids_by_data.insert(key, edge.id);
     }
 
@@ -93,16 +122,31 @@ fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
         let path_name = &input_path.name;
         let mut source_hash = Sequence::PATH_START_HASH;
         let mut source_coordinate = 0;
+        let mut source_strand = Strand::Forward;
         let mut path_edge_ids = vec![];
-        for segment_id in input_path.nodes.iter() {
+        for (index, segment_id) in input_path.nodes.iter().enumerate() {
             let target = sequences_by_segment_id.get(segment_id).unwrap();
-            let key = edge_data_from_fields(source_hash, source_coordinate, &target.hash);
+            let target_strand = bool_to_strand(input_path.dir[index]);
+            let key = edge_data_from_fields(
+                source_hash,
+                source_coordinate,
+                source_strand,
+                &target.hash,
+                target_strand,
+            );
             let edge_id = *edge_ids_by_data.get(&key).unwrap();
             path_edge_ids.push(edge_id);
             source_hash = &target.hash;
             source_coordinate = target.length;
+            source_strand = target_strand;
         }
-        let key = edge_data_from_fields(source_hash, source_coordinate, Sequence::PATH_END_HASH);
+        let key = edge_data_from_fields(
+            source_hash,
+            source_coordinate,
+            source_strand,
+            Sequence::PATH_END_HASH,
+            Strand::Forward,
+        );
         let edge_id = *edge_ids_by_data.get(&key).unwrap();
         path_edge_ids.push(edge_id);
         Path::create(conn, path_name, block_group.id, path_edge_ids);
@@ -112,30 +156,51 @@ fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
         let path_name = &input_walk.sample_id;
         let mut source_hash = Sequence::PATH_START_HASH;
         let mut source_coordinate = 0;
+        let mut source_strand = Strand::Forward;
         let mut path_edge_ids = vec![];
-        for segment_id in input_walk.walk_id.iter() {
+        for (index, segment_id) in input_walk.walk_id.iter().enumerate() {
             let target = sequences_by_segment_id.get(segment_id).unwrap();
-            let key = edge_data_from_fields(source_hash, source_coordinate, &target.hash);
+            let target_strand = bool_to_strand(input_walk.walk_dir[index]);
+            let key = edge_data_from_fields(
+                source_hash,
+                source_coordinate,
+                source_strand,
+                &target.hash,
+                target_strand,
+            );
             let edge_id = *edge_ids_by_data.get(&key).unwrap();
             path_edge_ids.push(edge_id);
             source_hash = &target.hash;
             source_coordinate = target.length;
+            source_strand = target_strand;
         }
-        let key = edge_data_from_fields(source_hash, source_coordinate, Sequence::PATH_END_HASH);
+        let key = edge_data_from_fields(
+            source_hash,
+            source_coordinate,
+            source_strand,
+            Sequence::PATH_END_HASH,
+            Strand::Forward,
+        );
         let edge_id = *edge_ids_by_data.get(&key).unwrap();
         path_edge_ids.push(edge_id);
         Path::create(conn, path_name, block_group.id, path_edge_ids);
     }
 }
 
-fn edge_data_from_fields(source_hash: &str, source_coordinate: i32, target_hash: &str) -> EdgeData {
+fn edge_data_from_fields(
+    source_hash: &str,
+    source_coordinate: i32,
+    source_strand: Strand,
+    target_hash: &str,
+    target_strand: Strand,
+) -> EdgeData {
     EdgeData {
         source_hash: source_hash.to_string(),
         source_coordinate,
-        source_strand: Strand::Forward,
+        source_strand,
         target_hash: target_hash.to_string(),
         target_coordinate: 0,
-        target_strand: Strand::Forward,
+        target_strand,
         chromosome_index: 0,
         phased: 0,
     }
@@ -193,5 +258,28 @@ mod tests {
 
         let result = Path::sequence(conn, path);
         assert_eq!(result, "ACCTACAAATTCAAAC");
+    }
+
+    #[test]
+    fn test_import_gfa_with_reverse_strand_edges() {
+        let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        gfa_path.push("fixtures/reverse_strand.gfa");
+        let collection_name = "test".to_string();
+        let conn = &get_connection(None);
+        import_gfa(gfa_path.to_str().unwrap(), &collection_name, conn);
+
+        let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
+        let path = Path::get_paths(
+            conn,
+            "select * from path where block_group_id = ?1 AND name = ?2",
+            vec![
+                SQLValue::from(block_group_id),
+                SQLValue::from("124".to_string()),
+            ],
+        )[0]
+        .clone();
+
+        let result = Path::sequence(conn, path);
+        assert_eq!(result, "TATGCCAGCTGCGAATA");
     }
 }
