@@ -6,6 +6,7 @@ use crate::models::{
     self,
     block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
+    collection::Collection,
     edge::{Edge, EdgeData},
     path::Path,
     sequence::Sequence,
@@ -21,7 +22,7 @@ fn bool_to_strand(direction: bool) -> Strand {
 }
 
 pub fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
-    models::Collection::create(conn, collection_name);
+    Collection::create(conn, collection_name);
     let block_group = BlockGroup::create(conn, collection_name, None, "");
     let gfa: Gfa<u64, (), ()> = Gfa::parse_gfa_file(gfa_path);
     let mut sequences_by_segment_id: HashMap<u64, Sequence> = HashMap::new();

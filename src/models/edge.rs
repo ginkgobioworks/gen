@@ -5,7 +5,7 @@ use std::hash::RandomState;
 
 use crate::models::strand::Strand;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Edge {
     pub id: i32,
     pub source_hash: String,
@@ -232,7 +232,7 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    use crate::models::{sequence::Sequence, Collection};
+    use crate::models::{collection::Collection, sequence::Sequence};
     use crate::test_helpers::get_connection;
 
     #[test]

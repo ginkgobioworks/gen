@@ -2,6 +2,8 @@
 use clap::{Parser, Subcommand};
 use gen::config;
 use gen::config::get_operation_connection;
+
+use gen::exports::gfa::export_gfa;
 use gen::get_connection;
 use gen::imports::fasta::import_fasta;
 use gen::imports::gfa::import_gfa;
@@ -68,6 +70,17 @@ enum Commands {
     },
     /// View operations carried out against a database
     Operations {},
+    Export {
+        /// The name of the collection to export
+        #[arg(short, long)]
+        name: String,
+        /// The path to the database being exported from
+        #[arg(short, long)]
+        db: String,
+        /// The name of the GFA file to export to
+        #[arg(short, long)]
+        gfa: String,
+    },
 }
 
 fn main() {
@@ -162,6 +175,12 @@ fn main() {
         }
         Some(Commands::Checkout { id }) => {
             operation_management::move_to(&conn, &Operation::get_by_id(&operation_conn, *id));
+	}
+        Some(Commands::Export { name, db, gfa }) => {
+            let mut conn = get_connection(db);
+            conn.execute("BEGIN TRANSACTION", []).unwrap();
+            export_gfa(&conn, name, gfa);
+            conn.execute("END TRANSACTION", []).unwrap();
         }
         None => {}
     }

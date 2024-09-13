@@ -629,7 +629,7 @@ impl BlockGroup {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Collection, Sample};
+    use crate::models::{collection::Collection, Sample};
     use crate::test_helpers::get_connection;
 
     fn setup_block_group(conn: &Connection) -> (i32, Path) {
