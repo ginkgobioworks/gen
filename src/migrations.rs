@@ -11,6 +11,7 @@ pub fn run_migrations(conn: &mut Connection) {
     conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(()))
         .unwrap();
     conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+    conn.execute("PRAGMA cache_size=50000;", []).unwrap();
 
     // 2️⃣ Update the database schema, atomically
     let r = migrations.to_latest(conn);

@@ -2,17 +2,17 @@ use intervaltree::IntervalTree;
 use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
-use rusqlite::{types::Value as SQLValue, Connection};
+use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
 use std::collections::{HashMap, HashSet};
 
 use crate::graph::all_simple_paths;
 use crate::models::block_group_edge::BlockGroupEdge;
-use crate::models::change_log::ChangeLog;
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::path::{NewBlock, Path, PathData};
 use crate::models::path_edge::PathEdge;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
+use crate::operation_management::get_operation;
 
 #[derive(Debug)]
 pub struct BlockGroup {
@@ -144,6 +144,25 @@ impl BlockGroup {
         }
     }
 
+    pub fn query(conn: &Connection, query: &str, placeholders: Vec<SQLValue>) -> Vec<BlockGroup> {
+        let mut stmt = conn.prepare(query).unwrap();
+        let rows = stmt
+            .query_map(params_from_iter(placeholders), |row| {
+                Ok(BlockGroup {
+                    id: row.get(0)?,
+                    collection_name: row.get(1)?,
+                    sample_name: row.get(2)?,
+                    name: row.get(3)?,
+                })
+            })
+            .unwrap();
+        let mut objs = vec![];
+        for row in rows {
+            objs.push(row.unwrap());
+        }
+        objs
+    }
+
     pub fn clone(conn: &Connection, source_block_group_id: i32, target_block_group_id: i32) {
         let existing_paths = Path::get_paths(
             conn,
@@ -161,8 +180,8 @@ impl BlockGroup {
             let edge_ids = PathEdge::edges_for(conn, path.id)
                 .into_iter()
                 .map(|edge| edge.id)
-                .collect();
-            Path::create(conn, &path.name, target_block_group_id, edge_ids);
+                .collect::<Vec<i32>>();
+            Path::create(conn, &path.name, target_block_group_id, &edge_ids);
         }
     }
 
@@ -501,22 +520,6 @@ impl BlockGroup {
             let edge_ids = Edge::bulk_create(conn, new_edges);
             BlockGroupEdge::bulk_create(conn, block_group_id, &edge_ids);
         }
-        ChangeLog::bulk_create(
-            conn,
-            &changes
-                .iter()
-                .map(|change| ChangeLog {
-                    id: None,
-                    path_id: change.path.id,
-                    path_start: change.start,
-                    path_end: change.end,
-                    seq_hash: change.block.sequence.hash.clone(),
-                    seq_start: change.block.sequence_start,
-                    seq_end: change.block.sequence_end,
-                    strand: change.block.strand,
-                })
-                .collect::<Vec<ChangeLog>>(),
-        );
     }
 
     #[allow(clippy::ptr_arg)]
@@ -529,16 +532,6 @@ impl BlockGroup {
         let new_edges = BlockGroup::set_up_new_edges(change, tree);
         let edge_ids = Edge::bulk_create(conn, new_edges);
         BlockGroupEdge::bulk_create(conn, change.block_group_id, &edge_ids);
-        ChangeLog::new(
-            change.path.id,
-            change.start,
-            change.end,
-            change.block.sequence.hash.clone(),
-            change.block.sequence_start,
-            change.block.sequence_end,
-            change.block.strand,
-        )
-        .save(conn);
     }
 
     pub fn set_up_new_edges(
@@ -723,7 +716,7 @@ mod tests {
             conn,
             "chr1",
             block_group.id,
-            vec![edge0.id, edge1.id, edge2.id, edge3.id, edge4.id],
+            &[edge0.id, edge1.id, edge2.id, edge3.id, edge4.id],
         );
         (block_group.id, path)
     }

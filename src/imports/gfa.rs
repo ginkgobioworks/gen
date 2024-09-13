@@ -149,7 +149,7 @@ pub fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
         );
         let edge_id = *edge_ids_by_data.get(&key).unwrap();
         path_edge_ids.push(edge_id);
-        Path::create(conn, path_name, block_group.id, path_edge_ids);
+        Path::create(conn, path_name, block_group.id, &path_edge_ids);
     }
 
     for input_walk in &gfa.walk {
@@ -183,7 +183,7 @@ pub fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
         );
         let edge_id = *edge_ids_by_data.get(&key).unwrap();
         path_edge_ids.push(edge_id);
-        Path::create(conn, path_name, block_group.id, path_edge_ids);
+        Path::create(conn, path_name, block_group.id, &path_edge_ids);
     }
 }
 

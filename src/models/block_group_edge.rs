@@ -1,4 +1,5 @@
 use crate::models::edge::Edge;
+use crate::models::operations::Operation;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 
