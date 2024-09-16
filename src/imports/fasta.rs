@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::str;
 
 use crate::models::file_types::FileTypes;
-use crate::models::operations::{FileAddition, Operation, OperationSummary};
+use crate::models::operations::{FileAddition, Operation, OperationMetadata, OperationSummary};
 use crate::models::{
     self, block_group::BlockGroup, block_group_edge::BlockGroupEdge, edge::Edge, path::Path,
     sequence::Sequence, strand::Strand,
@@ -12,14 +12,20 @@ use crate::operation_management;
 use noodles::fasta;
 use rusqlite::{session, Connection};
 
-pub fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &Connection) {
+pub fn import_fasta(
+    fasta: &String,
+    name: &str,
+    shallow: bool,
+    conn: &Connection,
+    operation_conn: &Connection,
+) {
     let mut session = session::Session::new(conn).unwrap();
     operation_management::attach_session(&mut session);
-    let change = FileAddition::create(conn, fasta, FileTypes::Fasta);
+    let change = FileAddition::create(operation_conn, fasta, FileTypes::Fasta);
 
     let mut reader = fasta::io::reader::Builder.build_from_path(fasta).unwrap();
 
-    let operation = Operation::create(conn, name, "fasta_addition", change.id);
+    let operation = Operation::create(operation_conn, name, "fasta_addition", change.id);
 
     if !models::Collection::exists(conn, name) {
         let collection = models::Collection::create(conn, name);
@@ -75,15 +81,11 @@ pub fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &Connection
         for (path_name, change_count) in summary.iter() {
             summary_str.push_str(&format!(" {path_name}: {change_count} changes.\n"));
         }
-        OperationSummary::create(conn, operation.id, &summary_str);
+        OperationSummary::create(operation_conn, operation.id, &summary_str);
         println!("Created it");
         let mut output = Vec::new();
         session.changeset_strm(&mut output).unwrap();
-        operation_management::write_changeset(
-            conn,
-            operation_management::get_operation(conn).unwrap(),
-            &output,
-        );
+        operation_management::write_changeset(operation.id, &output);
     } else {
         println!("Collection {:1} already exists", name);
     }
@@ -93,21 +95,23 @@ pub fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &Connection
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-    use crate::operation_management;
-    use crate::test_helpers::get_connection;
+    use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use std::collections::HashSet;
 
     #[test]
     fn test_add_fasta() {
+        setup_gen_dir();
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
         let conn = get_connection(None);
+        let op_conn = &get_operation_connection(None);
 
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             "test",
             false,
             &conn,
+            op_conn,
         );
         assert_eq!(
             BlockGroup::get_all_sequences(&conn, 1),

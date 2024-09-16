@@ -1,8 +1,9 @@
+use crate::config::DB_UUID;
 use crate::graph::all_simple_paths;
 use crate::models::file_types::FileTypes;
-use crate::operation_management::{get_operation, set_operation};
 use itertools::Itertools;
 use petgraph::graphmap::{DiGraphMap, UnGraphMap};
+use petgraph::visit::Walker;
 use petgraph::Direction;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
@@ -23,7 +24,8 @@ impl Operation {
         change_type: &str,
         change_id: i32,
     ) -> Operation {
-        let current_op = get_operation(conn);
+        let current_op = OperationMetadata::get_operation(conn);
+        let mut operation;
         let query = "INSERT INTO operation (collection_name, change_type, change_id, parent_id) VALUES (?1, ?2, ?3, ?4) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
@@ -45,9 +47,9 @@ impl Operation {
                 },
             )
             .unwrap();
-        let operation = rows.next().unwrap().unwrap();
+        operation = rows.next().unwrap().unwrap();
         // TODO: error condition here where we can write to disk but transaction fails
-        set_operation(conn, operation.id);
+        OperationMetadata::set_operation(conn, operation.id);
         operation
     }
 
@@ -215,5 +217,38 @@ impl OperationSummary {
             })
             .unwrap();
         rows.map(|row| row.unwrap()).collect()
+    }
+}
+
+pub struct OperationMetadata {
+    operation_id: i32,
+}
+
+impl OperationMetadata {
+    pub fn set_operation(conn: &Connection, op_id: i32) {
+        let mut stmt = conn
+            .prepare(
+                "INSERT INTO metadata (db_uuid, operation_id)
+          VALUES (?1, ?2)
+          ON CONFLICT (db_uuid) DO
+          UPDATE SET operation_id=excluded.operation_id;",
+            )
+            .unwrap();
+        stmt.execute((DB_UUID.read().unwrap().clone(), op_id))
+            .unwrap();
+    }
+
+    pub fn get_operation(conn: &Connection) -> Option<i32> {
+        let mut id: Option<i32> = None;
+        let mut stmt = conn
+            .prepare("SELECT operation_id from metadata where db_uuid = ?1")
+            .unwrap();
+        let rows = stmt
+            .query_map((DB_UUID.read().unwrap().clone(),), |row| row.get(0))
+            .unwrap();
+        for row in rows {
+            id = Some(row.unwrap());
+        }
+        id
     }
 }

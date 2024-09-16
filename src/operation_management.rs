@@ -1,14 +1,12 @@
 use std::io::{IsTerminal, Read, Write};
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-};
+use std::{env, fs, path::PathBuf};
 
 use petgraph::Direction;
 use rusqlite::{session, Connection};
 
-use crate::config::{get_changeset_path, get_gen_dir, get_operation_path};
-use crate::models::operations::Operation;
+use crate::config::get_changeset_path;
+use crate::models::metadata;
+use crate::models::operations::{Operation, OperationMetadata};
 
 enum FileMode {
     Read,
@@ -33,32 +31,15 @@ pub fn get_file(path: &PathBuf, mode: FileMode) -> fs::File {
     file.unwrap()
 }
 
-pub fn get_operation(conn: &Connection) -> Option<i32> {
-    let path = get_operation_path(conn);
-    let mut file = get_file(&path, FileMode::Read);
-    let mut contents: String = "".to_string();
-    file.read_to_string(&mut contents)
-        .expect("Cannot read contents");
-    match contents.trim().parse::<i32>().unwrap_or(0) {
-        0 => None,
-        v => Some(v),
-    }
-}
-
-pub fn set_operation(conn: &Connection, op_id: i32) {
-    let path = get_operation_path(conn);
-    let mut file = get_file(&path, FileMode::Write);
-    file.write_all(&format!("{op_id}").into_bytes());
-}
-
-pub fn write_changeset(conn: &Connection, op_id: i32, changes: &[u8]) {
-    let change_path = get_changeset_path(conn).join(format!("{op_id}.cs"));
+pub fn write_changeset(op_id: i32, changes: &[u8]) {
+    let change_path = get_changeset_path().join(format!("{op_id}.cs"));
+    println!("cp is {change_path:?}");
     let mut file = fs::File::create_new(change_path).unwrap();
     file.write_all(changes).unwrap()
 }
 
 pub fn apply_changeset(conn: &Connection, op_id: i32) {
-    let change_path = get_changeset_path(conn).join(format!("{op_id}.cs"));
+    let change_path = get_changeset_path().join(format!("{op_id}.cs"));
     let mut file = fs::File::open(change_path).unwrap();
     let mut contents = vec![];
     file.read_to_end(&mut contents).unwrap();
@@ -73,7 +54,7 @@ pub fn apply_changeset(conn: &Connection, op_id: i32) {
 }
 
 pub fn revert_changeset(conn: &Connection, op_id: i32) {
-    let change_path = get_changeset_path(conn).join(format!("{op_id}.cs"));
+    let change_path = get_changeset_path().join(format!("{op_id}.cs"));
     let mut file = fs::File::open(change_path).unwrap();
     let mut contents = vec![];
     file.read_to_end(&mut contents).unwrap();
@@ -90,7 +71,7 @@ pub fn revert_changeset(conn: &Connection, op_id: i32) {
 }
 
 pub fn move_to(conn: &Connection, op_id: i32) {
-    let current_op_id = get_operation(conn).unwrap();
+    let current_op_id = OperationMetadata::get_operation(conn).unwrap();
     let path = Operation::get_path_between(conn, current_op_id, op_id);
     if path.is_empty() {
         println!("No path exists from {current_op_id} to {op_id}.");
@@ -101,12 +82,12 @@ pub fn move_to(conn: &Connection, op_id: i32) {
             Direction::Outgoing => {
                 println!("Reverting operation {operation_id}");
                 revert_changeset(conn, *operation_id);
-                set_operation(conn, *next_op);
+                OperationMetadata::set_operation(conn, *next_op);
             }
             Direction::Incoming => {
                 println!("Applying operation {operation_id}");
                 apply_changeset(conn, *operation_id);
-                set_operation(conn, *operation_id);
+                OperationMetadata::set_operation(conn, *operation_id);
             }
         }
     }
@@ -131,17 +112,18 @@ pub fn attach_session(session: &mut session::Session) {
 mod tests {
     use super::*;
     use crate::imports::fasta::import_fasta;
-    use crate::models::operations::Operation;
+    use crate::models::operations::{Operation, OperationMetadata};
     use crate::models::{edge::Edge, Sample};
-    use crate::test_helpers::{get_connection, setup_gen_dir};
+    use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use crate::updates::vcf::update_with_vcf;
 
     #[test]
     fn test_writes_operation_id() {
-        let conn = get_connection(None);
         setup_gen_dir();
-        set_operation(&conn, 1);
-        assert_eq!(get_operation(&conn).unwrap(), 1);
+        let conn = &get_connection(None);
+        let op_conn = &get_operation_connection(None);
+        OperationMetadata::set_operation(op_conn, 1);
+        assert_eq!(OperationMetadata::get_operation(op_conn).unwrap(), 1);
     }
 
     #[test]
@@ -152,16 +134,19 @@ mod tests {
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
         let conn = &mut get_connection(None);
+        let operation_conn = &get_operation_connection(None);
         let collection = "test".to_string();
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &collection,
             false,
             conn,
+            operation_conn,
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
-        let op_count = Operation::query(conn, "select * from operation", vec![]).len() as i32;
+        let op_count =
+            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
         assert_eq!(edge_count, 2);
         assert_eq!(sample_count, 0);
         assert_eq!(op_count, 1);
@@ -171,28 +156,38 @@ mod tests {
             "".to_string(),
             "".to_string(),
             conn,
+            operation_conn,
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
-        let op_count = Operation::query(conn, "select * from operation", vec![]).len() as i32;
+        let op_count =
+            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
         assert_eq!(edge_count, 10);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
 
         // revert back to state 1 where vcf samples and blockpaths do not exist
-        revert_changeset(conn, get_operation(conn).unwrap());
+        revert_changeset(
+            conn,
+            OperationMetadata::get_operation(operation_conn).unwrap(),
+        );
 
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
-        let op_count = Operation::query(conn, "select * from operation", vec![]).len() as i32;
+        let op_count =
+            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
         assert_eq!(edge_count, 2);
         assert_eq!(sample_count, 0);
         assert_eq!(op_count, 2);
 
-        apply_changeset(conn, get_operation(conn).unwrap());
+        apply_changeset(
+            conn,
+            OperationMetadata::get_operation(operation_conn).unwrap(),
+        );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
-        let op_count = Operation::query(conn, "select * from operation", vec![]).len() as i32;
+        let op_count =
+            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
         assert_eq!(edge_count, 10);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);

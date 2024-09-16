@@ -4,10 +4,13 @@ use std::fmt::Debug;
 use std::str;
 
 use gen::config;
+use gen::config::get_operation_connection;
 use gen::get_connection;
 use gen::imports::fasta::import_fasta;
 use gen::imports::gfa::import_gfa;
-use gen::models::operations;
+use gen::models::metadata::Metadata;
+use gen::models::operations::OperationMetadata;
+use gen::models::{metadata, operations};
 use gen::operation_management;
 use gen::updates::vcf::update_with_vcf;
 
@@ -80,6 +83,7 @@ fn main() {
     let binding = cli.db.unwrap();
     let db = binding.as_str();
     let mut conn = get_connection(db);
+    let operation_conn = get_operation_connection();
 
     match &cli.command {
         Some(Commands::Import {
@@ -90,7 +94,13 @@ fn main() {
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             if fasta.is_some() {
-                import_fasta(&fasta.clone().unwrap(), name, *shallow, &conn);
+                import_fasta(
+                    &fasta.clone().unwrap(),
+                    name,
+                    *shallow,
+                    &conn,
+                    &operation_conn,
+                );
             } else if gfa.is_some() {
                 import_gfa(&gfa.clone().unwrap(), name, &conn);
             } else {
@@ -113,7 +123,8 @@ fn main() {
                 name,
                 genotype.clone().unwrap_or("".to_string()),
                 sample.clone().unwrap_or("".to_string()),
-                &mut conn,
+                &conn,
+                &operation_conn,
             );
 
             conn.execute("END TRANSACTION", []).unwrap();
@@ -123,10 +134,10 @@ fn main() {
             println!("Gen repository initialized.");
         }
         Some(Commands::Operations {}) => {
-            let current_op =
-                operation_management::get_operation(&conn).expect("Unable to read operation.");
+            let current_op = OperationMetadata::get_operation(&operation_conn)
+                .expect("Unable to read operation.");
             let operations = operations::Operation::query(
-                &conn,
+                &operation_conn,
                 "select * from operation order by id desc;",
                 vec![],
             );

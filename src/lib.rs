@@ -1,3 +1,4 @@
+use std::fs::metadata;
 use std::str;
 
 pub mod config;
@@ -10,6 +11,7 @@ pub mod test_helpers;
 pub mod updates;
 
 use crate::migrations::run_migrations;
+use crate::models::metadata;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
@@ -19,6 +21,10 @@ pub fn get_connection(db_path: &str) -> Connection {
         Connection::open(db_path).unwrap_or_else(|_| panic!("Error connecting to {}", db_path));
     rusqlite::vtab::array::load_module(&conn).unwrap();
     run_migrations(&mut conn);
+    {
+        let mut writer = config::DB_UUID.write().unwrap();
+        *writer = metadata::get_db_uuid(&conn);
+    }
     conn
 }
 
