@@ -1,5 +1,5 @@
 use petgraph::Direction;
-use rusqlite::{session, types::Value, Connection};
+use rusqlite::{session, Connection};
 use std::io::{IsTerminal, Read, Write};
 use std::{env, fs, path::PathBuf};
 

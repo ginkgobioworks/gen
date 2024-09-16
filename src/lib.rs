@@ -1,4 +1,3 @@
-use std::fs::metadata;
 use std::str;
 
 pub mod config;
@@ -11,7 +10,6 @@ pub mod test_helpers;
 pub mod updates;
 
 use crate::migrations::run_migrations;
-use crate::models::metadata;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};

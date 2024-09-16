@@ -1,9 +1,7 @@
 use std::collections::HashMap;
-use std::fmt::{format, Debug};
+use std::fmt::Debug;
 use std::{io, path::PathBuf, str};
 
-use crate::migrations::run_migrations;
-use crate::models::operations::OperationState;
 use crate::models::{
     self,
     block_group::{BlockGroup, BlockGroupData, PathCache, PathChange},
@@ -14,7 +12,7 @@ use crate::models::{
     sequence::Sequence,
     strand::Strand,
 };
-use crate::{config, operation_management, parse_genotype};
+use crate::{operation_management, parse_genotype};
 use noodles::vcf;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use noodles::vcf::variant::record::samples::series::Value;

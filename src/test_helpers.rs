@@ -5,7 +5,6 @@ use tempdir::TempDir;
 
 use crate::config::{get_or_create_gen_dir, BASE_DIR};
 use crate::migrations::{run_migrations, run_operation_migrations};
-use crate::models::metadata;
 
 pub fn get_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Connection {
     let path: Option<&str> = db_path.into();

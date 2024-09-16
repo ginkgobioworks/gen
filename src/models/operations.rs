@@ -2,7 +2,6 @@ use crate::graph::all_simple_paths;
 use crate::models::file_types::FileTypes;
 use itertools::Itertools;
 use petgraph::graphmap::{DiGraphMap, UnGraphMap};
-use petgraph::visit::Walker;
 use petgraph::Direction;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
