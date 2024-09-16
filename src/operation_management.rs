@@ -114,7 +114,8 @@ pub fn attach_session(session: &mut session::Session) {
 mod tests {
     use super::*;
     use crate::imports::fasta::import_fasta;
-    use crate::models::operations::{Operation, OperationState};
+    use crate::models::file_types::FileTypes;
+    use crate::models::operations::{FileAddition, Operation, OperationState};
     use crate::models::{edge::Edge, metadata, Sample};
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use crate::updates::vcf::update_with_vcf;
@@ -125,7 +126,9 @@ mod tests {
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
-        OperationState::set_operation(op_conn, &db_uuid, 1);
+        let change = FileAddition::create(op_conn, "test", FileTypes::Fasta);
+        let operation = Operation::create(op_conn, &db_uuid, "test", "test", change.id);
+        OperationState::set_operation(op_conn, &db_uuid, operation.id);
         assert_eq!(OperationState::get_operation(op_conn, &db_uuid).unwrap(), 1);
     }
 
