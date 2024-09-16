@@ -1,18 +1,18 @@
 use std::collections::HashMap;
-use std::fmt::{format, Debug};
+use std::fmt::Debug;
 use std::{io, path::PathBuf, str};
 
-use crate::migrations::run_migrations;
 use crate::models::{
     self,
     block_group::{BlockGroup, BlockGroupData, PathCache, PathChange},
     file_types::FileTypes,
+    metadata,
     operations::{FileAddition, Operation, OperationSummary},
     path::{NewBlock, Path},
     sequence::Sequence,
     strand::Strand,
 };
-use crate::{config, operation_management, parse_genotype};
+use crate::{operation_management, parse_genotype};
 use noodles::vcf;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use noodles::vcf::variant::record::samples::series::Value;
@@ -157,14 +157,22 @@ pub fn update_with_vcf(
     collection_name: &str,
     fixed_genotype: String,
     fixed_sample: String,
-    conn: &mut Connection,
+    conn: &Connection,
+    operation_conn: &Connection,
 ) {
-    run_migrations(conn);
+    let db_uuid = metadata::get_db_uuid(conn);
+
     let mut session = session::Session::new(conn).unwrap();
     operation_management::attach_session(&mut session);
 
-    let change = FileAddition::create(conn, vcf_path, FileTypes::VCF);
-    let operation = Operation::create(conn, collection_name, "vcf_addition", change.id);
+    let change = FileAddition::create(operation_conn, vcf_path, FileTypes::VCF);
+    let operation = Operation::create(
+        operation_conn,
+        &db_uuid,
+        collection_name,
+        "vcf_addition",
+        change.id,
+    );
 
     let mut reader = vcf::io::reader::Builder::default()
         .build_from_path(vcf_path)
@@ -303,14 +311,10 @@ pub fn update_with_vcf(
             summary_str.push_str(&format!(" {path_name}: {change_count} changes.\n"));
         }
     }
-    OperationSummary::create(conn, operation.id, &summary_str);
+    OperationSummary::create(operation_conn, operation.id, &summary_str);
     let mut output = Vec::new();
     session.changeset_strm(&mut output).unwrap();
-    operation_management::write_changeset(
-        conn,
-        operation_management::get_operation(conn).unwrap(),
-        &output,
-    );
+    operation_management::write_changeset(&operation, &output);
 }
 
 #[cfg(test)]
@@ -318,22 +322,25 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use crate::imports::fasta::import_fasta;
-    use crate::test_helpers::get_connection;
+    use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use std::collections::HashSet;
 
     #[test]
     fn test_update_fasta_with_vcf() {
+        setup_gen_dir();
         let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         vcf_path.push("fixtures/simple.vcf");
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
-        let conn = &mut get_connection("test.db");
+        let conn = &get_connection(None);
+        let op_conn = &get_operation_connection(None);
         let collection = "test".to_string();
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &collection,
             false,
             conn,
+            op_conn,
         );
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
@@ -341,6 +348,7 @@ mod tests {
             "".to_string(),
             "".to_string(),
             conn,
+            op_conn,
         );
         assert_eq!(
             BlockGroup::get_all_sequences(conn, 1),
@@ -360,17 +368,20 @@ mod tests {
 
     #[test]
     fn test_update_fasta_with_vcf_custom_genotype() {
+        setup_gen_dir();
         let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         vcf_path.push("fixtures/general.vcf");
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
-        let conn = &mut get_connection("test.db");
+        let conn = &get_connection(None);
+        let op_conn = &get_operation_connection(None);
         let collection = "test".to_string();
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &collection,
             false,
             conn,
+            op_conn,
         );
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
@@ -378,6 +389,7 @@ mod tests {
             "0/1".to_string(),
             "sample 1".to_string(),
             conn,
+            op_conn,
         );
         assert_eq!(
             BlockGroup::get_all_sequences(conn, 1),

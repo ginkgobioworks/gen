@@ -1,6 +1,5 @@
 use crate::graph::all_simple_paths;
 use crate::models::file_types::FileTypes;
-use crate::operation_management::{get_operation, set_operation};
 use itertools::Itertools;
 use petgraph::graphmap::{DiGraphMap, UnGraphMap};
 use petgraph::Direction;
@@ -10,6 +9,7 @@ use rusqlite::{params_from_iter, Connection};
 #[derive(Clone, Debug)]
 pub struct Operation {
     pub id: i32,
+    pub db_uuid: String,
     pub parent_id: Option<i32>,
     pub collection_name: String,
     pub change_type: String,
@@ -19,16 +19,18 @@ pub struct Operation {
 impl Operation {
     pub fn create(
         conn: &Connection,
+        db_uuid: &String,
         collection_name: &str,
         change_type: &str,
         change_id: i32,
     ) -> Operation {
-        let current_op = get_operation(conn);
-        let query = "INSERT INTO operation (collection_name, change_type, change_id, parent_id) VALUES (?1, ?2, ?3, ?4) RETURNING (id)";
+        let current_op = OperationState::get_operation(conn, db_uuid);
+        let query = "INSERT INTO operation (db_uuid, collection_name, change_type, change_id, parent_id) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
             .query_map(
                 params_from_iter(vec![
+                    Value::from(db_uuid.clone()),
                     Value::from(collection_name.to_string()),
                     Value::from(change_type.to_string()),
                     Value::from(change_id),
@@ -37,6 +39,7 @@ impl Operation {
                 |row| {
                     Ok(Operation {
                         id: row.get(0)?,
+                        db_uuid: db_uuid.clone(),
                         parent_id: current_op,
                         collection_name: collection_name.to_string(),
                         change_type: change_type.to_string(),
@@ -47,7 +50,7 @@ impl Operation {
             .unwrap();
         let operation = rows.next().unwrap().unwrap();
         // TODO: error condition here where we can write to disk but transaction fails
-        set_operation(conn, operation.id);
+        OperationState::set_operation(conn, &operation.db_uuid, operation.id);
         operation
     }
 
@@ -124,10 +127,11 @@ impl Operation {
             .query_map(params_from_iter(placeholders), |row| {
                 Ok(Operation {
                     id: row.get(0)?,
-                    parent_id: row.get(1)?,
-                    collection_name: row.get(2)?,
-                    change_type: row.get(3)?,
-                    change_id: row.get(4)?,
+                    db_uuid: row.get(1)?,
+                    parent_id: row.get(2)?,
+                    collection_name: row.get(3)?,
+                    change_type: row.get(4)?,
+                    change_id: row.get(5)?,
                 })
             })
             .unwrap();
@@ -136,6 +140,31 @@ impl Operation {
             objs.push(row.unwrap());
         }
         objs
+    }
+
+    pub fn get(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Operation {
+        let mut stmt = conn.prepare(query).unwrap();
+        let mut rows = stmt
+            .query_map(params_from_iter(placeholders), |row| {
+                Ok(Operation {
+                    id: row.get(0)?,
+                    db_uuid: row.get(1)?,
+                    parent_id: row.get(2)?,
+                    collection_name: row.get(3)?,
+                    change_type: row.get(4)?,
+                    change_id: row.get(5)?,
+                })
+            })
+            .unwrap();
+        rows.next().unwrap().unwrap()
+    }
+
+    pub fn get_by_id(conn: &Connection, op_id: i32) -> Operation {
+        Operation::get(
+            conn,
+            "select * from operation where id = ?1",
+            vec![Value::from(op_id)],
+        )
     }
 }
 
@@ -215,5 +244,35 @@ impl OperationSummary {
             })
             .unwrap();
         rows.map(|row| row.unwrap()).collect()
+    }
+}
+
+pub struct OperationState {
+    operation_id: i32,
+}
+
+impl OperationState {
+    pub fn set_operation(conn: &Connection, db_uuid: &String, op_id: i32) {
+        let mut stmt = conn
+            .prepare(
+                "INSERT INTO operation_state (db_uuid, operation_id)
+          VALUES (?1, ?2)
+          ON CONFLICT (db_uuid) DO
+          UPDATE SET operation_id=excluded.operation_id;",
+            )
+            .unwrap();
+        stmt.execute((db_uuid, op_id)).unwrap();
+    }
+
+    pub fn get_operation(conn: &Connection, db_uuid: &String) -> Option<i32> {
+        let mut id: Option<i32> = None;
+        let mut stmt = conn
+            .prepare("SELECT operation_id from operation_state where db_uuid = ?1;")
+            .unwrap();
+        let rows = stmt.query_map((db_uuid,), |row| row.get(0)).unwrap();
+        for row in rows {
+            id = Some(row.unwrap());
+        }
+        id
     }
 }

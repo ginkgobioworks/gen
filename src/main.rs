@@ -1,15 +1,17 @@
 #![allow(warnings)]
 use clap::{Parser, Subcommand};
-use std::fmt::Debug;
-use std::str;
-
 use gen::config;
+use gen::config::get_operation_connection;
 use gen::get_connection;
 use gen::imports::fasta::import_fasta;
 use gen::imports::gfa::import_gfa;
-use gen::models::operations;
+use gen::models::metadata;
+use gen::models::operations::{Operation, OperationState};
 use gen::operation_management;
 use gen::updates::vcf::update_with_vcf;
+use rusqlite::types::Value;
+use std::fmt::Debug;
+use std::str;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -77,9 +79,11 @@ fn main() {
         return;
     }
 
-    let binding = cli.db.unwrap();
+    let binding = cli.db.expect("No db specified.");
     let db = binding.as_str();
-    let mut conn = get_connection(db);
+    let conn = get_connection(db);
+    let db_uuid = metadata::get_db_uuid(&conn);
+    let operation_conn = get_operation_connection();
 
     match &cli.command {
         Some(Commands::Import {
@@ -90,7 +94,13 @@ fn main() {
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             if fasta.is_some() {
-                import_fasta(&fasta.clone().unwrap(), name, *shallow, &conn);
+                import_fasta(
+                    &fasta.clone().unwrap(),
+                    name,
+                    *shallow,
+                    &conn,
+                    &operation_conn,
+                );
             } else if gfa.is_some() {
                 import_gfa(&gfa.clone().unwrap(), name, &conn);
             } else {
@@ -113,7 +123,8 @@ fn main() {
                 name,
                 genotype.clone().unwrap_or("".to_string()),
                 sample.clone().unwrap_or("".to_string()),
-                &mut conn,
+                &conn,
+                &operation_conn,
             );
 
             conn.execute("END TRANSACTION", []).unwrap();
@@ -123,12 +134,12 @@ fn main() {
             println!("Gen repository initialized.");
         }
         Some(Commands::Operations {}) => {
-            let current_op =
-                operation_management::get_operation(&conn).expect("Unable to read operation.");
-            let operations = operations::Operation::query(
-                &conn,
-                "select * from operation order by id desc;",
-                vec![],
+            let current_op = OperationState::get_operation(&operation_conn, &db_uuid)
+                .expect("Unable to read operation.");
+            let operations = Operation::query(
+                &operation_conn,
+                "select * from operation where db_uuid = ?1 order by id desc;",
+                vec![Value::from(db_uuid)],
             );
             let mut indicator = "";
             println!(
@@ -150,7 +161,7 @@ fn main() {
             }
         }
         Some(Commands::Checkout { id }) => {
-            operation_management::move_to(&conn, *id);
+            operation_management::move_to(&conn, &Operation::get_by_id(&operation_conn, *id));
         }
         None => {}
     }

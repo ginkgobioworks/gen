@@ -12,7 +12,6 @@ use crate::models::path::{NewBlock, Path, PathData};
 use crate::models::path_edge::PathEdge;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
-use crate::operation_management::get_operation;
 
 #[derive(Debug)]
 pub struct BlockGroup {

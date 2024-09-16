@@ -209,13 +209,14 @@ fn edge_data_from_fields(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::get_connection;
+    use crate::test_helpers::{get_connection, setup_gen_dir};
     use rusqlite::{types::Value as SQLValue, Connection};
     use std::fs;
     use std::path::PathBuf;
 
     #[test]
     fn test_import_simple_gfa() {
+        setup_gen_dir();
         let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         gfa_path.push("fixtures/simple.gfa");
         let collection_name = "test".to_string();
