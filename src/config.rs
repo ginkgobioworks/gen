@@ -63,12 +63,6 @@ pub fn get_gen_db_path() -> PathBuf {
     Path::new(&get_gen_dir()).join("gen.db")
 }
 
-pub fn get_operation_path() -> PathBuf {
-    let path = Path::new(&get_gen_dir()).join(DB_UUID.with(|v| v.read().unwrap().to_string()));
-    ensure_dir(&path);
-    path.join("operation")
-}
-
 pub fn get_changeset_path(operation: &Operation) -> PathBuf {
     let path = Path::new(&get_gen_dir())
         .join(operation.db_uuid.clone())

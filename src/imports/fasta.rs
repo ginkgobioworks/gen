@@ -5,8 +5,8 @@ use std::str;
 use crate::models::file_types::FileTypes;
 use crate::models::operations::{FileAddition, Operation, OperationMetadata, OperationSummary};
 use crate::models::{
-    self, block_group::BlockGroup, block_group_edge::BlockGroupEdge, edge::Edge, path::Path,
-    sequence::Sequence, strand::Strand,
+    self, block_group::BlockGroup, block_group_edge::BlockGroupEdge, edge::Edge, metadata,
+    path::Path, sequence::Sequence, strand::Strand,
 };
 use crate::operation_management;
 use noodles::fasta;
@@ -25,7 +25,9 @@ pub fn import_fasta(
 
     let mut reader = fasta::io::reader::Builder.build_from_path(fasta).unwrap();
 
-    let operation = Operation::create(operation_conn, name, "fasta_addition", change.id);
+    let db_uuid = metadata::get_db_uuid(conn);
+
+    let operation = Operation::create(operation_conn, &db_uuid, name, "fasta_addition", change.id);
 
     if !models::Collection::exists(conn, name) {
         let collection = models::Collection::create(conn, name);

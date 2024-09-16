@@ -77,7 +77,7 @@ pub fn revert_changeset(conn: &Connection, operation: &Operation) {
 }
 
 pub fn move_to(conn: &Connection, operation: &Operation) {
-    let current_op_id = OperationMetadata::get_operation(conn).unwrap();
+    let current_op_id = OperationMetadata::get_operation(conn, &operation.db_uuid).unwrap();
     let op_id = operation.id;
     let path = Operation::get_path_between(conn, current_op_id, op_id);
     if path.is_empty() {
@@ -89,12 +89,12 @@ pub fn move_to(conn: &Connection, operation: &Operation) {
             Direction::Outgoing => {
                 println!("Reverting operation {operation_id}");
                 revert_changeset(conn, &Operation::get_by_id(conn, *operation_id));
-                OperationMetadata::set_operation(conn, *next_op);
+                OperationMetadata::set_operation(conn, &operation.db_uuid, *next_op);
             }
             Direction::Incoming => {
                 println!("Applying operation {operation_id}");
                 apply_changeset(conn, &Operation::get_by_id(conn, *operation_id));
-                OperationMetadata::set_operation(conn, *operation_id);
+                OperationMetadata::set_operation(conn, &operation.db_uuid, *operation_id);
             }
         }
     }
@@ -120,17 +120,22 @@ mod tests {
     use super::*;
     use crate::imports::fasta::import_fasta;
     use crate::models::operations::{Operation, OperationMetadata};
-    use crate::models::{edge::Edge, Sample};
+    use crate::models::{edge::Edge, metadata, Sample};
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use crate::updates::vcf::update_with_vcf;
+    use std::fs::metadata;
 
     #[test]
     fn test_writes_operation_id() {
         setup_gen_dir();
         let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
-        OperationMetadata::set_operation(op_conn, 1);
-        assert_eq!(OperationMetadata::get_operation(op_conn).unwrap(), 1);
+        OperationMetadata::set_operation(op_conn, &db_uuid, 1);
+        assert_eq!(
+            OperationMetadata::get_operation(op_conn, &db_uuid).unwrap(),
+            1
+        );
     }
 
     #[test]
@@ -141,6 +146,7 @@ mod tests {
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
         let conn = &mut get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
         let operation_conn = &get_operation_connection(None);
         let collection = "test".to_string();
         import_fasta(
@@ -178,7 +184,7 @@ mod tests {
             conn,
             &Operation::get_by_id(
                 operation_conn,
-                OperationMetadata::get_operation(operation_conn).unwrap(),
+                OperationMetadata::get_operation(operation_conn, &db_uuid).unwrap(),
             ),
         );
 
@@ -194,7 +200,7 @@ mod tests {
             conn,
             &Operation::get_by_id(
                 operation_conn,
-                OperationMetadata::get_operation(operation_conn).unwrap(),
+                OperationMetadata::get_operation(operation_conn, &db_uuid).unwrap(),
             ),
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;

@@ -1,4 +1,3 @@
-use crate::config::DB_UUID;
 use crate::graph::all_simple_paths;
 use crate::models::file_types::FileTypes;
 use itertools::Itertools;
@@ -21,12 +20,12 @@ pub struct Operation {
 impl Operation {
     pub fn create(
         conn: &Connection,
+        db_uuid: &String,
         collection_name: &str,
         change_type: &str,
         change_id: i32,
     ) -> Operation {
-        let current_op = OperationMetadata::get_operation(conn);
-        let db_uuid = DB_UUID.with(|v| v.read().unwrap().to_string());
+        let current_op = OperationMetadata::get_operation(conn, db_uuid);
         let query = "INSERT INTO operation (db_uuid, collection_name, change_type, change_id, parent_id) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
@@ -52,7 +51,7 @@ impl Operation {
             .unwrap();
         let operation = rows.next().unwrap().unwrap();
         // TODO: error condition here where we can write to disk but transaction fails
-        OperationMetadata::set_operation(conn, operation.id);
+        OperationMetadata::set_operation(conn, &operation.db_uuid, operation.id);
         operation
     }
 
@@ -254,7 +253,7 @@ pub struct OperationMetadata {
 }
 
 impl OperationMetadata {
-    pub fn set_operation(conn: &Connection, op_id: i32) {
+    pub fn set_operation(conn: &Connection, db_uuid: &String, op_id: i32) {
         let mut stmt = conn
             .prepare(
                 "INSERT INTO metadata (db_uuid, operation_id)
@@ -263,20 +262,15 @@ impl OperationMetadata {
           UPDATE SET operation_id=excluded.operation_id;",
             )
             .unwrap();
-        stmt.execute((DB_UUID.with(|v| v.read().unwrap().clone()), op_id))
-            .unwrap();
+        stmt.execute((db_uuid, op_id)).unwrap();
     }
 
-    pub fn get_operation(conn: &Connection) -> Option<i32> {
+    pub fn get_operation(conn: &Connection, db_uuid: &String) -> Option<i32> {
         let mut id: Option<i32> = None;
         let mut stmt = conn
             .prepare("SELECT operation_id from metadata where db_uuid = ?1;")
             .unwrap();
-        let rows = stmt
-            .query_map((DB_UUID.with(|v| v.read().unwrap().clone()),), |row| {
-                row.get(0)
-            })
-            .unwrap();
+        let rows = stmt.query_map((db_uuid,), |row| row.get(0)).unwrap();
         for row in rows {
             id = Some(row.unwrap());
         }

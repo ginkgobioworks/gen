@@ -3,7 +3,7 @@ use std::fs;
 use rusqlite::Connection;
 use tempdir::TempDir;
 
-use crate::config::{get_or_create_gen_dir, BASE_DIR, DB_UUID};
+use crate::config::{get_or_create_gen_dir, BASE_DIR};
 use crate::migrations::{run_migrations, run_operation_migrations};
 use crate::models::metadata;
 
@@ -21,12 +21,6 @@ pub fn get_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Connection {
     }
     rusqlite::vtab::array::load_module(&conn).unwrap();
     run_migrations(&mut conn);
-    {
-        DB_UUID.with(|v| {
-            let mut writer = v.write().unwrap();
-            *writer = metadata::get_db_uuid(&conn);
-        });
-    }
     conn
 }
 

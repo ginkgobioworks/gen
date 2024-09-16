@@ -1,13 +1,12 @@
 #![allow(warnings)]
 use clap::{Parser, Subcommand};
 use gen::config;
-use gen::config::{get_operation_connection, DB_UUID};
+use gen::config::get_operation_connection;
 use gen::get_connection;
 use gen::imports::fasta::import_fasta;
 use gen::imports::gfa::import_gfa;
-use gen::models::metadata::Metadata;
+use gen::models::metadata;
 use gen::models::operations::{Operation, OperationMetadata};
-use gen::models::{metadata, operations};
 use gen::operation_management;
 use gen::updates::vcf::update_with_vcf;
 use rusqlite::types::Value;
@@ -83,6 +82,7 @@ fn main() {
     let binding = cli.db.unwrap_or_else(|| panic!("No db specified."));
     let db = binding.as_str();
     let mut conn = get_connection(db);
+    let db_uuid = metadata::get_db_uuid(&conn);
     let operation_conn = get_operation_connection();
 
     match &cli.command {
@@ -134,12 +134,12 @@ fn main() {
             println!("Gen repository initialized.");
         }
         Some(Commands::Operations {}) => {
-            let current_op = OperationMetadata::get_operation(&operation_conn)
+            let current_op = OperationMetadata::get_operation(&operation_conn, &db_uuid)
                 .expect("Unable to read operation.");
-            let operations = operations::Operation::query(
+            let operations = Operation::query(
                 &operation_conn,
                 "select * from operation where db_uuid = ?1 order by id desc;",
-                vec![Value::from(DB_UUID.with(|v| v.read().unwrap().to_string()))],
+                vec![Value::from(db_uuid)],
             );
             let mut indicator = "";
             println!(

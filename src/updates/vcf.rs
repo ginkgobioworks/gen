@@ -8,6 +8,7 @@ use crate::models::{
     self,
     block_group::{BlockGroup, BlockGroupData, PathCache, PathChange},
     file_types::FileTypes,
+    metadata,
     operations::{FileAddition, Operation, OperationSummary},
     path::{NewBlock, Path},
     sequence::Sequence,
@@ -161,11 +162,19 @@ pub fn update_with_vcf(
     conn: &Connection,
     operation_conn: &Connection,
 ) {
+    let db_uuid = metadata::get_db_uuid(conn);
+
     let mut session = session::Session::new(conn).unwrap();
     operation_management::attach_session(&mut session);
 
     let change = FileAddition::create(operation_conn, vcf_path, FileTypes::VCF);
-    let operation = Operation::create(operation_conn, collection_name, "vcf_addition", change.id);
+    let operation = Operation::create(
+        operation_conn,
+        &db_uuid,
+        collection_name,
+        "vcf_addition",
+        change.id,
+    );
 
     let mut reader = vcf::io::reader::Builder::default()
         .build_from_path(vcf_path)
@@ -314,7 +323,6 @@ pub fn update_with_vcf(
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-    use crate::config::DB_UUID;
     use crate::imports::fasta::import_fasta;
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use std::collections::HashSet;
@@ -368,7 +376,6 @@ mod tests {
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
         let conn = &get_connection(None);
-        println!("custom geno uuid is {db:?}", db = DB_UUID);
         let op_conn = &get_operation_connection(None);
         let collection = "test".to_string();
         import_fasta(

@@ -21,12 +21,6 @@ pub fn get_connection(db_path: &str) -> Connection {
         Connection::open(db_path).unwrap_or_else(|_| panic!("Error connecting to {}", db_path));
     rusqlite::vtab::array::load_module(&conn).unwrap();
     run_migrations(&mut conn);
-    {
-        config::DB_UUID.with(|v| {
-            let mut writer = v.write().unwrap();
-            *writer = metadata::get_db_uuid(&conn);
-        });
-    }
     conn
 }
 
