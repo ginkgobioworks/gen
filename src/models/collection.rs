@@ -1,8 +1,9 @@
+use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 
 use crate::models::block_group::BlockGroup;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Collection {
     pub name: String,
 }
@@ -55,5 +56,15 @@ impl Collection {
             })
             .unwrap();
         block_group_iter.map(|bg| bg.unwrap()).collect()
+    }
+
+    pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Collection> {
+        let mut stmt = conn.prepare(query).unwrap();
+        let rows = stmt
+            .query_map(params_from_iter(placeholders), |row| {
+                Ok(Collection { name: row.get(0)? })
+            })
+            .unwrap();
+        rows.map(|row| row.unwrap()).collect()
     }
 }
