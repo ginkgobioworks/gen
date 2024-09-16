@@ -11,7 +11,6 @@ use std::{
 };
 
 thread_local! {
-pub static DB_UUID: LazyLock<RwLock<String>> = LazyLock::new(|| RwLock::new("".to_string()));
 pub static BASE_DIR: LazyLock<RwLock<PathBuf>> =
     LazyLock::new(|| RwLock::new(env::current_dir().unwrap()));
 }
