@@ -3,7 +3,7 @@ use std::fmt::{format, Debug};
 use std::{io, path::PathBuf, str};
 
 use crate::migrations::run_migrations;
-use crate::models::operations::OperationMetadata;
+use crate::models::operations::OperationState;
 use crate::models::{
     self,
     block_group::{BlockGroup, BlockGroupData, PathCache, PathChange},

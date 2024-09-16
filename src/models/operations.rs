@@ -25,7 +25,7 @@ impl Operation {
         change_type: &str,
         change_id: i32,
     ) -> Operation {
-        let current_op = OperationMetadata::get_operation(conn, db_uuid);
+        let current_op = OperationState::get_operation(conn, db_uuid);
         let query = "INSERT INTO operation (db_uuid, collection_name, change_type, change_id, parent_id) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
@@ -51,7 +51,7 @@ impl Operation {
             .unwrap();
         let operation = rows.next().unwrap().unwrap();
         // TODO: error condition here where we can write to disk but transaction fails
-        OperationMetadata::set_operation(conn, &operation.db_uuid, operation.id);
+        OperationState::set_operation(conn, &operation.db_uuid, operation.id);
         operation
     }
 
@@ -248,15 +248,15 @@ impl OperationSummary {
     }
 }
 
-pub struct OperationMetadata {
+pub struct OperationState {
     operation_id: i32,
 }
 
-impl OperationMetadata {
+impl OperationState {
     pub fn set_operation(conn: &Connection, db_uuid: &String, op_id: i32) {
         let mut stmt = conn
             .prepare(
-                "INSERT INTO metadata (db_uuid, operation_id)
+                "INSERT INTO operation_state (db_uuid, operation_id)
           VALUES (?1, ?2)
           ON CONFLICT (db_uuid) DO
           UPDATE SET operation_id=excluded.operation_id;",
@@ -268,7 +268,7 @@ impl OperationMetadata {
     pub fn get_operation(conn: &Connection, db_uuid: &String) -> Option<i32> {
         let mut id: Option<i32> = None;
         let mut stmt = conn
-            .prepare("SELECT operation_id from metadata where db_uuid = ?1;")
+            .prepare("SELECT operation_id from operation_state where db_uuid = ?1;")
             .unwrap();
         let rows = stmt.query_map((db_uuid,), |row| row.get(0)).unwrap();
         for row in rows {

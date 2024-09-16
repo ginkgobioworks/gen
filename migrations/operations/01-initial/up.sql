@@ -1,7 +1,7 @@
-CREATE TABLE metadata (
+CREATE TABLE operation_state (
   db_uuid TEXT PRIMARY KEY NOT NULL,
   operation_id INTEGER
---  FOREIGN KEY(operation_id) REFERENCES operation(id)
+  FOREIGN KEY(operation_id) REFERENCES operation(id)
 ) STRICT;
 
 CREATE TABLE operation (

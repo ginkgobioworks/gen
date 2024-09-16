@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::str;
 
 use crate::models::file_types::FileTypes;
-use crate::models::operations::{FileAddition, Operation, OperationMetadata, OperationSummary};
+use crate::models::operations::{FileAddition, Operation, OperationState, OperationSummary};
 use crate::models::{
     self, block_group::BlockGroup, block_group_edge::BlockGroupEdge, edge::Edge, metadata,
     path::Path, sequence::Sequence, strand::Strand,

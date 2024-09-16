@@ -1,2 +1,0 @@
-DROP TABLE edges;
-DROP TABLE nodes;

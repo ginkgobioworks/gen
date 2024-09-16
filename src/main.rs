@@ -6,7 +6,7 @@ use gen::get_connection;
 use gen::imports::fasta::import_fasta;
 use gen::imports::gfa::import_gfa;
 use gen::models::metadata;
-use gen::models::operations::{Operation, OperationMetadata};
+use gen::models::operations::{Operation, OperationState};
 use gen::operation_management;
 use gen::updates::vcf::update_with_vcf;
 use rusqlite::types::Value;
@@ -79,7 +79,7 @@ fn main() {
         return;
     }
 
-    let binding = cli.db.unwrap_or_else(|| panic!("No db specified."));
+    let binding = cli.db.expect("No db specified.");
     let db = binding.as_str();
     let conn = get_connection(db);
     let db_uuid = metadata::get_db_uuid(&conn);
@@ -134,7 +134,7 @@ fn main() {
             println!("Gen repository initialized.");
         }
         Some(Commands::Operations {}) => {
-            let current_op = OperationMetadata::get_operation(&operation_conn, &db_uuid)
+            let current_op = OperationState::get_operation(&operation_conn, &db_uuid)
                 .expect("Unable to read operation.");
             let operations = Operation::query(
                 &operation_conn,

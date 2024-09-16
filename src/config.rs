@@ -17,7 +17,6 @@ pub static BASE_DIR: LazyLock<RwLock<PathBuf>> =
 
 pub fn get_operation_connection() -> Connection {
     let db_path = get_gen_db_path();
-    println!("our db path {db_path:?}");
     let mut conn =
         Connection::open(&db_path).unwrap_or_else(|_| panic!("Error connecting to {:?}", &db_path));
     run_operation_migrations(&mut conn);

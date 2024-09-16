@@ -4,7 +4,7 @@ use std::io::{IsTerminal, Read, Write};
 use std::{env, fs, path::PathBuf};
 
 use crate::config::get_changeset_path;
-use crate::models::operations::{Operation, OperationMetadata};
+use crate::models::operations::{Operation, OperationState};
 
 enum FileMode {
     Read,
@@ -32,13 +32,8 @@ pub fn get_file(path: &PathBuf, mode: FileMode) -> fs::File {
 pub fn write_changeset(operation: &Operation, changes: &[u8]) {
     let change_path =
         get_changeset_path(operation).join(format!("{op_id}.cs", op_id = operation.id));
-    let mut file = match fs::File::create_new(change_path.clone()) {
-        Ok(v) => v,
-        Err(message) => {
-            println!("error opening {change_path:?}");
-            panic!("fail");
-        }
-    };
+    let mut file = fs::File::create_new(&change_path)
+        .unwrap_or_else(|_| panic!("Unable to open {change_path:?}"));
     file.write_all(changes).unwrap()
 }
 
@@ -77,7 +72,7 @@ pub fn revert_changeset(conn: &Connection, operation: &Operation) {
 }
 
 pub fn move_to(conn: &Connection, operation: &Operation) {
-    let current_op_id = OperationMetadata::get_operation(conn, &operation.db_uuid).unwrap();
+    let current_op_id = OperationState::get_operation(conn, &operation.db_uuid).unwrap();
     let op_id = operation.id;
     let path = Operation::get_path_between(conn, current_op_id, op_id);
     if path.is_empty() {
@@ -89,12 +84,12 @@ pub fn move_to(conn: &Connection, operation: &Operation) {
             Direction::Outgoing => {
                 println!("Reverting operation {operation_id}");
                 revert_changeset(conn, &Operation::get_by_id(conn, *operation_id));
-                OperationMetadata::set_operation(conn, &operation.db_uuid, *next_op);
+                OperationState::set_operation(conn, &operation.db_uuid, *next_op);
             }
             Direction::Incoming => {
                 println!("Applying operation {operation_id}");
                 apply_changeset(conn, &Operation::get_by_id(conn, *operation_id));
-                OperationMetadata::set_operation(conn, &operation.db_uuid, *operation_id);
+                OperationState::set_operation(conn, &operation.db_uuid, *operation_id);
             }
         }
     }
@@ -119,11 +114,10 @@ pub fn attach_session(session: &mut session::Session) {
 mod tests {
     use super::*;
     use crate::imports::fasta::import_fasta;
-    use crate::models::operations::{Operation, OperationMetadata};
+    use crate::models::operations::{Operation, OperationState};
     use crate::models::{edge::Edge, metadata, Sample};
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use crate::updates::vcf::update_with_vcf;
-    use std::fs::metadata;
 
     #[test]
     fn test_writes_operation_id() {
@@ -131,11 +125,8 @@ mod tests {
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
-        OperationMetadata::set_operation(op_conn, &db_uuid, 1);
-        assert_eq!(
-            OperationMetadata::get_operation(op_conn, &db_uuid).unwrap(),
-            1
-        );
+        OperationState::set_operation(op_conn, &db_uuid, 1);
+        assert_eq!(OperationState::get_operation(op_conn, &db_uuid).unwrap(), 1);
     }
 
     #[test]
@@ -184,7 +175,7 @@ mod tests {
             conn,
             &Operation::get_by_id(
                 operation_conn,
-                OperationMetadata::get_operation(operation_conn, &db_uuid).unwrap(),
+                OperationState::get_operation(operation_conn, &db_uuid).unwrap(),
             ),
         );
 
@@ -200,7 +191,7 @@ mod tests {
             conn,
             &Operation::get_by_id(
                 operation_conn,
-                OperationMetadata::get_operation(operation_conn, &db_uuid).unwrap(),
+                OperationState::get_operation(operation_conn, &db_uuid).unwrap(),
             ),
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
