@@ -1,3 +1,7 @@
+CREATE TABLE gen_metadata (
+  db_uuid TEXT PRIMARY KEY NOT NULL
+) STRICT;
+
 CREATE TABLE collection (
   name TEXT PRIMARY KEY NOT NULL
 ) STRICT;
@@ -93,3 +97,10 @@ CREATE TABLE block_group_edges (
 CREATE UNIQUE INDEX block_group_edges_uidx ON block_group_edges(block_group_id, edge_id);
 
 INSERT INTO sequence (hash, sequence_type, sequence, name, file_path, "length") values ("start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "OTHER", "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "", "", 64), ("end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "OTHER", "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "", "", 64);
+INSERT INTO gen_metadata (db_uuid) values (lower(
+    hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-' || '4' ||
+    substr(hex( randomblob(2)), 2) || '-' ||
+    substr('AB89', 1 + (abs(random()) % 4) , 1)  ||
+    substr(hex(randomblob(2)), 2) || '-' ||
+    hex(randomblob(6))
+  ));

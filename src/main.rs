@@ -3,9 +3,12 @@ use clap::{Parser, Subcommand};
 use std::fmt::Debug;
 use std::str;
 
+use gen::config;
 use gen::get_connection;
 use gen::imports::fasta::import_fasta;
 use gen::imports::gfa::import_gfa;
+use gen::models::operations;
+use gen::operation_management;
 use gen::updates::vcf::update_with_vcf;
 
 #[derive(Parser)]
@@ -13,7 +16,7 @@ use gen::updates::vcf::update_with_vcf;
 struct Cli {
     /// The path to the database you wish to utilize
     #[arg(short, long)]
-    db: String,
+    db: Option<String>,
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -53,11 +56,29 @@ enum Commands {
         #[arg(short, long)]
         sample: Option<String>,
     },
+    /// Initialize a gen repository
+    Init {},
+    /// Migrate a database to a given operation
+    Checkout {
+        /// The operation id to move to
+        #[clap(index = 1)]
+        id: i32,
+    },
+    /// View operations carried out against a database
+    Operations {},
 }
 
 fn main() {
     let cli = Cli::parse();
-    let db = cli.db.as_str();
+    // commands not requiring a db connection are handled here
+    if let Some(Commands::Init {}) = &cli.command {
+        config::get_or_create_gen_dir();
+        println!("Gen repository initialized.");
+        return;
+    }
+
+    let binding = cli.db.unwrap();
+    let db = binding.as_str();
     let mut conn = get_connection(db);
 
     match &cli.command {
@@ -96,6 +117,40 @@ fn main() {
             );
 
             conn.execute("END TRANSACTION", []).unwrap();
+        }
+        Some(Commands::Init {}) => {
+            config::get_or_create_gen_dir();
+            println!("Gen repository initialized.");
+        }
+        Some(Commands::Operations {}) => {
+            let current_op =
+                operation_management::get_operation(&conn).expect("Unable to read operation.");
+            let operations = operations::Operation::query(
+                &conn,
+                "select * from operation order by id desc;",
+                vec![],
+            );
+            let mut indicator = "";
+            println!(
+                "{indicator:<3}{col1:>3}   {col2:<70}",
+                col1 = "Id",
+                col2 = "Summary"
+            );
+            for op in operations.iter() {
+                if op.id == current_op {
+                    indicator = ">";
+                } else {
+                    indicator = "";
+                }
+                println!(
+                    "{indicator:<3}{col1:>3}   {col2:<70}",
+                    col1 = op.id,
+                    col2 = op.change_type
+                );
+            }
+        }
+        Some(Commands::Checkout { id }) => {
+            operation_management::move_to(&conn, *id);
         }
         None => {}
     }

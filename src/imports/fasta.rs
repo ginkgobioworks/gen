@@ -80,7 +80,8 @@ pub fn import_fasta(fasta: &String, name: &str, shallow: bool, conn: &Connection
         let mut output = Vec::new();
         session.changeset_strm(&mut output).unwrap();
         operation_management::write_changeset(
-            operation_management::get_operation().unwrap(),
+            conn,
+            operation_management::get_operation(conn).unwrap(),
             &output,
         );
     } else {
