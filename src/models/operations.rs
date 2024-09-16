@@ -11,6 +11,7 @@ use rusqlite::{params_from_iter, Connection};
 #[derive(Clone, Debug)]
 pub struct Operation {
     pub id: i32,
+    pub db_uuid: String,
     pub parent_id: Option<i32>,
     pub collection_name: String,
     pub change_type: String,
@@ -25,12 +26,13 @@ impl Operation {
         change_id: i32,
     ) -> Operation {
         let current_op = OperationMetadata::get_operation(conn);
-        let mut operation;
-        let query = "INSERT INTO operation (collection_name, change_type, change_id, parent_id) VALUES (?1, ?2, ?3, ?4) RETURNING (id)";
+        let db_uuid = DB_UUID.read().unwrap().to_string();
+        let query = "INSERT INTO operation (db_uuid, collection_name, change_type, change_id, parent_id) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
             .query_map(
                 params_from_iter(vec![
+                    Value::from(db_uuid.clone()),
                     Value::from(collection_name.to_string()),
                     Value::from(change_type.to_string()),
                     Value::from(change_id),
@@ -39,6 +41,7 @@ impl Operation {
                 |row| {
                     Ok(Operation {
                         id: row.get(0)?,
+                        db_uuid: db_uuid.clone(),
                         parent_id: current_op,
                         collection_name: collection_name.to_string(),
                         change_type: change_type.to_string(),
@@ -47,7 +50,7 @@ impl Operation {
                 },
             )
             .unwrap();
-        operation = rows.next().unwrap().unwrap();
+        let operation = rows.next().unwrap().unwrap();
         // TODO: error condition here where we can write to disk but transaction fails
         OperationMetadata::set_operation(conn, operation.id);
         operation
@@ -126,10 +129,11 @@ impl Operation {
             .query_map(params_from_iter(placeholders), |row| {
                 Ok(Operation {
                     id: row.get(0)?,
-                    parent_id: row.get(1)?,
-                    collection_name: row.get(2)?,
-                    change_type: row.get(3)?,
-                    change_id: row.get(4)?,
+                    db_uuid: row.get(1)?,
+                    parent_id: row.get(2)?,
+                    collection_name: row.get(3)?,
+                    change_type: row.get(4)?,
+                    change_id: row.get(5)?,
                 })
             })
             .unwrap();

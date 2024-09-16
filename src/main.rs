@@ -1,10 +1,7 @@
 #![allow(warnings)]
 use clap::{Parser, Subcommand};
-use std::fmt::Debug;
-use std::str;
-
 use gen::config;
-use gen::config::get_operation_connection;
+use gen::config::{get_operation_connection, DB_UUID};
 use gen::get_connection;
 use gen::imports::fasta::import_fasta;
 use gen::imports::gfa::import_gfa;
@@ -13,6 +10,9 @@ use gen::models::operations::OperationMetadata;
 use gen::models::{metadata, operations};
 use gen::operation_management;
 use gen::updates::vcf::update_with_vcf;
+use rusqlite::types::Value;
+use std::fmt::Debug;
+use std::str;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -80,7 +80,7 @@ fn main() {
         return;
     }
 
-    let binding = cli.db.unwrap();
+    let binding = cli.db.unwrap_or_else(|| panic!("No db specified."));
     let db = binding.as_str();
     let mut conn = get_connection(db);
     let operation_conn = get_operation_connection();
@@ -138,8 +138,8 @@ fn main() {
                 .expect("Unable to read operation.");
             let operations = operations::Operation::query(
                 &operation_conn,
-                "select * from operation order by id desc;",
-                vec![],
+                "select * from operation where db_uuid = ?1 order by id desc;",
+                vec![Value::from(DB_UUID.read().unwrap().to_string())],
             );
             let mut indicator = "";
             println!(

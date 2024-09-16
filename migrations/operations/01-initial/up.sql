@@ -6,6 +6,7 @@ CREATE TABLE metadata (
 
 CREATE TABLE operation (
   id INTEGER PRIMARY KEY NOT NULL,
+  db_uuid TEXT NOT NULL,
   parent_id INTEGER,
   collection_name TEXT NOT NULL,
   change_type TEXT NOT NULL,
