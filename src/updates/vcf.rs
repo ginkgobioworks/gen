@@ -307,14 +307,14 @@ pub fn update_with_vcf(
     OperationSummary::create(operation_conn, operation.id, &summary_str);
     let mut output = Vec::new();
     session.changeset_strm(&mut output).unwrap();
-    println!("wriitng for operation {operation:?}");
-    operation_management::write_changeset(operation.id, &output);
+    operation_management::write_changeset(&operation, &output);
 }
 
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use crate::config::DB_UUID;
     use crate::imports::fasta::import_fasta;
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use std::collections::HashSet;
@@ -367,7 +367,8 @@ mod tests {
         vcf_path.push("fixtures/general.vcf");
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
-        let conn = &mut get_connection(None);
+        let conn = &get_connection(None);
+        println!("custom geno uuid is {db:?}", db = DB_UUID);
         let op_conn = &get_operation_connection(None);
         let collection = "test".to_string();
         import_fasta(

@@ -6,7 +6,7 @@ use gen::get_connection;
 use gen::imports::fasta::import_fasta;
 use gen::imports::gfa::import_gfa;
 use gen::models::metadata::Metadata;
-use gen::models::operations::OperationMetadata;
+use gen::models::operations::{Operation, OperationMetadata};
 use gen::models::{metadata, operations};
 use gen::operation_management;
 use gen::updates::vcf::update_with_vcf;
@@ -139,7 +139,7 @@ fn main() {
             let operations = operations::Operation::query(
                 &operation_conn,
                 "select * from operation where db_uuid = ?1 order by id desc;",
-                vec![Value::from(DB_UUID.read().unwrap().to_string())],
+                vec![Value::from(DB_UUID.with(|v| v.read().unwrap().to_string()))],
             );
             let mut indicator = "";
             println!(
@@ -161,7 +161,7 @@ fn main() {
             }
         }
         Some(Commands::Checkout { id }) => {
-            operation_management::move_to(&conn, *id);
+            operation_management::move_to(&conn, &Operation::get_by_id(&operation_conn, *id));
         }
         None => {}
     }

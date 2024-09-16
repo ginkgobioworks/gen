@@ -85,7 +85,7 @@ pub fn import_fasta(
         println!("Created it");
         let mut output = Vec::new();
         session.changeset_strm(&mut output).unwrap();
-        operation_management::write_changeset(operation.id, &output);
+        operation_management::write_changeset(&operation, &output);
     } else {
         println!("Collection {:1} already exists", name);
     }

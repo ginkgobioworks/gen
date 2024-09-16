@@ -22,10 +22,11 @@ pub fn get_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Connection {
     rusqlite::vtab::array::load_module(&conn).unwrap();
     run_migrations(&mut conn);
     {
-        let mut writer = DB_UUID.write().unwrap();
-        *writer = metadata::get_db_uuid(&conn);
+        DB_UUID.with(|v| {
+            let mut writer = v.write().unwrap();
+            *writer = metadata::get_db_uuid(&conn);
+        });
     }
-    println!("set uuid to {db:?}", db = DB_UUID);
     conn
 }
 
@@ -48,8 +49,10 @@ pub fn get_operation_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Conn
 pub fn setup_gen_dir() {
     let tmp_dir = TempDir::new("gen").unwrap().into_path();
     {
-        let mut bd = BASE_DIR.write().unwrap();
-        *bd = tmp_dir;
+        BASE_DIR.with(|v| {
+            let mut writer = v.write().unwrap();
+            *writer = tmp_dir;
+        });
     }
     get_or_create_gen_dir();
 }

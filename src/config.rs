@@ -1,4 +1,5 @@
 use crate::migrations::run_operation_migrations;
+use crate::models::operations::Operation;
 use rusqlite::Connection;
 use std::io::{IsTerminal, Read, Write};
 use std::string::ToString;
@@ -9,9 +10,11 @@ use std::{
     sync::LazyLock,
 };
 
+thread_local! {
 pub static DB_UUID: LazyLock<RwLock<String>> = LazyLock::new(|| RwLock::new("".to_string()));
 pub static BASE_DIR: LazyLock<RwLock<PathBuf>> =
     LazyLock::new(|| RwLock::new(env::current_dir().unwrap()));
+}
 
 pub fn get_operation_connection() -> Connection {
     let db_path = get_gen_db_path();
@@ -29,7 +32,7 @@ fn ensure_dir(path: &PathBuf) {
 }
 
 pub fn get_or_create_gen_dir() -> PathBuf {
-    let start_dir = BASE_DIR.read().unwrap();
+    let start_dir = BASE_DIR.with(|v| v.read().unwrap().clone());
     let mut cur_dir = start_dir.as_path();
     let gen_path = cur_dir.join(".gen");
     ensure_dir(&gen_path);
@@ -38,7 +41,7 @@ pub fn get_or_create_gen_dir() -> PathBuf {
 
 // TODO: maybe just store all these things in a sqlite file too in .gen
 pub fn get_gen_dir() -> String {
-    let start_dir = BASE_DIR.read().unwrap();
+    let start_dir = BASE_DIR.with(|v| v.read().unwrap().clone());
     let mut cur_dir = start_dir.as_path();
     let mut gen_path = cur_dir.join(".gen");
     while !gen_path.is_dir() {
@@ -61,14 +64,14 @@ pub fn get_gen_db_path() -> PathBuf {
 }
 
 pub fn get_operation_path() -> PathBuf {
-    let path = Path::new(&get_gen_dir()).join(DB_UUID.read().unwrap().to_string());
+    let path = Path::new(&get_gen_dir()).join(DB_UUID.with(|v| v.read().unwrap().to_string()));
     ensure_dir(&path);
     path.join("operation")
 }
 
-pub fn get_changeset_path() -> PathBuf {
+pub fn get_changeset_path(operation: &Operation) -> PathBuf {
     let path = Path::new(&get_gen_dir())
-        .join(DB_UUID.read().unwrap().to_string())
+        .join(operation.db_uuid.clone())
         .join("changeset");
     ensure_dir(&path);
     path

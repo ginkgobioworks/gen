@@ -22,8 +22,10 @@ pub fn get_connection(db_path: &str) -> Connection {
     rusqlite::vtab::array::load_module(&conn).unwrap();
     run_migrations(&mut conn);
     {
-        let mut writer = config::DB_UUID.write().unwrap();
-        *writer = metadata::get_db_uuid(&conn);
+        config::DB_UUID.with(|v| {
+            let mut writer = v.write().unwrap();
+            *writer = metadata::get_db_uuid(&conn);
+        });
     }
     conn
 }

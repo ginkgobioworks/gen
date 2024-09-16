@@ -26,7 +26,7 @@ impl Operation {
         change_id: i32,
     ) -> Operation {
         let current_op = OperationMetadata::get_operation(conn);
-        let db_uuid = DB_UUID.read().unwrap().to_string();
+        let db_uuid = DB_UUID.with(|v| v.read().unwrap().to_string());
         let query = "INSERT INTO operation (db_uuid, collection_name, change_type, change_id, parent_id) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
@@ -143,6 +143,31 @@ impl Operation {
         }
         objs
     }
+
+    pub fn get(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Operation {
+        let mut stmt = conn.prepare(query).unwrap();
+        let mut rows = stmt
+            .query_map(params_from_iter(placeholders), |row| {
+                Ok(Operation {
+                    id: row.get(0)?,
+                    db_uuid: row.get(1)?,
+                    parent_id: row.get(2)?,
+                    collection_name: row.get(3)?,
+                    change_type: row.get(4)?,
+                    change_id: row.get(5)?,
+                })
+            })
+            .unwrap();
+        rows.next().unwrap().unwrap()
+    }
+
+    pub fn get_by_id(conn: &Connection, op_id: i32) -> Operation {
+        Operation::get(
+            conn,
+            "select * from operation where id = ?1",
+            vec![Value::from(op_id)],
+        )
+    }
 }
 
 pub struct FileAddition {
@@ -238,17 +263,19 @@ impl OperationMetadata {
           UPDATE SET operation_id=excluded.operation_id;",
             )
             .unwrap();
-        stmt.execute((DB_UUID.read().unwrap().clone(), op_id))
+        stmt.execute((DB_UUID.with(|v| v.read().unwrap().clone()), op_id))
             .unwrap();
     }
 
     pub fn get_operation(conn: &Connection) -> Option<i32> {
         let mut id: Option<i32> = None;
         let mut stmt = conn
-            .prepare("SELECT operation_id from metadata where db_uuid = ?1")
+            .prepare("SELECT operation_id from metadata where db_uuid = ?1;")
             .unwrap();
         let rows = stmt
-            .query_map((DB_UUID.read().unwrap().clone(),), |row| row.get(0))
+            .query_map((DB_UUID.with(|v| v.read().unwrap().clone()),), |row| {
+                row.get(0)
+            })
             .unwrap();
         for row in rows {
             id = Some(row.unwrap());

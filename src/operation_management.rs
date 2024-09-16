@@ -1,11 +1,9 @@
+use petgraph::Direction;
+use rusqlite::{session, types::Value, Connection};
 use std::io::{IsTerminal, Read, Write};
 use std::{env, fs, path::PathBuf};
 
-use petgraph::Direction;
-use rusqlite::{session, Connection};
-
 use crate::config::get_changeset_path;
-use crate::models::metadata;
 use crate::models::operations::{Operation, OperationMetadata};
 
 enum FileMode {
@@ -31,15 +29,22 @@ pub fn get_file(path: &PathBuf, mode: FileMode) -> fs::File {
     file.unwrap()
 }
 
-pub fn write_changeset(op_id: i32, changes: &[u8]) {
-    let change_path = get_changeset_path().join(format!("{op_id}.cs"));
-    println!("cp is {change_path:?}");
-    let mut file = fs::File::create_new(change_path).unwrap();
+pub fn write_changeset(operation: &Operation, changes: &[u8]) {
+    let change_path =
+        get_changeset_path(operation).join(format!("{op_id}.cs", op_id = operation.id));
+    let mut file = match fs::File::create_new(change_path.clone()) {
+        Ok(v) => v,
+        Err(message) => {
+            println!("error opening {change_path:?}");
+            panic!("fail");
+        }
+    };
     file.write_all(changes).unwrap()
 }
 
-pub fn apply_changeset(conn: &Connection, op_id: i32) {
-    let change_path = get_changeset_path().join(format!("{op_id}.cs"));
+pub fn apply_changeset(conn: &Connection, operation: &Operation) {
+    let change_path =
+        get_changeset_path(operation).join(format!("{op_id}.cs", op_id = operation.id));
     let mut file = fs::File::open(change_path).unwrap();
     let mut contents = vec![];
     file.read_to_end(&mut contents).unwrap();
@@ -53,8 +58,9 @@ pub fn apply_changeset(conn: &Connection, op_id: i32) {
     conn.pragma_update(None, "foreign_keys", "1").unwrap();
 }
 
-pub fn revert_changeset(conn: &Connection, op_id: i32) {
-    let change_path = get_changeset_path().join(format!("{op_id}.cs"));
+pub fn revert_changeset(conn: &Connection, operation: &Operation) {
+    let change_path =
+        get_changeset_path(operation).join(format!("{op_id}.cs", op_id = operation.id));
     let mut file = fs::File::open(change_path).unwrap();
     let mut contents = vec![];
     file.read_to_end(&mut contents).unwrap();
@@ -70,8 +76,9 @@ pub fn revert_changeset(conn: &Connection, op_id: i32) {
     conn.pragma_update(None, "foreign_keys", "1").unwrap();
 }
 
-pub fn move_to(conn: &Connection, op_id: i32) {
+pub fn move_to(conn: &Connection, operation: &Operation) {
     let current_op_id = OperationMetadata::get_operation(conn).unwrap();
+    let op_id = operation.id;
     let path = Operation::get_path_between(conn, current_op_id, op_id);
     if path.is_empty() {
         println!("No path exists from {current_op_id} to {op_id}.");
@@ -81,12 +88,12 @@ pub fn move_to(conn: &Connection, op_id: i32) {
         match direction {
             Direction::Outgoing => {
                 println!("Reverting operation {operation_id}");
-                revert_changeset(conn, *operation_id);
+                revert_changeset(conn, &Operation::get_by_id(conn, *operation_id));
                 OperationMetadata::set_operation(conn, *next_op);
             }
             Direction::Incoming => {
                 println!("Applying operation {operation_id}");
-                apply_changeset(conn, *operation_id);
+                apply_changeset(conn, &Operation::get_by_id(conn, *operation_id));
                 OperationMetadata::set_operation(conn, *operation_id);
             }
         }
@@ -169,7 +176,10 @@ mod tests {
         // revert back to state 1 where vcf samples and blockpaths do not exist
         revert_changeset(
             conn,
-            OperationMetadata::get_operation(operation_conn).unwrap(),
+            &Operation::get_by_id(
+                operation_conn,
+                OperationMetadata::get_operation(operation_conn).unwrap(),
+            ),
         );
 
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
@@ -182,7 +192,10 @@ mod tests {
 
         apply_changeset(
             conn,
-            OperationMetadata::get_operation(operation_conn).unwrap(),
+            &Operation::get_by_id(
+                operation_conn,
+                OperationMetadata::get_operation(operation_conn).unwrap(),
+            ),
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
