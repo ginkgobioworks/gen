@@ -81,7 +81,7 @@ fn main() {
 
     let binding = cli.db.unwrap_or_else(|| panic!("No db specified."));
     let db = binding.as_str();
-    let mut conn = get_connection(db);
+    let conn = get_connection(db);
     let db_uuid = metadata::get_db_uuid(&conn);
     let operation_conn = get_operation_connection();
 
