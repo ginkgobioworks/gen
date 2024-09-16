@@ -240,6 +240,22 @@ mod tests {
     }
 
     #[test]
+    fn test_import_no_path_gfa() {
+        let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        gfa_path.push("fixtures/no_path.gfa");
+        let collection_name = "no path".to_string();
+        let conn = &get_connection(None);
+        import_gfa(gfa_path.to_str().unwrap(), &collection_name, conn);
+
+        let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
+        let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec!["AAAATTTTGGGGCCCC".to_string()])
+        );
+    }
+
+    #[test]
     fn test_import_gfa_with_walk() {
         let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         gfa_path.push("fixtures/walk.gfa");

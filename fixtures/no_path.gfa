@@ -1,0 +1,7 @@
+S	0	GGGG	*
+S	1	AAAA	*
+S	2	TTTT	*
+S	3	CCCC	*
+L	1	+	2	+	*
+L	2	+	0	+	*
+L	0	+	3	+	*
