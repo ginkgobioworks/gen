@@ -256,7 +256,7 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
-    use crate::models::{block_group::BlockGroup, sequence::NewSequence, Collection};
+    use crate::models::{block_group::BlockGroup, collection::Collection, sequence::NewSequence};
     use crate::test_helpers::get_connection;
 
     #[test]

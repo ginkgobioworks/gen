@@ -20,3 +20,6 @@ fixtures/*.ipynb
 
 # Mac droppings
 .DS_Store
+
+# Gen tracking dir
+.gen/

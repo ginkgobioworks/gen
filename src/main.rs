@@ -2,6 +2,8 @@
 use clap::{Parser, Subcommand};
 use gen::config;
 use gen::config::get_operation_connection;
+
+use gen::exports::gfa::export_gfa;
 use gen::get_connection;
 use gen::imports::fasta::import_fasta;
 use gen::imports::gfa::import_gfa;
@@ -11,6 +13,7 @@ use gen::operation_management;
 use gen::updates::vcf::update_with_vcf;
 use rusqlite::types::Value;
 use std::fmt::Debug;
+use std::path::PathBuf;
 use std::str;
 
 #[derive(Parser)]
@@ -68,6 +71,14 @@ enum Commands {
     },
     /// View operations carried out against a database
     Operations {},
+    Export {
+        /// The name of the collection to export
+        #[arg(short, long)]
+        name: String,
+        /// The name of the GFA file to export to
+        #[arg(short, long)]
+        gfa: String,
+    },
 }
 
 fn main() {
@@ -102,7 +113,7 @@ fn main() {
                     &operation_conn,
                 );
             } else if gfa.is_some() {
-                import_gfa(&gfa.clone().unwrap(), name, &conn);
+                import_gfa(&PathBuf::from(gfa.clone().unwrap()), name, &conn);
             } else {
                 panic!(
                     "ERROR: Import command attempted but no recognized file format was specified"
@@ -162,6 +173,11 @@ fn main() {
         }
         Some(Commands::Checkout { id }) => {
             operation_management::move_to(&conn, &Operation::get_by_id(&operation_conn, *id));
+        }
+        Some(Commands::Export { name, gfa }) => {
+            conn.execute("BEGIN TRANSACTION", []).unwrap();
+            export_gfa(&conn, name, &PathBuf::from(gfa));
+            conn.execute("END TRANSACTION", []).unwrap();
         }
         None => {}
     }
