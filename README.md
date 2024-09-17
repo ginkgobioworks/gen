@@ -1,9 +1,13 @@
 # Gen
 `Gen` is a version control system for genetic sequences. It efficiently stores genome-length sequences and sequence variations, with native support for polyploid genomes and pooled genotypes. Each project is organized into a repository, where collections of sequences and associated data are stored and tracked over time. Within a repository, branches can be created to explore different modifications or variations without affecting the main project. These branches can later be merged to integrate results from different experiments or collaborators.
 
-We do this by storing sequences in a graph model. For example, when you add a FASTA file to a repository, a 'block group' is created for each sequence—typically corresponding to a chromosome or contig. Initially, each group contains a single block that acts as the coordinate reference. As genome edits are made, or variations are observed through sequencing, gen automatically tracks these changes by adding new blocks and edges to the block group. The figure below illustrates how this process works for different types of variants.
+Sequences could be natural genomes from NCBI for example, or engineered constructs from your favorite genetic design tool. In either case, the `gen` client imports standard file formats and stores sequences as _pangenome molecules_ that represent not just the sequence itself, but also every engineered variant or natural mutation observed via DNA sequencing. This is made possible by implementing a graph model with nodes that represent sequence fragments and edges that represent how these fragments can be connected in a path to reconstitute a linear sequence. The figure below illustrates what this looks like for different types of variants.
 
-Each block group can represent not just a single strain, cultivar, or cell line, but an entire population or library. Individual linear sequences are stored as paths, which represent a walk over the blocks and edges within the group. This design allows you to refer to specific loci across different sequences without worrying about changes in the coordinate reference frame, ensuring that your analyses stay consistent as sequences evolve."
+`<figure 1>`
+
+In this way, pangenome molecules (internally referred to as block groups) can represent not just a single strain, cultivar, or cell line, but the entire populations or experimental library associated with that collection. By storing sequences as paths in a common graph `gen` solves the problem of coordinate reference frames changing between genetic lineages during the life cycle of a project. Even as your sequences acquire deletions and insertions, coordinates can be easily translated from path to path.
+
+Next to paths, `gen` provides another way to describe individual strains or experiments: _samples_.
 
 ## Installing from Source
 Make sure you have a Rust compiler installed on your system. You can install the Rust toolset using the [rustup installer](https://rustup.rs/).
