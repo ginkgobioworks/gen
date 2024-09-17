@@ -224,7 +224,7 @@ mod tests {
         gfa_path.push("fixtures/simple.gfa");
         let collection_name = "test".to_string();
         let conn = &get_connection(None);
-        import_gfa(gfa_path.as_path(), &collection_name, conn);
+        import_gfa(&gfa_path, &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::get_paths(
@@ -247,7 +247,7 @@ mod tests {
         gfa_path.push("fixtures/no_path.gfa");
         let collection_name = "no path".to_string();
         let conn = &get_connection(None);
-        import_gfa(gfa_path.as_path(), &collection_name, conn);
+        import_gfa(&gfa_path, &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id);
