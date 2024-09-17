@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::path::PathBuf;
 
 use crate::models::{
     self,
@@ -16,7 +17,7 @@ use crate::models::{
     strand::Strand,
 };
 
-pub fn export_gfa(conn: &Connection, collection_name: &str, filename: &str) {
+pub fn export_gfa(conn: &Connection, collection_name: &str, filename: &PathBuf) {
     let block_groups = Collection::get_block_groups(conn, collection_name);
 
     let mut edge_set = HashSet::new();
@@ -193,13 +194,9 @@ mod tests {
         );
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group.id);
 
-        let tmp_dir = tempdir().expect("Couldn't get handle to temp directory");
-        let gfa_path = tmp_dir
-            .path()
-            .join("intermediate.gfa")
-            .into_os_string()
-            .into_string()
-            .unwrap();
+        let temp_dir = tempdir().expect("Couldn't get handle to temp directory");
+        let mut gfa_path = PathBuf::from(temp_dir.path());
+        gfa_path.push("intermediate.gfa");
 
         export_gfa(&conn, collection_name, &gfa_path);
         // NOTE: Not directly checking file contents because segments are written in random order

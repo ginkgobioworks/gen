@@ -1,6 +1,8 @@
 use gfa_reader::Gfa;
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
+use std::path::Path as FilePath;
+use std::path::PathBuf;
 
 use crate::models::{
     self,
@@ -21,10 +23,10 @@ fn bool_to_strand(direction: bool) -> Strand {
     }
 }
 
-pub fn import_gfa(gfa_path: &str, collection_name: &str, conn: &Connection) {
+pub fn import_gfa(gfa_path: &FilePath, collection_name: &str, conn: &Connection) {
     Collection::create(conn, collection_name);
     let block_group = BlockGroup::create(conn, collection_name, None, "");
-    let gfa: Gfa<u64, (), ()> = Gfa::parse_gfa_file(gfa_path);
+    let gfa: Gfa<u64, (), ()> = Gfa::parse_gfa_file(gfa_path.to_str().unwrap());
     let mut sequences_by_segment_id: HashMap<u64, Sequence> = HashMap::new();
 
     for segment in &gfa.segments {
@@ -222,7 +224,7 @@ mod tests {
         gfa_path.push("fixtures/simple.gfa");
         let collection_name = "test".to_string();
         let conn = &get_connection(None);
-        import_gfa(gfa_path.to_str().unwrap(), &collection_name, conn);
+        import_gfa(gfa_path.as_path(), &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::get_paths(
@@ -245,7 +247,7 @@ mod tests {
         gfa_path.push("fixtures/no_path.gfa");
         let collection_name = "no path".to_string();
         let conn = &get_connection(None);
-        import_gfa(gfa_path.to_str().unwrap(), &collection_name, conn);
+        import_gfa(gfa_path.as_path(), &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id);
@@ -261,7 +263,7 @@ mod tests {
         gfa_path.push("fixtures/walk.gfa");
         let collection_name = "walk".to_string();
         let conn = &mut get_connection(None);
-        import_gfa(gfa_path.to_str().unwrap(), &collection_name, conn);
+        import_gfa(&gfa_path, &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::get_paths(
@@ -284,7 +286,7 @@ mod tests {
         gfa_path.push("fixtures/reverse_strand.gfa");
         let collection_name = "test".to_string();
         let conn = &get_connection(None);
-        import_gfa(gfa_path.to_str().unwrap(), &collection_name, conn);
+        import_gfa(&gfa_path, &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::get_paths(

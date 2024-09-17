@@ -5,8 +5,8 @@ use std::str;
 use crate::models::file_types::FileTypes;
 use crate::models::operations::{FileAddition, Operation, OperationSummary};
 use crate::models::{
-    self, block_group::BlockGroup, block_group_edge::BlockGroupEdge, collection::Collection, edge::Edge, metadata,
-    path::Path, sequence::Sequence, strand::Strand,
+    self, block_group::BlockGroup, block_group_edge::BlockGroupEdge, collection::Collection,
+    edge::Edge, metadata, path::Path, sequence::Sequence, strand::Strand,
 };
 use crate::operation_management;
 use noodles::fasta;
