@@ -265,15 +265,6 @@ fn main() {
         }
         Some(Commands::Checkout { branch, id }) => {
             operation_management::checkout(&conn, &operation_conn, &db_uuid, branch, Some(*id));
-            //
-            // if let Some(branch_name) = branch {
-            //     OperationState::set_branch(&operation_conn, &db_uuid, branch_name);
-            // }
-            // operation_management::move_to(
-            //     &conn,
-            //     &operation_conn,
-            //     &Operation::get_by_id(&operation_conn, *id),
-            // );
         }
         Some(Commands::Export { name, gfa }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
