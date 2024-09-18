@@ -4,7 +4,8 @@ use std::io::{IsTerminal, Read, Write};
 use std::{env, fs, path::PathBuf};
 
 use crate::config::get_changeset_path;
-use crate::models::operations::{Operation, OperationState};
+use crate::models::operations::{Branch, Operation, OperationState};
+use crate::operation_management;
 
 enum FileMode {
     Read,
@@ -71,10 +72,10 @@ pub fn revert_changeset(conn: &Connection, operation: &Operation) {
     conn.pragma_update(None, "foreign_keys", "1").unwrap();
 }
 
-pub fn move_to(conn: &Connection, operation: &Operation) {
-    let current_op_id = OperationState::get_operation(conn, &operation.db_uuid).unwrap();
+pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Operation) {
+    let current_op_id = OperationState::get_operation(operation_conn, &operation.db_uuid).unwrap();
     let op_id = operation.id;
-    let path = Operation::get_path_between(conn, current_op_id, op_id);
+    let path = Operation::get_path_between(operation_conn, current_op_id, op_id);
     if path.is_empty() {
         println!("No path exists from {current_op_id} to {op_id}.");
         return;
@@ -83,13 +84,13 @@ pub fn move_to(conn: &Connection, operation: &Operation) {
         match direction {
             Direction::Outgoing => {
                 println!("Reverting operation {operation_id}");
-                revert_changeset(conn, &Operation::get_by_id(conn, *operation_id));
-                OperationState::set_operation(conn, &operation.db_uuid, *next_op);
+                revert_changeset(conn, &Operation::get_by_id(operation_conn, *operation_id));
+                OperationState::set_operation(operation_conn, &operation.db_uuid, *next_op);
             }
             Direction::Incoming => {
                 println!("Applying operation {operation_id}");
-                apply_changeset(conn, &Operation::get_by_id(conn, *operation_id));
-                OperationState::set_operation(conn, &operation.db_uuid, *operation_id);
+                apply_changeset(conn, &Operation::get_by_id(operation_conn, *operation_id));
+                OperationState::set_operation(operation_conn, &operation.db_uuid, *operation_id);
             }
         }
     }
@@ -110,15 +111,48 @@ pub fn attach_session(session: &mut session::Session) {
     }
 }
 
+pub fn checkout(
+    conn: &Connection,
+    operation_conn: &Connection,
+    db_uuid: &str,
+    branch_name: &Option<String>,
+    operation_id: Option<i32>,
+) {
+    let mut branch_id = 0;
+    let mut dest_op_id = operation_id.unwrap_or(0);
+    if let Some(name) = branch_name {
+        let current_branch = OperationState::get_current_branch(operation_conn, db_uuid)
+            .expect("No current branch set");
+        let branch = Branch::get_by_name(operation_conn, db_uuid, name)
+            .unwrap_or_else(|| panic!("No branch named {name}"));
+        branch_id = branch.id;
+        if current_branch != branch_id {
+            OperationState::set_branch(operation_conn, db_uuid, name);
+        }
+        if dest_op_id == 0 {
+            dest_op_id = branch.current_operation_id.unwrap();
+        }
+    }
+    if dest_op_id == 0 {
+        panic!("No operation defined.");
+    }
+    move_to(
+        conn,
+        operation_conn,
+        &Operation::get_by_id(operation_conn, dest_op_id),
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::imports::fasta::import_fasta;
     use crate::models::file_types::FileTypes;
-    use crate::models::operations::{FileAddition, Operation, OperationState};
+    use crate::models::operations::{setup_db, Branch, FileAddition, Operation, OperationState};
     use crate::models::{edge::Edge, metadata, Sample};
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use crate::updates::vcf::update_with_vcf;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn test_writes_operation_id() {
@@ -126,6 +160,7 @@ mod tests {
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
         let change = FileAddition::create(op_conn, "test", FileTypes::Fasta);
         let operation = Operation::create(op_conn, &db_uuid, "test", "test", change.id);
         OperationState::set_operation(op_conn, &db_uuid, operation.id);
@@ -142,6 +177,7 @@ mod tests {
         let conn = &mut get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let operation_conn = &get_operation_connection(None);
+        setup_db(operation_conn, &db_uuid);
         let collection = "test".to_string();
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
@@ -204,5 +240,119 @@ mod tests {
         assert_eq!(edge_count, 10);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
+    }
+
+    #[test]
+    fn test_branch_movement() {
+        setup_gen_dir();
+        let fasta_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
+        let vcf_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.vcf");
+        let vcf2_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple2.vcf");
+        let conn = &mut get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let operation_conn = &get_operation_connection(None);
+        setup_db(operation_conn, &db_uuid);
+        let collection = "test".to_string();
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            operation_conn,
+        );
+        let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
+        let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
+        let op_count =
+            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
+        assert_eq!(edge_count, 2);
+        assert_eq!(sample_count, 0);
+        assert_eq!(op_count, 1);
+
+        let branch_1 = Branch::create(operation_conn, &db_uuid, "branch_1");
+
+        let branch_2 = Branch::create(operation_conn, &db_uuid, "branch_2");
+
+        OperationState::set_branch(operation_conn, &db_uuid, "branch_1");
+        assert_eq!(
+            OperationState::get_current_branch(operation_conn, &db_uuid).unwrap(),
+            branch_1.id
+        );
+
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+        let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
+        let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
+        let op_count =
+            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
+        assert_eq!(edge_count, 10);
+        assert_eq!(sample_count, 3);
+        assert_eq!(op_count, 2);
+
+        // checkout branch 2
+        checkout(
+            conn,
+            operation_conn,
+            &db_uuid,
+            &Some("branch_2".to_string()),
+            None,
+        );
+
+        assert_eq!(
+            OperationState::get_current_branch(operation_conn, &db_uuid).unwrap(),
+            branch_2.id
+        );
+
+        // ensure branch 1 operations have been undone
+        let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
+        let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
+        let op_count =
+            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
+        assert_eq!(edge_count, 2);
+        assert_eq!(sample_count, 0);
+        assert_eq!(op_count, 2);
+
+        // apply vcf2
+        update_with_vcf(
+            &vcf2_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+        let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
+        let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
+        let op_count =
+            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
+        assert_eq!(edge_count, 6);
+        assert_eq!(sample_count, 1);
+        assert_eq!(op_count, 3);
+
+        // migrate to branch 1 again
+        checkout(
+            conn,
+            operation_conn,
+            &db_uuid,
+            &Some("branch_1".to_string()),
+            None,
+        );
+        assert_eq!(
+            OperationState::get_current_branch(operation_conn, &db_uuid).unwrap(),
+            branch_1.id
+        );
+
+        let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
+        let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
+        let op_count =
+            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
+        assert_eq!(edge_count, 10);
+        assert_eq!(sample_count, 3);
+        assert_eq!(op_count, 3);
     }
 }
