@@ -288,6 +288,9 @@ impl Branch {
     }
 
     pub fn delete(conn: &Connection, db_uuid: &str, branch_name: &str) {
+        if branch_name == "main" {
+            panic!("Main branch cannot be deleted");
+        }
         if let Some(branch) = Branch::get_by_name(conn, db_uuid, branch_name) {
             let branch_id = branch.id;
             if let Some(current_branch) = OperationState::get_current_branch(conn, db_uuid) {
