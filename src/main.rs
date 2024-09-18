@@ -219,20 +219,17 @@ fn main() {
                         .expect("Must provide a branch name to delete."),
                 );
             } else if *checkout {
-                OperationState::set_branch(
-                    &operation_conn,
-                    &db_uuid,
-                    &branch_name
-                        .clone()
-                        .expect("Must provide a branch name to checkout."),
-                );
-                let branch =
-                    Branch::get_by_name(&operation_conn, &db_uuid, &branch_name.clone().unwrap())
-                        .unwrap();
-                operation_management::move_to(
+                operation_management::checkout(
                     &conn,
                     &operation_conn,
-                    &Operation::get_by_id(&operation_conn, branch.current_operation_id.unwrap()),
+                    &db_uuid,
+                    &Some(
+                        branch_name
+                            .clone()
+                            .expect("Must provide a branch name to checkout.")
+                            .to_string(),
+                    ),
+                    None,
                 );
             } else if *list {
                 let current_branch = OperationState::get_current_branch(&operation_conn, &db_uuid);
@@ -267,14 +264,16 @@ fn main() {
             }
         }
         Some(Commands::Checkout { branch, id }) => {
-            if let Some(branch_name) = branch {
-                OperationState::set_branch(&operation_conn, &db_uuid, branch_name);
-            }
-            operation_management::move_to(
-                &conn,
-                &operation_conn,
-                &Operation::get_by_id(&operation_conn, *id),
-            );
+            operation_management::checkout(&conn, &operation_conn, &db_uuid, branch, Some(*id));
+            //
+            // if let Some(branch_name) = branch {
+            //     OperationState::set_branch(&operation_conn, &db_uuid, branch_name);
+            // }
+            // operation_management::move_to(
+            //     &conn,
+            //     &operation_conn,
+            //     &Operation::get_by_id(&operation_conn, *id),
+            // );
         }
         Some(Commands::Export { name, gfa }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
