@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use petgraph::prelude::DiGraphMap;
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
@@ -53,7 +54,13 @@ pub fn export_gfa(conn: &Connection, collection_name: &str, filename: &PathBuf) 
         edges_by_node_pair.clone(),
         terminal_block_ids,
     );
-    write_paths(&mut writer, conn, collection_name, edges_by_node_pair);
+    write_paths(
+        &mut writer,
+        conn,
+        collection_name,
+        edges_by_node_pair,
+        &blocks,
+    );
 }
 
 fn write_segments(
@@ -119,11 +126,42 @@ fn link_line(
     )
 }
 
+// NOTE: A path is an immutable list of edges, but the sequence between the target of one edge and
+// the source of the next may be "split" by later operations that add edges with sources or targets
+// on a sequence that are in between those of a consecutive pair of edges in a path.  This function
+// handles that case by collecting all the nodes between the target of one edge and the source of
+// the next.
+fn nodes_for_edges(
+    edge1: &Edge,
+    edge2: &Edge,
+    blocks_by_hash_and_start: &HashMap<(&str, i32), GroupBlock>,
+    blocks_by_hash_and_end: &HashMap<(&str, i32), GroupBlock>,
+) -> Vec<i32> {
+    let current_block = blocks_by_hash_and_start
+        .get(&(edge1.target_hash.as_str(), edge1.target_coordinate))
+        .unwrap();
+    let end_block = blocks_by_hash_and_end
+        .get(&(edge2.source_hash.as_str(), edge2.source_coordinate))
+        .unwrap();
+    let mut node_ids = vec![];
+    #[allow(clippy::while_immutable_condition)]
+    while current_block.id != end_block.id {
+        node_ids.push(current_block.id);
+        let current_block = blocks_by_hash_and_start
+            .get(&(current_block.sequence_hash.as_str(), current_block.end))
+            .unwrap();
+    }
+    node_ids.push(end_block.id);
+
+    node_ids
+}
+
 fn write_paths(
     writer: &mut BufWriter<File>,
     conn: &Connection,
     collection_name: &str,
     edges_by_node_pair: HashMap<(i32, i32), Edge>,
+    blocks: &[GroupBlock],
 ) {
     let paths = Path::get_paths_for_collection(conn, collection_name);
     let edges_by_path_id =
@@ -133,16 +171,30 @@ fn write_paths(
         .map(|(node_pair, edge)| (edge.id, *node_pair))
         .collect::<HashMap<i32, (i32, i32)>>();
 
+    let blocks_by_hash_and_start = blocks
+        .iter()
+        .map(|block| ((block.sequence_hash.as_str(), block.start), block.clone()))
+        .collect::<HashMap<(&str, i32), GroupBlock>>();
+    let blocks_by_hash_and_end = blocks
+        .iter()
+        .map(|block| ((block.sequence_hash.as_str(), block.end), block.clone()))
+        .collect::<HashMap<(&str, i32), GroupBlock>>();
+
     for path in paths {
         let edges_for_path = edges_by_path_id.get(&path.id).unwrap();
         let mut node_ids = vec![];
         let mut node_strands = vec![];
-        // Edges actually have too much information, the target of one is the same as the source of
-        // the next, so just iterate and take the target node to get the path of segments.
-        for edge in edges_for_path[0..edges_for_path.len() - 1].iter() {
-            let (_, target) = node_pairs_by_edge_id.get(&edge.id).unwrap();
-            node_ids.push(*target);
-            node_strands.push(edge.target_strand);
+        for (edge1, edge2) in edges_for_path.iter().tuple_windows() {
+            let current_node_ids = nodes_for_edges(
+                edge1,
+                edge2,
+                &blocks_by_hash_and_start,
+                &blocks_by_hash_and_end,
+            );
+            for node_id in &current_node_ids {
+                node_ids.push(*node_id);
+                node_strands.push(edge1.target_strand);
+            }
         }
 
         writer
@@ -155,7 +207,7 @@ fn path_line(path_name: &str, node_ids: &[i32], node_strands: &[Strand]) -> Stri
     let nodes = node_ids
         .iter()
         .zip(node_strands.iter())
-        .map(|(node_id, node_strand)| format!("{}{}", node_id + 1, node_strand))
+        .map(|(node_id, node_strand)| format!("{}{}", *node_id + 1, node_strand))
         .collect::<Vec<String>>()
         .join(",");
     format!("P\t{}\t{}\n", path_name, nodes)
@@ -295,6 +347,60 @@ mod tests {
         setup_gen_dir();
         let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         gfa_path.push("fixtures/simple.gfa");
+        let collection_name = "test".to_string();
+        let conn = &get_connection(None);
+        import_gfa(&gfa_path, &collection_name, conn);
+
+        let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
+        let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id);
+
+        let temp_dir = tempdir().expect("Couldn't get handle to temp directory");
+        let mut gfa_path = PathBuf::from(temp_dir.path());
+        gfa_path.push("intermediate.gfa");
+
+        export_gfa(conn, &collection_name, &gfa_path);
+        import_gfa(&gfa_path, "test collection 2", conn);
+
+        let block_group2 = Collection::get_block_groups(conn, "test collection 2")
+            .pop()
+            .unwrap();
+        let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id);
+
+        assert_eq!(all_sequences, all_sequences2);
+    }
+
+    #[test]
+    fn test_anderson_round_trip() {
+        setup_gen_dir();
+        let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        gfa_path.push("fixtures/anderson_promoters.gfa");
+        let collection_name = "anderson promoters".to_string();
+        let conn = &get_connection(None);
+        import_gfa(&gfa_path, &collection_name, conn);
+
+        let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
+        let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id);
+
+        let temp_dir = tempdir().expect("Couldn't get handle to temp directory");
+        let mut gfa_path = PathBuf::from(temp_dir.path());
+        gfa_path.push("intermediate.gfa");
+
+        export_gfa(conn, &collection_name, &gfa_path);
+        import_gfa(&gfa_path, "anderson promoters 2", conn);
+
+        let block_group2 = Collection::get_block_groups(conn, "anderson promoters 2")
+            .pop()
+            .unwrap();
+        let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id);
+
+        assert_eq!(all_sequences, all_sequences2);
+    }
+
+    #[test]
+    fn test_reverse_strand_round_trip() {
+        setup_gen_dir();
+        let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        gfa_path.push("fixtures/reverse_strand.gfa");
         let collection_name = "test".to_string();
         let conn = &get_connection(None);
         import_gfa(&gfa_path, &collection_name, conn);
