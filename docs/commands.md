@@ -1,3 +1,11 @@
+# Apply
+
+Apply operations to the current branch.
+
+Operations for a given branch can be found via `gen --db db_name.db operations -b branch_name`. To apply an operation
+from a given branch, use `gen --db db_name.db apply operation_id`. The changes will be applied to the current state of
+the database and recorded as a new operation.
+
 # Branches
 
 Creating a new branch can be accomplished via `gen --db db_name.db branch --create branch_name`.

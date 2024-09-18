@@ -27,7 +27,13 @@ pub fn import_fasta(
 
     let db_uuid = metadata::get_db_uuid(conn);
 
-    let operation = Operation::create(operation_conn, &db_uuid, name, "fasta_addition", change.id);
+    let operation = Operation::create(
+        operation_conn,
+        &db_uuid,
+        name.to_string(),
+        "fasta_addition",
+        change.id,
+    );
 
     if !Collection::exists(conn, name) {
         let collection = Collection::create(conn, name);

@@ -1,11 +1,14 @@
+use crate::config::get_changeset_path;
+use crate::models::file_types::FileTypes;
+use crate::models::operations::{
+    Branch, FileAddition, Operation, OperationState, OperationSummary,
+};
+use crate::operation_management;
 use petgraph::Direction;
 use rusqlite::{session, Connection};
+use std::fmt::format;
 use std::io::{IsTerminal, Read, Write};
 use std::{env, fs, path::PathBuf};
-
-use crate::config::get_changeset_path;
-use crate::models::operations::{Branch, Operation, OperationState};
-use crate::operation_management;
 
 enum FileMode {
     Read,
@@ -72,9 +75,35 @@ pub fn revert_changeset(conn: &Connection, operation: &Operation) {
     conn.pragma_update(None, "foreign_keys", "1").unwrap();
 }
 
+pub fn apply(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_id: i32) {
+    let mut session = session::Session::new(conn).unwrap();
+    attach_session(&mut session);
+    let change = FileAddition::create(operation_conn, &format!("{op_id}.cs"), FileTypes::Changeset);
+    apply_changeset(conn, &Operation::get_by_id(operation_conn, op_id));
+    let operation = Operation::create(
+        operation_conn,
+        db_uuid,
+        None,
+        "changeset_application",
+        change.id,
+    );
+
+    OperationSummary::create(
+        operation_conn,
+        operation.id,
+        &format!("Applied changeset {op_id}."),
+    );
+    let mut output = Vec::new();
+    session.changeset_strm(&mut output).unwrap();
+    write_changeset(&operation, &output);
+}
+
 pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Operation) {
     let current_op_id = OperationState::get_operation(operation_conn, &operation.db_uuid).unwrap();
     let op_id = operation.id;
+    if (current_op_id == op_id) {
+        return;
+    }
     let path = Operation::get_path_between(operation_conn, current_op_id, op_id);
     if path.is_empty() {
         println!("No path exists from {current_op_id} to {op_id}.");
@@ -162,7 +191,7 @@ mod tests {
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, &db_uuid);
         let change = FileAddition::create(op_conn, "test", FileTypes::Fasta);
-        let operation = Operation::create(op_conn, &db_uuid, "test", "test", change.id);
+        let operation = Operation::create(op_conn, &db_uuid, "test".to_string(), "test", change.id);
         OperationState::set_operation(op_conn, &db_uuid, operation.id);
         assert_eq!(OperationState::get_operation(op_conn, &db_uuid).unwrap(), 1);
     }

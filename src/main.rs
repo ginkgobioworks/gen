@@ -88,10 +88,19 @@ enum Commands {
         branch: Option<String>,
         /// The operation id to move to
         #[clap(index = 1)]
-        id: i32,
+        id: Option<i32>,
     },
     /// View operations carried out against a database
-    Operations {},
+    Operations {
+        /// The branch to list operations for
+        #[arg(short, long)]
+        branch: Option<String>,
+    },
+    Apply {
+        /// The operation id to apply
+        #[clap(index = 1)]
+        id: i32,
+    },
     Export {
         /// The name of the collection to export
         #[arg(short, long)]
@@ -168,13 +177,22 @@ fn main() {
             config::get_or_create_gen_dir();
             println!("Gen repository initialized.");
         }
-        Some(Commands::Operations {}) => {
+        Some(Commands::Operations { branch }) => {
             let current_op = OperationState::get_operation(&operation_conn, &db_uuid)
                 .expect("Unable to read operation.");
-            let operations = Operation::query(
+            let branch_name = branch.clone().unwrap_or_else(|| {
+                let current_branch_id =
+                    OperationState::get_current_branch(&operation_conn, &db_uuid)
+                        .expect("No current branch is set.");
+                Branch::get_by_id(&operation_conn, current_branch_id)
+                    .unwrap_or_else(|| panic!("No branch with id {current_branch_id}"))
+                    .name
+            });
+            let operations = Branch::get_operations(
                 &operation_conn,
-                "select * from operation where db_uuid = ?1 order by id desc;",
-                vec![Value::from(db_uuid)],
+                Branch::get_by_name(&operation_conn, &db_uuid, &branch_name)
+                    .unwrap_or_else(|| panic!("No branch named {branch_name}."))
+                    .id,
             );
             let mut indicator = "";
             println!(
@@ -263,8 +281,11 @@ fn main() {
                 println!("No options selected.");
             }
         }
+        Some(Commands::Apply { id }) => {
+            operation_management::apply(&conn, &operation_conn, &db_uuid, *id);
+        }
         Some(Commands::Checkout { branch, id }) => {
-            operation_management::checkout(&conn, &operation_conn, &db_uuid, branch, Some(*id));
+            operation_management::checkout(&conn, &operation_conn, &db_uuid, branch, *id);
         }
         Some(Commands::Export { name, gfa }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();

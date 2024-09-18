@@ -10,10 +10,12 @@ CREATE TABLE operation (
   id INTEGER PRIMARY KEY NOT NULL,
   db_uuid TEXT NOT NULL,
   parent_id INTEGER,
-  collection_name TEXT NOT NULL,
+  branch_id INTEGER NOT NULL,
+  collection_name TEXT,
   change_type TEXT NOT NULL,
   change_id INTEGER NOT NULL,
   FOREIGN KEY(parent_id) REFERENCES operation(id)
+  FOREIGN KEY(branch_id) REFERENCES branch(id)
 ) STRICT;
 
 CREATE TABLE file_addition (

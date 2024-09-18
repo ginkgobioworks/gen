@@ -1,7 +1,9 @@
 use crate::graph::all_simple_paths;
 use crate::models::file_types::FileTypes;
+use crate::models::operations;
 use itertools::Itertools;
 use petgraph::graphmap::{DiGraphMap, UnGraphMap};
+use petgraph::visit::DfsPostOrder;
 use petgraph::Direction;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
@@ -11,7 +13,8 @@ pub struct Operation {
     pub id: i32,
     pub db_uuid: String,
     pub parent_id: Option<i32>,
-    pub collection_name: String,
+    pub branch_id: i32,
+    pub collection_name: Option<String>,
     pub change_type: String,
     pub change_id: i32,
 }
@@ -20,28 +23,33 @@ impl Operation {
     pub fn create(
         conn: &Connection,
         db_uuid: &str,
-        collection_name: &str,
+        collection_name: impl Into<Option<String>>,
         change_type: &str,
         change_id: i32,
     ) -> Operation {
+        let collection_name = collection_name.into();
         let current_op = OperationState::get_operation(conn, db_uuid);
-        let query = "INSERT INTO operation (db_uuid, collection_name, change_type, change_id, parent_id) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING (id)";
+        let current_branch_id =
+            OperationState::get_current_branch(conn, db_uuid).expect("No branch is checked out.");
+        let query = "INSERT INTO operation (db_uuid, collection_name, change_type, change_id, parent_id, branch_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
             .query_map(
                 params_from_iter(vec![
                     Value::from(db_uuid.to_string()),
-                    Value::from(collection_name.to_string()),
+                    Value::from(collection_name.clone()),
                     Value::from(change_type.to_string()),
                     Value::from(change_id),
                     Value::from(current_op),
+                    Value::from(current_branch_id),
                 ]),
                 |row| {
                     Ok(Operation {
                         id: row.get(0)?,
                         db_uuid: db_uuid.to_string(),
                         parent_id: current_op,
-                        collection_name: collection_name.to_string(),
+                        branch_id: current_branch_id,
+                        collection_name: collection_name.clone(),
                         change_type: change_type.to_string(),
                         change_id,
                     })
@@ -129,9 +137,10 @@ impl Operation {
                     id: row.get(0)?,
                     db_uuid: row.get(1)?,
                     parent_id: row.get(2)?,
-                    collection_name: row.get(3)?,
-                    change_type: row.get(4)?,
-                    change_id: row.get(5)?,
+                    branch_id: row.get(3)?,
+                    collection_name: row.get(4)?,
+                    change_type: row.get(5)?,
+                    change_id: row.get(6)?,
                 })
             })
             .unwrap();
@@ -150,9 +159,10 @@ impl Operation {
                     id: row.get(0)?,
                     db_uuid: row.get(1)?,
                     parent_id: row.get(2)?,
-                    collection_name: row.get(3)?,
-                    change_type: row.get(4)?,
-                    change_id: row.get(5)?,
+                    branch_id: row.get(3)?,
+                    collection_name: row.get(4)?,
+                    change_type: row.get(5)?,
+                    change_id: row.get(6)?,
                 })
             })
             .unwrap();
@@ -342,12 +352,48 @@ impl Branch {
         branch
     }
 
+    pub fn get_by_id(conn: &Connection, branch_id: i32) -> Option<Branch> {
+        let mut branch: Option<Branch> = None;
+        for result in Branch::query(
+            conn,
+            "select * from branch where id = ?1",
+            vec![Value::from(branch_id)],
+        )
+        .iter()
+        {
+            branch = Some(result.clone());
+        }
+        branch
+    }
+
     pub fn set_current_operation(conn: &Connection, branch_id: i32, operation_id: i32) {
         conn.execute(
             "UPDATE branch set current_operation_id = ?2 where id = ?1",
             (branch_id, operation_id),
         )
         .unwrap();
+    }
+
+    pub fn get_operations(conn: &Connection, branch_id: i32) -> Vec<Operation> {
+        let branch = Branch::get_by_id(conn, branch_id)
+            .unwrap_or_else(|| panic!("No branch with id {branch_id}."));
+        let graph = Operation::get_operation_graph(conn);
+        let mut operations: Vec<Operation> = vec![];
+        let creation_id = branch.start_operation_id.unwrap_or(1);
+
+        let mut dfs = DfsPostOrder::new(&graph, creation_id);
+
+        // Traverse all transitive predecessors
+        while let Some(ancestor) = dfs.next(&graph) {
+            operations.push(Operation::get_by_id(conn, ancestor));
+        }
+
+        operations.extend(Operation::query(
+            conn,
+            "select * from operation where branch_id = ?1 and id > ?2 order by id;",
+            vec![Value::from(branch_id), Value::from(creation_id)],
+        ));
+        operations
     }
 }
 
@@ -437,5 +483,179 @@ pub fn setup_db(conn: &Connection, db_uuid: &str) {
     {
         Branch::create(conn, db_uuid, "main");
         OperationState::set_branch(conn, db_uuid, "main");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_helpers::{get_operation_connection, setup_gen_dir};
+
+    #[test]
+    fn test_gets_operations_of_branch() {
+        setup_gen_dir();
+        let db_uuid = "something";
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, db_uuid);
+
+        let change = FileAddition::create(op_conn, "foo", FileTypes::Fasta);
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        // operations will be made in ascending order.
+        // The branch topology is as follows. () indicate where a branch starts
+        //
+        //                     -> 4 -> 5
+        //                   /
+        //         -> 2 -> 3 (branch-1-sub-1)
+        //        /
+        //      branch-1
+        //    /
+        //   1 (main, branch-1, branch-2)
+        //    \
+        //    branch-2
+        //       \
+        //        -> 6 -> 7 (branch-2-midpoint-1) -> 8 (branch-2-sub-1)
+        //                 \                           \
+        //                   -> 12 -> 13                9 -> 10 -> 11
+        //
+        //
+        //
+        //
+        let branch_1 = Branch::create(op_conn, db_uuid, "branch-1");
+        let branch_2 = Branch::create(op_conn, db_uuid, "branch-2");
+        OperationState::set_branch(op_conn, db_uuid, "branch-1");
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        let branch_1_sub_1 = Branch::create(op_conn, db_uuid, "branch-1-sub-1");
+        OperationState::set_branch(op_conn, db_uuid, "branch-1-sub-1");
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+
+        // TODO: We should merge the set branch/operation stuff, now that operations track branches we likely don't need set_branch
+        OperationState::set_branch(op_conn, db_uuid, "branch-2");
+        OperationState::set_operation(op_conn, db_uuid, 1);
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        let branch_2_midpoint = Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+
+        let branch_2_sub_1 = Branch::create(op_conn, db_uuid, "branch-2-sub-1");
+        OperationState::set_branch(op_conn, db_uuid, "branch-2-sub-1");
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+
+        OperationState::set_operation(op_conn, db_uuid, branch_2_midpoint.id);
+        OperationState::set_branch(op_conn, db_uuid, &branch_2.name);
+        let branch_2_midpoint_1 = Branch::create(op_conn, db_uuid, "branch-2-midpoint-1");
+        OperationState::set_branch(op_conn, db_uuid, &branch_2_midpoint_1.name);
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+
+        let ops = Branch::get_operations(op_conn, branch_2_midpoint_1.id)
+            .iter()
+            .map(|f| f.id)
+            .collect::<Vec<i32>>();
+        assert_eq!(ops, vec![1, 6, 7, 12, 13]);
+
+        let ops = Branch::get_operations(op_conn, branch_1.id)
+            .iter()
+            .map(|f| f.id)
+            .collect::<Vec<i32>>();
+        assert_eq!(ops, vec![1, 2, 3]);
+
+        let ops = Branch::get_operations(op_conn, branch_2.id)
+            .iter()
+            .map(|f| f.id)
+            .collect::<Vec<i32>>();
+        assert_eq!(ops, vec![1, 6, 7, 8]);
+
+        let ops = Branch::get_operations(op_conn, branch_1_sub_1.id)
+            .iter()
+            .map(|f| f.id)
+            .collect::<Vec<i32>>();
+        assert_eq!(ops, vec![1, 2, 3, 4, 5]);
+
+        let ops = Branch::get_operations(op_conn, branch_2_sub_1.id)
+            .iter()
+            .map(|f| f.id)
+            .collect::<Vec<i32>>();
+        assert_eq!(ops, vec![1, 6, 7, 8, 9, 10, 11]);
     }
 }
