@@ -36,6 +36,8 @@ CREATE TABLE branch (
   db_uuid TEXT NOT NULL,
   name TEXT NOT NULL,
   start_operation_id INTEGER,
-  current_operation_id INTEGER
+  current_operation_id INTEGER,
+  FOREIGN KEY(start_operation_id) REFERENCES operation(id),
+  FOREIGN KEY(current_operation_id) REFERENCES operation(id)
 ) STRICT;
 CREATE UNIQUE INDEX branch_uidx ON branch(db_uuid, name);

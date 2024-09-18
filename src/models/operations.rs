@@ -442,7 +442,6 @@ impl OperationState {
           UPDATE SET branch_id=excluded.branch_id;",
             )
             .unwrap();
-        println!("setting branc to {branch_name}");
         stmt.execute(params_from_iter(vec![
             Value::from(db_uuid.to_string()),
             Value::from(branch.id),
