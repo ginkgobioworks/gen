@@ -295,11 +295,6 @@ impl Branch {
                     panic!("Unable to delete the branch that is currently active.");
                 }
             }
-            conn.execute(
-                "delete from branch_operation where branch_id = ?1",
-                (branch_id,),
-            )
-            .expect("Error deleting from branch_operation table.");
             conn.execute("delete from branch where id = ?1", (branch_id,))
                 .expect("Error deleting from branch table.");
         } else {
