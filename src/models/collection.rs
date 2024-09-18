@@ -2,6 +2,7 @@ use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 
 use crate::models::block_group::BlockGroup;
+use crate::models::path::Path;
 
 #[derive(Clone, Debug)]
 pub struct Collection {
@@ -15,6 +16,7 @@ impl Collection {
             .unwrap();
         stmt.exists([name]).unwrap()
     }
+
     pub fn create(conn: &Connection, name: &str) -> Collection {
         let mut stmt = conn
             .prepare("INSERT INTO collection (name) VALUES (?1) RETURNING *")

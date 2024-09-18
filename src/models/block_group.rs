@@ -160,7 +160,7 @@ impl BlockGroup {
         BlockGroupEdge::bulk_create(conn, target_block_group_id, &edge_ids);
 
         for path in existing_paths {
-            let edge_ids = PathEdge::edges_for(conn, path.id)
+            let edge_ids = PathEdge::edges_for_path(conn, path.id)
                 .into_iter()
                 .map(|edge| edge.id)
                 .collect::<Vec<i32>>();
