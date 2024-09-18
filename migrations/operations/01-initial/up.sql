@@ -1,7 +1,9 @@
 CREATE TABLE operation_state (
   db_uuid TEXT PRIMARY KEY NOT NULL,
   operation_id INTEGER,
-  FOREIGN KEY(operation_id) REFERENCES operation(id)
+  branch_id INTEGER,
+  FOREIGN KEY(operation_id) REFERENCES operation(id),
+  FOREIGN KEY(branch_id) REFERENCES branch(id)
 ) STRICT;
 
 CREATE TABLE operation (
@@ -26,3 +28,21 @@ CREATE TABLE operation_summary (
   summary TEXT NOT NULL,
   FOREIGN KEY(operation_id) REFERENCES operation(id)
 ) STRICT;
+
+CREATE TABLE branch (
+  id INTEGER PRIMARY KEY NOT NULL,
+  db_uuid TEXT NOT NULL,
+  name TEXT NOT NULL,
+  start_operation_id INTEGER,
+  current_operation_id INTEGER
+) STRICT;
+CREATE UNIQUE INDEX branch_uidx ON branch(db_uuid, name);
+
+CREATE TABLE branch_operation (
+  id INTEGER PRIMARY KEY NOT NULL,
+  branch_id INTEGER NOT NULL,
+  operation_id INTEGER NOT NULL,
+  FOREIGN KEY(branch_id) REFERENCES branch(id),
+  FOREIGN KEY(operation_id) REFERENCES operation(id)
+) STRICT;
+CREATE UNIQUE INDEX branch_operation_uidx ON branch_operation(branch_id, operation_id);

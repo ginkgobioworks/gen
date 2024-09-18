@@ -8,7 +8,7 @@ use gen::get_connection;
 use gen::imports::fasta::import_fasta;
 use gen::imports::gfa::import_gfa;
 use gen::models::metadata;
-use gen::models::operations::{Operation, OperationState};
+use gen::models::operations::{setup_db, Branch, Operation, OperationState};
 use gen::operation_management;
 use gen::updates::vcf::update_with_vcf;
 use rusqlite::types::Value;
@@ -63,8 +63,29 @@ enum Commands {
     },
     /// Initialize a gen repository
     Init {},
+    /// Manage and create branches
+    Branch {
+        /// Create a branch with the given name
+        #[arg(long, action)]
+        create: bool,
+        /// Delete a given branch
+        #[arg(short, long, action)]
+        delete: bool,
+        /// Checkout a given branch
+        #[arg(long, action)]
+        checkout: bool,
+        /// List all branches
+        #[arg(short, long, action)]
+        list: bool,
+        /// The branch name
+        #[clap(index = 1)]
+        branch_name: Option<String>,
+    },
     /// Migrate a database to a given operation
     Checkout {
+        /// The branch identifier to migrate to
+        #[arg(short, long)]
+        branch: Option<String>,
         /// The operation id to move to
         #[clap(index = 1)]
         id: i32,
@@ -95,6 +116,9 @@ fn main() {
     let conn = get_connection(db);
     let db_uuid = metadata::get_db_uuid(&conn);
     let operation_conn = get_operation_connection();
+
+    // initialize the selected database if needed.
+    setup_db(&operation_conn, &db_uuid);
 
     match &cli.command {
         Some(Commands::Import {
@@ -171,8 +195,86 @@ fn main() {
                 );
             }
         }
-        Some(Commands::Checkout { id }) => {
-            operation_management::move_to(&conn, &Operation::get_by_id(&operation_conn, *id));
+        Some(Commands::Branch {
+            create,
+            delete,
+            checkout,
+            list,
+            branch_name,
+        }) => {
+            if *create {
+                Branch::create(
+                    &operation_conn,
+                    &db_uuid,
+                    &branch_name
+                        .clone()
+                        .expect("Must provide a branch name to create."),
+                );
+            } else if *delete {
+                Branch::delete(
+                    &operation_conn,
+                    &db_uuid,
+                    &branch_name
+                        .clone()
+                        .expect("Must provide a branch name to delete."),
+                );
+            } else if *checkout {
+                OperationState::set_branch(
+                    &operation_conn,
+                    &db_uuid,
+                    &branch_name
+                        .clone()
+                        .expect("Must provide a branch name to checkout."),
+                );
+                let branch =
+                    Branch::get_by_name(&operation_conn, &db_uuid, &branch_name.clone().unwrap())
+                        .unwrap();
+                operation_management::move_to(
+                    &conn,
+                    &operation_conn,
+                    &Operation::get_by_id(&operation_conn, branch.current_operation_id.unwrap()),
+                );
+            } else if *list {
+                let current_branch = OperationState::get_current_branch(&operation_conn, &db_uuid);
+                let mut indicator = "";
+                println!(
+                    "{indicator:<3}{col1:<30}   {col2:<20}",
+                    col1 = "Name",
+                    col2 = "Operation",
+                );
+                for branch in Branch::query(
+                    &operation_conn,
+                    "select * from branch where db_uuid = ?1",
+                    vec![Value::from(db_uuid.to_string())],
+                )
+                .iter()
+                {
+                    if let Some(current_branch_id) = current_branch {
+                        if current_branch_id == branch.id {
+                            indicator = ">";
+                        } else {
+                            indicator = "";
+                        }
+                    }
+                    println!(
+                        "{indicator:<3}{col1:<30}   {col2:<20}",
+                        col1 = branch.name,
+                        col2 = branch.current_operation_id.unwrap_or(-1)
+                    );
+                }
+            } else {
+                println!("No options selected.");
+            }
+        }
+        Some(Commands::Checkout { branch, id }) => {
+            if let Some(branch_name) = branch {
+                OperationState::set_branch(&operation_conn, &db_uuid, branch_name);
+            }
+            operation_management::move_to(
+                &conn,
+                &operation_conn,
+                &Operation::get_by_id(&operation_conn, *id),
+            );
         }
         Some(Commands::Export { name, gfa }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();

@@ -19,7 +19,7 @@ pub struct Operation {
 impl Operation {
     pub fn create(
         conn: &Connection,
-        db_uuid: &String,
+        db_uuid: &str,
         collection_name: &str,
         change_type: &str,
         change_id: i32,
@@ -30,7 +30,7 @@ impl Operation {
         let mut rows = stmt
             .query_map(
                 params_from_iter(vec![
-                    Value::from(db_uuid.clone()),
+                    Value::from(db_uuid.to_string()),
                     Value::from(collection_name.to_string()),
                     Value::from(change_type.to_string()),
                     Value::from(change_id),
@@ -39,7 +39,7 @@ impl Operation {
                 |row| {
                     Ok(Operation {
                         id: row.get(0)?,
-                        db_uuid: db_uuid.clone(),
+                        db_uuid: db_uuid.to_string(),
                         parent_id: current_op,
                         collection_name: collection_name.to_string(),
                         change_type: change_type.to_string(),
@@ -247,12 +247,118 @@ impl OperationSummary {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Branch {
+    pub id: i32,
+    pub db_uuid: String,
+    pub name: String,
+    pub start_operation_id: Option<i32>,
+    pub current_operation_id: Option<i32>,
+}
+
+impl Branch {
+    pub fn create(conn: &Connection, db_uuid: &str, branch_name: &str) -> Branch {
+        let current_operation_id = OperationState::get_operation(conn, db_uuid);
+        let mut stmt = conn.prepare_cached("insert into branch (db_uuid, name, start_operation_id, current_operation_id) values (?1, ?2, ?3, ?3) returning (id);").unwrap();
+
+        let mut rows = stmt
+            .query_map((db_uuid, branch_name, current_operation_id), |row| {
+                Ok(Branch {
+                    id: row.get(0)?,
+                    db_uuid: db_uuid.to_string(),
+                    name: branch_name.to_string(),
+                    start_operation_id: current_operation_id,
+                    current_operation_id,
+                })
+            })
+            .unwrap();
+        match rows.next().unwrap() {
+            Ok(res) => res,
+            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+                if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                    panic!("Branch already exists");
+                } else {
+                    panic!("something bad happened querying the database {err:?} {details:?}");
+                }
+            }
+            Err(_) => {
+                panic!("something bad happened querying the database");
+            }
+        }
+    }
+
+    pub fn delete(conn: &Connection, db_uuid: &str, branch_name: &str) {
+        if let Some(branch) = Branch::get_by_name(conn, db_uuid, branch_name) {
+            let branch_id = branch.id;
+            if let Some(current_branch) = OperationState::get_current_branch(conn, db_uuid) {
+                if current_branch == branch_id {
+                    panic!("Unable to delete the branch that is currently active.");
+                }
+            }
+            conn.execute(
+                "delete from branch_operation where branch_id = ?1",
+                (branch_id,),
+            )
+            .expect("Error deleting from branch_operation table.");
+            conn.execute("delete from branch where id = ?1", (branch_id,))
+                .expect("Error deleting from branch table.");
+        } else {
+            panic!("No branch named {branch_name} in database.");
+        }
+    }
+
+    pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Branch> {
+        let mut stmt = conn.prepare(query).unwrap();
+        let rows = stmt
+            .query_map(params_from_iter(placeholders), |row| {
+                Ok(Branch {
+                    id: row.get(0)?,
+                    db_uuid: row.get(1)?,
+                    name: row.get(2)?,
+                    start_operation_id: row.get(3)?,
+                    current_operation_id: row.get(4)?,
+                })
+            })
+            .unwrap();
+        let mut objs = vec![];
+        for row in rows {
+            objs.push(row.unwrap());
+        }
+        objs
+    }
+
+    pub fn get_by_name(conn: &Connection, db_uuid: &str, branch_name: &str) -> Option<Branch> {
+        let mut branch: Option<Branch> = None;
+        for result in Branch::query(
+            conn,
+            "select * from branch where db_uuid = ?1 and name = ?2",
+            vec![
+                Value::from(db_uuid.to_string()),
+                Value::from(branch_name.to_string()),
+            ],
+        )
+        .iter()
+        {
+            branch = Some(result.clone());
+        }
+        branch
+    }
+
+    pub fn set_current_operation(conn: &Connection, branch_id: i32, operation_id: i32) {
+        conn.execute(
+            "UPDATE branch set current_operation_id = ?2 where id = ?1",
+            (branch_id, operation_id),
+        )
+        .unwrap();
+    }
+}
+
 pub struct OperationState {
     operation_id: i32,
 }
 
 impl OperationState {
-    pub fn set_operation(conn: &Connection, db_uuid: &String, op_id: i32) {
+    pub fn set_operation(conn: &Connection, db_uuid: &str, op_id: i32) {
         let mut stmt = conn
             .prepare(
                 "INSERT INTO operation_state (db_uuid, operation_id)
@@ -261,18 +367,77 @@ impl OperationState {
           UPDATE SET operation_id=excluded.operation_id;",
             )
             .unwrap();
-        stmt.execute((db_uuid, op_id)).unwrap();
+        stmt.execute((db_uuid.to_string(), op_id)).unwrap();
+        let branch_id =
+            OperationState::get_current_branch(conn, db_uuid).expect("No current branch set.");
+        Branch::set_current_operation(conn, branch_id, op_id);
     }
 
-    pub fn get_operation(conn: &Connection, db_uuid: &String) -> Option<i32> {
+    pub fn get_operation(conn: &Connection, db_uuid: &str) -> Option<i32> {
         let mut id: Option<i32> = None;
         let mut stmt = conn
             .prepare("SELECT operation_id from operation_state where db_uuid = ?1;")
             .unwrap();
-        let rows = stmt.query_map((db_uuid,), |row| row.get(0)).unwrap();
+        let rows = stmt
+            .query_map((db_uuid.to_string(),), |row| row.get(0))
+            .unwrap();
         for row in rows {
-            id = Some(row.unwrap());
+            id = row.unwrap();
         }
         id
+    }
+
+    pub fn set_branch(conn: &Connection, db_uuid: &str, branch_name: &str) {
+        let branch = Branch::get_by_name(conn, db_uuid, branch_name)
+            .unwrap_or_else(|| panic!("No branch named {branch_name}."));
+        let mut stmt = conn
+            .prepare(
+                "INSERT INTO operation_state (db_uuid, branch_id)
+          VALUES (?1, ?2)
+          ON CONFLICT (db_uuid) DO
+          UPDATE SET branch_id=excluded.branch_id;",
+            )
+            .unwrap();
+        println!("setting branc to {branch_name}");
+        stmt.execute(params_from_iter(vec![
+            Value::from(db_uuid.to_string()),
+            Value::from(branch.id),
+        ]))
+        .unwrap();
+        if let Some(current_branch_id) = OperationState::get_current_branch(conn, db_uuid) {
+            if current_branch_id != branch.id {
+                panic!("Failed to set branch to {branch_name}");
+            }
+        } else {
+            panic!("Failed to set branch.");
+        }
+    }
+
+    pub fn get_current_branch(conn: &Connection, db_uuid: &str) -> Option<i32> {
+        let mut id: Option<i32> = None;
+        let mut stmt = conn
+            .prepare("SELECT branch_id from operation_state where db_uuid = ?1;")
+            .unwrap();
+        let rows = stmt
+            .query_map((db_uuid.to_string(),), |row| row.get(0))
+            .unwrap();
+        for row in rows {
+            id = row.unwrap();
+        }
+        id
+    }
+}
+
+pub fn setup_db(conn: &Connection, db_uuid: &str) {
+    // check if the database is known. If not, initialize it.
+    if Branch::query(
+        conn,
+        "select * from branch where db_uuid = ?1",
+        vec![Value::from(db_uuid.to_string())],
+    )
+    .is_empty()
+    {
+        Branch::create(conn, db_uuid, "main");
+        OperationState::set_branch(conn, db_uuid, "main");
     }
 }

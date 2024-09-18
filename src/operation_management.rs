@@ -71,10 +71,10 @@ pub fn revert_changeset(conn: &Connection, operation: &Operation) {
     conn.pragma_update(None, "foreign_keys", "1").unwrap();
 }
 
-pub fn move_to(conn: &Connection, operation: &Operation) {
-    let current_op_id = OperationState::get_operation(conn, &operation.db_uuid).unwrap();
+pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Operation) {
+    let current_op_id = OperationState::get_operation(operation_conn, &operation.db_uuid).unwrap();
     let op_id = operation.id;
-    let path = Operation::get_path_between(conn, current_op_id, op_id);
+    let path = Operation::get_path_between(operation_conn, current_op_id, op_id);
     if path.is_empty() {
         println!("No path exists from {current_op_id} to {op_id}.");
         return;
@@ -83,13 +83,13 @@ pub fn move_to(conn: &Connection, operation: &Operation) {
         match direction {
             Direction::Outgoing => {
                 println!("Reverting operation {operation_id}");
-                revert_changeset(conn, &Operation::get_by_id(conn, *operation_id));
-                OperationState::set_operation(conn, &operation.db_uuid, *next_op);
+                revert_changeset(conn, &Operation::get_by_id(operation_conn, *operation_id));
+                OperationState::set_operation(operation_conn, &operation.db_uuid, *next_op);
             }
             Direction::Incoming => {
                 println!("Applying operation {operation_id}");
-                apply_changeset(conn, &Operation::get_by_id(conn, *operation_id));
-                OperationState::set_operation(conn, &operation.db_uuid, *operation_id);
+                apply_changeset(conn, &Operation::get_by_id(operation_conn, *operation_id));
+                OperationState::set_operation(operation_conn, &operation.db_uuid, *operation_id);
             }
         }
     }
