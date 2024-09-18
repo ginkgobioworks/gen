@@ -36,15 +36,95 @@ pub fn export_gfa(conn: &Connection, collection_name: &str, filename: &PathBuf) 
     let file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(file);
 
-    let terminal_block_ids = write_blocks(&mut writer, blocks.clone());
+    let mut terminal_block_ids = HashSet::new();
+    for block in &blocks {
+        if block.sequence_hash == Sequence::PATH_START_HASH
+            || block.sequence_hash == Sequence::PATH_END_HASH
+        {
+            terminal_block_ids.insert(block.id);
+            continue;
+        }
+    }
 
-    write_edges(
+    write_segments(&mut writer, blocks.clone(), terminal_block_ids.clone());
+    write_links(
         &mut writer,
         graph,
         edges_by_node_pair.clone(),
         terminal_block_ids,
     );
+    write_paths(&mut writer, conn, collection_name, edges_by_node_pair);
+}
 
+fn write_segments(
+    writer: &mut BufWriter<File>,
+    blocks: Vec<GroupBlock>,
+    terminal_block_ids: HashSet<i32>,
+) {
+    for block in &blocks {
+        if terminal_block_ids.contains(&block.id) {
+            continue;
+        }
+        writer
+            .write_all(&segment_line(&block.sequence, block.id as usize).into_bytes())
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Error writing segment with sequence {} to GFA stream",
+                    block.sequence,
+                )
+            });
+    }
+}
+
+fn segment_line(sequence: &str, index: usize) -> String {
+    format!("S\t{}\t{}\t{}\n", index + 1, sequence, "*")
+}
+
+fn write_links(
+    writer: &mut BufWriter<File>,
+    graph: DiGraphMap<i32, ()>,
+    edges_by_node_pair: HashMap<(i32, i32), Edge>,
+    terminal_block_ids: HashSet<i32>,
+) {
+    for (source, target, ()) in graph.all_edges() {
+        if terminal_block_ids.contains(&source) || terminal_block_ids.contains(&target) {
+            continue;
+        }
+        let edge = edges_by_node_pair.get(&(source, target)).unwrap();
+        writer
+            .write_all(
+                &link_line(source, edge.source_strand, target, edge.target_strand).into_bytes(),
+            )
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Error writing link from segment {} to {} to GFA stream",
+                    source, target,
+                )
+            });
+    }
+}
+
+fn link_line(
+    source_index: i32,
+    source_strand: Strand,
+    target_index: i32,
+    target_strand: Strand,
+) -> String {
+    format!(
+        "L\t{}\t{}\t{}\t{}\t*\n",
+        source_index + 1,
+        source_strand,
+        target_index + 1,
+        target_strand
+    )
+}
+
+fn write_paths(
+    writer: &mut BufWriter<File>,
+    conn: &Connection,
+    collection_name: &str,
+    edges_by_node_pair: HashMap<(i32, i32), Edge>,
+) {
     let paths = Path::get_paths_for_collection(conn, collection_name);
     let edges_by_path_id =
         PathEdge::edges_for_paths(conn, paths.iter().map(|path| path.id).collect());
@@ -53,10 +133,7 @@ pub fn export_gfa(conn: &Connection, collection_name: &str, filename: &PathBuf) 
         .map(|(node_pair, edge)| (edge.id, *node_pair))
         .collect::<HashMap<i32, (i32, i32)>>();
 
-    println!("here1");
     for path in paths {
-        println!("here2");
-        println!("{}", path.name);
         let edges_for_path = edges_by_path_id.get(&path.id).unwrap();
         let mut node_ids = vec![];
         let mut node_strands = vec![];
@@ -82,71 +159,6 @@ fn path_line(path_name: &str, node_ids: &[i32], node_strands: &[Strand]) -> Stri
         .collect::<Vec<String>>()
         .join(",");
     format!("P\t{}\t{}\n", path_name, nodes)
-}
-
-fn write_blocks(writer: &mut BufWriter<File>, blocks: Vec<GroupBlock>) -> HashSet<i32> {
-    let mut terminal_block_ids = HashSet::new();
-    for block in &blocks {
-        if block.sequence_hash == Sequence::PATH_START_HASH
-            || block.sequence_hash == Sequence::PATH_END_HASH
-        {
-            terminal_block_ids.insert(block.id);
-            continue;
-        }
-        writer
-            .write_all(&segment_line(&block.sequence, block.id as usize).into_bytes())
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Error writing segment with sequence {} to GFA stream",
-                    block.sequence,
-                )
-            });
-    }
-
-    terminal_block_ids
-}
-
-fn write_edges(
-    writer: &mut BufWriter<File>,
-    graph: DiGraphMap<i32, ()>,
-    edges_by_node_pair: HashMap<(i32, i32), Edge>,
-    terminal_block_ids: HashSet<i32>,
-) {
-    for (source, target, ()) in graph.all_edges() {
-        if terminal_block_ids.contains(&source) || terminal_block_ids.contains(&target) {
-            continue;
-        }
-        let edge = edges_by_node_pair.get(&(source, target)).unwrap();
-        writer
-            .write_all(
-                &link_line(source, edge.source_strand, target, edge.target_strand).into_bytes(),
-            )
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Error writing link from segment {} to {} to GFA stream",
-                    source, target,
-                )
-            });
-    }
-}
-
-fn segment_line(sequence: &str, index: usize) -> String {
-    format!("S\t{}\t{}\t{}\n", index + 1, sequence, "*")
-}
-
-fn link_line(
-    source_index: i32,
-    source_strand: Strand,
-    target_index: i32,
-    target_strand: Strand,
-) -> String {
-    format!(
-        "L\t{}\t{}\t{}\t{}\t*\n",
-        source_index + 1,
-        source_strand,
-        target_index + 1,
-        target_strand
-    )
 }
 
 mod tests {
@@ -276,5 +288,32 @@ mod tests {
         let paths = Path::get_paths_for_collection(&conn, "test collection 2");
         assert_eq!(paths.len(), 1);
         assert_eq!(Path::sequence(&conn, paths[0].clone()), "AAAATTTTGGGGCCCC");
+    }
+
+    #[test]
+    fn test_simple_round_trip() {
+        setup_gen_dir();
+        let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        gfa_path.push("fixtures/simple.gfa");
+        let collection_name = "test".to_string();
+        let conn = &get_connection(None);
+        import_gfa(&gfa_path, &collection_name, conn);
+
+        let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
+        let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id);
+
+        let temp_dir = tempdir().expect("Couldn't get handle to temp directory");
+        let mut gfa_path = PathBuf::from(temp_dir.path());
+        gfa_path.push("intermediate.gfa");
+
+        export_gfa(conn, &collection_name, &gfa_path);
+        import_gfa(&gfa_path, "test collection 2", conn);
+
+        let block_group2 = Collection::get_block_groups(conn, "test collection 2")
+            .pop()
+            .unwrap();
+        let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id);
+
+        assert_eq!(all_sequences, all_sequences2);
     }
 }
