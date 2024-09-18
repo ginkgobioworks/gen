@@ -5,12 +5,7 @@ Sequences could be genomes from NCBI for example, or engineered plasmid construc
 
 `<figure 1>`
 
-Advantages are:
-(1) very large collections of whole genomes can be stored as paths with modest hardware requirements. 
-(2) solves the problem of coordinate reference frames changing between genetic lineages during the life cycle of a project. Even as your sequences acquire deletions and insertions, coordinates can be easily translated from path to path.
-(3) version control
-
-Next to paths, `gen` provides another way to describe individual strains or experiments: _samples_.
+Annotations can be imported from gff, gb associated to a specific path, but can be propagated. Experimental data can be associated with gen molecules through the use of _sample_ objects, which assign numerical values to the edges or paths in a molecule. These values can for example represent the frequency at which an edge or path is observed via NGS. 
 
 ## Installing from Source
 Make sure you have a Rust compiler installed on your system. You can install the Rust toolset using the [rustup installer](https://rustup.rs/).
