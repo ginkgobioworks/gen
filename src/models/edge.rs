@@ -320,7 +320,7 @@ impl Edge {
             .collect::<Vec<i64>>()
     }
 
-    pub fn blocks_from_edges(conn: &Connection, edges: &Vec<Edge>) -> (Vec<GroupBlock>, Vec<Edge>) {
+    pub fn blocks_from_edges(conn: &Connection, edges: &Vec<Edge>) -> Vec<GroupBlock> {
         let mut node_ids = HashSet::new();
         let mut edges_by_source_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
         let mut edges_by_target_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
@@ -422,7 +422,7 @@ impl Edge {
             0,
         );
         blocks.push(end_block);
-        (blocks, boundary_edges)
+        blocks
     }
 
     pub fn build_graph(
@@ -482,6 +482,106 @@ impl Edge {
         }
 
         (graph, edges_by_node_pair)
+    }
+
+    pub fn boundary_edges_from_sequences(
+        sequence_blocks_by_hash: &HashMap<String, Vec<GroupBlock>>,
+    ) -> Vec<Edge> {
+        let mut boundary_edges = vec![];
+        for sequence_blocks in sequence_blocks_by_hash.values() {
+            for (previous_block, next_block) in sequence_blocks.iter().tuple_windows() {
+                // NOTE: Most of this data is bogus, the Edge struct is just a convenient wrapper
+                // for the data we need to set up boundary edges in the block group graph
+                boundary_edges.push(Edge {
+                    id: -1,
+                    source_hash: previous_block.sequence_hash.clone(),
+                    source_coordinate: previous_block.end,
+                    source_strand: Strand::Unknown,
+                    target_hash: next_block.sequence_hash.clone(),
+                    target_coordinate: next_block.start,
+                    target_strand: Strand::Unknown,
+                    chromosome_index: 0,
+                    phased: 0,
+                });
+            }
+        }
+        boundary_edges
+    }
+
+    pub fn get_completion_edges(
+        edges: Vec<Edge>,
+        sequence_blocks_by_hash: HashMap<String, Vec<GroupBlock>>,
+    ) -> Vec<Edge> {
+        // For cases like pooled sequences, where there are multiple promoters and genes immediately
+        // adjacent to each other, those sequences will have only been added to the reference
+        // sequence, and won't typically have edges between each other.  This method returns edges
+        // between all pairs of such sequences.
+
+        let mut edges_by_target_hash = HashMap::<String, Vec<Edge>>::new();
+        let mut edges_by_source_hash = HashMap::<String, Vec<Edge>>::new();
+        for edge in edges {
+            edges_by_target_hash
+                .entry(edge.target_hash.clone())
+                .and_modify(|target_edges| target_edges.push(edge.clone()))
+                .or_insert_with(|| vec![edge.clone()]);
+            edges_by_source_hash
+                .entry(edge.source_hash.clone())
+                .and_modify(|source_edges| source_edges.push(edge.clone()))
+                .or_insert_with(|| vec![edge.clone()]);
+        }
+
+        let mut end_blocks_by_hash = HashMap::new();
+        for (hash, sequence_blocks) in &sequence_blocks_by_hash {
+            let end_block = sequence_blocks.last().unwrap();
+            end_blocks_by_hash.insert(hash, end_block);
+        }
+
+        let mut completion_edges = vec![];
+        for (hash, sequence_blocks) in &sequence_blocks_by_hash {
+            for (previous_block, next_block) in sequence_blocks.iter().tuple_windows() {
+                let incoming_edges = edges_by_target_hash.get(&next_block.sequence_hash).unwrap();
+                let outgoing_edges = edges_by_source_hash
+                    .get(&previous_block.sequence_hash)
+                    .unwrap();
+                let mut sources = vec![];
+                let mut targets = vec![];
+                for incoming_edge in incoming_edges {
+                    let incoming_source_block =
+                        end_blocks_by_hash.get(&incoming_edge.source_hash).unwrap();
+                    if incoming_edge.source_coordinate == incoming_source_block.end
+                        && incoming_edge.target_coordinate == next_block.start
+                    {
+                        for outgoing_edge in outgoing_edges {
+                            if outgoing_edge.source_coordinate == previous_block.end
+                                && outgoing_edge.target_coordinate == 0
+                            {
+                                sources.push(incoming_edge.source_hash.clone());
+                                targets.push(outgoing_edge.target_hash.clone());
+                            }
+                        }
+                    }
+                }
+
+                for source in &sources {
+                    let source_block = end_blocks_by_hash.get(&source).unwrap();
+                    for target in &targets {
+                        completion_edges.push(Edge {
+                            id: -1,
+                            source_hash: source.to_string(),
+                            source_coordinate: source_block.end,
+                            source_strand: Strand::Unknown,
+                            target_hash: target.to_string(),
+                            target_coordinate: 0,
+                            target_strand: Strand::Unknown,
+                            chromosome_index: 0,
+                            phased: 0,
+                        });
+                    }
+                }
+            }
+        }
+
+        completion_edges
     }
 }
 
