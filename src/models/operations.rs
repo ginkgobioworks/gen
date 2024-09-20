@@ -58,8 +58,6 @@ impl Operation {
             .unwrap();
         let operation = rows.next().unwrap().unwrap();
         // TODO: error condition here where we can write to disk but transaction fails
-        println!("here1");
-        println!("{}", &operation.db_uuid);
         OperationState::set_operation(conn, &operation.db_uuid, operation.id);
         operation
     }
