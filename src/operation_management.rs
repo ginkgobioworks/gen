@@ -16,7 +16,7 @@ enum FileMode {
 }
 
 pub fn get_file(path: &PathBuf, mode: FileMode) -> fs::File {
-    let mut file;
+    let file;
     match mode {
         FileMode::Read => {
             if fs::metadata(path).is_ok() {
@@ -53,7 +53,8 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
         &mut &contents[..],
         None::<fn(&str) -> bool>,
         |_conflict_type, _item| session::ConflictAction::SQLITE_CHANGESET_OMIT,
-    );
+    )
+    .unwrap();
     conn.pragma_update(None, "foreign_keys", "1").unwrap();
 }
 
@@ -64,14 +65,15 @@ pub fn revert_changeset(conn: &Connection, operation: &Operation) {
     let mut contents = vec![];
     file.read_to_end(&mut contents).unwrap();
     let mut inverted_contents: Vec<u8> = vec![];
-    session::invert_strm(&mut &contents[..], &mut inverted_contents);
+    session::invert_strm(&mut &contents[..], &mut inverted_contents).unwrap();
 
     conn.pragma_update(None, "foreign_keys", "0").unwrap();
     conn.apply_strm(
         &mut &inverted_contents[..],
         None::<fn(&str) -> bool>,
         |_conflict_type, _item| session::ConflictAction::SQLITE_CHANGESET_OMIT,
-    );
+    )
+    .unwrap();
     conn.pragma_update(None, "foreign_keys", "1").unwrap();
 }
 
@@ -147,15 +149,13 @@ pub fn checkout(
     branch_name: &Option<String>,
     operation_id: Option<i32>,
 ) {
-    let mut branch_id = 0;
     let mut dest_op_id = operation_id.unwrap_or(0);
     if let Some(name) = branch_name {
         let current_branch = OperationState::get_current_branch(operation_conn, db_uuid)
             .expect("No current branch set");
         let branch = Branch::get_by_name(operation_conn, db_uuid, name)
             .unwrap_or_else(|| panic!("No branch named {name}"));
-        branch_id = branch.id;
-        if current_branch != branch_id {
+        if current_branch != branch.id {
             OperationState::set_branch(operation_conn, db_uuid, name);
         }
         if dest_op_id == 0 {
@@ -178,7 +178,7 @@ mod tests {
     use crate::imports::fasta::import_fasta;
     use crate::models::file_types::FileTypes;
     use crate::models::operations::{setup_db, Branch, FileAddition, Operation, OperationState};
-    use crate::models::{edge::Edge, metadata, Sample};
+    use crate::models::{edge::Edge, metadata, sample::Sample};
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use crate::updates::vcf::update_with_vcf;
     use std::path::{Path, PathBuf};

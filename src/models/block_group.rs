@@ -1,5 +1,4 @@
 use intervaltree::IntervalTree;
-use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
 use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
 use std::collections::{HashMap, HashSet};
@@ -218,13 +217,13 @@ impl BlockGroup {
         let result = if sample_name.is_some() {
             conn.query_row(
 		"select id from block_group where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
-		(collection_name, sample_name, group_name.clone()),
+		(collection_name, sample_name, group_name),
 		|row| row.get(0),
             )
         } else {
             conn.query_row(
 		"select id from block_group where collection_name = ?1 AND sample_name IS NULL AND name = ?2",
-		(collection_name, group_name.clone()),
+		(collection_name, group_name),
 		|row| row.get(0),
             )
         };
@@ -242,7 +241,7 @@ impl BlockGroup {
         let mut edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
         let (blocks, boundary_edges) = Edge::blocks_from_edges(conn, &edges);
         edges.extend(boundary_edges.clone());
-        let (graph, _) = Edge::build_graph(conn, &edges, &blocks);
+        let (graph, _) = Edge::build_graph(&edges, &blocks);
 
         let mut start_nodes = vec![];
         let mut end_nodes = vec![];
@@ -416,7 +415,7 @@ impl BlockGroup {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{collection::Collection, Sample};
+    use crate::models::{collection::Collection, sample::Sample};
     use crate::test_helpers::get_connection;
 
     fn setup_block_group(conn: &Connection) -> (i32, Path) {

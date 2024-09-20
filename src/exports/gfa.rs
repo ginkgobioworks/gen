@@ -32,7 +32,7 @@ pub fn export_gfa(conn: &Connection, collection_name: &str, filename: &PathBuf) 
     let (blocks, boundary_edges) = Edge::blocks_from_edges(conn, &edges);
     edges.extend(boundary_edges.clone());
 
-    let (graph, edges_by_node_pair) = Edge::build_graph(conn, &edges, &blocks);
+    let (graph, edges_by_node_pair) = Edge::build_graph(&edges, &blocks);
 
     let file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(file);

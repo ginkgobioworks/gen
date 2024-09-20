@@ -21,7 +21,6 @@ pub fn get_db_uuid(conn: &Connection) -> String {
 
 #[cfg(test)]
 mod tests {
-    use rusqlite::Connection;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 

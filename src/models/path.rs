@@ -257,11 +257,10 @@ impl Path {
 }
 
 mod tests {
-    use rusqlite::Connection;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
-    use crate::models::{block_group::BlockGroup, collection::Collection, sequence::NewSequence};
+    use crate::models::{block_group::BlockGroup, collection::Collection};
     use crate::test_helpers::get_connection;
 
     #[test]
