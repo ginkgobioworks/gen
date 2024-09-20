@@ -272,8 +272,22 @@ impl BlockGroup {
 
     pub fn get_all_sequences(conn: &Connection, block_group_id: i64) -> HashSet<String> {
         let mut edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
-        let (blocks, boundary_edges) = Edge::blocks_from_edges(conn, &edges);
+        let blocks = Edge::blocks_from_edges(conn, &edges);
+        let sequence_blocks_by_hash: HashMap<String, Vec<GroupBlock>> = blocks
+            .clone()
+            .into_iter()
+            .fold(HashMap::new(), |mut acc, block| {
+                acc.entry(block.sequence_hash.clone())
+                    .and_modify(|blocks| blocks.push(block.clone()))
+                    .or_insert_with(|| vec![block.clone()]);
+                acc
+            });
+        let boundary_edges = Edge::boundary_edges_from_sequences(&sequence_blocks_by_hash);
         edges.extend(boundary_edges.clone());
+
+        let completion_edges =
+            Edge::get_completion_edges(edges.clone(), sequence_blocks_by_hash.clone());
+        edges.extend(completion_edges.clone());
         let (graph, _) = Edge::build_graph(&edges, &blocks);
 
         let mut start_nodes = vec![];
@@ -288,7 +302,6 @@ impl BlockGroup {
                 end_nodes.push(node);
             }
         }
-
         let blocks_by_id = blocks
             .clone()
             .into_iter()
@@ -1308,6 +1321,126 @@ mod tests {
             HashSet::from_iter(vec![
                 "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
                 "AAAAAAAAAATTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn makes_a_pool() {
+        let conn = get_connection(None);
+        let (block_group_id, path) = setup_block_group(&conn);
+        let promoter_1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("pro1")
+            .save(&conn);
+        let promoter_2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("pro2")
+            .save(&conn);
+        let gene_1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("gen1")
+            .save(&conn);
+        let gene_2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("gen2")
+            .save(&conn);
+        let promoter_1_block = NewBlock {
+            id: 0,
+            sequence: promoter_1.clone(),
+            block_sequence: promoter_1.get_sequence(0, 4).to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 7,
+            path_end: 15,
+            strand: Strand::Forward,
+        };
+        let promoter_2_block = NewBlock {
+            id: 0,
+            sequence: promoter_2.clone(),
+            block_sequence: promoter_2.get_sequence(0, 4).to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 7,
+            path_end: 15,
+            strand: Strand::Forward,
+        };
+        let gene_1_block = NewBlock {
+            id: 0,
+            sequence: gene_1.clone(),
+            block_sequence: gene_1.get_sequence(0, 4).to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 15,
+            path_end: 20,
+            strand: Strand::Forward,
+        };
+        let gene_2_block = NewBlock {
+            id: 0,
+            sequence: gene_2.clone(),
+            block_sequence: gene_2.get_sequence(0, 4).to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 15,
+            path_end: 20,
+            strand: Strand::Forward,
+        };
+        let changes = vec![
+            PathChange {
+                block_group_id,
+                path: path.clone(),
+                start: 7,
+                end: 15,
+                block: promoter_1_block,
+                chromosome_index: 1,
+                phased: 0,
+            },
+            PathChange {
+                block_group_id,
+                path: path.clone(),
+                start: 7,
+                end: 15,
+                block: promoter_2_block,
+                chromosome_index: 1,
+                phased: 0,
+            },
+            PathChange {
+                block_group_id,
+                path: path.clone(),
+                start: 15,
+                end: 20,
+                block: gene_1_block,
+                chromosome_index: 1,
+                phased: 0,
+            },
+            PathChange {
+                block_group_id,
+                path: path.clone(),
+                start: 15,
+                end: 20,
+                block: gene_2_block,
+                chromosome_index: 1,
+                phased: 0,
+            },
+        ];
+        let tree = Path::intervaltree_for(&conn, &path);
+        for change in changes.iter() {
+            BlockGroup::insert_change(&conn, change, &tree);
+        }
+
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAApro1TTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTTTTgen1CCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAApro1gen1CCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAApro2TTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTTTTgen2CCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAApro1gen2CCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAApro2gen1CCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAApro2gen2CCCCCCCCCCGGGGGGGGGG".to_string(),
             ])
         );
     }
