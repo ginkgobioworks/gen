@@ -6,6 +6,7 @@ pub enum FileTypes {
     Fasta,
     GFA,
     VCF,
+    Changeset,
 }
 
 impl ToSql for FileTypes {
@@ -14,6 +15,7 @@ impl ToSql for FileTypes {
             FileTypes::Fasta => "fasta".into(),
             FileTypes::GFA => "gfa".into(),
             FileTypes::VCF => "vcf".into(),
+            FileTypes::Changeset => "changeset".into(),
         };
         Ok(result)
     }
@@ -25,6 +27,7 @@ impl From<FileTypes> for Value {
             FileTypes::Fasta => "fasta",
             FileTypes::GFA => "gfa",
             FileTypes::VCF => "vcf",
+            FileTypes::Changeset => "changeset",
         };
         Value::Text(result.to_string())
     }
@@ -36,6 +39,7 @@ impl FromSql for FileTypes {
             Ok("fasta") => FileTypes::Fasta,
             Ok("gfa") => FileTypes::GFA,
             Ok("vcf") => FileTypes::VCF,
+            Ok("changeset") => FileTypes::Changeset,
             _ => panic!("Invalid entry in database"),
         };
         Ok(result)

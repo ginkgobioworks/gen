@@ -169,7 +169,7 @@ pub fn update_with_vcf(
     let operation = Operation::create(
         operation_conn,
         &db_uuid,
-        collection_name,
+        collection_name.to_string(),
         "vcf_addition",
         change.id,
     );
