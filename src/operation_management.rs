@@ -1,12 +1,12 @@
 use std::collections::{HashMap, HashSet};
-use std::io::{IsTerminal, Read, Write};
-use std::{env, fs, path::PathBuf, str};
+use std::io::{Read, Write};
+use std::{fs, path::PathBuf, str};
 
 use fallible_streaming_iterator::FallibleStreamingIterator;
 use itertools::Itertools;
 use petgraph::Direction;
-use rusqlite::session::{ChangesetIter, Session};
-use rusqlite::types::{FromSql, Value};
+use rusqlite::session::ChangesetIter;
+use rusqlite::types::FromSql;
 use rusqlite::{session, Connection};
 use serde::{Deserialize, Serialize};
 
@@ -67,82 +67,78 @@ pub fn get_changeset_dependencies(conn: &Connection, changes: &[u8]) -> Vec<u8> 
     let mut created_paths = HashSet::new();
     let mut created_edges = HashSet::new();
     let mut created_sequences: HashSet<String> = HashSet::new();
-    while let cs = iter.next() {
-        if let Some(item) = cs.unwrap() {
-            let op = item.op().unwrap();
-            // info on indirect changes: https://www.sqlite.org/draft/session/sqlite3session_indirect.html
-            if !op.indirect() {
-                let table = op.table_name();
-                let pk_column = item
-                    .pk()
-                    .unwrap()
-                    .iter()
-                    .find_position(|item| **item == 1)
-                    .unwrap()
-                    .0;
-                match table {
-                    "sequence" => {
-                        let hash =
-                            str::from_utf8(item.new_value(pk_column).unwrap().as_bytes().unwrap())
-                                .unwrap();
-                        created_sequences.insert(hash.to_string());
-                    }
-                    "block_group" => {
-                        let bg_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
-                        created_block_groups.insert(bg_pk);
-                    }
-                    "path" => {
-                        created_paths
-                            .insert(item.new_value(pk_column).unwrap().as_i64().unwrap() as i32);
-                        let bg_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
-                        if !created_block_groups.contains(&bg_id) {
-                            previous_block_groups.insert(bg_id);
-                        }
-                    }
-                    "edges" => {
-                        let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
-                        let source_hash =
-                            str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
-                                .unwrap()
-                                .to_string();
-                        let target_hash =
-                            str::from_utf8(item.new_value(4).unwrap().as_bytes().unwrap())
-                                .unwrap()
-                                .to_string();
-                        created_edges.insert(edge_pk);
-                        if !created_sequences.contains(&source_hash) {
-                            previous_sequences.insert(source_hash);
-                        }
-                        if !created_sequences.contains(&target_hash) {
-                            previous_sequences.insert(target_hash);
-                        }
-                    }
-                    "path_edges" => {
-                        let path_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
-                        let edge_id = item.new_value(3).unwrap().as_i64().unwrap() as i32;
-                        if !created_paths.contains(&path_id) {
-                            previous_paths.insert(path_id);
-                        }
-                        if !created_edges.contains(&edge_id) {
-                            previous_edges.insert(edge_id);
-                        }
-                    }
-                    "block_group_edges" => {
-                        // make sure blockgroup_map has blockgroups for bg ids made in external changes.
-                        let bg_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
-                        let edge_id = item.new_value(2).unwrap().as_i64().unwrap() as i32;
-                        if !created_edges.contains(&edge_id) {
-                            previous_edges.insert(edge_id);
-                        }
-                        if !created_block_groups.contains(&bg_id) {
-                            previous_block_groups.insert(bg_id);
-                        }
-                    }
-                    _ => {}
+    while let Some(item) = iter.next().unwrap() {
+        let op = item.op().unwrap();
+        // info on indirect changes: https://www.sqlite.org/draft/session/sqlite3session_indirect.html
+        if !op.indirect() {
+            let table = op.table_name();
+            let pk_column = item
+                .pk()
+                .unwrap()
+                .iter()
+                .find_position(|item| **item == 1)
+                .unwrap()
+                .0;
+            match table {
+                "sequence" => {
+                    let hash =
+                        str::from_utf8(item.new_value(pk_column).unwrap().as_bytes().unwrap())
+                            .unwrap();
+                    created_sequences.insert(hash.to_string());
                 }
+                "block_group" => {
+                    let bg_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
+                    created_block_groups.insert(bg_pk);
+                }
+                "path" => {
+                    created_paths
+                        .insert(item.new_value(pk_column).unwrap().as_i64().unwrap() as i32);
+                    let bg_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
+                    if !created_block_groups.contains(&bg_id) {
+                        previous_block_groups.insert(bg_id);
+                    }
+                }
+                "edges" => {
+                    let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
+                    let source_hash =
+                        str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
+                            .unwrap()
+                            .to_string();
+                    let target_hash =
+                        str::from_utf8(item.new_value(4).unwrap().as_bytes().unwrap())
+                            .unwrap()
+                            .to_string();
+                    created_edges.insert(edge_pk);
+                    if !created_sequences.contains(&source_hash) {
+                        previous_sequences.insert(source_hash);
+                    }
+                    if !created_sequences.contains(&target_hash) {
+                        previous_sequences.insert(target_hash);
+                    }
+                }
+                "path_edges" => {
+                    let path_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
+                    let edge_id = item.new_value(3).unwrap().as_i64().unwrap() as i32;
+                    if !created_paths.contains(&path_id) {
+                        previous_paths.insert(path_id);
+                    }
+                    if !created_edges.contains(&edge_id) {
+                        previous_edges.insert(edge_id);
+                    }
+                }
+                "block_group_edges" => {
+                    // make sure blockgroup_map has blockgroups for bg ids made in external changes.
+                    let bg_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
+                    let edge_id = item.new_value(2).unwrap().as_i64().unwrap() as i32;
+                    if !created_edges.contains(&edge_id) {
+                        previous_edges.insert(edge_id);
+                    }
+                    if !created_block_groups.contains(&bg_id) {
+                        previous_block_groups.insert(bg_id);
+                    }
+                }
+                _ => {}
             }
-        } else {
-            break;
         }
     }
 
@@ -255,133 +251,110 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
     let mut insert_paths = vec![];
     let mut insert_block_group_edges = vec![];
 
-    while let cs = iter.next() {
-        if let Some(item) = cs.unwrap() {
-            let op = item.op().unwrap();
-            // info on indirect changes: https://www.sqlite.org/draft/session/sqlite3session_indirect.html
-            if !op.indirect() {
-                let table = op.table_name();
-                let pk_column = item
-                    .pk()
-                    .unwrap()
-                    .iter()
-                    .find_position(|item| **item == 1)
-                    .unwrap()
-                    .0;
-                match table {
-                    "sample" => {
-                        Sample::create(
+    while let Some(item) = iter.next().unwrap() {
+        let op = item.op().unwrap();
+        // info on indirect changes: https://www.sqlite.org/draft/session/sqlite3session_indirect.html
+        if !op.indirect() {
+            let table = op.table_name();
+            let pk_column = item
+                .pk()
+                .unwrap()
+                .iter()
+                .find_position(|item| **item == 1)
+                .unwrap()
+                .0;
+            match table {
+                "sample" => {
+                    Sample::create(
+                        conn,
+                        str::from_utf8(item.new_value(pk_column).unwrap().as_bytes().unwrap())
+                            .unwrap(),
+                    );
+                }
+                "sequence" => {
+                    Sequence::new()
+                        .sequence_type(
+                            str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap()).unwrap(),
+                        )
+                        .sequence(
+                            str::from_utf8(item.new_value(2).unwrap().as_bytes().unwrap()).unwrap(),
+                        )
+                        .name(
+                            str::from_utf8(item.new_value(3).unwrap().as_bytes().unwrap()).unwrap(),
+                        )
+                        .file_path(
+                            str::from_utf8(item.new_value(4).unwrap().as_bytes().unwrap()).unwrap(),
+                        )
+                        .length(item.new_value(5).unwrap().as_i64().unwrap() as i32)
+                        .save(conn);
+                }
+                "block_group" => {
+                    let bg_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
+                    if let Some(v) = dep_bg_map.get(&bg_pk) {
+                        blockgroup_map.insert(bg_pk, *v);
+                    } else {
+                        let sample_name: Option<&str> =
+                            match item.new_value(2).unwrap().as_bytes_or_null().unwrap() {
+                                Some(v) => Some(str::from_utf8(v).unwrap()),
+                                None => None,
+                            };
+                        let new_bg = BlockGroup::create(
                             conn,
-                            str::from_utf8(item.new_value(pk_column).unwrap().as_bytes().unwrap())
+                            str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap()).unwrap(),
+                            sample_name,
+                            str::from_utf8(item.new_value(3).unwrap().as_bytes().unwrap()).unwrap(),
+                        );
+                        blockgroup_map.insert(bg_pk, new_bg.id);
+                    };
+                }
+                "path" => {
+                    // defer path creation until edges are made
+                    insert_paths.push(Path {
+                        id: item.new_value(pk_column).unwrap().as_i64().unwrap() as i32,
+                        block_group_id: item.new_value(1).unwrap().as_i64().unwrap() as i32,
+                        name: str::from_utf8(item.new_value(2).unwrap().as_bytes().unwrap())
+                            .unwrap()
+                            .to_string(),
+                    });
+                }
+                "edges" => {
+                    let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
+                    edge_map.insert(
+                        edge_pk,
+                        EdgeData {
+                            source_hash: item.new_value(1).unwrap().as_str().unwrap().to_string(),
+                            source_coordinate: item.new_value(2).unwrap().as_i64().unwrap() as i32,
+                            source_strand: Strand::column_result(item.new_value(3).unwrap())
                                 .unwrap(),
-                        );
-                    }
-                    "sequence" => {
-                        Sequence::new()
-                            .sequence_type(
-                                str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
-                                    .unwrap(),
-                            )
-                            .sequence(
-                                str::from_utf8(item.new_value(2).unwrap().as_bytes().unwrap())
-                                    .unwrap(),
-                            )
-                            .name(
-                                str::from_utf8(item.new_value(3).unwrap().as_bytes().unwrap())
-                                    .unwrap(),
-                            )
-                            .file_path(
-                                str::from_utf8(item.new_value(4).unwrap().as_bytes().unwrap())
-                                    .unwrap(),
-                            )
-                            .length(item.new_value(5).unwrap().as_i64().unwrap() as i32)
-                            .save(conn);
-                    }
-                    "block_group" => {
-                        let bg_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
-                        if let Some(v) = dep_bg_map.get(&bg_pk) {
-                            blockgroup_map.insert(bg_pk, *v);
-                        } else {
-                            let sample_name: Option<&str> =
-                                match item.new_value(2).unwrap().as_bytes_or_null().unwrap() {
-                                    Some(v) => Some(str::from_utf8(v).unwrap()),
-                                    None => None,
-                                };
-                            let new_bg = BlockGroup::create(
-                                conn,
-                                str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
-                                    .unwrap(),
-                                sample_name,
-                                str::from_utf8(item.new_value(3).unwrap().as_bytes().unwrap())
-                                    .unwrap(),
-                            );
-                            blockgroup_map.insert(bg_pk, new_bg.id);
-                        };
-                    }
-                    "path" => {
-                        // defer path creation until edges are made
-                        insert_paths.push(Path {
-                            id: item.new_value(pk_column).unwrap().as_i64().unwrap() as i32,
-                            block_group_id: item.new_value(1).unwrap().as_i64().unwrap() as i32,
-                            name: str::from_utf8(item.new_value(2).unwrap().as_bytes().unwrap())
-                                .unwrap()
-                                .to_string(),
-                        });
-                    }
-                    "edges" => {
-                        let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
-                        edge_map.insert(
-                            edge_pk,
-                            EdgeData {
-                                source_hash: item
-                                    .new_value(1)
-                                    .unwrap()
-                                    .as_str()
-                                    .unwrap()
-                                    .to_string(),
-                                source_coordinate: item.new_value(2).unwrap().as_i64().unwrap()
-                                    as i32,
-                                source_strand: Strand::column_result(item.new_value(3).unwrap())
-                                    .unwrap(),
-                                target_hash: item
-                                    .new_value(4)
-                                    .unwrap()
-                                    .as_str()
-                                    .unwrap()
-                                    .to_string(),
-                                target_coordinate: item.new_value(5).unwrap().as_i64().unwrap()
-                                    as i32,
-                                target_strand: Strand::column_result(item.new_value(6).unwrap())
-                                    .unwrap(),
-                                chromosome_index: item.new_value(7).unwrap().as_i64().unwrap()
-                                    as i32,
-                                phased: item.new_value(8).unwrap().as_i64().unwrap() as i32,
-                            },
-                        );
-                    }
-                    "path_edges" => {
-                        let path_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
-                        let path_index = item.new_value(2).unwrap().as_i64().unwrap() as i32;
-                        // the edge_id here may not be valid and in this database may have a different pk
-                        let edge_id = item.new_value(3).unwrap().as_i64().unwrap() as i32;
-                        path_edges
-                            .entry(path_id)
-                            .or_default()
-                            .push((path_index, edge_id));
-                    }
-                    "block_group_edges" => {
-                        // make sure blockgroup_map has blockgroups for bg ids made in external changes.
-                        let bg_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
-                        let edge_id = item.new_value(2).unwrap().as_i64().unwrap() as i32;
-                        insert_block_group_edges.push((bg_id, edge_id));
-                    }
-                    _ => {
-                        panic!("unhandled table is {v}", v = op.table_name());
-                    }
+                            target_hash: item.new_value(4).unwrap().as_str().unwrap().to_string(),
+                            target_coordinate: item.new_value(5).unwrap().as_i64().unwrap() as i32,
+                            target_strand: Strand::column_result(item.new_value(6).unwrap())
+                                .unwrap(),
+                            chromosome_index: item.new_value(7).unwrap().as_i64().unwrap() as i32,
+                            phased: item.new_value(8).unwrap().as_i64().unwrap() as i32,
+                        },
+                    );
+                }
+                "path_edges" => {
+                    let path_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
+                    let path_index = item.new_value(2).unwrap().as_i64().unwrap() as i32;
+                    // the edge_id here may not be valid and in this database may have a different pk
+                    let edge_id = item.new_value(3).unwrap().as_i64().unwrap() as i32;
+                    path_edges
+                        .entry(path_id)
+                        .or_default()
+                        .push((path_index, edge_id));
+                }
+                "block_group_edges" => {
+                    // make sure blockgroup_map has blockgroups for bg ids made in external changes.
+                    let bg_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
+                    let edge_id = item.new_value(2).unwrap().as_i64().unwrap() as i32;
+                    insert_block_group_edges.push((bg_id, edge_id));
+                }
+                _ => {
+                    panic!("unhandled table is {v}", v = op.table_name());
                 }
             }
-        } else {
-            break;
         }
     }
 
@@ -559,6 +532,7 @@ mod tests {
         get_connection, get_operation_connection, setup_block_group, setup_gen_dir,
     };
     use crate::updates::vcf::update_with_vcf;
+    use rusqlite::{session::Session, types::Value};
     use std::path::{Path, PathBuf};
 
     #[test]

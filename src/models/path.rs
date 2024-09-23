@@ -83,7 +83,7 @@ impl Path {
             .unwrap();
         let path = match rows.next().unwrap() {
             Ok(res) => res,
-            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+            Err(rusqlite::Error::SqliteFailure(err, _details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
                     let query = "SELECT id from path where name = ?1 AND block_group_id = ?2;";
                     Path {
@@ -287,6 +287,7 @@ impl Path {
     }
 }
 
+#[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;

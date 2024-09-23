@@ -106,11 +106,11 @@ impl BlockGroup {
             Err(rusqlite::Error::SqliteFailure(err, details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
                     println!("{err:?} {details:?}");
-                    let bg_id = match(sample_name) {
+                    let bg_id = match sample_name {
                         Some(v) => {conn
                             .query_row(
                                 "select id from block_group where collection_name = ?1 and sample_name = ?2 and name = ?3",
-                                (collection_name, sample_name, name),
+                                (collection_name, v, name),
                                 |row| row.get(0),
                             )
                             .unwrap()}

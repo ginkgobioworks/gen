@@ -1,4 +1,3 @@
-use crate::models::block_group::BlockGroup;
 use crate::models::edge::Edge;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};

@@ -395,9 +395,7 @@ impl Branch {
     }
 }
 
-pub struct OperationState {
-    operation_id: i32,
-}
+pub struct OperationState {}
 
 impl OperationState {
     pub fn set_operation(conn: &Connection, db_uuid: &str, op_id: i32) {

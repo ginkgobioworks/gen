@@ -329,6 +329,7 @@ impl Sequence {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use std::path::PathBuf;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
