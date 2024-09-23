@@ -85,7 +85,7 @@ CREATE TABLE path_edges (
   FOREIGN KEY(edge_id) REFERENCES edges(id),
   FOREIGN KEY(path_id) REFERENCES path(id)
 ) STRICT;
-CREATE UNIQUE INDEX path_edges_uidx ON path_edges(path_id, edge_id);
+CREATE UNIQUE INDEX path_edges_uidx ON path_edges(path_id, edge_id, index_in_path);
 
 CREATE TABLE block_group_edges (
   id INTEGER PRIMARY KEY NOT NULL,

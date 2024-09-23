@@ -119,6 +119,11 @@ impl Path {
         paths
     }
 
+    pub fn get_paths_for_collection(conn: &Connection, collection_name: &str) -> Vec<Path> {
+        let query = "SELECT * FROM path JOIN block_group ON path.block_group_id = block_group.id WHERE block_group.collection_name = ?1";
+        Path::get_paths(conn, query, vec![Value::from(collection_name.to_string())])
+    }
+
     pub fn sequence(conn: &Connection, path: Path) -> String {
         let blocks = Path::blocks_for(conn, &path);
         blocks
@@ -179,7 +184,7 @@ impl Path {
     }
 
     pub fn blocks_for(conn: &Connection, path: &Path) -> Vec<NewBlock> {
-        let edges = PathEdge::edges_for(conn, path.id);
+        let edges = PathEdge::edges_for_path(conn, path.id);
         let mut sequence_hashes = HashSet::new();
         for edge in &edges {
             if edge.source_hash != Sequence::PATH_START_HASH {

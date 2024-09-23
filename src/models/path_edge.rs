@@ -1,7 +1,9 @@
-use crate::models::edge::Edge;
+use itertools::Itertools;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use std::collections::HashMap;
+
+use crate::models::edge::Edge;
 
 #[derive(Clone, Debug)]
 pub struct PathEdge {
@@ -72,7 +74,7 @@ impl PathEdge {
         objs
     }
 
-    pub fn edges_for(conn: &Connection, path_id: i32) -> Vec<Edge> {
+    pub fn edges_for_path(conn: &Connection, path_id: i32) -> Vec<Edge> {
         let path_edges = PathEdge::query(
             conn,
             "select * from path_edges where path_id = ?1 order by index_in_path ASC",
@@ -91,6 +93,48 @@ impl PathEdge {
             .into_iter()
             .map(|edge_id| edges_by_id[&edge_id].clone())
             .collect::<Vec<Edge>>()
+    }
+
+    pub fn edges_for_paths(conn: &Connection, path_ids: Vec<i32>) -> HashMap<i32, Vec<Edge>> {
+        let placeholder_string = path_ids.iter().map(|_| "?").join(",");
+        let path_edges = PathEdge::query(
+            conn,
+            format!(
+                "select * from path_edges where path_id in ({}) ORDER BY path_id, index_in_path",
+                placeholder_string
+            )
+            .as_str(),
+            path_ids
+                .into_iter()
+                .map(Value::from)
+                .collect::<Vec<Value>>(),
+        );
+        let edge_ids = path_edges
+            .clone()
+            .into_iter()
+            .map(|path_edge| path_edge.edge_id)
+            .collect::<Vec<i32>>();
+        let edges = Edge::bulk_load(conn, &edge_ids);
+        let edges_by_id = edges
+            .into_iter()
+            .map(|edge| (edge.id, edge))
+            .collect::<HashMap<i32, Edge>>();
+        let path_edges_by_path_id = path_edges
+            .into_iter()
+            .map(|path_edge| (path_edge.path_id, path_edge.edge_id))
+            .into_group_map();
+        path_edges_by_path_id
+            .into_iter()
+            .map(|(path_id, edge_ids)| {
+                (
+                    path_id,
+                    edge_ids
+                        .into_iter()
+                        .map(|edge_id| edges_by_id[&edge_id].clone())
+                        .collect::<Vec<Edge>>(),
+                )
+            })
+            .collect::<HashMap<i32, Vec<Edge>>>()
     }
 }
 
