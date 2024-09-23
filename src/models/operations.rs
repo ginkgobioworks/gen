@@ -1,7 +1,5 @@
 use crate::graph::all_simple_paths;
 use crate::models::file_types::FileTypes;
-use crate::models::operations;
-use itertools::Itertools;
 use petgraph::graphmap::{DiGraphMap, UnGraphMap};
 use petgraph::visit::DfsPostOrder;
 use petgraph::Direction;
@@ -98,7 +96,7 @@ impl Operation {
         for node in directed_graph.nodes() {
             undirected_graph.add_node(node);
         }
-        for (source, target, weight) in directed_graph.all_edges() {
+        for (source, target, _weight) in directed_graph.all_edges() {
             undirected_graph.add_edge(source, target, ());
         }
         let mut patch_path: Vec<(i32, Direction, i32)> = vec![];
@@ -106,7 +104,7 @@ impl Operation {
             let mut last_node = 0;
             for node in path {
                 if node != source_id {
-                    for (edge_src, edge_target, edge_weight) in
+                    for (_edge_src, edge_target, _edge_weight) in
                         directed_graph.edges_directed(last_node, Direction::Outgoing)
                     {
                         if edge_target == node {
@@ -114,7 +112,7 @@ impl Operation {
                             break;
                         }
                     }
-                    for (edge_src, edge_target, edge_weight) in
+                    for (edge_src, _edge_target, _edge_weight) in
                         directed_graph.edges_directed(last_node, Direction::Incoming)
                     {
                         if edge_src == node {

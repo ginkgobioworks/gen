@@ -2,10 +2,8 @@ use gfa_reader::Gfa;
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
 use std::path::Path as FilePath;
-use std::path::PathBuf;
 
 use crate::models::{
-    self,
     block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
     collection::Collection,
@@ -213,8 +211,7 @@ fn edge_data_from_fields(
 mod tests {
     use super::*;
     use crate::test_helpers::{get_connection, setup_gen_dir};
-    use rusqlite::{types::Value as SQLValue, Connection};
-    use std::fs;
+    use rusqlite::types::Value as SQLValue;
     use std::path::PathBuf;
 
     #[test]

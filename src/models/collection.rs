@@ -2,7 +2,6 @@ use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 
 use crate::models::block_group::BlockGroup;
-use crate::models::path::Path;
 
 #[derive(Clone, Debug)]
 pub struct Collection {

@@ -4,7 +4,7 @@ use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::{fs, path::PathBuf, str};
+use std::{fs, str};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Sequence {
@@ -309,7 +309,7 @@ impl Sequence {
 }
 
 mod tests {
-    use rusqlite::Connection;
+    use std::path::PathBuf;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 

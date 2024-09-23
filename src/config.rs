@@ -1,7 +1,6 @@
 use crate::migrations::run_operation_migrations;
 use crate::models::operations::Operation;
 use rusqlite::Connection;
-use std::io::{IsTerminal, Read, Write};
 use std::string::ToString;
 use std::sync::RwLock;
 use std::{
@@ -31,7 +30,7 @@ fn ensure_dir(path: &PathBuf) {
 
 pub fn get_or_create_gen_dir() -> PathBuf {
     let start_dir = BASE_DIR.with(|v| v.read().unwrap().clone());
-    let mut cur_dir = start_dir.as_path();
+    let cur_dir = start_dir.as_path();
     let gen_path = cur_dir.join(".gen");
     ensure_dir(&gen_path);
     gen_path

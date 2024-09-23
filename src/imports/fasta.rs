@@ -1,12 +1,11 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::str;
 
 use crate::models::file_types::FileTypes;
 use crate::models::operations::{FileAddition, Operation, OperationSummary};
 use crate::models::{
-    self, block_group::BlockGroup, block_group_edge::BlockGroupEdge, collection::Collection,
-    edge::Edge, metadata, path::Path, sequence::Sequence, strand::Strand,
+    block_group::BlockGroup, block_group_edge::BlockGroupEdge, collection::Collection, edge::Edge,
+    metadata, path::Path, sequence::Sequence, strand::Strand,
 };
 use crate::operation_management;
 use noodles::fasta;
@@ -103,8 +102,10 @@ pub fn import_fasta(
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use crate::models::operations::setup_db;
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use std::collections::HashSet;
+    use std::path::PathBuf;
 
     #[test]
     fn test_add_fasta() {
@@ -113,6 +114,8 @@ mod tests {
         fasta_path.push("fixtures/simple.fa");
         let conn = get_connection(None);
         let op_conn = &get_operation_connection(None);
+        let db_uuid = metadata::get_db_uuid(&conn);
+        setup_db(op_conn, &db_uuid);
 
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),

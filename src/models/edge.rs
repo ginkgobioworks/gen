@@ -396,7 +396,6 @@ impl Edge {
     }
 
     pub fn build_graph(
-        conn: &Connection,
         edges: &Vec<Edge>,
         blocks: &Vec<GroupBlock>,
     ) -> (DiGraphMap<i32, ()>, HashMap<(i32, i32), Edge>) {
@@ -457,12 +456,9 @@ impl Edge {
 }
 
 mod tests {
-    use rusqlite::Connection;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-    use std::collections::HashMap;
-
-    use crate::models::{collection::Collection, sequence::Sequence};
+    use crate::models::collection::Collection;
     use crate::test_helpers::get_connection;
 
     #[test]
