@@ -1,16 +1,39 @@
+use std::collections::{HashMap, HashSet};
+use std::io::{IsTerminal, Read, Write};
+use std::{env, fs, path::PathBuf, str};
+
+use fallible_streaming_iterator::FallibleStreamingIterator;
+use itertools::Itertools;
+use petgraph::Direction;
+use rusqlite::session::{ChangesetIter, Session};
+use rusqlite::types::{FromSql, Value};
+use rusqlite::{session, Connection};
+use serde::{Deserialize, Serialize};
+
 use crate::config::get_changeset_path;
+use crate::models::block_group::BlockGroup;
+use crate::models::block_group_edge::BlockGroupEdge;
+use crate::models::edge::{Edge, EdgeData};
 use crate::models::file_types::FileTypes;
 use crate::models::operations::{
     Branch, FileAddition, Operation, OperationState, OperationSummary,
 };
-use petgraph::Direction;
-use rusqlite::{session, Connection};
-use std::io::{Read, Write};
-use std::{fs, path::PathBuf};
+use crate::models::path::Path;
+use crate::models::sample::Sample;
+use crate::models::sequence::{NewSequence, Sequence};
+use crate::models::strand::Strand;
 
 pub enum FileMode {
     Read,
     Write,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+struct DependencyModels {
+    sequences: Vec<Sequence>,
+    block_group: Vec<BlockGroup>,
+    edges: Vec<Edge>,
+    paths: Vec<Path>,
 }
 
 pub fn get_file(path: &PathBuf, mode: FileMode) -> fs::File {
@@ -31,15 +54,191 @@ pub fn get_file(path: &PathBuf, mode: FileMode) -> fs::File {
     file.unwrap()
 }
 
-pub fn write_changeset(operation: &Operation, changes: &[u8]) {
+pub fn get_changeset_dependencies(conn: &Connection, changes: &[u8]) -> Vec<u8> {
+    let input: &mut dyn Read = &mut changes.clone();
+    let mut iter = ChangesetIter::start_strm(&input).unwrap();
+    // the purpose of this function is to capture external changes to the changeset, notably foreign keys
+    // that may be made in previous changesets.
+    let mut previous_block_groups = HashSet::new();
+    let mut previous_edges = HashSet::new();
+    let mut previous_paths = HashSet::new();
+    let mut previous_sequences = HashSet::new();
+    let mut created_block_groups = HashSet::new();
+    let mut created_paths = HashSet::new();
+    let mut created_edges = HashSet::new();
+    let mut created_sequences: HashSet<String> = HashSet::new();
+    while let cs = iter.next() {
+        if let Some(item) = cs.unwrap() {
+            let op = item.op().unwrap();
+            // info on indirect changes: https://www.sqlite.org/draft/session/sqlite3session_indirect.html
+            if !op.indirect() {
+                let table = op.table_name();
+                let pk_column = item
+                    .pk()
+                    .unwrap()
+                    .iter()
+                    .find_position(|item| **item == 1)
+                    .unwrap()
+                    .0;
+                match table {
+                    "sequence" => {
+                        let hash =
+                            str::from_utf8(item.new_value(pk_column).unwrap().as_bytes().unwrap())
+                                .unwrap();
+                        created_sequences.insert(hash.to_string());
+                    }
+                    "block_group" => {
+                        let bg_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
+                        created_block_groups.insert(bg_pk);
+                    }
+                    "path" => {
+                        created_paths
+                            .insert(item.new_value(pk_column).unwrap().as_i64().unwrap() as i32);
+                        let bg_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
+                        if !created_block_groups.contains(&bg_id) {
+                            previous_block_groups.insert(bg_id);
+                        }
+                    }
+                    "edges" => {
+                        let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
+                        let source_hash =
+                            str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
+                                .unwrap()
+                                .to_string();
+                        let target_hash =
+                            str::from_utf8(item.new_value(4).unwrap().as_bytes().unwrap())
+                                .unwrap()
+                                .to_string();
+                        created_edges.insert(edge_pk);
+                        if !created_sequences.contains(&source_hash) {
+                            previous_sequences.insert(source_hash);
+                        }
+                        if !created_sequences.contains(&target_hash) {
+                            previous_sequences.insert(target_hash);
+                        }
+                    }
+                    "path_edges" => {
+                        let path_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
+                        let edge_id = item.new_value(3).unwrap().as_i64().unwrap() as i32;
+                        if !created_paths.contains(&path_id) {
+                            previous_paths.insert(path_id);
+                        }
+                        if !created_edges.contains(&edge_id) {
+                            previous_edges.insert(edge_id);
+                        }
+                    }
+                    "block_group_edges" => {
+                        // make sure blockgroup_map has blockgroups for bg ids made in external changes.
+                        let bg_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
+                        let edge_id = item.new_value(2).unwrap().as_i64().unwrap() as i32;
+                        if !created_edges.contains(&edge_id) {
+                            previous_edges.insert(edge_id);
+                        }
+                        if !created_block_groups.contains(&bg_id) {
+                            previous_block_groups.insert(bg_id);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        } else {
+            break;
+        }
+    }
+
+    let s = DependencyModels {
+        sequences: Sequence::sequences_by_hash(
+            conn,
+            previous_sequences.iter().map(|s| s as &str).collect(),
+        )
+        .values()
+        .cloned()
+        .collect(),
+        block_group: BlockGroup::query(
+            conn,
+            &format!(
+                "select * from block_group where id in ({ids})",
+                ids = previous_block_groups.iter().join(",")
+            ),
+            vec![],
+        ),
+        edges: Edge::query(
+            conn,
+            &format!(
+                "select * from edges where id in ({ids})",
+                ids = previous_edges.iter().join(",")
+            ),
+            vec![],
+        ),
+        paths: Path::get_paths(
+            conn,
+            &format!(
+                "select * from path where id in ({ids})",
+                ids = previous_paths.iter().join(",")
+            ),
+            vec![],
+        ),
+    };
+    serde_json::to_vec(&s).unwrap()
+}
+
+pub fn write_changeset(conn: &Connection, operation: &Operation, changes: &[u8]) {
     let change_path =
         get_changeset_path(operation).join(format!("{op_id}.cs", op_id = operation.id));
+    let dependency_path =
+        get_changeset_path(operation).join(format!("{op_id}.dep", op_id = operation.id));
+
+    let mut dependency_file = fs::File::create_new(&dependency_path)
+        .unwrap_or_else(|_| panic!("Unable to open {dependency_path:?}"));
+    dependency_file
+        .write_all(&get_changeset_dependencies(conn, changes))
+        .unwrap();
+
     let mut file = fs::File::create_new(&change_path)
         .unwrap_or_else(|_| panic!("Unable to open {change_path:?}"));
     file.write_all(changes).unwrap()
 }
 
 pub fn apply_changeset(conn: &Connection, operation: &Operation) {
+    let dependency_path =
+        get_changeset_path(operation).join(format!("{op_id}.dep", op_id = operation.id));
+    let dependencies: DependencyModels =
+        serde_json::from_reader(fs::File::open(dependency_path).unwrap()).unwrap();
+
+    for sequence in dependencies.sequences.iter() {
+        let new_seq = NewSequence::from(sequence).save(conn);
+        assert_eq!(new_seq.hash, sequence.hash);
+    }
+
+    let mut dep_bg_map = HashMap::new();
+    for bg in dependencies.block_group.iter() {
+        let sample_name = bg.sample_name.as_ref().map(|v| v as &str);
+        let new_bg = BlockGroup::create(conn, &bg.collection_name, sample_name, &bg.name);
+        dep_bg_map.insert(&bg.id, new_bg.id);
+    }
+
+    let mut dep_edge_map = HashMap::new();
+    let new_edges = Edge::bulk_create(
+        conn,
+        dependencies.edges.iter().map(EdgeData::from).collect(),
+    );
+    for (index, edge_id) in new_edges.iter().enumerate() {
+        dep_edge_map.insert(&dependencies.edges[index].id, *edge_id);
+    }
+
+    let mut dep_path_map = HashMap::new();
+    for path in dependencies.paths.iter() {
+        let new_path = Path::create(
+            conn,
+            &path.name,
+            *dep_bg_map
+                .get(&path.block_group_id)
+                .unwrap_or(&path.block_group_id),
+            &[],
+        );
+        dep_path_map.insert(path.id, new_path.id);
+    }
+
     let change_path =
         get_changeset_path(operation).join(format!("{op_id}.cs", op_id = operation.id));
     let mut file = fs::File::open(change_path).unwrap();
@@ -47,12 +246,191 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
     file.read_to_end(&mut contents).unwrap();
     conn.pragma_update(None, "foreign_keys", "0").unwrap();
 
-    conn.apply_strm(
-        &mut &contents[..],
-        None::<fn(&str) -> bool>,
-        |_conflict_type, _item| session::ConflictAction::SQLITE_CHANGESET_OMIT,
-    )
-    .unwrap();
+    let input: &mut dyn Read = &mut contents.as_slice();
+    let mut iter = ChangesetIter::start_strm(&input).unwrap();
+
+    let mut blockgroup_map: HashMap<i32, i32> = HashMap::new();
+    let mut edge_map: HashMap<i32, EdgeData> = HashMap::new();
+    let mut path_edges: HashMap<i32, Vec<(i32, i32)>> = HashMap::new();
+    let mut insert_paths = vec![];
+    let mut insert_block_group_edges = vec![];
+
+    while let cs = iter.next() {
+        if let Some(item) = cs.unwrap() {
+            let op = item.op().unwrap();
+            // info on indirect changes: https://www.sqlite.org/draft/session/sqlite3session_indirect.html
+            if !op.indirect() {
+                let table = op.table_name();
+                let pk_column = item
+                    .pk()
+                    .unwrap()
+                    .iter()
+                    .find_position(|item| **item == 1)
+                    .unwrap()
+                    .0;
+                match table {
+                    "sample" => {
+                        Sample::create(
+                            conn,
+                            str::from_utf8(item.new_value(pk_column).unwrap().as_bytes().unwrap())
+                                .unwrap(),
+                        );
+                    }
+                    "sequence" => {
+                        Sequence::new()
+                            .sequence_type(
+                                str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
+                                    .unwrap(),
+                            )
+                            .sequence(
+                                str::from_utf8(item.new_value(2).unwrap().as_bytes().unwrap())
+                                    .unwrap(),
+                            )
+                            .name(
+                                str::from_utf8(item.new_value(3).unwrap().as_bytes().unwrap())
+                                    .unwrap(),
+                            )
+                            .file_path(
+                                str::from_utf8(item.new_value(4).unwrap().as_bytes().unwrap())
+                                    .unwrap(),
+                            )
+                            .length(item.new_value(5).unwrap().as_i64().unwrap() as i32)
+                            .save(conn);
+                    }
+                    "block_group" => {
+                        let bg_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
+                        if let Some(v) = dep_bg_map.get(&bg_pk) {
+                            blockgroup_map.insert(bg_pk, *v);
+                        } else {
+                            let sample_name: Option<&str> =
+                                match item.new_value(2).unwrap().as_bytes_or_null().unwrap() {
+                                    Some(v) => Some(str::from_utf8(v).unwrap()),
+                                    None => None,
+                                };
+                            let new_bg = BlockGroup::create(
+                                conn,
+                                str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
+                                    .unwrap(),
+                                sample_name,
+                                str::from_utf8(item.new_value(3).unwrap().as_bytes().unwrap())
+                                    .unwrap(),
+                            );
+                            blockgroup_map.insert(bg_pk, new_bg.id);
+                        };
+                    }
+                    "path" => {
+                        // defer path creation until edges are made
+                        insert_paths.push(Path {
+                            id: item.new_value(pk_column).unwrap().as_i64().unwrap() as i32,
+                            block_group_id: item.new_value(1).unwrap().as_i64().unwrap() as i32,
+                            name: str::from_utf8(item.new_value(2).unwrap().as_bytes().unwrap())
+                                .unwrap()
+                                .to_string(),
+                        });
+                    }
+                    "edges" => {
+                        let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
+                        edge_map.insert(
+                            edge_pk,
+                            EdgeData {
+                                source_hash: item
+                                    .new_value(1)
+                                    .unwrap()
+                                    .as_str()
+                                    .unwrap()
+                                    .to_string(),
+                                source_coordinate: item.new_value(2).unwrap().as_i64().unwrap()
+                                    as i32,
+                                source_strand: Strand::column_result(item.new_value(3).unwrap())
+                                    .unwrap(),
+                                target_hash: item
+                                    .new_value(4)
+                                    .unwrap()
+                                    .as_str()
+                                    .unwrap()
+                                    .to_string(),
+                                target_coordinate: item.new_value(5).unwrap().as_i64().unwrap()
+                                    as i32,
+                                target_strand: Strand::column_result(item.new_value(6).unwrap())
+                                    .unwrap(),
+                                chromosome_index: item.new_value(7).unwrap().as_i64().unwrap()
+                                    as i32,
+                                phased: item.new_value(8).unwrap().as_i64().unwrap() as i32,
+                            },
+                        );
+                    }
+                    "path_edges" => {
+                        let path_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
+                        let path_index = item.new_value(2).unwrap().as_i64().unwrap() as i32;
+                        // the edge_id here may not be valid and in this database may have a different pk
+                        let edge_id = item.new_value(3).unwrap().as_i64().unwrap() as i32;
+                        path_edges
+                            .entry(path_id)
+                            .or_default()
+                            .push((path_index, edge_id));
+                    }
+                    "block_group_edges" => {
+                        // make sure blockgroup_map has blockgroups for bg ids made in external changes.
+                        let bg_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
+                        let edge_id = item.new_value(2).unwrap().as_i64().unwrap() as i32;
+                        insert_block_group_edges.push((bg_id, edge_id));
+                    }
+                    _ => {
+                        panic!("unhandled table is {v}", v = op.table_name());
+                    }
+                }
+            }
+        } else {
+            break;
+        }
+    }
+
+    let sorted_edge_ids = edge_map.keys().copied().sorted().collect::<Vec<i32>>();
+    let created_edges = Edge::bulk_create(
+        conn,
+        sorted_edge_ids
+            .iter()
+            .map(|id| edge_map[id].clone())
+            .collect::<Vec<EdgeData>>(),
+    );
+    let mut edge_id_map: HashMap<i32, i32> = HashMap::new();
+    for (index, edge_id) in created_edges.iter().enumerate() {
+        edge_id_map.insert(sorted_edge_ids[index], *edge_id);
+    }
+
+    for path in insert_paths {
+        let mut sorted_edges = vec![];
+        for (_, edge_id) in path_edges
+            .get(&path.id)
+            .unwrap()
+            .iter()
+            .sorted_by(|(c1, _), (c2, _)| Ord::cmp(&c1, &c2))
+        {
+            let new_edge_id = dep_edge_map
+                .get(edge_id)
+                .unwrap_or(edge_id_map.get(edge_id).unwrap_or(edge_id));
+            sorted_edges.push(*new_edge_id);
+        }
+        Path::create(conn, &path.name, path.block_group_id, &sorted_edges);
+    }
+
+    let mut block_group_edges: HashMap<i32, Vec<i32>> = HashMap::new();
+
+    for (bg_id, edge_id) in insert_block_group_edges {
+        let bg_id = *dep_bg_map
+            .get(&bg_id)
+            .or(blockgroup_map.get(&bg_id).or(Some(&bg_id)))
+            .unwrap();
+        let edge_id = dep_edge_map
+            .get(&edge_id)
+            .or(edge_id_map.get(&edge_id).or(Some(&edge_id)))
+            .unwrap();
+        block_group_edges.entry(bg_id).or_default().push(*edge_id);
+    }
+    for (bg_id, edges) in block_group_edges.iter() {
+        BlockGroupEdge::bulk_create(conn, *bg_id, edges);
+    }
+
     conn.pragma_update(None, "foreign_keys", "1").unwrap();
 }
 
@@ -95,7 +473,7 @@ pub fn apply(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_i
     );
     let mut output = Vec::new();
     session.changeset_strm(&mut output).unwrap();
-    write_changeset(&operation, &output);
+    write_changeset(conn, &operation, &output);
 }
 
 pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Operation) {
@@ -177,7 +555,9 @@ mod tests {
     use crate::models::file_types::FileTypes;
     use crate::models::operations::{setup_db, Branch, FileAddition, Operation, OperationState};
     use crate::models::{edge::Edge, metadata, sample::Sample};
-    use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
+    use crate::test_helpers::{
+        get_connection, get_operation_connection, setup_block_group, setup_gen_dir,
+    };
     use crate::updates::vcf::update_with_vcf;
     use std::path::{Path, PathBuf};
 
@@ -192,6 +572,62 @@ mod tests {
         let operation = Operation::create(op_conn, &db_uuid, "test".to_string(), "test", change.id);
         OperationState::set_operation(op_conn, &db_uuid, operation.id);
         assert_eq!(OperationState::get_operation(op_conn, &db_uuid).unwrap(), 1);
+    }
+
+    #[test]
+    fn test_records_patch_dependencies() {
+        setup_gen_dir();
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        // create some stuff before we attach to our main session that will be required as extra information
+        let (bg_id, path_id) = setup_block_group(conn);
+        let binding = BlockGroup::query(
+            conn,
+            "select * from block_group where id = ?1;",
+            vec![Value::from(bg_id)],
+        );
+        let dep_bg = binding.first().unwrap();
+        let mut session = Session::new(conn).unwrap();
+        attach_session(&mut session);
+
+        let random_seq = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCG")
+            .save(conn);
+        let existing_seq = Sequence::sequence_from_hash(conn, Sequence::PATH_END_HASH).unwrap();
+
+        let new_edge = Edge::create(
+            conn,
+            random_seq.hash.clone(),
+            0,
+            Strand::Forward,
+            existing_seq.hash.clone(),
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        BlockGroupEdge::bulk_create(conn, bg_id, &[new_edge.id]);
+        let mut output = Vec::new();
+        session.changeset_strm(&mut output).unwrap();
+        let change = FileAddition::create(op_conn, "test", FileTypes::Fasta);
+        let operation = Operation::create(op_conn, &db_uuid, "test".to_string(), "test", change.id);
+        write_changeset(conn, &operation, &output);
+
+        let dependency_path =
+            get_changeset_path(&operation).join(format!("{op_id}.dep", op_id = operation.id));
+        let dependencies: DependencyModels =
+            serde_json::from_reader(fs::File::open(dependency_path).unwrap()).unwrap();
+        assert_eq!(dependencies.sequences.len(), 1);
+        assert_eq!(
+            dependencies.block_group[0].collection_name,
+            dep_bg.collection_name
+        );
+        assert_eq!(dependencies.block_group[0].name, dep_bg.name);
+        assert_eq!(dependencies.block_group[0].sample_name, dep_bg.sample_name);
     }
 
     #[test]
@@ -267,6 +703,134 @@ mod tests {
         assert_eq!(edge_count, 10);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
+    }
+
+    #[test]
+    fn test_cross_branch_patch() {
+        setup_gen_dir();
+        let fasta_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
+        let vcf_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.vcf");
+        let vcf2_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple2.vcf");
+        let conn = &mut get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let operation_conn = &get_operation_connection(None);
+        setup_db(operation_conn, &db_uuid);
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            operation_conn,
+        );
+
+        let branch_1 = Branch::create(operation_conn, &db_uuid, "branch-1");
+        let branch_2 = Branch::create(operation_conn, &db_uuid, "branch-2");
+        checkout(
+            conn,
+            operation_conn,
+            &db_uuid,
+            &Some("branch-1".to_string()),
+            None,
+        );
+
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+
+        let foo_bg_id = BlockGroup::get_id(conn, &collection, Some("foo"), "m123");
+        let patch_1_seqs = HashSet::from_iter(vec![
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+        ]);
+
+        assert_eq!(BlockGroup::get_all_sequences(conn, foo_bg_id), patch_1_seqs);
+        assert_eq!(
+            BlockGroup::query(conn, "select * from block_group;", vec![])
+                .iter()
+                .map(|v| v.sample_name.clone().unwrap_or("".to_string()))
+                .collect::<Vec<String>>(),
+            vec![
+                "".to_string(),
+                "unknown".to_string(),
+                "G1".to_string(),
+                "foo".to_string()
+            ]
+        );
+
+        checkout(
+            conn,
+            operation_conn,
+            &db_uuid,
+            &Some("branch-2".to_string()),
+            None,
+        );
+        update_with_vcf(
+            &vcf2_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+
+        let foo_bg_id = BlockGroup::get_id(conn, &collection, Some("foo"), "m123");
+        let patch_2_seqs = HashSet::from_iter(vec![
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATCGATCGATCGACGATCGGGAACACACAGAGA".to_string(),
+        ]);
+        assert_eq!(BlockGroup::get_all_sequences(conn, foo_bg_id), patch_2_seqs);
+        assert_ne!(patch_1_seqs, patch_2_seqs);
+        assert_eq!(
+            BlockGroup::query(conn, "select * from block_group;", vec![])
+                .iter()
+                .map(|v| v.sample_name.clone().unwrap_or("".to_string()))
+                .collect::<Vec<String>>(),
+            vec!["".to_string(), "foo".to_string()]
+        );
+
+        // apply changes from branch-1, it will be operation id 2
+        apply(conn, operation_conn, &db_uuid, 2);
+
+        let foo_bg_id = BlockGroup::get_id(conn, &collection, Some("foo"), "m123");
+        let patch_2_seqs = HashSet::from_iter(vec![
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATCGATCGATCGACGATCGGGAACACACAGAGA".to_string(),
+            "ATCATCGATCGACGATCGGGAACACACAGAGA".to_string(),
+            "ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+        ]);
+        assert_eq!(BlockGroup::get_all_sequences(conn, foo_bg_id), patch_2_seqs);
+        assert_eq!(
+            BlockGroup::query(conn, "select * from block_group;", vec![])
+                .iter()
+                .map(|v| v.sample_name.clone().unwrap_or("".to_string()))
+                .collect::<Vec<String>>(),
+            vec![
+                "".to_string(),
+                "foo".to_string(),
+                "unknown".to_string(),
+                "G1".to_string()
+            ]
+        );
+
+        let unknown_bg_id = BlockGroup::get_id(conn, &collection, Some("unknown"), "m123");
+        let unknown_seqs = HashSet::from_iter(vec![
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATCGATCGATAGAGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATCATCGATAGAGATCGATCGGGAACACACAGAGA".to_string(),
+        ]);
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, unknown_bg_id),
+            unknown_seqs
+        );
+        assert_ne!(unknown_seqs, patch_2_seqs);
     }
 
     #[test]
