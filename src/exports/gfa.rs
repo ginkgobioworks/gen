@@ -2,14 +2,11 @@ use itertools::Itertools;
 use petgraph::prelude::DiGraphMap;
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
 use crate::models::{
-    self,
-    block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
     collection::Collection,
     edge::{Edge, GroupBlock},
@@ -54,13 +51,7 @@ pub fn export_gfa(conn: &Connection, collection_name: &str, filename: &PathBuf) 
         edges_by_node_pair.clone(),
         terminal_block_ids,
     );
-    write_paths(
-        &mut writer,
-        conn,
-        collection_name,
-        edges_by_node_pair,
-        &blocks,
-    );
+    write_paths(&mut writer, conn, collection_name, &blocks);
 }
 
 fn write_segments(
@@ -137,7 +128,7 @@ fn nodes_for_edges(
     blocks_by_hash_and_start: &HashMap<(&str, i32), GroupBlock>,
     blocks_by_hash_and_end: &HashMap<(&str, i32), GroupBlock>,
 ) -> Vec<i32> {
-    let current_block = blocks_by_hash_and_start
+    let mut current_block = blocks_by_hash_and_start
         .get(&(edge1.target_hash.as_str(), edge1.target_coordinate))
         .unwrap();
     let end_block = blocks_by_hash_and_end
@@ -147,7 +138,7 @@ fn nodes_for_edges(
     #[allow(clippy::while_immutable_condition)]
     while current_block.id != end_block.id {
         node_ids.push(current_block.id);
-        let current_block = blocks_by_hash_and_start
+        current_block = blocks_by_hash_and_start
             .get(&(current_block.sequence_hash.as_str(), current_block.end))
             .unwrap();
     }
@@ -160,16 +151,11 @@ fn write_paths(
     writer: &mut BufWriter<File>,
     conn: &Connection,
     collection_name: &str,
-    edges_by_node_pair: HashMap<(i32, i32), Edge>,
     blocks: &[GroupBlock],
 ) {
     let paths = Path::get_paths_for_collection(conn, collection_name);
     let edges_by_path_id =
         PathEdge::edges_for_paths(conn, paths.iter().map(|path| path.id).collect());
-    let node_pairs_by_edge_id = edges_by_node_pair
-        .iter()
-        .map(|(node_pair, edge)| (edge.id, *node_pair))
-        .collect::<HashMap<i32, (i32, i32)>>();
 
     let blocks_by_hash_and_start = blocks
         .iter()
@@ -214,15 +200,11 @@ fn path_line(path_name: &str, node_ids: &[i32], node_strands: &[Strand]) -> Stri
 }
 
 mod tests {
-    use rusqlite::Connection;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
     use crate::imports::gfa::import_gfa;
-    use crate::models::{
-        block_group::BlockGroup, block_group_edge::BlockGroupEdge, collection::Collection,
-        edge::Edge, sequence::Sequence,
-    };
+    use crate::models::{block_group::BlockGroup, collection::Collection};
     use crate::test_helpers::{get_connection, setup_gen_dir};
     use tempfile::tempdir;
 

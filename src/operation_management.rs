@@ -3,14 +3,12 @@ use crate::models::file_types::FileTypes;
 use crate::models::operations::{
     Branch, FileAddition, Operation, OperationState, OperationSummary,
 };
-use crate::operation_management;
 use petgraph::Direction;
 use rusqlite::{session, Connection};
-use std::fmt::format;
-use std::io::{IsTerminal, Read, Write};
-use std::{env, fs, path::PathBuf};
+use std::io::{Read, Write};
+use std::{fs, path::PathBuf};
 
-enum FileMode {
+pub enum FileMode {
     Read,
     Write,
 }
@@ -103,7 +101,7 @@ pub fn apply(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_i
 pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Operation) {
     let current_op_id = OperationState::get_operation(operation_conn, &operation.db_uuid).unwrap();
     let op_id = operation.id;
-    if (current_op_id == op_id) {
+    if current_op_id == op_id {
         return;
     }
     let path = Operation::get_path_between(operation_conn, current_op_id, op_id);

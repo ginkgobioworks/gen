@@ -1,7 +1,5 @@
 use crate::graph::all_simple_paths;
 use crate::models::file_types::FileTypes;
-use crate::models::operations;
-use itertools::Itertools;
 use petgraph::graphmap::{DiGraphMap, UnGraphMap};
 use petgraph::visit::DfsPostOrder;
 use petgraph::Direction;
