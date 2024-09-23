@@ -100,7 +100,7 @@ impl PathEdge {
         let path_edges = PathEdge::query(
             conn,
             format!(
-                "select id, path_id, index_in_path, edge_id from path_edges where path_id in ({}) ORDER BY path_id, index_in_path",
+                "select * from path_edges where path_id in ({}) ORDER BY path_id, index_in_path",
                 placeholder_string
             )
             .as_str(),
