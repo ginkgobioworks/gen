@@ -324,8 +324,6 @@ mod tests {
     use std::collections::HashSet;
     use std::path::PathBuf;
 
-    // NOTE: Ignoring this test until we've figured out a good way to handle homozygous cases
-    #[ignore]
     #[test]
     fn test_update_fasta_with_vcf() {
         setup_gen_dir();
