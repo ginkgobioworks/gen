@@ -586,7 +586,12 @@ mod tests {
     use crate::imports::fasta::import_fasta;
     use crate::models::file_types::FileTypes;
     use crate::models::operations::{setup_db, Branch, FileAddition, Operation, OperationState};
-    use crate::models::{edge::Edge, metadata, sample::Sample};
+    use crate::models::{
+        edge::Edge,
+        metadata,
+        node::{BOGUS_SOURCE_NODE_ID, BOGUS_TARGET_NODE_ID},
+        sample::Sample,
+    };
     use crate::test_helpers::{
         get_connection, get_operation_connection, setup_block_group, setup_gen_dir,
     };
@@ -635,9 +640,11 @@ mod tests {
         let new_edge = Edge::create(
             conn,
             random_seq.hash.clone(),
+            BOGUS_SOURCE_NODE_ID,
             0,
             Strand::Forward,
             existing_seq.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             0,
             Strand::Forward,
             0,

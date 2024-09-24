@@ -205,7 +205,12 @@ mod tests {
     use super::*;
 
     use crate::imports::gfa::import_gfa;
-    use crate::models::{block_group::BlockGroup, collection::Collection};
+    use crate::models::{
+        block_group::BlockGroup,
+        collection::Collection,
+        node::{BOGUS_SOURCE_NODE_ID, BOGUS_TARGET_NODE_ID},
+    };
+
     use crate::test_helpers::{get_connection, setup_gen_dir};
     use tempfile::tempdir;
 
@@ -237,9 +242,11 @@ mod tests {
         let edge1 = Edge::create(
             &conn,
             Sequence::PATH_START_HASH.to_string(),
+            BOGUS_SOURCE_NODE_ID,
             0,
             Strand::Forward,
             sequence1.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             0,
             Strand::Forward,
             0,
@@ -248,9 +255,11 @@ mod tests {
         let edge2 = Edge::create(
             &conn,
             sequence1.hash,
+            BOGUS_SOURCE_NODE_ID,
             4,
             Strand::Forward,
             sequence2.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             0,
             Strand::Forward,
             0,
@@ -259,9 +268,11 @@ mod tests {
         let edge3 = Edge::create(
             &conn,
             sequence2.hash,
+            BOGUS_SOURCE_NODE_ID,
             4,
             Strand::Forward,
             sequence3.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             0,
             Strand::Forward,
             0,
@@ -270,9 +281,11 @@ mod tests {
         let edge4 = Edge::create(
             &conn,
             sequence3.hash,
+            BOGUS_SOURCE_NODE_ID,
             4,
             Strand::Forward,
             sequence4.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             0,
             Strand::Forward,
             0,
@@ -281,9 +294,11 @@ mod tests {
         let edge5 = Edge::create(
             &conn,
             sequence4.hash,
+            BOGUS_SOURCE_NODE_ID,
             4,
             Strand::Forward,
             Sequence::PATH_END_HASH.to_string(),
+            BOGUS_TARGET_NODE_ID,
             0,
             Strand::Forward,
             0,

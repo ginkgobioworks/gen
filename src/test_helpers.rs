@@ -9,6 +9,7 @@ use crate::models::block_group::BlockGroup;
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::collection::Collection;
 use crate::models::edge::Edge;
+use crate::models::node::{BOGUS_SOURCE_NODE_ID, BOGUS_TARGET_NODE_ID};
 use crate::models::path::Path;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
@@ -79,9 +80,11 @@ pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
     let edge0 = Edge::create(
         conn,
         Sequence::PATH_START_HASH.to_string(),
+        BOGUS_SOURCE_NODE_ID,
         0,
         Strand::Forward,
         a_seq.hash.clone(),
+        BOGUS_TARGET_NODE_ID,
         0,
         Strand::Forward,
         0,
@@ -90,9 +93,11 @@ pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
     let edge1 = Edge::create(
         conn,
         a_seq.hash,
+        BOGUS_SOURCE_NODE_ID,
         10,
         Strand::Forward,
         t_seq.hash.clone(),
+        BOGUS_TARGET_NODE_ID,
         0,
         Strand::Forward,
         0,
@@ -101,9 +106,11 @@ pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
     let edge2 = Edge::create(
         conn,
         t_seq.hash,
+        BOGUS_SOURCE_NODE_ID,
         10,
         Strand::Forward,
         c_seq.hash.clone(),
+        BOGUS_TARGET_NODE_ID,
         0,
         Strand::Forward,
         0,
@@ -112,9 +119,11 @@ pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
     let edge3 = Edge::create(
         conn,
         c_seq.hash,
+        BOGUS_SOURCE_NODE_ID,
         10,
         Strand::Forward,
         g_seq.hash.clone(),
+        BOGUS_TARGET_NODE_ID,
         0,
         Strand::Forward,
         0,
@@ -123,9 +132,11 @@ pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
     let edge4 = Edge::create(
         conn,
         g_seq.hash,
+        BOGUS_SOURCE_NODE_ID,
         10,
         Strand::Forward,
         Sequence::PATH_END_HASH.to_string(),
+        BOGUS_TARGET_NODE_ID,
         0,
         Strand::Forward,
         0,

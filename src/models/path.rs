@@ -294,7 +294,11 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
-    use crate::models::{block_group::BlockGroup, collection::Collection};
+    use crate::models::{
+        block_group::BlockGroup,
+        collection::Collection,
+        node::{BOGUS_SOURCE_NODE_ID, BOGUS_TARGET_NODE_ID},
+    };
     use crate::test_helpers::get_connection;
 
     #[test]
@@ -309,9 +313,11 @@ mod tests {
         let edge1 = Edge::create(
             conn,
             Sequence::PATH_START_HASH.to_string(),
+            BOGUS_SOURCE_NODE_ID,
             -123,
             Strand::Forward,
             sequence1.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             0,
             Strand::Forward,
             0,
@@ -324,9 +330,11 @@ mod tests {
         let edge2 = Edge::create(
             conn,
             sequence1.hash.clone(),
+            BOGUS_SOURCE_NODE_ID,
             8,
             Strand::Forward,
             sequence2.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             1,
             Strand::Forward,
             0,
@@ -339,9 +347,11 @@ mod tests {
         let edge3 = Edge::create(
             conn,
             sequence2.hash.clone(),
+            BOGUS_SOURCE_NODE_ID,
             8,
             Strand::Forward,
             sequence3.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             1,
             Strand::Forward,
             0,
@@ -354,9 +364,11 @@ mod tests {
         let edge4 = Edge::create(
             conn,
             sequence3.hash.clone(),
+            BOGUS_SOURCE_NODE_ID,
             8,
             Strand::Forward,
             sequence4.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             1,
             Strand::Forward,
             0,
@@ -365,9 +377,11 @@ mod tests {
         let edge5 = Edge::create(
             conn,
             sequence4.hash.clone(),
+            BOGUS_SOURCE_NODE_ID,
             8,
             Strand::Forward,
             Sequence::PATH_END_HASH.to_string(),
+            BOGUS_TARGET_NODE_ID,
             -1,
             Strand::Forward,
             0,
@@ -395,9 +409,11 @@ mod tests {
         let edge5 = Edge::create(
             conn,
             sequence1.hash.clone(),
+            BOGUS_SOURCE_NODE_ID,
             8,
             Strand::Reverse,
             Sequence::PATH_END_HASH.to_string(),
+            BOGUS_TARGET_NODE_ID,
             0,
             Strand::Reverse,
             0,
@@ -410,9 +426,11 @@ mod tests {
         let edge4 = Edge::create(
             conn,
             sequence2.hash.clone(),
+            BOGUS_SOURCE_NODE_ID,
             7,
             Strand::Reverse,
             sequence1.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             0,
             Strand::Reverse,
             0,
@@ -425,9 +443,11 @@ mod tests {
         let edge3 = Edge::create(
             conn,
             sequence3.hash.clone(),
+            BOGUS_SOURCE_NODE_ID,
             7,
             Strand::Reverse,
             sequence2.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             0,
             Strand::Reverse,
             0,
@@ -440,9 +460,11 @@ mod tests {
         let edge2 = Edge::create(
             conn,
             sequence4.hash.clone(),
+            BOGUS_SOURCE_NODE_ID,
             7,
             Strand::Reverse,
             sequence3.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             0,
             Strand::Reverse,
             0,
@@ -451,9 +473,11 @@ mod tests {
         let edge1 = Edge::create(
             conn,
             Sequence::PATH_START_HASH.to_string(),
+            BOGUS_SOURCE_NODE_ID,
             -1,
             Strand::Reverse,
             sequence4.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             0,
             Strand::Reverse,
             0,
@@ -488,9 +512,11 @@ mod tests {
         let edge1 = Edge::create(
             conn,
             Sequence::PATH_START_HASH.to_string(),
+            BOGUS_SOURCE_NODE_ID,
             -1,
             Strand::Forward,
             sequence1.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             0,
             Strand::Forward,
             0,
@@ -503,9 +529,11 @@ mod tests {
         let edge2 = Edge::create(
             conn,
             sequence1.hash.clone(),
+            BOGUS_SOURCE_NODE_ID,
             8,
             Strand::Forward,
             sequence2.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             1,
             Strand::Forward,
             0,
@@ -518,9 +546,11 @@ mod tests {
         let edge3 = Edge::create(
             conn,
             sequence2.hash.clone(),
+            BOGUS_SOURCE_NODE_ID,
             8,
             Strand::Forward,
             sequence3.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             1,
             Strand::Forward,
             0,
@@ -533,9 +563,11 @@ mod tests {
         let edge4 = Edge::create(
             conn,
             sequence3.hash.clone(),
+            BOGUS_SOURCE_NODE_ID,
             8,
             Strand::Forward,
             sequence4.hash.clone(),
+            BOGUS_TARGET_NODE_ID,
             1,
             Strand::Forward,
             0,
@@ -544,9 +576,11 @@ mod tests {
         let edge5 = Edge::create(
             conn,
             sequence4.hash.clone(),
+            BOGUS_SOURCE_NODE_ID,
             8,
             Strand::Forward,
             Sequence::PATH_END_HASH.to_string(),
+            BOGUS_TARGET_NODE_ID,
             -1,
             Strand::Forward,
             0,
