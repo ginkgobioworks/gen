@@ -68,7 +68,9 @@ pub struct NewBlock {
 
 impl Path {
     pub fn create(conn: &Connection, name: &str, block_group_id: i32, edge_ids: &[i32]) -> Path {
-        // TODO: Should we do something if edge_ids don't match here?
+        // TODO: Should we do something if edge_ids don't match here? Suppose we have a path
+        // for a block group with edges 1,2,3. And then the same path is added again with edges
+        // 5,6,7, should this be an error? Should we just keep adding edges?
         let query = "INSERT INTO path (name, block_group_id) VALUES (?1, ?2) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
 

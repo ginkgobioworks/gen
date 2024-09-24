@@ -23,6 +23,14 @@ use crate::models::sample::Sample;
 use crate::models::sequence::{NewSequence, Sequence};
 use crate::models::strand::Strand;
 
+/* General information
+
+Changesets from sqlite will be created in the order that operations are applied in the database,
+so given our foreign key setup, we would not expect out of order table/row creation. i.e. block
+groups will always appear before block group edges, etc.
+
+ */
+
 pub enum FileMode {
     Read,
     Write,

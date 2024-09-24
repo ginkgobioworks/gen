@@ -116,7 +116,6 @@ mod tests {
         let conn = get_connection(None);
         let db_uuid = metadata::get_db_uuid(&conn);
         let op_conn = &get_operation_connection(None);
-        let db_uuid = metadata::get_db_uuid(&conn);
         setup_db(op_conn, &db_uuid);
 
         import_fasta(
