@@ -8,6 +8,7 @@ use crate::models::{
     block_group_edge::BlockGroupEdge,
     collection::Collection,
     edge::{Edge, EdgeData},
+    node::{BOGUS_SOURCE_NODE_ID, BOGUS_TARGET_NODE_ID},
     path::Path,
     sequence::Sequence,
     strand::Strand,
@@ -197,9 +198,11 @@ fn edge_data_from_fields(
 ) -> EdgeData {
     EdgeData {
         source_hash: source_hash.to_string(),
+        source_node_id: BOGUS_SOURCE_NODE_ID,
         source_coordinate,
         source_strand,
         target_hash: target_hash.to_string(),
+        target_node_id: BOGUS_TARGET_NODE_ID,
         target_coordinate: 0,
         target_strand,
         chromosome_index: 0,

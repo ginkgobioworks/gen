@@ -16,6 +16,7 @@ use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::collection::Collection;
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::file_types::FileTypes;
+use crate::models::node::{BOGUS_SOURCE_NODE_ID, BOGUS_TARGET_NODE_ID};
 use crate::models::operations::{
     Branch, FileAddition, Operation, OperationState, OperationSummary,
 };
@@ -334,15 +335,17 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                         edge_pk,
                         EdgeData {
                             source_hash: item.new_value(1).unwrap().as_str().unwrap().to_string(),
-                            source_coordinate: item.new_value(2).unwrap().as_i64().unwrap() as i32,
-                            source_strand: Strand::column_result(item.new_value(3).unwrap())
+                            source_node_id: BOGUS_SOURCE_NODE_ID,
+                            source_coordinate: item.new_value(3).unwrap().as_i64().unwrap() as i32,
+                            source_strand: Strand::column_result(item.new_value(4).unwrap())
                                 .unwrap(),
-                            target_hash: item.new_value(4).unwrap().as_str().unwrap().to_string(),
-                            target_coordinate: item.new_value(5).unwrap().as_i64().unwrap() as i32,
-                            target_strand: Strand::column_result(item.new_value(6).unwrap())
+                            target_hash: item.new_value(5).unwrap().as_str().unwrap().to_string(),
+                            target_node_id: BOGUS_TARGET_NODE_ID,
+                            target_coordinate: item.new_value(7).unwrap().as_i64().unwrap() as i32,
+                            target_strand: Strand::column_result(item.new_value(8).unwrap())
                                 .unwrap(),
-                            chromosome_index: item.new_value(7).unwrap().as_i64().unwrap() as i32,
-                            phased: item.new_value(8).unwrap().as_i64().unwrap() as i32,
+                            chromosome_index: item.new_value(9).unwrap().as_i64().unwrap() as i32,
+                            phased: item.new_value(10).unwrap().as_i64().unwrap() as i32,
                         },
                     );
                 }
@@ -612,7 +615,7 @@ mod tests {
         setup_db(op_conn, &db_uuid);
 
         // create some stuff before we attach to our main session that will be required as extra information
-        let (bg_id, path_id) = setup_block_group(conn);
+        let (bg_id, _path_id) = setup_block_group(conn);
         let binding = BlockGroup::query(
             conn,
             "select * from block_group where id = ?1;",
@@ -754,8 +757,8 @@ mod tests {
             operation_conn,
         );
 
-        let branch_1 = Branch::create(operation_conn, &db_uuid, "branch-1");
-        let branch_2 = Branch::create(operation_conn, &db_uuid, "branch-2");
+        Branch::create(operation_conn, &db_uuid, "branch-1");
+        Branch::create(operation_conn, &db_uuid, "branch-2");
         checkout(
             conn,
             operation_conn,

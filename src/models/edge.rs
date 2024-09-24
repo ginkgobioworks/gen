@@ -7,15 +7,18 @@ use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection, Result as SQLResult, Row};
 use serde::{Deserialize, Serialize};
 
+use crate::models::node::{BOGUS_SOURCE_NODE_ID, BOGUS_TARGET_NODE_ID};
 use crate::models::{sequence::Sequence, strand::Strand};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub struct Edge {
     pub id: i32,
     pub source_hash: String,
+    pub source_node_id: i32,
     pub source_coordinate: i32,
     pub source_strand: Strand,
     pub target_hash: String,
+    pub target_node_id: i32,
     pub target_coordinate: i32,
     pub target_strand: Strand,
     pub chromosome_index: i32,
@@ -25,9 +28,11 @@ pub struct Edge {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct EdgeData {
     pub source_hash: String,
+    pub source_node_id: i32,
     pub source_coordinate: i32,
     pub source_strand: Strand,
     pub target_hash: String,
+    pub target_node_id: i32,
     pub target_coordinate: i32,
     pub target_strand: Strand,
     pub chromosome_index: i32,
@@ -38,9 +43,11 @@ impl From<&Edge> for EdgeData {
     fn from(item: &Edge) -> Self {
         EdgeData {
             source_hash: item.source_hash.clone(),
+            source_node_id: item.source_node_id,
             source_coordinate: item.source_coordinate,
             source_strand: item.source_strand,
             target_hash: item.target_hash.clone(),
+            target_node_id: item.target_node_id,
             target_coordinate: item.target_coordinate,
             target_strand: item.target_strand,
             chromosome_index: item.chromosome_index,
@@ -77,13 +84,15 @@ impl Edge {
         chromosome_index: i32,
         phased: i32,
     ) -> Edge {
-        let query = "INSERT INTO edges (source_hash, source_coordinate, source_strand, target_hash, target_coordinate, target_strand, chromosome_index, phased) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) RETURNING *";
+        let query = "INSERT INTO edges (source_hash, source_node_id, source_coordinate, source_strand, target_hash, target_node_id, target_coordinate, target_strand, chromosome_index, phased) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) RETURNING *";
         let id_query = "select id from edges where source_hash = ?1 and source_coordinate = ?2 and source_strand = ?3 and target_hash = ?4 and target_coordinate = ?5 and target_strand = ?6 and chromosome_index = ?7 and phased = ?8";
         let placeholders: Vec<Value> = vec![
             source_hash.clone().into(),
+            BOGUS_SOURCE_NODE_ID.into(),
             source_coordinate.into(),
             source_strand.into(),
             target_hash.clone().into(),
+            BOGUS_TARGET_NODE_ID.into(),
             target_coordinate.into(),
             target_strand.into(),
             chromosome_index.into(),
@@ -95,13 +104,15 @@ impl Edge {
             Ok(Edge {
                 id: row.get(0)?,
                 source_hash: row.get(1)?,
-                source_coordinate: row.get(2)?,
-                source_strand: row.get(3)?,
-                target_hash: row.get(4)?,
-                target_coordinate: row.get(5)?,
-                target_strand: row.get(6)?,
-                chromosome_index: row.get(7)?,
-                phased: row.get(8)?,
+                source_node_id: row.get(2)?,
+                source_coordinate: row.get(3)?,
+                source_strand: row.get(4)?,
+                target_hash: row.get(5)?,
+                target_node_id: row.get(6)?,
+                target_coordinate: row.get(7)?,
+                target_strand: row.get(8)?,
+                chromosome_index: row.get(9)?,
+                phased: row.get(10)?,
             })
         }) {
             Ok(edge) => edge,
@@ -113,9 +124,11 @@ impl Edge {
                             .query_row(id_query, params_from_iter(&placeholders), |row| row.get(0))
                             .unwrap(),
                         source_hash,
+                        source_node_id: BOGUS_SOURCE_NODE_ID,
                         source_coordinate,
                         source_strand,
                         target_hash,
+                        target_node_id: BOGUS_TARGET_NODE_ID,
                         target_coordinate,
                         target_strand,
                         chromosome_index,
@@ -135,13 +148,15 @@ impl Edge {
         Ok(Edge {
             id: row.get(0)?,
             source_hash: row.get(1)?,
-            source_coordinate: row.get(2)?,
-            source_strand: row.get(3)?,
-            target_hash: row.get(4)?,
-            target_coordinate: row.get(5)?,
-            target_strand: row.get(6)?,
-            chromosome_index: row.get(7)?,
-            phased: row.get(8)?,
+            source_node_id: BOGUS_SOURCE_NODE_ID,
+            source_coordinate: row.get(3)?,
+            source_strand: row.get(4)?,
+            target_hash: row.get(5)?,
+            target_node_id: BOGUS_TARGET_NODE_ID,
+            target_coordinate: row.get(7)?,
+            target_strand: row.get(8)?,
+            chromosome_index: row.get(9)?,
+            phased: row.get(10)?,
         })
     }
 
@@ -151,7 +166,7 @@ impl Edge {
             .map(|edge_id| edge_id.to_string())
             .collect::<Vec<_>>()
             .join(",");
-        let query = format!("select id, source_hash, source_coordinate, source_strand, target_hash, target_coordinate, target_strand, chromosome_index, phased from edges where id in ({});", formatted_edge_ids);
+        let query = format!("select id, source_hash, source_node_id, source_coordinate, source_strand, target_hash, target_node_id, target_coordinate, target_strand, chromosome_index, phased from edges where id in ({});", formatted_edge_ids);
         Edge::query(conn, &query, vec![])
     }
 
@@ -213,11 +228,13 @@ impl Edge {
             let source_strand = format!("\"{0}\"", edge.source_strand);
             let target_strand = format!("\"{0}\"", edge.target_strand);
             let edge_row = format!(
-                "({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7})",
+                "({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})",
                 source_hash,
+                BOGUS_SOURCE_NODE_ID,
                 edge.source_coordinate,
                 source_strand,
                 target_hash,
+                BOGUS_TARGET_NODE_ID,
                 edge.target_coordinate,
                 target_strand,
                 edge.chromosome_index,
@@ -230,7 +247,7 @@ impl Edge {
             for chunk in edge_rows_to_insert.chunks(100000) {
                 let formatted_edge_rows_to_insert = chunk.join(", ");
 
-                let insert_statement = format!("INSERT INTO edges (source_hash, source_coordinate, source_strand, target_hash, target_coordinate, target_strand, chromosome_index, phased) VALUES {0} RETURNING *;", formatted_edge_rows_to_insert);
+                let insert_statement = format!("INSERT INTO edges (source_hash, source_node_id, source_coordinate, source_strand, target_hash, target_node_id, target_coordinate, target_strand, chromosome_index, phased) VALUES {0} RETURNING *;", formatted_edge_rows_to_insert);
                 let mut stmt = conn.prepare(&insert_statement).unwrap();
                 let rows = stmt.query_map([], Edge::edge_from_row).unwrap();
                 for row in rows {
@@ -248,9 +265,11 @@ impl Edge {
     pub fn to_data(edge: Edge) -> EdgeData {
         EdgeData {
             source_hash: edge.source_hash,
+            source_node_id: BOGUS_SOURCE_NODE_ID,
             source_coordinate: edge.source_coordinate,
             source_strand: edge.source_strand,
             target_hash: edge.target_hash,
+            target_node_id: BOGUS_TARGET_NODE_ID,
             target_coordinate: edge.target_coordinate,
             target_strand: edge.target_strand,
             chromosome_index: edge.chromosome_index,
@@ -327,9 +346,11 @@ impl Edge {
                 boundary_edges.push(Edge {
                     id: -1,
                     source_hash: hash.clone(),
+                    source_node_id: BOGUS_SOURCE_NODE_ID,
                     source_coordinate: *block_boundary,
                     source_strand: Strand::Unknown,
                     target_hash: hash.clone(),
+                    target_node_id: BOGUS_TARGET_NODE_ID,
                     target_coordinate: *block_boundary,
                     target_strand: Strand::Unknown,
                     chromosome_index: 0,
@@ -488,9 +509,11 @@ mod tests {
             .save(conn);
         let edge1 = EdgeData {
             source_hash: Sequence::PATH_START_HASH.to_string(),
+            source_node_id: BOGUS_SOURCE_NODE_ID,
             source_coordinate: -1,
             source_strand: Strand::Forward,
             target_hash: sequence1.hash.clone(),
+            target_node_id: BOGUS_TARGET_NODE_ID,
             target_coordinate: 1,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -502,9 +525,11 @@ mod tests {
             .save(conn);
         let edge2 = EdgeData {
             source_hash: sequence1.hash.clone(),
+            source_node_id: BOGUS_SOURCE_NODE_ID,
             source_coordinate: 2,
             source_strand: Strand::Forward,
             target_hash: sequence2.hash.clone(),
+            target_node_id: BOGUS_TARGET_NODE_ID,
             target_coordinate: 3,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -512,9 +537,11 @@ mod tests {
         };
         let edge3 = EdgeData {
             source_hash: sequence2.hash.clone(),
+            source_node_id: BOGUS_SOURCE_NODE_ID,
             source_coordinate: 4,
             source_strand: Strand::Forward,
             target_hash: Sequence::PATH_END_HASH.to_string(),
+            target_node_id: BOGUS_TARGET_NODE_ID,
             target_coordinate: -1,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -555,9 +582,11 @@ mod tests {
             .save(conn);
         let edge1 = EdgeData {
             source_hash: Sequence::PATH_START_HASH.to_string(),
+            source_node_id: BOGUS_SOURCE_NODE_ID,
             source_coordinate: -1,
             source_strand: Strand::Forward,
             target_hash: sequence1.hash.clone(),
+            target_node_id: BOGUS_TARGET_NODE_ID,
             target_coordinate: 1,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -569,9 +598,11 @@ mod tests {
             .save(conn);
         let edge2 = EdgeData {
             source_hash: sequence1.hash.clone(),
+            source_node_id: BOGUS_SOURCE_NODE_ID,
             source_coordinate: 2,
             source_strand: Strand::Forward,
             target_hash: sequence2.hash.clone(),
+            target_node_id: BOGUS_TARGET_NODE_ID,
             target_coordinate: 3,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -579,9 +610,11 @@ mod tests {
         };
         let edge3 = EdgeData {
             source_hash: sequence2.hash.clone(),
+            source_node_id: BOGUS_SOURCE_NODE_ID,
             source_coordinate: 4,
             source_strand: Strand::Forward,
             target_hash: Sequence::PATH_END_HASH.to_string(),
+            target_node_id: BOGUS_TARGET_NODE_ID,
             target_coordinate: -1,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -646,8 +679,10 @@ mod tests {
         let edge1 = EdgeData {
             source_hash: Sequence::PATH_START_HASH.to_string(),
             source_coordinate: -1,
+            source_node_id: BOGUS_SOURCE_NODE_ID,
             source_strand: Strand::Forward,
             target_hash: sequence1.hash.clone(),
+            target_node_id: BOGUS_TARGET_NODE_ID,
             target_coordinate: 1,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -659,9 +694,11 @@ mod tests {
             .save(conn);
         let edge2 = EdgeData {
             source_hash: sequence1.hash.clone(),
+            source_node_id: BOGUS_SOURCE_NODE_ID,
             source_coordinate: 2,
             source_strand: Strand::Forward,
             target_hash: sequence2.hash.clone(),
+            target_node_id: BOGUS_TARGET_NODE_ID,
             target_coordinate: 3,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -669,9 +706,11 @@ mod tests {
         };
         let edge3 = EdgeData {
             source_hash: sequence2.hash.clone(),
+            source_node_id: BOGUS_SOURCE_NODE_ID,
             source_coordinate: 4,
             source_strand: Strand::Forward,
             target_hash: Sequence::PATH_END_HASH.to_string(),
+            target_node_id: BOGUS_TARGET_NODE_ID,
             target_coordinate: -1,
             target_strand: Strand::Forward,
             chromosome_index: 0,

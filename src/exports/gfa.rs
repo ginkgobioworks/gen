@@ -199,6 +199,7 @@ fn path_line(path_name: &str, node_ids: &[i32], node_strands: &[Strand]) -> Stri
     format!("P\t{}\t{}\n", path_name, nodes)
 }
 
+#[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;

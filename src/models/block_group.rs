@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::graph::all_simple_paths;
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData, GroupBlock};
+use crate::models::node::{BOGUS_SOURCE_NODE_ID, BOGUS_TARGET_NODE_ID};
 use crate::models::path::{NewBlock, Path, PathData};
 use crate::models::path_edge::PathEdge;
 use crate::models::sequence::Sequence;
@@ -365,10 +366,12 @@ impl BlockGroup {
             // Deletion
             let new_edge = EdgeData {
                 source_hash: start_block.sequence.hash.clone(),
+                source_node_id: BOGUS_SOURCE_NODE_ID,
                 source_coordinate: change.start - start_block.path_start
                     + start_block.sequence_start,
                 source_strand: Strand::Forward,
                 target_hash: end_block.sequence.hash.clone(),
+                target_node_id: BOGUS_TARGET_NODE_ID,
                 target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
                 target_strand: Strand::Forward,
                 chromosome_index: change.chromosome_index,
@@ -382,9 +385,11 @@ impl BlockGroup {
             if change.start == 0 {
                 let new_beginning_edge = EdgeData {
                     source_hash: Sequence::PATH_START_HASH.to_string(),
+                    source_node_id: BOGUS_SOURCE_NODE_ID,
                     source_coordinate: 0,
                     source_strand: Strand::Forward,
                     target_hash: end_block.sequence.hash.clone(),
+                    target_node_id: BOGUS_TARGET_NODE_ID,
                     target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
                     target_strand: Strand::Forward,
                     chromosome_index: change.chromosome_index,
@@ -399,10 +404,12 @@ impl BlockGroup {
             // Insertion/replacement
             let new_start_edge = EdgeData {
                 source_hash: start_block.sequence.hash.clone(),
+                source_node_id: BOGUS_SOURCE_NODE_ID,
                 source_coordinate: change.start - start_block.path_start
                     + start_block.sequence_start,
                 source_strand: Strand::Forward,
                 target_hash: change.block.sequence.hash.clone(),
+                target_node_id: BOGUS_TARGET_NODE_ID,
                 target_coordinate: change.block.sequence_start,
                 target_strand: Strand::Forward,
                 chromosome_index: change.chromosome_index,
@@ -410,9 +417,11 @@ impl BlockGroup {
             };
             let new_end_edge = EdgeData {
                 source_hash: change.block.sequence.hash.clone(),
+                source_node_id: BOGUS_SOURCE_NODE_ID,
                 source_coordinate: change.block.sequence_end,
                 source_strand: Strand::Forward,
                 target_hash: end_block.sequence.hash.clone(),
+                target_node_id: BOGUS_TARGET_NODE_ID,
                 target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
                 target_strand: Strand::Forward,
                 chromosome_index: change.chromosome_index,
