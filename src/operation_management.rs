@@ -115,7 +115,7 @@ pub fn get_changeset_dependencies(conn: &Connection, changes: &[u8]) -> Vec<u8> 
                             .unwrap()
                             .to_string();
                     let target_hash =
-                        str::from_utf8(item.new_value(4).unwrap().as_bytes().unwrap())
+                        str::from_utf8(item.new_value(5).unwrap().as_bytes().unwrap())
                             .unwrap()
                             .to_string();
                     created_edges.insert(edge_pk);
@@ -202,6 +202,7 @@ pub fn write_changeset(conn: &Connection, operation: &Operation, changes: &[u8])
 
     let mut file = fs::File::create_new(&change_path)
         .unwrap_or_else(|_| panic!("Unable to open {change_path:?}"));
+
     file.write_all(changes).unwrap()
 }
 

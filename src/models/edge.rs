@@ -85,7 +85,7 @@ impl Edge {
         phased: i32,
     ) -> Edge {
         let query = "INSERT INTO edges (source_hash, source_node_id, source_coordinate, source_strand, target_hash, target_node_id, target_coordinate, target_strand, chromosome_index, phased) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) RETURNING *";
-        let id_query = "select id from edges where source_hash = ?1 and source_coordinate = ?2 and source_strand = ?3 and target_hash = ?4 and target_coordinate = ?5 and target_strand = ?6 and chromosome_index = ?7 and phased = ?8";
+        let id_query = "select id from edges where source_hash = ?1 and source_node_id = ?2 and source_coordinate = ?3 and source_strand = ?4 and target_hash = ?5 and target_node_id = ?6 and target_coordinate = ?7 and target_strand = ?8 and chromosome_index = ?9 and phased = ?10";
         let placeholders: Vec<Value> = vec![
             source_hash.clone().into(),
             BOGUS_SOURCE_NODE_ID.into(),
