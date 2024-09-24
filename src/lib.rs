@@ -49,7 +49,7 @@ pub fn parse_genotype(gt: &str) -> Vec<Option<Genotype>> {
         true => Phasing::Unphased,
         false => Phasing::Phased,
     };
-    for entry in gt.split_inclusive(|c| c == '|' || c == '/') {
+    for entry in gt.split_inclusive(['|', '/']) {
         let allele;
         let mut phasing = Phasing::Unphased;
         if entry.ends_with(['/', '|']) {

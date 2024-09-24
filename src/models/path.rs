@@ -1,15 +1,18 @@
-use crate::models::{edge::Edge, path_edge::PathEdge, sequence::Sequence, strand::Strand};
+use std::collections::{HashMap, HashSet};
+
 use intervaltree::IntervalTree;
 use itertools::Itertools;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
-use std::collections::{HashMap, HashSet};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+use crate::models::{edge::Edge, path_edge::PathEdge, sequence::Sequence, strand::Strand};
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub struct Path {
     pub id: i32,
-    pub name: String,
     pub block_group_id: i32,
+    pub name: String,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -65,8 +68,12 @@ pub struct NewBlock {
 
 impl Path {
     pub fn create(conn: &Connection, name: &str, block_group_id: i32, edge_ids: &[i32]) -> Path {
+        // TODO: Should we do something if edge_ids don't match here? Suppose we have a path
+        // for a block group with edges 1,2,3. And then the same path is added again with edges
+        // 5,6,7, should this be an error? Should we just keep adding edges?
         let query = "INSERT INTO path (name, block_group_id) VALUES (?1, ?2) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
+
         let mut rows = stmt
             .query_map((name, block_group_id), |row| {
                 Ok(Path {
@@ -76,7 +83,33 @@ impl Path {
                 })
             })
             .unwrap();
-        let path = rows.next().unwrap().unwrap();
+        let path = match rows.next().unwrap() {
+            Ok(res) => res,
+            Err(rusqlite::Error::SqliteFailure(err, _details)) => {
+                if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                    let query = "SELECT id from path where name = ?1 AND block_group_id = ?2;";
+                    Path {
+                        id: conn
+                            .query_row(
+                                query,
+                                params_from_iter(vec![
+                                    Value::from(name.to_string()),
+                                    Value::from(block_group_id),
+                                ]),
+                                |row| row.get(0),
+                            )
+                            .unwrap(),
+                        name: name.to_string(),
+                        block_group_id,
+                    }
+                } else {
+                    panic!("something bad happened querying the database")
+                }
+            }
+            Err(_) => {
+                panic!("something bad happened querying the database")
+            }
+        };
 
         for (index, edge_id) in edge_ids.iter().enumerate() {
             PathEdge::create(conn, path.id, index.try_into().unwrap(), *edge_id);
@@ -256,6 +289,7 @@ impl Path {
     }
 }
 
+#[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;

@@ -1,13 +1,15 @@
+use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, RandomState};
+
 use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
 use rusqlite::types::Value;
-use rusqlite::{params_from_iter, Connection};
-use std::collections::{HashMap, HashSet};
-use std::hash::RandomState;
+use rusqlite::{params_from_iter, Connection, Result as SQLResult, Row};
+use serde::{Deserialize, Serialize};
 
 use crate::models::{sequence::Sequence, strand::Strand};
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub struct Edge {
     pub id: i32,
     pub source_hash: String,
@@ -32,13 +34,28 @@ pub struct EdgeData {
     pub phased: i32,
 }
 
+impl From<&Edge> for EdgeData {
+    fn from(item: &Edge) -> Self {
+        EdgeData {
+            source_hash: item.source_hash.clone(),
+            source_coordinate: item.source_coordinate,
+            source_strand: item.source_strand,
+            target_hash: item.target_hash.clone(),
+            target_coordinate: item.target_coordinate,
+            target_strand: item.target_strand,
+            chromosome_index: item.chromosome_index,
+            phased: item.phased,
+        }
+    }
+}
+
 #[derive(Eq, Hash, PartialEq)]
 pub struct BlockKey {
     pub sequence_hash: String,
     pub coordinate: i32,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct GroupBlock {
     pub id: i32,
     pub sequence_hash: String,
@@ -114,6 +131,20 @@ impl Edge {
         }
     }
 
+    fn edge_from_row(row: &Row) -> SQLResult<Edge> {
+        Ok(Edge {
+            id: row.get(0)?,
+            source_hash: row.get(1)?,
+            source_coordinate: row.get(2)?,
+            source_strand: row.get(3)?,
+            target_hash: row.get(4)?,
+            target_coordinate: row.get(5)?,
+            target_strand: row.get(6)?,
+            chromosome_index: row.get(7)?,
+            phased: row.get(8)?,
+        })
+    }
+
     pub fn bulk_load(conn: &Connection, edge_ids: &[i32]) -> Vec<Edge> {
         let formatted_edge_ids = edge_ids
             .iter()
@@ -127,19 +158,7 @@ impl Edge {
     pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Edge> {
         let mut stmt = conn.prepare(query).unwrap();
         let rows = stmt
-            .query_map(params_from_iter(placeholders), |row| {
-                Ok(Edge {
-                    id: row.get(0)?,
-                    source_hash: row.get(1)?,
-                    source_coordinate: row.get(2)?,
-                    source_strand: row.get(3)?,
-                    target_hash: row.get(4)?,
-                    target_coordinate: row.get(5)?,
-                    target_strand: row.get(6)?,
-                    chromosome_index: row.get(7)?,
-                    phased: row.get(8)?,
-                })
-            })
+            .query_map(params_from_iter(placeholders), Edge::edge_from_row)
             .unwrap();
         let mut edges = vec![];
         for row in rows {
@@ -150,6 +169,7 @@ impl Edge {
 
     pub fn bulk_create(conn: &Connection, edges: Vec<EdgeData>) -> Vec<i32> {
         let mut edge_rows = vec![];
+        let mut edge_map: HashMap<EdgeData, i32> = HashMap::new();
         for edge in &edges {
             let source_hash = format!("\"{0}\"", edge.source_hash);
             let source_strand = format!("\"{0}\"", edge.source_strand);
@@ -172,11 +192,9 @@ impl Edge {
 
         let select_statement = format!("SELECT * FROM edges WHERE (source_hash, source_coordinate, source_strand, target_hash, target_coordinate, target_strand, chromosome_index, phased) in ({0});", formatted_edge_rows);
         let existing_edges = Edge::query(conn, &select_statement, vec![]);
-        let mut existing_edge_ids: Vec<i32> = existing_edges
-            .clone()
-            .into_iter()
-            .map(|edge| edge.id)
-            .collect();
+        for edge in existing_edges.iter() {
+            edge_map.insert(EdgeData::from(edge), edge.id);
+        }
 
         let existing_edge_set = HashSet::<EdgeData, RandomState>::from_iter(
             existing_edges.into_iter().map(Edge::to_data),
@@ -208,25 +226,23 @@ impl Edge {
             edge_rows_to_insert.push(edge_row);
         }
 
-        if edge_rows_to_insert.is_empty() {
-            return existing_edge_ids;
-        }
+        if !edge_rows_to_insert.is_empty() {
+            for chunk in edge_rows_to_insert.chunks(100000) {
+                let formatted_edge_rows_to_insert = chunk.join(", ");
 
-        for chunk in edge_rows_to_insert.chunks(100000) {
-            let formatted_edge_rows_to_insert = chunk.join(", ");
-
-            let insert_statement = format!("INSERT INTO edges (source_hash, source_coordinate, source_strand, target_hash, target_coordinate, target_strand, chromosome_index, phased) VALUES {0} RETURNING (id);", formatted_edge_rows_to_insert);
-            let mut stmt = conn.prepare(&insert_statement).unwrap();
-            let rows = stmt.query_map([], |row| row.get(0)).unwrap();
-            let mut edge_ids: Vec<i32> = vec![];
-            for row in rows {
-                edge_ids.push(row.unwrap());
+                let insert_statement = format!("INSERT INTO edges (source_hash, source_coordinate, source_strand, target_hash, target_coordinate, target_strand, chromosome_index, phased) VALUES {0} RETURNING *;", formatted_edge_rows_to_insert);
+                let mut stmt = conn.prepare(&insert_statement).unwrap();
+                let rows = stmt.query_map([], Edge::edge_from_row).unwrap();
+                for row in rows {
+                    let edge = row.unwrap();
+                    edge_map.insert(EdgeData::from(&edge), edge.id);
+                }
             }
-
-            existing_edge_ids.extend(edge_ids);
         }
-
-        existing_edge_ids
+        edges
+            .iter()
+            .map(|edge| *edge_map.get(edge).unwrap())
+            .collect::<Vec<i32>>()
     }
 
     pub fn to_data(edge: Edge) -> EdgeData {
@@ -455,6 +471,7 @@ impl Edge {
     }
 }
 
+#[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
@@ -526,6 +543,79 @@ mod tests {
         assert_eq!(edge_result3.source_coordinate, 4);
         assert_eq!(edge_result3.target_hash, Sequence::PATH_END_HASH);
         assert_eq!(edge_result3.target_coordinate, -1);
+    }
+
+    #[test]
+    fn test_bulk_create_returns_edges_in_order() {
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let edge1 = EdgeData {
+            source_hash: Sequence::PATH_START_HASH.to_string(),
+            source_coordinate: -1,
+            source_strand: Strand::Forward,
+            target_hash: sequence1.hash.clone(),
+            target_coordinate: 1,
+            target_strand: Strand::Forward,
+            chromosome_index: 0,
+            phased: 0,
+        };
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(conn);
+        let edge2 = EdgeData {
+            source_hash: sequence1.hash.clone(),
+            source_coordinate: 2,
+            source_strand: Strand::Forward,
+            target_hash: sequence2.hash.clone(),
+            target_coordinate: 3,
+            target_strand: Strand::Forward,
+            chromosome_index: 0,
+            phased: 0,
+        };
+        let edge3 = EdgeData {
+            source_hash: sequence2.hash.clone(),
+            source_coordinate: 4,
+            source_strand: Strand::Forward,
+            target_hash: Sequence::PATH_END_HASH.to_string(),
+            target_coordinate: -1,
+            target_strand: Strand::Forward,
+            chromosome_index: 0,
+            phased: 0,
+        };
+
+        let edges = vec![edge2.clone(), edge3.clone()];
+        let edge_ids1 = Edge::bulk_create(conn, edges.clone());
+        assert_eq!(edge_ids1.len(), 2);
+        for (index, id) in edge_ids1.iter().enumerate() {
+            let binding = Edge::query(
+                conn,
+                "select * from edges where id = ?1;",
+                vec![Value::from(*id)],
+            );
+            let edge = binding.first().unwrap();
+            assert_eq!(EdgeData::from(edge), edges[index]);
+        }
+
+        let edges = vec![edge1.clone(), edge2.clone(), edge3.clone()];
+        let edge_ids2 = Edge::bulk_create(conn, edges.clone());
+        assert_eq!(edge_ids2[1], edge_ids1[0]);
+        assert_eq!(edge_ids2[2], edge_ids1[1]);
+        assert_eq!(edge_ids2.len(), 3);
+        for (index, id) in edge_ids2.iter().enumerate() {
+            // this sort by makes it so the order will not match the input order of the function call
+            let binding = Edge::query(
+                conn,
+                "select * from edges where id = ?1;",
+                vec![Value::from(*id)],
+            );
+            let edge = binding.first().unwrap();
+            assert_eq!(EdgeData::from(edge), edges[index]);
+        }
     }
 
     #[test]

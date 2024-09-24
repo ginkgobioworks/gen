@@ -1,7 +1,9 @@
+use std::collections::{HashMap, HashSet};
+
 use intervaltree::IntervalTree;
 use petgraph::Direction;
 use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
-use std::collections::{HashMap, HashSet};
+use serde::{Deserialize, Serialize};
 
 use crate::graph::all_simple_paths;
 use crate::models::block_group_edge::BlockGroupEdge;
@@ -11,7 +13,7 @@ use crate::models::path_edge::PathEdge;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct BlockGroup {
     pub id: i32,
     pub collection_name: String,
@@ -104,17 +106,29 @@ impl BlockGroup {
             Err(rusqlite::Error::SqliteFailure(err, details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
                     println!("{err:?} {details:?}");
-                    BlockGroup {
-                        id: conn
+                    let bg_id = match sample_name {
+                        Some(v) => {conn
                             .query_row(
-                                "select id from block_group where collection_name = ?1 and sample_name is null and name = ?2",
+                                "select id from block_group where collection_name = ?1 and sample_name = ?2 and name = ?3",
+                                (collection_name, v, name),
+                                |row| row.get(0),
+                            )
+                            .unwrap()}
+                        None => {
+                            conn
+                            .query_row(
+                                "select id from block_group where collection_name = ?1 and sample_name is null and name = ?3",
                                 (collection_name, name),
                                 |row| row.get(0),
                             )
-                            .unwrap(),
+                            .unwrap()
+                        }
+                    };
+                    BlockGroup {
+                        id: bg_id,
                         collection_name: collection_name.to_string(),
                         sample_name: sample_name.map(|s| s.to_string()),
-                        name: name.to_string()
+                        name: name.to_string(),
                     }
                 } else {
                     panic!("something bad happened querying the database")
@@ -416,95 +430,7 @@ impl BlockGroup {
 mod tests {
     use super::*;
     use crate::models::{collection::Collection, sample::Sample};
-    use crate::test_helpers::get_connection;
-
-    fn setup_block_group(conn: &Connection) -> (i32, Path) {
-        let a_seq = Sequence::new()
-            .sequence_type("DNA")
-            .sequence("AAAAAAAAAA")
-            .save(conn);
-        let t_seq = Sequence::new()
-            .sequence_type("DNA")
-            .sequence("TTTTTTTTTT")
-            .save(conn);
-        let c_seq = Sequence::new()
-            .sequence_type("DNA")
-            .sequence("CCCCCCCCCC")
-            .save(conn);
-        let g_seq = Sequence::new()
-            .sequence_type("DNA")
-            .sequence("GGGGGGGGGG")
-            .save(conn);
-        let _collection = Collection::create(conn, "test");
-        let block_group = BlockGroup::create(conn, "test", None, "hg19");
-        let edge0 = Edge::create(
-            conn,
-            Sequence::PATH_START_HASH.to_string(),
-            0,
-            Strand::Forward,
-            a_seq.hash.clone(),
-            0,
-            Strand::Forward,
-            0,
-            0,
-        );
-        let edge1 = Edge::create(
-            conn,
-            a_seq.hash,
-            10,
-            Strand::Forward,
-            t_seq.hash.clone(),
-            0,
-            Strand::Forward,
-            0,
-            0,
-        );
-        let edge2 = Edge::create(
-            conn,
-            t_seq.hash,
-            10,
-            Strand::Forward,
-            c_seq.hash.clone(),
-            0,
-            Strand::Forward,
-            0,
-            0,
-        );
-        let edge3 = Edge::create(
-            conn,
-            c_seq.hash,
-            10,
-            Strand::Forward,
-            g_seq.hash.clone(),
-            0,
-            Strand::Forward,
-            0,
-            0,
-        );
-        let edge4 = Edge::create(
-            conn,
-            g_seq.hash,
-            10,
-            Strand::Forward,
-            Sequence::PATH_END_HASH.to_string(),
-            0,
-            Strand::Forward,
-            0,
-            0,
-        );
-        BlockGroupEdge::bulk_create(
-            conn,
-            block_group.id,
-            &[edge0.id, edge1.id, edge2.id, edge3.id, edge4.id],
-        );
-        let path = Path::create(
-            conn,
-            "chr1",
-            block_group.id,
-            &[edge0.id, edge1.id, edge2.id, edge3.id, edge4.id],
-        );
-        (block_group.id, path)
-    }
+    use crate::test_helpers::{get_connection, setup_block_group};
 
     #[test]
     fn test_blockgroup_create() {

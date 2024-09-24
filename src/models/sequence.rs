@@ -2,11 +2,12 @@ use noodles::core::Position;
 use noodles::fasta;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::{fs, str};
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub struct Sequence {
     pub hash: String,
     pub sequence_type: String,
@@ -20,7 +21,7 @@ pub struct Sequence {
     pub external_sequence: bool,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct NewSequence<'a> {
     sequence_type: Option<&'a str>,
     sequence: Option<&'a str>,
@@ -28,6 +29,17 @@ pub struct NewSequence<'a> {
     file_path: Option<&'a str>,
     length: Option<i32>,
     shallow: bool,
+}
+
+impl<'a> From<&'a Sequence> for NewSequence<'a> {
+    fn from(value: &'a Sequence) -> NewSequence<'a> {
+        NewSequence::new()
+            .sequence_type(&value.sequence_type)
+            .sequence(&value.sequence)
+            .name(&value.name)
+            .file_path(&value.file_path)
+            .length(value.length)
+    }
 }
 
 impl<'a> NewSequence<'a> {
@@ -60,8 +72,10 @@ impl<'a> NewSequence<'a> {
     }
 
     pub fn file_path(mut self, path: &'a str) -> Self {
-        self.file_path = Some(path);
-        self.shallow = true;
+        if !path.is_empty() {
+            self.file_path = Some(path);
+            self.shallow = true;
+        }
         self
     }
 
@@ -76,16 +90,23 @@ impl<'a> NewSequence<'a> {
         hasher.update(";");
         if let Some(v) = self.sequence {
             hasher.update(v);
-            hasher.update(";");
+        } else {
+            hasher.update("");
         }
+        hasher.update(";");
         if let Some(v) = self.name {
             hasher.update(v);
-            hasher.update(";");
+        } else {
+            hasher.update("");
         }
+        hasher.update(";");
         if let Some(v) = self.file_path {
             hasher.update(v);
-            hasher.update(";");
+        } else {
+            hasher.update("");
         }
+        hasher.update(";");
+
         format!("{:x}", hasher.finalize())
     }
 
@@ -308,6 +329,7 @@ impl Sequence {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use std::path::PathBuf;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
