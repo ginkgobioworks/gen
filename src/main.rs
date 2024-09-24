@@ -161,7 +161,7 @@ fn main() {
 
     let binding = cli.db.unwrap_or_else(|| {
         let mut stmt = operation_conn
-            .prepare("select db_name from defaults where id = 1 and db_name is not null;")
+            .prepare("select db_name from defaults where id = 1;")
             .unwrap();
         let row: Option<String> = stmt.query_row((), |row| row.get(0)).unwrap();
         row.expect("No db specified and no default database chosen.")
