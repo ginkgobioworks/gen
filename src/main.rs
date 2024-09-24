@@ -8,10 +8,10 @@ use gen::get_connection;
 use gen::imports::fasta::import_fasta;
 use gen::imports::gfa::import_gfa;
 use gen::models::metadata;
-use gen::models::operations::{setup_db, Branch, Operation, OperationState};
+use gen::models::operations::{setup_db, Branch, OperationState};
 use gen::operation_management;
 use gen::updates::vcf::update_with_vcf;
-use rusqlite::types::Value;
+use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::str;
@@ -26,6 +26,13 @@ struct Cli {
     command: Option<Commands>,
 }
 
+fn get_default_collection(conn: &Connection) -> Option<String> {
+    let mut stmt = conn
+        .prepare("select collection_name from defaults where id = 1")
+        .unwrap();
+    stmt.query_row((), |row| row.get(0)).unwrap()
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Import a new sequence collection.
@@ -38,7 +45,7 @@ enum Commands {
         gfa: Option<String>,
         /// The name of the collection to store the entry under
         #[arg(short, long)]
-        name: String,
+        name: Option<String>,
         /// Don't store the sequence in the database, instead store the filename
         #[arg(short, long, action)]
         shallow: bool,
@@ -47,7 +54,7 @@ enum Commands {
     Update {
         /// The name of the collection to update
         #[arg(short, long)]
-        name: String,
+        name: Option<String>,
         /// A fasta file to insert
         #[arg(short, long)]
         fasta: Option<String>,
@@ -104,10 +111,18 @@ enum Commands {
     Export {
         /// The name of the collection to export
         #[arg(short, long)]
-        name: String,
+        name: Option<String>,
         /// The name of the GFA file to export to
         #[arg(short, long)]
         gfa: String,
+    },
+    Defaults {
+        /// The default database to use
+        #[arg(short, long)]
+        database: Option<String>,
+        /// The default collection to use
+        #[arg(short, long)]
+        collection: Option<String>,
     },
 }
 
@@ -120,11 +135,42 @@ fn main() {
         return;
     }
 
-    let binding = cli.db.expect("No db specified.");
+    let operation_conn = get_operation_connection();
+    if let Some(Commands::Defaults {
+        database,
+        collection,
+    }) = &cli.command
+    {
+        if let Some(name) = database {
+            operation_conn
+                .execute("update defaults set db_name=?1 where id = 1", (name,))
+                .unwrap();
+            println!("Default database set to {name}");
+        }
+        if let Some(name) = collection {
+            operation_conn
+                .execute(
+                    "update defaults set collection_name=?1 where id = 1",
+                    (name,),
+                )
+                .unwrap();
+            println!("Default collection set to {name}");
+        }
+        return;
+    }
+
+    let binding = cli.db.unwrap_or_else(|| {
+        let mut stmt = operation_conn
+            .prepare("select db_name from defaults where id = 1 and db_name is not null;")
+            .unwrap();
+        let row: Option<String> = stmt.query_row((), |row| row.get(0)).unwrap();
+        row.expect("No db specified and no default database chosen.")
+    });
     let db = binding.as_str();
     let conn = get_connection(db);
     let db_uuid = metadata::get_db_uuid(&conn);
-    let operation_conn = get_operation_connection();
+
+    let default_collection = get_default_collection(&operation_conn);
 
     // initialize the selected database if needed.
     setup_db(&operation_conn, &db_uuid);
@@ -137,6 +183,9 @@ fn main() {
             shallow,
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
+            let name = &name.clone().unwrap_or_else(|| {
+                default_collection.expect("No collection specified and default not setup.")
+            });
             if fasta.is_some() {
                 import_fasta(
                     &fasta.clone().unwrap(),
@@ -162,6 +211,9 @@ fn main() {
             sample,
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
+            let name = &name.clone().unwrap_or_else(|| {
+                default_collection.expect("No collection specified and default not setup.")
+            });
             update_with_vcf(
                 vcf,
                 name,
@@ -172,10 +224,6 @@ fn main() {
             );
 
             conn.execute("END TRANSACTION", []).unwrap();
-        }
-        Some(Commands::Init {}) => {
-            config::get_or_create_gen_dir();
-            println!("Gen repository initialized.");
         }
         Some(Commands::Operations { branch }) => {
             let current_op = OperationState::get_operation(&operation_conn, &db_uuid)
@@ -288,10 +336,22 @@ fn main() {
             operation_management::checkout(&conn, &operation_conn, &db_uuid, branch, *id);
         }
         Some(Commands::Export { name, gfa }) => {
+            let name = &name.clone().unwrap_or_else(|| {
+                default_collection.expect("No collection specified and default not setup.")
+            });
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             export_gfa(&conn, name, &PathBuf::from(gfa));
             conn.execute("END TRANSACTION", []).unwrap();
         }
         None => {}
+        // these will never be handled by this method as we search for them earlier.
+        Some(Commands::Init {}) => {
+            config::get_or_create_gen_dir();
+            println!("Gen repository initialized.");
+        }
+        Some(Commands::Defaults {
+            database,
+            collection,
+        }) => {}
     }
 }

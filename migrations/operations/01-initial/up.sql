@@ -1,3 +1,9 @@
+CREATE TABLE defaults (
+  id INTEGER PRIMARY KEY NOT NULL,
+  db_name TEXT,
+  collection_name TEXT
+) STRICT;
+
 CREATE TABLE operation_state (
   db_uuid TEXT PRIMARY KEY NOT NULL,
   operation_id INTEGER,
@@ -41,3 +47,5 @@ CREATE TABLE branch (
   FOREIGN KEY(current_operation_id) REFERENCES operation(id)
 ) STRICT;
 CREATE UNIQUE INDEX branch_uidx ON branch(db_uuid, name);
+
+INSERT INTO defaults values (1, NULL, NULL);

@@ -1,3 +1,12 @@
+# Defaults
+
+This controls default choices for the `gen` command line
+
+- database
+  - This controls the default database for `gen` to work on, it is what is passed to the `--db` argument. 
+- collection
+  - This controls the default collection for `gen` to work on, it is what is passed to the `--name` argument.
+
 # Apply
 
 Apply operations to the current branch.
