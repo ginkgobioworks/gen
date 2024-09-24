@@ -1,11 +1,31 @@
 # Gen
-Gen is a version control system for genetic sequences. It efficiently stores genome-length sequences and sequence variations, with native support for polyploid genomes and pooled genotypes. Each project is organized into a repository, where collections of sequences and associated data are stored and tracked over time. Within a repository, branches can be created to explore different modifications or variations without affecting the main project. These branches can later be merged to integrate results from different experiments or collaborators.
+Gen is a version control system for genetic sequences. It efficiently stores genome-length sequences and sequence
+variations, with native support for polyploid genomes and pooled genotypes. Each project is organized into a repository,
+where collections of sequences and associated data are stored and tracked over time. Within a repository, branches can
+be created to explore different modifications or variations without affecting the main project. These branches can later
+be merged to integrate results from different experiments or collaborators.
 
-The gen client can import standard sequence file formats from sources like NCBI and genetic design tools. Internally, sequences are stored as _pangenomic molecules_ that represent not just a single strain, cultivar, or cell line, but also any engineered or naturally derived variants for use in laboratory experiments. Gen molecules take the form of a graph structure as shown in the figure below. Each molecule is made up out of a network of _nodes_ that represent sequence fragments, and _edges_ that define how sequence fragments are connected. Multiple molecules are organized into _collections_ that could for example represent the different chromosomes in a cell. Molecules generally start out as a single node that holds a reference sequence, and new edges and nodes are added for every sequence variant that is designed or observed. To reconstitute a linear sequence, the client walks from node to node along a defined _path_.
+The gen client can import standard sequence file formats from sources like NCBI and genetic design tools. Internally,
+sequences are stored as _pangenomic molecules_ that represent not just a single strain, cultivar, or cell line, but also
+any engineered or naturally derived variants for use in laboratory experiments. Gen molecules take the form of a graph
+structure as shown in the figure below. Each molecule is made up out of a network of _nodes_ that represent sequence
+fragments, and _edges_ that define how sequence fragments are connected. Multiple molecules are organized into
+_collections_ that could represent the different chromosomes in a cell or fragments in a reaction mixture. Molecules
+generally start out as a single node that holds a reference sequence, and new edges and nodes are added for every
+sequence variant that is designed or observed. To reconstitute a linear sequence, the client walks from node to node
+along a defined _path_.
 
 `<figure 1>`
 
-Imported feature annotations can be propagated from path to path in a sequence-agnostic way that relies on coordinate translation. Paths can also be compared to one another to detect features that are common or different between sets of paths, which can be used to analyze experimental data. Another way to use gen to analyze experiments is through _sample_ objects. A gen sample assigns probabilities to edges and paths based on the frequency they are observed in a physical sample. These numbers can be derived from sequencing results, or set by the user to represent an isolate or cloning reaction. This allows a user to mask out the edges that are not present in a sample and focus on the distinguishing features. The figure below demonstrates how this can be used to represent a polyploid genome obtained through cross-breeding. Like paths, samples can be compared to one another to detect differences and common features.
+Imported feature annotations can be propagated from path to path in a sequence-agnostic way that relies on coordinate
+translation. Paths can also be compared to one another to detect features that are common or different between sets of
+paths, which can be used to analyze experimental data. A _sample_ object represents the subset of the possible paths and
+edges that is actually present in an experimental sample. A value between from 0 and 1 is assigned to each edge and path
+to represent the probability that and edge or path is observed. These numbers can be derived from sequencing results, or
+set by the user to represent an isolate or cloning reaction. This allows a user to focus on distinguishing features of a
+molecule by masking out irrelevant edges. The figure below demonstrates how this can be used to represent a polyploid
+genome obtained through cross-breeding. Like paths, samples can be compared to one another to detect differences and
+common features.
 
 `<figure 2>`
 
