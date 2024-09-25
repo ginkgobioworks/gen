@@ -10,9 +10,9 @@ use crate::models::{
     block_group_edge::BlockGroupEdge,
     collection::Collection,
     edge::{Edge, GroupBlock},
+    node::{PATH_END_NODE_ID, PATH_START_NODE_ID},
     path::Path,
     path_edge::PathEdge,
-    sequence::Sequence,
     strand::Strand,
 };
 
@@ -26,19 +26,17 @@ pub fn export_gfa(conn: &Connection, collection_name: &str, filename: &PathBuf) 
     }
 
     let mut edges = edge_set.into_iter().collect();
-    let (blocks, boundary_edges) = Edge::blocks_from_edges(conn, &edges);
+    let (blocks, boundary_edges) = Edge::blocks_from_edges_new(conn, &edges);
     edges.extend(boundary_edges.clone());
 
-    let (graph, edges_by_node_pair) = Edge::build_graph(&edges, &blocks);
+    let (graph, edges_by_node_pair) = Edge::build_graph_new(&edges, &blocks);
 
     let file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(file);
 
     let mut terminal_block_ids = HashSet::new();
     for block in &blocks {
-        if block.sequence_hash == Sequence::PATH_START_HASH
-            || block.sequence_hash == Sequence::PATH_END_HASH
-        {
+        if block.node_id == PATH_START_NODE_ID || block.node_id == PATH_END_NODE_ID {
             terminal_block_ids.insert(block.id);
             continue;
         }
@@ -125,21 +123,21 @@ fn link_line(
 fn nodes_for_edges(
     edge1: &Edge,
     edge2: &Edge,
-    blocks_by_hash_and_start: &HashMap<(&str, i32), GroupBlock>,
-    blocks_by_hash_and_end: &HashMap<(&str, i32), GroupBlock>,
+    blocks_by_node_and_start: &HashMap<(i32, i32), GroupBlock>,
+    blocks_by_node_and_end: &HashMap<(i32, i32), GroupBlock>,
 ) -> Vec<i32> {
-    let mut current_block = blocks_by_hash_and_start
-        .get(&(edge1.target_hash.as_str(), edge1.target_coordinate))
+    let mut current_block = blocks_by_node_and_start
+        .get(&(edge1.target_node_id, edge1.target_coordinate))
         .unwrap();
-    let end_block = blocks_by_hash_and_end
-        .get(&(edge2.source_hash.as_str(), edge2.source_coordinate))
+    let end_block = blocks_by_node_and_end
+        .get(&(edge2.source_node_id, edge2.source_coordinate))
         .unwrap();
     let mut node_ids = vec![];
     #[allow(clippy::while_immutable_condition)]
     while current_block.id != end_block.id {
         node_ids.push(current_block.id);
-        current_block = blocks_by_hash_and_start
-            .get(&(current_block.sequence_hash.as_str(), current_block.end))
+        current_block = blocks_by_node_and_start
+            .get(&(current_block.node_id, current_block.end))
             .unwrap();
     }
     node_ids.push(end_block.id);
@@ -157,34 +155,34 @@ fn write_paths(
     let edges_by_path_id =
         PathEdge::edges_for_paths(conn, paths.iter().map(|path| path.id).collect());
 
-    let blocks_by_hash_and_start = blocks
+    let blocks_by_node_and_start = blocks
         .iter()
-        .map(|block| ((block.sequence_hash.as_str(), block.start), block.clone()))
-        .collect::<HashMap<(&str, i32), GroupBlock>>();
-    let blocks_by_hash_and_end = blocks
+        .map(|block| ((block.node_id, block.start), block.clone()))
+        .collect::<HashMap<(i32, i32), GroupBlock>>();
+    let blocks_by_node_and_end = blocks
         .iter()
-        .map(|block| ((block.sequence_hash.as_str(), block.end), block.clone()))
-        .collect::<HashMap<(&str, i32), GroupBlock>>();
+        .map(|block| ((block.node_id, block.end), block.clone()))
+        .collect::<HashMap<(i32, i32), GroupBlock>>();
 
     for path in paths {
         let edges_for_path = edges_by_path_id.get(&path.id).unwrap();
-        let mut node_ids = vec![];
+        let mut graph_node_ids = vec![];
         let mut node_strands = vec![];
         for (edge1, edge2) in edges_for_path.iter().tuple_windows() {
             let current_node_ids = nodes_for_edges(
                 edge1,
                 edge2,
-                &blocks_by_hash_and_start,
-                &blocks_by_hash_and_end,
+                &blocks_by_node_and_start,
+                &blocks_by_node_and_end,
             );
             for node_id in &current_node_ids {
-                node_ids.push(*node_id);
+                graph_node_ids.push(*node_id);
                 node_strands.push(edge1.target_strand);
             }
         }
 
         writer
-            .write_all(&path_line(&path.name, &node_ids, &node_strands).into_bytes())
+            .write_all(&path_line(&path.name, &graph_node_ids, &node_strands).into_bytes())
             .unwrap_or_else(|_| panic!("Error writing path {} to GFA stream", path.name));
     }
 }
@@ -206,9 +204,7 @@ mod tests {
 
     use crate::imports::gfa::import_gfa;
     use crate::models::{
-        block_group::BlockGroup,
-        collection::Collection,
-        node::{BOGUS_SOURCE_NODE_ID, BOGUS_TARGET_NODE_ID},
+        block_group::BlockGroup, collection::Collection, node::Node, sequence::Sequence,
     };
 
     use crate::test_helpers::{get_connection, setup_gen_dir};
@@ -238,15 +234,19 @@ mod tests {
             .sequence_type("DNA")
             .sequence("CCCC")
             .save(&conn);
+        let node1 = Node::create(&conn, &sequence1.hash);
+        let node2 = Node::create(&conn, &sequence2.hash);
+        let node3 = Node::create(&conn, &sequence3.hash);
+        let node4 = Node::create(&conn, &sequence4.hash);
 
         let edge1 = Edge::create(
             &conn,
             Sequence::PATH_START_HASH.to_string(),
-            BOGUS_SOURCE_NODE_ID,
+            PATH_START_NODE_ID,
             0,
             Strand::Forward,
             sequence1.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            node1.id,
             0,
             Strand::Forward,
             0,
@@ -255,11 +255,11 @@ mod tests {
         let edge2 = Edge::create(
             &conn,
             sequence1.hash,
-            BOGUS_SOURCE_NODE_ID,
+            node1.id,
             4,
             Strand::Forward,
             sequence2.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            node2.id,
             0,
             Strand::Forward,
             0,
@@ -268,11 +268,11 @@ mod tests {
         let edge3 = Edge::create(
             &conn,
             sequence2.hash,
-            BOGUS_SOURCE_NODE_ID,
+            node2.id,
             4,
             Strand::Forward,
             sequence3.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            node3.id,
             0,
             Strand::Forward,
             0,
@@ -281,11 +281,11 @@ mod tests {
         let edge4 = Edge::create(
             &conn,
             sequence3.hash,
-            BOGUS_SOURCE_NODE_ID,
+            node3.id,
             4,
             Strand::Forward,
             sequence4.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            node4.id,
             0,
             Strand::Forward,
             0,
@@ -294,11 +294,11 @@ mod tests {
         let edge5 = Edge::create(
             &conn,
             sequence4.hash,
-            BOGUS_SOURCE_NODE_ID,
+            node4.id,
             4,
             Strand::Forward,
             Sequence::PATH_END_HASH.to_string(),
-            BOGUS_TARGET_NODE_ID,
+            PATH_END_NODE_ID,
             0,
             Strand::Forward,
             0,
