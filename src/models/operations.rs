@@ -5,6 +5,7 @@ use petgraph::visit::DfsPostOrder;
 use petgraph::Direction;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
+use std::string::ToString;
 
 #[derive(Clone, Debug)]
 pub struct Operation {
@@ -29,6 +30,24 @@ impl Operation {
         let current_op = OperationState::get_operation(conn, db_uuid);
         let current_branch_id =
             OperationState::get_current_branch(conn, db_uuid).expect("No branch is checked out.");
+
+        // if we are in the middle of a branch's operations, and not on a new branch's creation point
+        // we cannot create a new operation as that would create a bifurcation in a branch's order
+        // of operations. We ensure there is no child operation in this branch of the current operation.
+
+        if let Some(op_id) = current_op {
+            let count: i32 = conn
+                .query_row(
+                    "select count(*) from operation where branch_id = ?1 AND parent_id = ?2",
+                    (current_branch_id, op_id),
+                    |row| row.get(0),
+                )
+                .unwrap();
+            if count != 0 {
+                panic!("The current operation is in the middle of a branch. A new operation would create a bifurcation in the branch lineage. Create a new branch if you wish to bifurcate the current set of operations.");
+            }
+        }
+
         let query = "INSERT INTO operation (db_uuid, collection_name, change_type, change_id, parent_id, branch_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
@@ -652,5 +671,65 @@ mod tests {
             .map(|f| f.id)
             .collect::<Vec<i32>>();
         assert_eq!(ops, vec![1, 6, 7, 8, 9, 10, 11]);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "The current operation is in the middle of a branch. A new operation would create a bifurcation in the branch lineage. Create a new branch if you wish to bifurcate the current set of operations."
+    )]
+    fn test_prevents_bifurcation() {
+        // We make a simple branch from 1 -> 2 -> 3 -> 4 and ensure we cannot checkout operation 2
+        // and create a new operation from that point on the same branch.
+
+        setup_gen_dir();
+        let db_uuid = "something";
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, db_uuid);
+
+        let change = FileAddition::create(op_conn, "foo", FileTypes::Fasta);
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        OperationState::set_operation(op_conn, db_uuid, 2);
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
     }
 }
