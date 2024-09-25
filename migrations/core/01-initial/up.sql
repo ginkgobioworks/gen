@@ -79,11 +79,8 @@ CREATE TABLE edges (
   target_strand TEXT NOT NULL,
   chromosome_index INTEGER NOT NULL,
   phased INTEGER NOT NULL,
-  FOREIGN KEY(source_hash) REFERENCES sequence(hash),
-  FOREIGN KEY(target_hash) REFERENCES sequence(hash),
   constraint chk_phased check (phased in (0, 1))
 ) STRICT;
-CREATE UNIQUE INDEX edge_uidx ON edges(source_hash, source_node_id, source_coordinate, source_strand, target_hash, target_node_id, target_coordinate, target_strand, chromosome_index, phased);
 -- CREATE UNIQUE INDEX edge_uidx ON edges(source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased);
 
 CREATE TABLE path_edges (

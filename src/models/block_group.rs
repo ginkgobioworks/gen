@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use crate::graph::all_simple_paths;
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData, GroupBlock};
-use crate::models::node::{BOGUS_SOURCE_NODE_ID, BOGUS_TARGET_NODE_ID};
-use crate::models::path::{NewBlock, Path, PathData};
+use crate::models::node::{BOGUS_SOURCE_NODE_ID, BOGUS_TARGET_NODE_ID, PATH_START_NODE_ID};
+use crate::models::path::{NewBlock, Path, PathBlock, PathData};
 use crate::models::path_edge::PathEdge;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
@@ -36,6 +36,17 @@ pub struct PathChange {
     pub start: i32,
     pub end: i32,
     pub block: NewBlock,
+    pub chromosome_index: i32,
+    pub phased: i32,
+}
+
+#[derive(Clone, Debug)]
+pub struct PathChangeNew {
+    pub block_group_id: i32,
+    pub path: Path,
+    pub start: i32,
+    pub end: i32,
+    pub block: PathBlock,
     pub chromosome_index: i32,
     pub phased: i32,
 }
@@ -82,6 +93,52 @@ impl PathCache<'_> {
         path_cache: &'a PathCache<'a>,
         path: &'a Path,
     ) -> Option<&'a IntervalTree<i32, NewBlock>> {
+        path_cache.intervaltree_cache.get(path)
+    }
+}
+
+pub struct PathCacheNew<'a> {
+    pub cache: HashMap<PathData, Path>,
+    pub intervaltree_cache: HashMap<Path, IntervalTree<i32, PathBlock>>,
+    pub conn: &'a Connection,
+}
+
+impl PathCacheNew<'_> {
+    pub fn new(conn: &Connection) -> PathCacheNew {
+        PathCacheNew {
+            cache: HashMap::<PathData, Path>::new(),
+            intervaltree_cache: HashMap::<Path, IntervalTree<i32, PathBlock>>::new(),
+            conn,
+        }
+    }
+
+    pub fn lookup(path_cache: &mut PathCacheNew, block_group_id: i32, name: String) -> Path {
+        let path_key = PathData {
+            name: name.clone(),
+            block_group_id,
+        };
+        let path_lookup = path_cache.cache.get(&path_key);
+        if let Some(path) = path_lookup {
+            path.clone()
+        } else {
+            let new_path = Path::get_paths(
+                path_cache.conn,
+                "select * from path where block_group_id = ?1 AND name = ?2",
+                vec![SQLValue::from(block_group_id), SQLValue::from(name)],
+            )[0]
+            .clone();
+
+            path_cache.cache.insert(path_key, new_path.clone());
+            let tree = Path::intervaltree_for_new(path_cache.conn, &new_path);
+            path_cache.intervaltree_cache.insert(new_path.clone(), tree);
+            new_path
+        }
+    }
+
+    pub fn get_intervaltree<'a>(
+        path_cache: &'a PathCacheNew<'a>,
+        path: &'a Path,
+    ) -> Option<&'a IntervalTree<i32, PathBlock>> {
         path_cache.intervaltree_cache.get(path)
     }
 }
@@ -375,6 +432,27 @@ impl BlockGroup {
         }
     }
 
+    pub fn insert_changes_new(
+        conn: &Connection,
+        changes: &Vec<PathChangeNew>,
+        cache: &PathCacheNew,
+    ) {
+        let mut new_edges_by_block_group = HashMap::<i32, Vec<EdgeData>>::new();
+        for change in changes {
+            let tree = PathCacheNew::get_intervaltree(cache, &change.path).unwrap();
+            let new_edges = BlockGroup::set_up_new_edges_new(change, tree);
+            new_edges_by_block_group
+                .entry(change.block_group_id)
+                .and_modify(|new_edge_data| new_edge_data.extend(new_edges.clone()))
+                .or_insert_with(|| new_edges.clone());
+        }
+
+        for (block_group_id, new_edges) in new_edges_by_block_group {
+            let edge_ids = Edge::bulk_create(conn, new_edges);
+            BlockGroupEdge::bulk_create(conn, block_group_id, &edge_ids);
+        }
+    }
+
     #[allow(clippy::ptr_arg)]
     #[allow(clippy::needless_late_init)]
     pub fn insert_change(
@@ -475,6 +553,106 @@ impl BlockGroup {
                 source_strand: Strand::Forward,
                 target_hash: end_block.sequence.hash.clone(),
                 target_node_id: BOGUS_TARGET_NODE_ID,
+                target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
+                target_strand: Strand::Forward,
+                chromosome_index: change.chromosome_index,
+                phased: change.phased,
+            };
+            new_edges.push(new_start_edge);
+            new_edges.push(new_end_edge);
+        }
+
+        new_edges
+    }
+
+    pub fn set_up_new_edges_new(
+        change: &PathChangeNew,
+        tree: &IntervalTree<i32, PathBlock>,
+    ) -> Vec<EdgeData> {
+        let start_blocks: Vec<&PathBlock> =
+            tree.query_point(change.start).map(|x| &x.value).collect();
+        assert_eq!(start_blocks.len(), 1);
+        // NOTE: This may not be used but needs to be initialized here instead of inside the if
+        // statement that uses it, so that the borrow checker is happy
+        let previous_start_blocks: Vec<&PathBlock> = tree
+            .query_point(change.start - 1)
+            .map(|x| &x.value)
+            .collect();
+        assert_eq!(previous_start_blocks.len(), 1);
+        let start_block = if start_blocks[0].path_start == change.start {
+            // First part of this block will be replaced/deleted, need to get previous block to add
+            // edge including it
+            previous_start_blocks[0]
+        } else {
+            start_blocks[0]
+        };
+
+        let end_blocks: Vec<&PathBlock> = tree.query_point(change.end).map(|x| &x.value).collect();
+        assert_eq!(end_blocks.len(), 1);
+        let end_block = end_blocks[0];
+
+        let mut new_edges = vec![];
+
+        if change.block.sequence_start == change.block.sequence_end {
+            // Deletion
+            let new_edge = EdgeData {
+                source_hash: "".to_string(),
+                source_node_id: start_block.node_id,
+                source_coordinate: change.start - start_block.path_start
+                    + start_block.sequence_start,
+                source_strand: Strand::Forward,
+                target_hash: "".to_string(),
+                target_node_id: end_block.node_id,
+                target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
+                target_strand: Strand::Forward,
+                chromosome_index: change.chromosome_index,
+                phased: change.phased,
+            };
+            new_edges.push(new_edge);
+
+            // NOTE: If the deletion is happening at the very beginning of a path, we need to add
+            // an edge from the dedicated start node to the end of the deletion, to indicate it's
+            // another start point in the block group DAG.
+            if change.start == 0 {
+                let new_beginning_edge = EdgeData {
+                    source_hash: "".to_string(),
+                    source_node_id: PATH_START_NODE_ID,
+                    source_coordinate: 0,
+                    source_strand: Strand::Forward,
+                    target_hash: "".to_string(),
+                    target_node_id: end_block.node_id,
+                    target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
+                    target_strand: Strand::Forward,
+                    chromosome_index: change.chromosome_index,
+                    phased: change.phased,
+                };
+                new_edges.push(new_beginning_edge);
+            }
+        // NOTE: If the deletion is happening at the very end of a path, we might add an edge
+        // from the beginning of the deletion to the dedicated end node, but in practice it
+        // doesn't affect sequence readouts, so it may not be worth it.
+        } else {
+            // Insertion/replacement
+            let new_start_edge = EdgeData {
+                source_hash: "".to_string(),
+                source_node_id: start_block.node_id,
+                source_coordinate: change.start - start_block.path_start
+                    + start_block.sequence_start,
+                source_strand: Strand::Forward,
+                target_hash: "".to_string(),
+                target_node_id: change.block.node_id,
+                target_coordinate: change.block.sequence_start,
+                target_strand: Strand::Forward,
+                chromosome_index: change.chromosome_index,
+                phased: change.phased,
+            };
+            let new_end_edge = EdgeData {
+                source_hash: "".to_string(),
+                source_node_id: change.block.node_id,
+                source_coordinate: change.block.sequence_end,
+                source_strand: Strand::Forward,
+                target_hash: "".to_string(),
+                target_node_id: end_block.node_id,
                 target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
                 target_strand: Strand::Forward,
                 chromosome_index: change.chromosome_index,

@@ -475,33 +475,14 @@ impl Edge {
             }
         }
 
-        let nodes = Node::get_nodes(conn, node_ids.into_iter().collect::<Vec<i32>>());
-        let sequence_hashes_by_node_id = nodes
-            .iter()
-            .map(|node| (node.id, node.sequence_hash.clone()))
-            .collect::<HashMap<i32, String>>();
-        let sequences_by_hash = Sequence::sequences_by_hash(
-            conn,
-            sequence_hashes_by_node_id
-                .values()
-                .map(|hash| hash.as_str())
-                .collect::<Vec<&str>>(),
-        );
-        let sequences_by_node_id = sequence_hashes_by_node_id
-            .clone()
-            .into_iter()
-            .map(|(node_id, sequence_hash)| {
-                (
-                    node_id,
-                    sequences_by_hash.get(&sequence_hash).unwrap().clone(),
-                )
-            })
-            .collect::<HashMap<i32, Sequence>>();
+        let sequences_by_node_id =
+            Node::get_sequences_by_node_ids(conn, node_ids.into_iter().collect::<Vec<i32>>());
+
         let mut blocks = vec![];
         let mut block_index = 0;
         let mut boundary_edges = vec![];
         for (node_id, sequence) in sequences_by_node_id.into_iter() {
-            let hash = sequence_hashes_by_node_id.get(&node_id).unwrap();
+            let hash = sequence.hash.clone();
             let block_boundaries = Edge::get_block_boundaries(
                 edges_by_source_node_id.get(&node_id),
                 edges_by_target_node_id.get(&node_id),
@@ -739,13 +720,14 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
+        let node1 = Node::create(conn, sequence1.hash.as_str());
         let edge1 = EdgeData {
-            source_hash: Sequence::PATH_START_HASH.to_string(),
-            source_node_id: BOGUS_SOURCE_NODE_ID,
+            source_hash: "".to_string(),
+            source_node_id: PATH_START_NODE_ID,
             source_coordinate: -1,
             source_strand: Strand::Forward,
-            target_hash: sequence1.hash.clone(),
-            target_node_id: BOGUS_TARGET_NODE_ID,
+            target_hash: "".to_string(),
+            target_node_id: node1.id,
             target_coordinate: 1,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -755,25 +737,26 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
+        let node2 = Node::create(conn, sequence2.hash.as_str());
         let edge2 = EdgeData {
-            source_hash: sequence1.hash.clone(),
-            source_node_id: BOGUS_SOURCE_NODE_ID,
+            source_hash: "".to_string(),
+            source_node_id: node1.id,
             source_coordinate: 2,
             source_strand: Strand::Forward,
-            target_hash: sequence2.hash.clone(),
-            target_node_id: BOGUS_TARGET_NODE_ID,
+            target_hash: "".to_string(),
+            target_node_id: node2.id,
             target_coordinate: 3,
             target_strand: Strand::Forward,
             chromosome_index: 0,
             phased: 0,
         };
         let edge3 = EdgeData {
-            source_hash: sequence2.hash.clone(),
-            source_node_id: BOGUS_SOURCE_NODE_ID,
+            source_hash: "".to_string(),
+            source_node_id: node2.id,
             source_coordinate: 4,
             source_strand: Strand::Forward,
-            target_hash: Sequence::PATH_END_HASH.to_string(),
-            target_node_id: BOGUS_TARGET_NODE_ID,
+            target_hash: "".to_string(),
+            target_node_id: PATH_END_NODE_ID,
             target_coordinate: -1,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -785,22 +768,22 @@ mod tests {
         let edges = Edge::bulk_load(conn, &edge_ids);
         assert_eq!(edges.len(), 3);
 
-        let edges_by_source_hash = edges
+        let edges_by_source_node_id = edges
             .into_iter()
-            .map(|edge| (edge.source_hash.clone(), edge))
-            .collect::<HashMap<String, Edge>>();
+            .map(|edge| (edge.source_node_id, edge))
+            .collect::<HashMap<i32, Edge>>();
 
-        let edge_result1 = edges_by_source_hash.get(Sequence::PATH_START_HASH).unwrap();
+        let edge_result1 = edges_by_source_node_id.get(&PATH_START_NODE_ID).unwrap();
         assert_eq!(edge_result1.source_coordinate, -1);
-        assert_eq!(edge_result1.target_hash, sequence1.hash);
+        assert_eq!(edge_result1.target_node_id, node1.id);
         assert_eq!(edge_result1.target_coordinate, 1);
-        let edge_result2 = edges_by_source_hash.get(&sequence1.hash).unwrap();
+        let edge_result2 = edges_by_source_node_id.get(&node1.id).unwrap();
         assert_eq!(edge_result2.source_coordinate, 2);
-        assert_eq!(edge_result2.target_hash, sequence2.hash);
+        assert_eq!(edge_result2.target_node_id, node2.id);
         assert_eq!(edge_result2.target_coordinate, 3);
-        let edge_result3 = edges_by_source_hash.get(&sequence2.hash).unwrap();
+        let edge_result3 = edges_by_source_node_id.get(&node2.id).unwrap();
         assert_eq!(edge_result3.source_coordinate, 4);
-        assert_eq!(edge_result3.target_hash, Sequence::PATH_END_HASH);
+        assert_eq!(edge_result3.target_node_id, PATH_END_NODE_ID);
         assert_eq!(edge_result3.target_coordinate, -1);
     }
 
@@ -812,13 +795,14 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
+        let node1 = Node::create(conn, sequence1.hash.as_str());
         let edge1 = EdgeData {
-            source_hash: Sequence::PATH_START_HASH.to_string(),
-            source_node_id: BOGUS_SOURCE_NODE_ID,
+            source_hash: "".to_string(),
+            source_node_id: PATH_START_NODE_ID,
             source_coordinate: -1,
             source_strand: Strand::Forward,
-            target_hash: sequence1.hash.clone(),
-            target_node_id: BOGUS_TARGET_NODE_ID,
+            target_hash: "".to_string(),
+            target_node_id: node1.id,
             target_coordinate: 1,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -828,25 +812,26 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
+        let node2 = Node::create(conn, sequence2.hash.as_str());
         let edge2 = EdgeData {
-            source_hash: sequence1.hash.clone(),
-            source_node_id: BOGUS_SOURCE_NODE_ID,
+            source_hash: "".to_string(),
+            source_node_id: node1.id,
             source_coordinate: 2,
             source_strand: Strand::Forward,
-            target_hash: sequence2.hash.clone(),
-            target_node_id: BOGUS_TARGET_NODE_ID,
+            target_hash: "".to_string(),
+            target_node_id: node2.id,
             target_coordinate: 3,
             target_strand: Strand::Forward,
             chromosome_index: 0,
             phased: 0,
         };
         let edge3 = EdgeData {
-            source_hash: sequence2.hash.clone(),
-            source_node_id: BOGUS_SOURCE_NODE_ID,
+            source_hash: "".to_string(),
+            source_node_id: node2.id,
             source_coordinate: 4,
             source_strand: Strand::Forward,
-            target_hash: Sequence::PATH_END_HASH.to_string(),
-            target_node_id: BOGUS_TARGET_NODE_ID,
+            target_hash: "".to_string(),
+            target_node_id: PATH_END_NODE_ID,
             target_coordinate: -1,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -891,32 +876,33 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
+        let node1 = Node::create(conn, sequence1.hash.as_str());
         // NOTE: Create one edge ahead of time to confirm an existing row ID gets returned in the bulk create
         let existing_edge = Edge::create(
             conn,
-            Sequence::PATH_START_HASH.to_string(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            PATH_START_NODE_ID,
             -1,
             Strand::Forward,
-            sequence1.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            node1.id,
             1,
             Strand::Forward,
             0,
             0,
         );
-        assert_eq!(existing_edge.source_hash, Sequence::PATH_START_HASH);
+        assert_eq!(existing_edge.source_node_id, PATH_START_NODE_ID);
         assert_eq!(existing_edge.source_coordinate, -1);
-        assert_eq!(existing_edge.target_hash, sequence1.hash);
+        assert_eq!(existing_edge.target_node_id, node1.id);
         assert_eq!(existing_edge.target_coordinate, 1);
 
         let edge1 = EdgeData {
-            source_hash: Sequence::PATH_START_HASH.to_string(),
+            source_hash: "".to_string(),
             source_coordinate: -1,
-            source_node_id: BOGUS_SOURCE_NODE_ID,
+            source_node_id: PATH_START_NODE_ID,
             source_strand: Strand::Forward,
-            target_hash: sequence1.hash.clone(),
-            target_node_id: BOGUS_TARGET_NODE_ID,
+            target_hash: "".to_string(),
+            target_node_id: node1.id,
             target_coordinate: 1,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -926,25 +912,26 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
+        let node2 = Node::create(conn, sequence2.hash.as_str());
         let edge2 = EdgeData {
-            source_hash: sequence1.hash.clone(),
-            source_node_id: BOGUS_SOURCE_NODE_ID,
+            source_hash: "".to_string(),
+            source_node_id: node1.id,
             source_coordinate: 2,
             source_strand: Strand::Forward,
-            target_hash: sequence2.hash.clone(),
-            target_node_id: BOGUS_TARGET_NODE_ID,
+            target_hash: "".to_string(),
+            target_node_id: node2.id,
             target_coordinate: 3,
             target_strand: Strand::Forward,
             chromosome_index: 0,
             phased: 0,
         };
         let edge3 = EdgeData {
-            source_hash: sequence2.hash.clone(),
-            source_node_id: BOGUS_SOURCE_NODE_ID,
+            source_hash: "".to_string(),
+            source_node_id: node2.id,
             source_coordinate: 4,
             source_strand: Strand::Forward,
-            target_hash: Sequence::PATH_END_HASH.to_string(),
-            target_node_id: BOGUS_TARGET_NODE_ID,
+            target_hash: "".to_string(),
+            target_node_id: PATH_END_NODE_ID,
             target_coordinate: -1,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -956,25 +943,25 @@ mod tests {
         let edges = Edge::bulk_load(conn, &edge_ids);
         assert_eq!(edges.len(), 3);
 
-        let edges_by_source_hash = edges
+        let edges_by_source_node_id = edges
             .into_iter()
-            .map(|edge| (edge.source_hash.clone(), edge))
-            .collect::<HashMap<String, Edge>>();
+            .map(|edge| (edge.source_node_id, edge))
+            .collect::<HashMap<i32, Edge>>();
 
-        let edge_result1 = edges_by_source_hash.get(Sequence::PATH_START_HASH).unwrap();
+        let edge_result1 = edges_by_source_node_id.get(&PATH_START_NODE_ID).unwrap();
 
         assert_eq!(edge_result1.id, existing_edge.id);
 
         assert_eq!(edge_result1.source_coordinate, -1);
-        assert_eq!(edge_result1.target_hash, sequence1.hash);
+        assert_eq!(edge_result1.target_node_id, node1.id);
         assert_eq!(edge_result1.target_coordinate, 1);
-        let edge_result2 = edges_by_source_hash.get(&sequence1.hash).unwrap();
+        let edge_result2 = edges_by_source_node_id.get(&node1.id).unwrap();
         assert_eq!(edge_result2.source_coordinate, 2);
-        assert_eq!(edge_result2.target_hash, sequence2.hash);
+        assert_eq!(edge_result2.target_node_id, node2.id);
         assert_eq!(edge_result2.target_coordinate, 3);
-        let edge_result3 = edges_by_source_hash.get(&sequence2.hash).unwrap();
+        let edge_result3 = edges_by_source_node_id.get(&node2.id).unwrap();
         assert_eq!(edge_result3.source_coordinate, 4);
-        assert_eq!(edge_result3.target_hash, Sequence::PATH_END_HASH);
+        assert_eq!(edge_result3.target_node_id, PATH_END_NODE_ID);
         assert_eq!(edge_result3.target_coordinate, -1);
     }
 }

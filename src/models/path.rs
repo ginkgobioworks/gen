@@ -6,7 +6,13 @@ use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
 
-use crate::models::{edge::Edge, path_edge::PathEdge, sequence::Sequence, strand::Strand};
+use crate::models::{
+    edge::Edge,
+    node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
+    path_edge::PathEdge,
+    sequence::Sequence,
+    strand::Strand,
+};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub struct Path {
@@ -58,6 +64,18 @@ pub fn revcomp(seq: &str) -> String {
 pub struct NewBlock {
     pub id: i32,
     pub sequence: Sequence,
+    pub block_sequence: String,
+    pub sequence_start: i32,
+    pub sequence_end: i32,
+    pub path_start: i32,
+    pub path_end: i32,
+    pub strand: Strand,
+}
+
+#[derive(Clone, Debug)]
+pub struct PathBlock {
+    pub id: i32,
+    pub node_id: i32,
     pub block_sequence: String,
     pub sequence_start: i32,
     pub sequence_end: i32,
@@ -158,7 +176,7 @@ impl Path {
     }
 
     pub fn sequence(conn: &Connection, path: Path) -> String {
-        let blocks = Path::blocks_for(conn, &path);
+        let blocks = Path::blocks_for_new(conn, &path);
         blocks
             .into_iter()
             .map(|block| block.block_sequence)
@@ -287,6 +305,128 @@ impl Path {
             .collect();
         tree
     }
+
+    pub fn edge_pairs_to_block_new(
+        block_id: i32,
+        path: &Path,
+        into: Edge,
+        out_of: Edge,
+        sequences_by_node_id: &HashMap<i32, Sequence>,
+        current_path_length: i32,
+    ) -> PathBlock {
+        if into.target_node_id != out_of.source_node_id {
+            panic!(
+                "Consecutive edges in path {0} don't share the same sequence",
+                path.id
+            );
+        }
+
+        let sequence = sequences_by_node_id.get(&into.target_node_id).unwrap();
+        let start = into.target_coordinate;
+        let end = out_of.source_coordinate;
+
+        let strand;
+        let block_sequence_length;
+
+        if into.target_strand == out_of.source_strand {
+            strand = into.target_strand;
+            block_sequence_length = end - start;
+        } else {
+            panic!(
+                "Edge pair with target_strand/source_strand mismatch for path {}",
+                path.id
+            );
+        }
+
+        let block_sequence = if strand == Strand::Reverse {
+            revcomp(&sequence.get_sequence(start, end))
+        } else {
+            sequence.get_sequence(start, end)
+        };
+
+        PathBlock {
+            id: block_id,
+            node_id: into.target_node_id,
+            block_sequence,
+            sequence_start: start,
+            sequence_end: end,
+            path_start: current_path_length,
+            path_end: current_path_length + block_sequence_length,
+            strand,
+        }
+    }
+
+    pub fn blocks_for_new(conn: &Connection, path: &Path) -> Vec<PathBlock> {
+        let edges = PathEdge::edges_for_path(conn, path.id);
+        let mut sequence_node_ids = HashSet::new();
+        for edge in &edges {
+            if edge.source_node_id != PATH_START_NODE_ID {
+                sequence_node_ids.insert(edge.source_node_id);
+            }
+            if edge.target_node_id != PATH_END_NODE_ID {
+                sequence_node_ids.insert(edge.target_node_id);
+            }
+        }
+        let sequences_by_node_id = Node::get_sequences_by_node_ids(
+            conn,
+            sequence_node_ids.into_iter().collect::<Vec<i32>>(),
+        );
+
+        let mut blocks = vec![];
+        let mut path_length = 0;
+
+        // NOTE: Adding a "start block" for the dedicated start sequence with a range from i32::MIN
+        // to 0 makes interval tree lookups work better.  If the point being looked up is -1 (or
+        // below), it will return this block.
+        blocks.push(PathBlock {
+            id: -1,
+            node_id: PATH_START_NODE_ID,
+            block_sequence: "".to_string(),
+            sequence_start: 0,
+            sequence_end: 0,
+            path_start: i32::MIN + 1,
+            path_end: 0,
+            strand: Strand::Forward,
+        });
+
+        for (index, (into, out_of)) in edges.into_iter().tuple_windows().enumerate() {
+            let block = Path::edge_pairs_to_block_new(
+                index as i32,
+                path,
+                into,
+                out_of,
+                &sequences_by_node_id,
+                path_length,
+            );
+            path_length += block.block_sequence.len() as i32;
+            blocks.push(block);
+        }
+
+        // NOTE: Adding an "end block" for the dedicated end sequence with a range from the path
+        // length to i32::MAX makes interval tree lookups work better.  If the point being looked up
+        // is the path length (or higher), it will return this block.
+        blocks.push(PathBlock {
+            id: -2,
+            node_id: PATH_END_NODE_ID,
+            block_sequence: "".to_string(),
+            sequence_start: 0,
+            sequence_end: 0,
+            path_start: path_length,
+            path_end: i32::MAX - 1,
+            strand: Strand::Forward,
+        });
+
+        blocks
+    }
+
+    pub fn intervaltree_for_new(conn: &Connection, path: &Path) -> IntervalTree<i32, PathBlock> {
+        let blocks = Path::blocks_for_new(conn, path);
+        let tree: IntervalTree<i32, PathBlock> = blocks
+            .into_iter()
+            .map(|block| (block.path_start..block.path_end, block))
+            .collect();
+        tree
+    }
 }
 
 #[cfg(test)]
@@ -294,11 +434,7 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
-    use crate::models::{
-        block_group::BlockGroup,
-        collection::Collection,
-        node::{BOGUS_SOURCE_NODE_ID, BOGUS_TARGET_NODE_ID},
-    };
+    use crate::models::{block_group::BlockGroup, collection::Collection};
     use crate::test_helpers::get_connection;
 
     #[test]
@@ -310,14 +446,15 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
+        let node1 = Node::create(conn, sequence1.hash.as_str());
         let edge1 = Edge::create(
             conn,
-            Sequence::PATH_START_HASH.to_string(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            PATH_START_NODE_ID,
             -123,
             Strand::Forward,
-            sequence1.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            node1.id,
             0,
             Strand::Forward,
             0,
@@ -327,14 +464,15 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
+        let node2 = Node::create(conn, sequence2.hash.as_str());
         let edge2 = Edge::create(
             conn,
-            sequence1.hash.clone(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            node1.id,
             8,
             Strand::Forward,
-            sequence2.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            node2.id,
             1,
             Strand::Forward,
             0,
@@ -344,14 +482,15 @@ mod tests {
             .sequence_type("DNA")
             .sequence("CCCCCCCC")
             .save(conn);
+        let node3 = Node::create(conn, sequence3.hash.as_str());
         let edge3 = Edge::create(
             conn,
-            sequence2.hash.clone(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            node2.id,
             8,
             Strand::Forward,
-            sequence3.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            node3.id,
             1,
             Strand::Forward,
             0,
@@ -361,14 +500,15 @@ mod tests {
             .sequence_type("DNA")
             .sequence("GGGGGGGG")
             .save(conn);
+        let node4 = Node::create(conn, sequence4.hash.as_str());
         let edge4 = Edge::create(
             conn,
-            sequence3.hash.clone(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            node3.id,
             8,
             Strand::Forward,
-            sequence4.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            node4.id,
             1,
             Strand::Forward,
             0,
@@ -376,12 +516,12 @@ mod tests {
         );
         let edge5 = Edge::create(
             conn,
-            sequence4.hash.clone(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            node4.id,
             8,
             Strand::Forward,
-            Sequence::PATH_END_HASH.to_string(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            PATH_END_NODE_ID,
             -1,
             Strand::Forward,
             0,
@@ -406,14 +546,15 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
+        let node1 = Node::create(conn, sequence1.hash.as_str());
         let edge5 = Edge::create(
             conn,
-            sequence1.hash.clone(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            node1.id,
             8,
             Strand::Reverse,
-            Sequence::PATH_END_HASH.to_string(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            PATH_END_NODE_ID,
             0,
             Strand::Reverse,
             0,
@@ -423,14 +564,15 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
+        let node2 = Node::create(conn, sequence2.hash.as_str());
         let edge4 = Edge::create(
             conn,
-            sequence2.hash.clone(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            node2.id,
             7,
             Strand::Reverse,
-            sequence1.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            node1.id,
             0,
             Strand::Reverse,
             0,
@@ -440,14 +582,15 @@ mod tests {
             .sequence_type("DNA")
             .sequence("CCCCCCCC")
             .save(conn);
+        let node3 = Node::create(conn, sequence3.hash.as_str());
         let edge3 = Edge::create(
             conn,
-            sequence3.hash.clone(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            node3.id,
             7,
             Strand::Reverse,
-            sequence2.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            node2.id,
             0,
             Strand::Reverse,
             0,
@@ -457,14 +600,15 @@ mod tests {
             .sequence_type("DNA")
             .sequence("GGGGGGGG")
             .save(conn);
+        let node4 = Node::create(conn, sequence4.hash.as_str());
         let edge2 = Edge::create(
             conn,
-            sequence4.hash.clone(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            node4.id,
             7,
             Strand::Reverse,
-            sequence3.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            node3.id,
             0,
             Strand::Reverse,
             0,
@@ -472,12 +616,12 @@ mod tests {
         );
         let edge1 = Edge::create(
             conn,
-            Sequence::PATH_START_HASH.to_string(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            PATH_START_NODE_ID,
             -1,
             Strand::Reverse,
-            sequence4.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            node4.id,
             0,
             Strand::Reverse,
             0,
@@ -509,14 +653,15 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
+        let node1 = Node::create(conn, sequence1.hash.as_str());
         let edge1 = Edge::create(
             conn,
-            Sequence::PATH_START_HASH.to_string(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            PATH_START_NODE_ID,
             -1,
             Strand::Forward,
-            sequence1.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            node1.id,
             0,
             Strand::Forward,
             0,
@@ -526,14 +671,15 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
+        let node2 = Node::create(conn, sequence2.hash.as_str());
         let edge2 = Edge::create(
             conn,
-            sequence1.hash.clone(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            node1.id,
             8,
             Strand::Forward,
-            sequence2.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            node2.id,
             1,
             Strand::Forward,
             0,
@@ -543,14 +689,15 @@ mod tests {
             .sequence_type("DNA")
             .sequence("CCCCCCCC")
             .save(conn);
+        let node3 = Node::create(conn, sequence3.hash.as_str());
         let edge3 = Edge::create(
             conn,
-            sequence2.hash.clone(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            node2.id,
             8,
             Strand::Forward,
-            sequence3.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            node3.id,
             1,
             Strand::Forward,
             0,
@@ -560,14 +707,15 @@ mod tests {
             .sequence_type("DNA")
             .sequence("GGGGGGGG")
             .save(conn);
+        let node4 = Node::create(conn, sequence4.hash.as_str());
         let edge4 = Edge::create(
             conn,
-            sequence3.hash.clone(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            node3.id,
             8,
             Strand::Forward,
-            sequence4.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            node4.id,
             1,
             Strand::Forward,
             0,
@@ -575,12 +723,12 @@ mod tests {
         );
         let edge5 = Edge::create(
             conn,
-            sequence4.hash.clone(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            node4.id,
             8,
             Strand::Forward,
-            Sequence::PATH_END_HASH.to_string(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            PATH_END_NODE_ID,
             -1,
             Strand::Forward,
             0,
@@ -593,31 +741,31 @@ mod tests {
             block_group.id,
             &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
         );
-        let tree = Path::intervaltree_for(conn, &path);
-        let blocks1: Vec<_> = tree.query_point(2).map(|x| x.value.clone()).collect();
+        let tree = Path::intervaltree_for_new(conn, &path);
+        let blocks1: Vec<PathBlock> = tree.query_point(2).map(|x| x.value.clone()).collect();
         assert_eq!(blocks1.len(), 1);
         let block1 = &blocks1[0];
-        assert_eq!(block1.sequence.hash, sequence1.hash);
+        assert_eq!(block1.node_id, node1.id);
         assert_eq!(block1.sequence_start, 0);
         assert_eq!(block1.sequence_end, 8);
         assert_eq!(block1.path_start, 0);
         assert_eq!(block1.path_end, 8);
         assert_eq!(block1.strand, Strand::Forward);
 
-        let blocks2: Vec<_> = tree.query_point(12).map(|x| x.value.clone()).collect();
+        let blocks2: Vec<PathBlock> = tree.query_point(12).map(|x| x.value.clone()).collect();
         assert_eq!(blocks2.len(), 1);
         let block2 = &blocks2[0];
-        assert_eq!(block2.sequence.hash, sequence2.hash);
+        assert_eq!(block2.node_id, node2.id);
         assert_eq!(block2.sequence_start, 1);
         assert_eq!(block2.sequence_end, 8);
         assert_eq!(block2.path_start, 8);
         assert_eq!(block2.path_end, 15);
         assert_eq!(block2.strand, Strand::Forward);
 
-        let blocks4: Vec<_> = tree.query_point(25).map(|x| x.value.clone()).collect();
+        let blocks4: Vec<PathBlock> = tree.query_point(25).map(|x| x.value.clone()).collect();
         assert_eq!(blocks4.len(), 1);
         let block4 = &blocks4[0];
-        assert_eq!(block4.sequence.hash, sequence4.hash);
+        assert_eq!(block4.node_id, node4.id);
         assert_eq!(block4.sequence_start, 1);
         assert_eq!(block4.sequence_end, 8);
         assert_eq!(block4.path_start, 22);

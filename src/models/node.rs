@@ -1,4 +1,5 @@
 use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
+use std::collections::HashMap;
 
 use crate::models::sequence::Sequence;
 
@@ -58,15 +59,31 @@ impl Node {
         )
     }
 
-    pub fn sequences_from_node_ids(conn: &Connection, node_ids: Vec<i32>) -> Vec<Sequence> {
-        let nodes = Node::get_nodes(conn, node_ids);
-        let sequence_hashes = nodes
+    pub fn get_sequences_by_node_ids(
+        conn: &Connection,
+        node_ids: Vec<i32>,
+    ) -> HashMap<i32, Sequence> {
+        let nodes = Node::get_nodes(conn, node_ids.into_iter().collect::<Vec<i32>>());
+        let sequence_hashes_by_node_id = nodes
             .iter()
-            .map(|node| node.sequence_hash.as_str())
-            .collect::<Vec<&str>>();
-        Sequence::sequences_by_hash(conn, sequence_hashes)
-            .values()
-            .cloned()
-            .collect()
+            .map(|node| (node.id, node.sequence_hash.clone()))
+            .collect::<HashMap<i32, String>>();
+        let sequences_by_hash = Sequence::sequences_by_hash(
+            conn,
+            sequence_hashes_by_node_id
+                .values()
+                .map(|hash| hash.as_str())
+                .collect::<Vec<&str>>(),
+        );
+        sequence_hashes_by_node_id
+            .clone()
+            .into_iter()
+            .map(|(node_id, sequence_hash)| {
+                (
+                    node_id,
+                    sequences_by_hash.get(&sequence_hash).unwrap().clone(),
+                )
+            })
+            .collect::<HashMap<i32, Sequence>>()
     }
 }
