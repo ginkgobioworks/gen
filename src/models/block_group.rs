@@ -439,7 +439,7 @@ impl BlockGroup {
 mod tests {
     use super::*;
     use crate::models::{collection::Collection, node::Node, sample::Sample};
-    use crate::test_helpers::{get_connection, setup_block_group_new};
+    use crate::test_helpers::{get_connection, setup_block_group};
 
     #[test]
     fn test_blockgroup_create() {
@@ -474,7 +474,7 @@ mod tests {
     #[test]
     fn insert_and_deletion_get_all() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
@@ -554,7 +554,7 @@ mod tests {
     #[test]
     fn simple_insert_get_all() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
@@ -595,7 +595,7 @@ mod tests {
     #[test]
     fn insert_on_block_boundary_middle() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
@@ -636,7 +636,7 @@ mod tests {
     #[test]
     fn insert_within_block() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
@@ -677,7 +677,7 @@ mod tests {
     #[test]
     fn insert_on_block_boundary_start() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
@@ -718,7 +718,7 @@ mod tests {
     #[test]
     fn insert_on_block_boundary_end() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
@@ -759,7 +759,7 @@ mod tests {
     #[test]
     fn insert_across_entire_block_boundary() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
@@ -800,7 +800,7 @@ mod tests {
     #[test]
     fn insert_across_two_blocks() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
@@ -841,7 +841,7 @@ mod tests {
     #[test]
     fn insert_spanning_blocks() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
@@ -882,7 +882,7 @@ mod tests {
     #[test]
     fn simple_deletion() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let deletion_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("")
@@ -925,7 +925,7 @@ mod tests {
     #[test]
     fn doesnt_apply_same_insert_twice() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
@@ -978,7 +978,7 @@ mod tests {
     #[test]
     fn insert_at_beginning_of_path() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
@@ -1019,7 +1019,7 @@ mod tests {
     #[test]
     fn insert_at_end_of_path() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
 
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
@@ -1061,7 +1061,7 @@ mod tests {
     #[test]
     fn insert_at_one_bp_into_block() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
@@ -1102,7 +1102,7 @@ mod tests {
     #[test]
     fn insert_at_one_bp_from_end_of_block() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
@@ -1143,7 +1143,7 @@ mod tests {
     #[test]
     fn delete_at_beginning_of_path() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let deletion_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("")
@@ -1184,7 +1184,7 @@ mod tests {
     #[test]
     fn delete_at_end_of_path() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let deletion_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("")
@@ -1225,7 +1225,7 @@ mod tests {
     #[test]
     fn deletion_starting_at_block_boundary() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let deletion_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("")
@@ -1266,7 +1266,7 @@ mod tests {
     #[test]
     fn deletion_ending_at_block_boundary() {
         let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group_new(&conn);
+        let (block_group_id, path) = setup_block_group(&conn);
         let deletion_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("")

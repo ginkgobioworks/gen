@@ -3,9 +3,6 @@ use std::collections::HashMap;
 
 use crate::models::sequence::Sequence;
 
-pub const BOGUS_SOURCE_NODE_ID: i32 = -1;
-pub const BOGUS_TARGET_NODE_ID: i32 = -2;
-
 pub const PATH_START_NODE_ID: i32 = 1;
 pub const PATH_END_NODE_ID: i32 = 2;
 

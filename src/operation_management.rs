@@ -16,7 +16,6 @@ use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::collection::Collection;
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::file_types::FileTypes;
-use crate::models::node::{BOGUS_SOURCE_NODE_ID, BOGUS_TARGET_NODE_ID};
 use crate::models::operations::{
     Branch, FileAddition, Operation, OperationState, OperationSummary,
 };
@@ -336,12 +335,12 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                         edge_pk,
                         EdgeData {
                             source_hash: item.new_value(1).unwrap().as_str().unwrap().to_string(),
-                            source_node_id: BOGUS_SOURCE_NODE_ID,
+                            source_node_id: item.new_value(2).unwrap().as_i64().unwrap() as i32,
                             source_coordinate: item.new_value(3).unwrap().as_i64().unwrap() as i32,
                             source_strand: Strand::column_result(item.new_value(4).unwrap())
                                 .unwrap(),
                             target_hash: item.new_value(5).unwrap().as_str().unwrap().to_string(),
-                            target_node_id: BOGUS_TARGET_NODE_ID,
+                            target_node_id: item.new_value(6).unwrap().as_i64().unwrap() as i32,
                             target_coordinate: item.new_value(7).unwrap().as_i64().unwrap() as i32,
                             target_strand: Strand::column_result(item.new_value(8).unwrap())
                                 .unwrap(),
@@ -586,12 +585,7 @@ mod tests {
     use crate::imports::fasta::import_fasta;
     use crate::models::file_types::FileTypes;
     use crate::models::operations::{setup_db, Branch, FileAddition, Operation, OperationState};
-    use crate::models::{
-        edge::Edge,
-        metadata,
-        node::{BOGUS_SOURCE_NODE_ID, BOGUS_TARGET_NODE_ID},
-        sample::Sample,
-    };
+    use crate::models::{edge::Edge, metadata, node::Node, sample::Sample};
     use crate::test_helpers::{
         get_connection, get_operation_connection, setup_block_group, setup_gen_dir,
     };
@@ -636,15 +630,17 @@ mod tests {
             .sequence("ATCG")
             .save(conn);
         let existing_seq = Sequence::sequence_from_hash(conn, Sequence::PATH_END_HASH).unwrap();
+        let random_node = Node::create(conn, random_seq.hash.as_str());
+        let existing_node = Node::create(conn, existing_seq.hash.as_str());
 
         let new_edge = Edge::create(
             conn,
-            random_seq.hash.clone(),
-            BOGUS_SOURCE_NODE_ID,
+            "".to_string(),
+            random_node.id,
             0,
             Strand::Forward,
-            existing_seq.hash.clone(),
-            BOGUS_TARGET_NODE_ID,
+            "".to_string(),
+            existing_node.id,
             0,
             Strand::Forward,
             0,
@@ -661,6 +657,8 @@ mod tests {
             get_changeset_path(&operation).join(format!("{op_id}.dep", op_id = operation.id));
         let dependencies: DependencyModels =
             serde_json::from_reader(fs::File::open(dependency_path).unwrap()).unwrap();
+        println!("here1");
+        println!("{:?}", dependencies);
         assert_eq!(dependencies.sequences.len(), 1);
         assert_eq!(
             dependencies.block_group[0].collection_name,
@@ -708,7 +706,7 @@ mod tests {
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
         let op_count =
             Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
-        assert_eq!(edge_count, 10);
+        assert_eq!(edge_count, 14);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
 
@@ -740,7 +738,7 @@ mod tests {
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
         let op_count =
             Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
-        assert_eq!(edge_count, 10);
+        assert_eq!(edge_count, 14);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
     }
@@ -921,7 +919,7 @@ mod tests {
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
         let op_count =
             Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
-        assert_eq!(edge_count, 10);
+        assert_eq!(edge_count, 14);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
 
@@ -982,7 +980,7 @@ mod tests {
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
         let op_count =
             Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
-        assert_eq!(edge_count, 10);
+        assert_eq!(edge_count, 14);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 3);
     }
