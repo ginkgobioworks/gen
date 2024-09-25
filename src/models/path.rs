@@ -327,11 +327,9 @@ mod tests {
         let node1 = Node::create(conn, sequence1.hash.as_str());
         let edge1 = Edge::create(
             conn,
-            "".to_string(),
             PATH_START_NODE_ID,
             -123,
             Strand::Forward,
-            "".to_string(),
             node1.id,
             0,
             Strand::Forward,
@@ -345,11 +343,9 @@ mod tests {
         let node2 = Node::create(conn, sequence2.hash.as_str());
         let edge2 = Edge::create(
             conn,
-            "".to_string(),
             node1.id,
             8,
             Strand::Forward,
-            "".to_string(),
             node2.id,
             1,
             Strand::Forward,
@@ -363,11 +359,9 @@ mod tests {
         let node3 = Node::create(conn, sequence3.hash.as_str());
         let edge3 = Edge::create(
             conn,
-            "".to_string(),
             node2.id,
             8,
             Strand::Forward,
-            "".to_string(),
             node3.id,
             1,
             Strand::Forward,
@@ -381,11 +375,9 @@ mod tests {
         let node4 = Node::create(conn, sequence4.hash.as_str());
         let edge4 = Edge::create(
             conn,
-            "".to_string(),
             node3.id,
             8,
             Strand::Forward,
-            "".to_string(),
             node4.id,
             1,
             Strand::Forward,
@@ -394,11 +386,9 @@ mod tests {
         );
         let edge5 = Edge::create(
             conn,
-            "".to_string(),
             node4.id,
             8,
             Strand::Forward,
-            "".to_string(),
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
@@ -427,11 +417,9 @@ mod tests {
         let node1 = Node::create(conn, sequence1.hash.as_str());
         let edge5 = Edge::create(
             conn,
-            "".to_string(),
             node1.id,
             8,
             Strand::Reverse,
-            "".to_string(),
             PATH_END_NODE_ID,
             0,
             Strand::Reverse,
@@ -445,11 +433,9 @@ mod tests {
         let node2 = Node::create(conn, sequence2.hash.as_str());
         let edge4 = Edge::create(
             conn,
-            "".to_string(),
             node2.id,
             7,
             Strand::Reverse,
-            "".to_string(),
             node1.id,
             0,
             Strand::Reverse,
@@ -463,11 +449,9 @@ mod tests {
         let node3 = Node::create(conn, sequence3.hash.as_str());
         let edge3 = Edge::create(
             conn,
-            "".to_string(),
             node3.id,
             7,
             Strand::Reverse,
-            "".to_string(),
             node2.id,
             0,
             Strand::Reverse,
@@ -481,11 +465,9 @@ mod tests {
         let node4 = Node::create(conn, sequence4.hash.as_str());
         let edge2 = Edge::create(
             conn,
-            "".to_string(),
             node4.id,
             7,
             Strand::Reverse,
-            "".to_string(),
             node3.id,
             0,
             Strand::Reverse,
@@ -494,11 +476,9 @@ mod tests {
         );
         let edge1 = Edge::create(
             conn,
-            "".to_string(),
             PATH_START_NODE_ID,
             -1,
             Strand::Reverse,
-            "".to_string(),
             node4.id,
             0,
             Strand::Reverse,
@@ -534,11 +514,9 @@ mod tests {
         let node1 = Node::create(conn, sequence1.hash.as_str());
         let edge1 = Edge::create(
             conn,
-            "".to_string(),
             PATH_START_NODE_ID,
             -1,
             Strand::Forward,
-            "".to_string(),
             node1.id,
             0,
             Strand::Forward,
@@ -552,11 +530,9 @@ mod tests {
         let node2 = Node::create(conn, sequence2.hash.as_str());
         let edge2 = Edge::create(
             conn,
-            "".to_string(),
             node1.id,
             8,
             Strand::Forward,
-            "".to_string(),
             node2.id,
             1,
             Strand::Forward,
@@ -570,11 +546,9 @@ mod tests {
         let node3 = Node::create(conn, sequence3.hash.as_str());
         let edge3 = Edge::create(
             conn,
-            "".to_string(),
             node2.id,
             8,
             Strand::Forward,
-            "".to_string(),
             node3.id,
             1,
             Strand::Forward,
@@ -588,11 +562,9 @@ mod tests {
         let node4 = Node::create(conn, sequence4.hash.as_str());
         let edge4 = Edge::create(
             conn,
-            "".to_string(),
             node3.id,
             8,
             Strand::Forward,
-            "".to_string(),
             node4.id,
             1,
             Strand::Forward,
@@ -601,11 +573,9 @@ mod tests {
         );
         let edge5 = Edge::create(
             conn,
-            "".to_string(),
             node4.id,
             8,
             Strand::Forward,
-            "".to_string(),
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,

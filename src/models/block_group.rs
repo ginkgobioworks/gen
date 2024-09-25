@@ -8,10 +8,9 @@ use serde::{Deserialize, Serialize};
 use crate::graph::all_simple_paths;
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData, GroupBlock};
-use crate::models::node::PATH_START_NODE_ID;
+use crate::models::node::{PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::path::{Path, PathBlock, PathData};
 use crate::models::path_edge::PathEdge;
-use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -283,9 +282,7 @@ impl BlockGroup {
                 // TODO: maybe make all_simple_paths return a single path id where start == end
                 if start_node == *end_node {
                     let block = blocks_by_id.get(&start_node).unwrap();
-                    if block.sequence_hash != Sequence::PATH_START_HASH
-                        && block.sequence_hash != Sequence::PATH_END_HASH
-                    {
+                    if block.node_id != PATH_START_NODE_ID && block.node_id != PATH_END_NODE_ID {
                         sequences.insert(block.sequence.clone());
                     }
                 } else {
@@ -365,12 +362,10 @@ impl BlockGroup {
         if change.block.sequence_start == change.block.sequence_end {
             // Deletion
             let new_edge = EdgeData {
-                source_hash: "".to_string(),
                 source_node_id: start_block.node_id,
                 source_coordinate: change.start - start_block.path_start
                     + start_block.sequence_start,
                 source_strand: Strand::Forward,
-                target_hash: "".to_string(),
                 target_node_id: end_block.node_id,
                 target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
                 target_strand: Strand::Forward,
@@ -384,11 +379,9 @@ impl BlockGroup {
             // another start point in the block group DAG.
             if change.start == 0 {
                 let new_beginning_edge = EdgeData {
-                    source_hash: "".to_string(),
                     source_node_id: PATH_START_NODE_ID,
                     source_coordinate: 0,
                     source_strand: Strand::Forward,
-                    target_hash: "".to_string(),
                     target_node_id: end_block.node_id,
                     target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
                     target_strand: Strand::Forward,
@@ -403,12 +396,10 @@ impl BlockGroup {
         } else {
             // Insertion/replacement
             let new_start_edge = EdgeData {
-                source_hash: "".to_string(),
                 source_node_id: start_block.node_id,
                 source_coordinate: change.start - start_block.path_start
                     + start_block.sequence_start,
                 source_strand: Strand::Forward,
-                target_hash: "".to_string(),
                 target_node_id: change.block.node_id,
                 target_coordinate: change.block.sequence_start,
                 target_strand: Strand::Forward,
@@ -416,11 +407,9 @@ impl BlockGroup {
                 phased: change.phased,
             };
             let new_end_edge = EdgeData {
-                source_hash: "".to_string(),
                 source_node_id: change.block.node_id,
                 source_coordinate: change.block.sequence_end,
                 source_strand: Strand::Forward,
-                target_hash: "".to_string(),
                 target_node_id: end_block.node_id,
                 target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
                 target_strand: Strand::Forward,
@@ -438,7 +427,7 @@ impl BlockGroup {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{collection::Collection, node::Node, sample::Sample};
+    use crate::models::{collection::Collection, node::Node, sample::Sample, sequence::Sequence};
     use crate::test_helpers::{get_connection, setup_block_group};
 
     #[test]

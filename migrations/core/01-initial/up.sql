@@ -69,19 +69,19 @@ CREATE TABLE operation_summary (
 
 CREATE TABLE edges (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-  source_hash TEXT NOT NULL,
   source_node_id INTEGER,
   source_coordinate INTEGER NOT NULL,
   source_strand TEXT NOT NULL,
-  target_hash TEXT NOT NULL,
   target_node_id INTEGER,
   target_coordinate INTEGER NOT NULL,
   target_strand TEXT NOT NULL,
   chromosome_index INTEGER NOT NULL,
   phased INTEGER NOT NULL,
+  FOREIGN KEY(source_node_id) REFERENCES nodes(id),
+  FOREIGN KEY(target_node_id) REFERENCES nodes(id),
   constraint chk_phased check (phased in (0, 1))
 ) STRICT;
--- CREATE UNIQUE INDEX edge_uidx ON edges(source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased);
+CREATE UNIQUE INDEX edge_uidx ON edges(source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased);
 
 CREATE TABLE path_edges (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,

@@ -8,16 +8,14 @@ use rusqlite::{params_from_iter, Connection, Result as SQLResult, Row};
 use serde::{Deserialize, Serialize};
 
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
-use crate::models::{sequence::Sequence, strand::Strand};
+use crate::models::strand::Strand;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub struct Edge {
     pub id: i32,
-    pub source_hash: String,
     pub source_node_id: i32,
     pub source_coordinate: i32,
     pub source_strand: Strand,
-    pub target_hash: String,
     pub target_node_id: i32,
     pub target_coordinate: i32,
     pub target_strand: Strand,
@@ -27,11 +25,9 @@ pub struct Edge {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct EdgeData {
-    pub source_hash: String,
     pub source_node_id: i32,
     pub source_coordinate: i32,
     pub source_strand: Strand,
-    pub target_hash: String,
     pub target_node_id: i32,
     pub target_coordinate: i32,
     pub target_strand: Strand,
@@ -42,11 +38,9 @@ pub struct EdgeData {
 impl From<&Edge> for EdgeData {
     fn from(item: &Edge) -> Self {
         EdgeData {
-            source_hash: item.source_hash.clone(),
             source_node_id: item.source_node_id,
             source_coordinate: item.source_coordinate,
             source_strand: item.source_strand,
-            target_hash: item.target_hash.clone(),
             target_node_id: item.target_node_id,
             target_coordinate: item.target_coordinate,
             target_strand: item.target_strand,
@@ -58,12 +52,6 @@ impl From<&Edge> for EdgeData {
 
 #[derive(Eq, Hash, PartialEq)]
 pub struct BlockKey {
-    pub sequence_hash: String,
-    pub coordinate: i32,
-}
-
-#[derive(Eq, Hash, PartialEq)]
-pub struct BlockKeyNew {
     pub node_id: i32,
     pub coordinate: i32,
 }
@@ -71,7 +59,6 @@ pub struct BlockKeyNew {
 #[derive(Clone, Debug)]
 pub struct GroupBlock {
     pub id: i32,
-    pub sequence_hash: String,
     pub node_id: i32,
     pub sequence: String,
     pub start: i32,
@@ -82,25 +69,21 @@ impl Edge {
     #[allow(clippy::too_many_arguments)]
     pub fn create(
         conn: &Connection,
-        source_hash: String,
         source_node_id: i32,
         source_coordinate: i32,
         source_strand: Strand,
-        target_hash: String,
         target_node_id: i32,
         target_coordinate: i32,
         target_strand: Strand,
         chromosome_index: i32,
         phased: i32,
     ) -> Edge {
-        let query = "INSERT INTO edges (source_hash, source_node_id, source_coordinate, source_strand, target_hash, target_node_id, target_coordinate, target_strand, chromosome_index, phased) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) RETURNING *";
-        let id_query = "select id from edges where source_hash = ?1 and source_node_id = ?2 and source_coordinate = ?3 and source_strand = ?4 and target_hash = ?5 and target_node_id = ?6 and target_coordinate = ?7 and target_strand = ?8 and chromosome_index = ?9 and phased = ?10";
+        let query = "INSERT INTO edges (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) RETURNING *";
+        let id_query = "select id from edges where and source_node_id = ?1 and source_coordinate = ?2 and source_strand = ?3 and target_node_id = ?4 and target_coordinate = ?5 and target_strand = ?6 and chromosome_index = ?7 and phased = ?8";
         let placeholders: Vec<Value> = vec![
-            source_hash.clone().into(),
             source_node_id.into(),
             source_coordinate.into(),
             source_strand.into(),
-            target_hash.clone().into(),
             target_node_id.into(),
             target_coordinate.into(),
             target_strand.into(),
@@ -112,16 +95,14 @@ impl Edge {
         match stmt.query_row(params_from_iter(&placeholders), |row| {
             Ok(Edge {
                 id: row.get(0)?,
-                source_hash: row.get(1)?,
-                source_node_id: row.get(2)?,
-                source_coordinate: row.get(3)?,
-                source_strand: row.get(4)?,
-                target_hash: row.get(5)?,
-                target_node_id: row.get(6)?,
-                target_coordinate: row.get(7)?,
-                target_strand: row.get(8)?,
-                chromosome_index: row.get(9)?,
-                phased: row.get(10)?,
+                source_node_id: row.get(1)?,
+                source_coordinate: row.get(2)?,
+                source_strand: row.get(3)?,
+                target_node_id: row.get(4)?,
+                target_coordinate: row.get(5)?,
+                target_strand: row.get(6)?,
+                chromosome_index: row.get(7)?,
+                phased: row.get(8)?,
             })
         }) {
             Ok(edge) => edge,
@@ -132,11 +113,9 @@ impl Edge {
                         id: conn
                             .query_row(id_query, params_from_iter(&placeholders), |row| row.get(0))
                             .unwrap(),
-                        source_hash,
                         source_node_id,
                         source_coordinate,
                         source_strand,
-                        target_hash,
                         target_node_id,
                         target_coordinate,
                         target_strand,
@@ -156,16 +135,14 @@ impl Edge {
     fn edge_from_row(row: &Row) -> SQLResult<Edge> {
         Ok(Edge {
             id: row.get(0)?,
-            source_hash: row.get(1)?,
-            source_node_id: row.get(2)?,
-            source_coordinate: row.get(3)?,
-            source_strand: row.get(4)?,
-            target_hash: row.get(5)?,
-            target_node_id: row.get(6)?,
-            target_coordinate: row.get(7)?,
-            target_strand: row.get(8)?,
-            chromosome_index: row.get(9)?,
-            phased: row.get(10)?,
+            source_node_id: row.get(1)?,
+            source_coordinate: row.get(2)?,
+            source_strand: row.get(3)?,
+            target_node_id: row.get(4)?,
+            target_coordinate: row.get(5)?,
+            target_strand: row.get(6)?,
+            chromosome_index: row.get(7)?,
+            phased: row.get(8)?,
         })
     }
 
@@ -175,7 +152,7 @@ impl Edge {
             .map(|edge_id| edge_id.to_string())
             .collect::<Vec<_>>()
             .join(",");
-        let query = format!("select id, source_hash, source_node_id, source_coordinate, source_strand, target_hash, target_node_id, target_coordinate, target_strand, chromosome_index, phased from edges where id in ({});", formatted_edge_ids);
+        let query = format!("select id, source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased from edges where id in ({});", formatted_edge_ids);
         Edge::query(conn, &query, vec![])
     }
 
@@ -195,17 +172,13 @@ impl Edge {
         let mut edge_rows = vec![];
         let mut edge_map: HashMap<EdgeData, i32> = HashMap::new();
         for edge in &edges {
-            let source_hash = format!("\"{0}\"", edge.source_hash);
             let source_strand = format!("\"{0}\"", edge.source_strand);
-            let target_hash = format!("\"{0}\"", edge.target_hash);
             let target_strand = format!("\"{0}\"", edge.target_strand);
             let edge_row = format!(
-                "({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})",
-                source_hash,
+                "({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7})",
                 edge.source_node_id,
                 edge.source_coordinate,
                 source_strand,
-                target_hash,
                 edge.target_node_id,
                 edge.target_coordinate,
                 target_strand,
@@ -216,7 +189,7 @@ impl Edge {
         }
         let formatted_edge_rows = edge_rows.join(", ");
 
-        let select_statement = format!("SELECT * FROM edges WHERE (source_hash, source_node_id, source_coordinate, source_strand, target_hash, target_node_id, target_coordinate, target_strand, chromosome_index, phased) in ({0});", formatted_edge_rows);
+        let select_statement = format!("SELECT * FROM edges WHERE (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased) in ({0});", formatted_edge_rows);
         let existing_edges = Edge::query(conn, &select_statement, vec![]);
         for edge in existing_edges.iter() {
             edge_map.insert(EdgeData::from(edge), edge.id);
@@ -234,17 +207,13 @@ impl Edge {
 
         let mut edge_rows_to_insert = vec![];
         for edge in edges_to_insert {
-            let source_hash = format!("\"{0}\"", edge.source_hash);
-            let target_hash = format!("\"{0}\"", edge.target_hash);
             let source_strand = format!("\"{0}\"", edge.source_strand);
             let target_strand = format!("\"{0}\"", edge.target_strand);
             let edge_row = format!(
-                "({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})",
-                source_hash,
+                "({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7})",
                 edge.source_node_id,
                 edge.source_coordinate,
                 source_strand,
-                target_hash,
                 edge.target_node_id,
                 edge.target_coordinate,
                 target_strand,
@@ -258,7 +227,7 @@ impl Edge {
             for chunk in edge_rows_to_insert.chunks(100000) {
                 let formatted_edge_rows_to_insert = chunk.join(", ");
 
-                let insert_statement = format!("INSERT INTO edges (source_hash, source_node_id, source_coordinate, source_strand, target_hash, target_node_id, target_coordinate, target_strand, chromosome_index, phased) VALUES {0} RETURNING *;", formatted_edge_rows_to_insert);
+                let insert_statement = format!("INSERT INTO edges (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased) VALUES {0} RETURNING *;", formatted_edge_rows_to_insert);
                 let mut stmt = conn.prepare(&insert_statement).unwrap();
                 let rows = stmt.query_map([], Edge::edge_from_row).unwrap();
                 for row in rows {
@@ -275,11 +244,9 @@ impl Edge {
 
     pub fn to_data(edge: Edge) -> EdgeData {
         EdgeData {
-            source_hash: edge.source_hash,
             source_node_id: edge.source_node_id,
             source_coordinate: edge.source_coordinate,
             source_strand: edge.source_strand,
-            target_hash: edge.target_hash,
             target_node_id: edge.target_node_id,
             target_coordinate: edge.target_coordinate,
             target_strand: edge.target_strand,
@@ -347,7 +314,6 @@ impl Edge {
         let mut block_index = 0;
         let mut boundary_edges = vec![];
         for (node_id, sequence) in sequences_by_node_id.into_iter() {
-            let hash = sequence.hash.clone();
             let block_boundaries = Edge::get_block_boundaries(
                 edges_by_source_node_id.get(&node_id),
                 edges_by_target_node_id.get(&node_id),
@@ -358,11 +324,9 @@ impl Edge {
                 // for the data we need to set up boundary edges in the block group graph
                 boundary_edges.push(Edge {
                     id: -1,
-                    source_hash: hash.clone(),
                     source_node_id: node_id,
                     source_coordinate: *block_boundary,
                     source_strand: Strand::Unknown,
-                    target_hash: hash.clone(),
                     target_node_id: node_id,
                     target_coordinate: *block_boundary,
                     target_strand: Strand::Unknown,
@@ -377,7 +341,6 @@ impl Edge {
                 let block_sequence = sequence.get_sequence(start, end).to_string();
                 let first_block = GroupBlock {
                     id: block_index,
-                    sequence_hash: hash.clone(),
                     node_id,
                     sequence: block_sequence,
                     start,
@@ -389,7 +352,6 @@ impl Edge {
                     let block_sequence = sequence.get_sequence(start, end).to_string();
                     let block = GroupBlock {
                         id: block_index,
-                        sequence_hash: hash.clone(),
                         node_id,
                         sequence: block_sequence,
                         start,
@@ -403,7 +365,6 @@ impl Edge {
                 let block_sequence = sequence.get_sequence(start, end).to_string();
                 let last_block = GroupBlock {
                     id: block_index,
-                    sequence_hash: hash.clone(),
                     node_id,
                     sequence: block_sequence,
                     start,
@@ -414,7 +375,6 @@ impl Edge {
             } else {
                 blocks.push(GroupBlock {
                     id: block_index,
-                    sequence_hash: hash.clone(),
                     node_id,
                     sequence: sequence.get_sequence(None, None),
                     start: 0,
@@ -428,20 +388,16 @@ impl Edge {
         // block group, since different paths in the block group may start or end at different
         // places on sequences.  These two "start sequence" and "end sequence" blocks will serve
         // that role.
-        let start_sequence = Sequence::sequence_from_hash(conn, Sequence::PATH_START_HASH).unwrap();
         let start_block = GroupBlock {
             id: block_index + 1,
-            sequence_hash: start_sequence.hash.clone(),
             node_id: PATH_START_NODE_ID,
             sequence: "".to_string(),
             start: 0,
             end: 0,
         };
         blocks.push(start_block);
-        let end_sequence = Sequence::sequence_from_hash(conn, Sequence::PATH_END_HASH).unwrap();
         let end_block = GroupBlock {
             id: block_index + 2,
-            sequence_hash: end_sequence.hash.clone(),
             node_id: PATH_END_NODE_ID,
             sequence: "".to_string(),
             start: 0,
@@ -460,27 +416,27 @@ impl Edge {
             .into_iter()
             .map(|block| {
                 (
-                    BlockKeyNew {
+                    BlockKey {
                         node_id: block.node_id,
                         coordinate: block.start,
                     },
                     block.id,
                 )
             })
-            .collect::<HashMap<BlockKeyNew, i32>>();
+            .collect::<HashMap<BlockKey, i32>>();
         let blocks_by_end = blocks
             .clone()
             .into_iter()
             .map(|block| {
                 (
-                    BlockKeyNew {
+                    BlockKey {
                         node_id: block.node_id,
                         coordinate: block.end,
                     },
                     block.id,
                 )
             })
-            .collect::<HashMap<BlockKeyNew, i32>>();
+            .collect::<HashMap<BlockKey, i32>>();
 
         let mut graph: DiGraphMap<i32, ()> = DiGraphMap::new();
         let mut edges_by_node_pair = HashMap::new();
@@ -488,12 +444,12 @@ impl Edge {
             graph.add_node(block.id);
         }
         for edge in edges {
-            let source_key = BlockKeyNew {
+            let source_key = BlockKey {
                 node_id: edge.source_node_id,
                 coordinate: edge.source_coordinate,
             };
             let source_id = blocks_by_end.get(&source_key);
-            let target_key = BlockKeyNew {
+            let target_key = BlockKey {
                 node_id: edge.target_node_id,
                 coordinate: edge.target_coordinate,
             };
@@ -515,7 +471,7 @@ impl Edge {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-    use crate::models::collection::Collection;
+    use crate::models::{collection::Collection, sequence::Sequence};
     use crate::test_helpers::get_connection;
 
     #[test]
@@ -528,11 +484,9 @@ mod tests {
             .save(conn);
         let node1 = Node::create(conn, sequence1.hash.as_str());
         let edge1 = EdgeData {
-            source_hash: "".to_string(),
             source_node_id: PATH_START_NODE_ID,
             source_coordinate: -1,
             source_strand: Strand::Forward,
-            target_hash: "".to_string(),
             target_node_id: node1.id,
             target_coordinate: 1,
             target_strand: Strand::Forward,
@@ -545,11 +499,9 @@ mod tests {
             .save(conn);
         let node2 = Node::create(conn, sequence2.hash.as_str());
         let edge2 = EdgeData {
-            source_hash: "".to_string(),
             source_node_id: node1.id,
             source_coordinate: 2,
             source_strand: Strand::Forward,
-            target_hash: "".to_string(),
             target_node_id: node2.id,
             target_coordinate: 3,
             target_strand: Strand::Forward,
@@ -557,11 +509,9 @@ mod tests {
             phased: 0,
         };
         let edge3 = EdgeData {
-            source_hash: "".to_string(),
             source_node_id: node2.id,
             source_coordinate: 4,
             source_strand: Strand::Forward,
-            target_hash: "".to_string(),
             target_node_id: PATH_END_NODE_ID,
             target_coordinate: -1,
             target_strand: Strand::Forward,
@@ -603,11 +553,9 @@ mod tests {
             .save(conn);
         let node1 = Node::create(conn, sequence1.hash.as_str());
         let edge1 = EdgeData {
-            source_hash: "".to_string(),
             source_node_id: PATH_START_NODE_ID,
             source_coordinate: -1,
             source_strand: Strand::Forward,
-            target_hash: "".to_string(),
             target_node_id: node1.id,
             target_coordinate: 1,
             target_strand: Strand::Forward,
@@ -620,11 +568,9 @@ mod tests {
             .save(conn);
         let node2 = Node::create(conn, sequence2.hash.as_str());
         let edge2 = EdgeData {
-            source_hash: "".to_string(),
             source_node_id: node1.id,
             source_coordinate: 2,
             source_strand: Strand::Forward,
-            target_hash: "".to_string(),
             target_node_id: node2.id,
             target_coordinate: 3,
             target_strand: Strand::Forward,
@@ -632,11 +578,9 @@ mod tests {
             phased: 0,
         };
         let edge3 = EdgeData {
-            source_hash: "".to_string(),
             source_node_id: node2.id,
             source_coordinate: 4,
             source_strand: Strand::Forward,
-            target_hash: "".to_string(),
             target_node_id: PATH_END_NODE_ID,
             target_coordinate: -1,
             target_strand: Strand::Forward,
@@ -686,11 +630,9 @@ mod tests {
         // NOTE: Create one edge ahead of time to confirm an existing row ID gets returned in the bulk create
         let existing_edge = Edge::create(
             conn,
-            "".to_string(),
             PATH_START_NODE_ID,
             -1,
             Strand::Forward,
-            "".to_string(),
             node1.id,
             1,
             Strand::Forward,
@@ -703,11 +645,9 @@ mod tests {
         assert_eq!(existing_edge.target_coordinate, 1);
 
         let edge1 = EdgeData {
-            source_hash: "".to_string(),
             source_coordinate: -1,
             source_node_id: PATH_START_NODE_ID,
             source_strand: Strand::Forward,
-            target_hash: "".to_string(),
             target_node_id: node1.id,
             target_coordinate: 1,
             target_strand: Strand::Forward,
@@ -720,11 +660,9 @@ mod tests {
             .save(conn);
         let node2 = Node::create(conn, sequence2.hash.as_str());
         let edge2 = EdgeData {
-            source_hash: "".to_string(),
             source_node_id: node1.id,
             source_coordinate: 2,
             source_strand: Strand::Forward,
-            target_hash: "".to_string(),
             target_node_id: node2.id,
             target_coordinate: 3,
             target_strand: Strand::Forward,
@@ -732,11 +670,9 @@ mod tests {
             phased: 0,
         };
         let edge3 = EdgeData {
-            source_hash: "".to_string(),
             source_node_id: node2.id,
             source_coordinate: 4,
             source_strand: Strand::Forward,
-            target_hash: "".to_string(),
             target_node_id: PATH_END_NODE_ID,
             target_coordinate: -1,
             target_strand: Strand::Forward,

@@ -83,11 +83,9 @@ pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
     let block_group = BlockGroup::create(conn, "test", None, "hg19");
     let edge0 = Edge::create(
         conn,
-        "".to_string(),
         PATH_START_NODE_ID,
         0,
         Strand::Forward,
-        "".to_string(),
         a_node.id,
         0,
         Strand::Forward,
@@ -96,11 +94,9 @@ pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
     );
     let edge1 = Edge::create(
         conn,
-        "".to_string(),
         a_node.id,
         10,
         Strand::Forward,
-        "".to_string(),
         t_node.id,
         0,
         Strand::Forward,
@@ -109,11 +105,9 @@ pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
     );
     let edge2 = Edge::create(
         conn,
-        "".to_string(),
         t_node.id,
         10,
         Strand::Forward,
-        "".to_string(),
         c_node.id,
         0,
         Strand::Forward,
@@ -122,11 +116,9 @@ pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
     );
     let edge3 = Edge::create(
         conn,
-        "".to_string(),
         c_node.id,
         10,
         Strand::Forward,
-        "".to_string(),
         g_node.id,
         0,
         Strand::Forward,
@@ -135,11 +127,9 @@ pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
     );
     let edge4 = Edge::create(
         conn,
-        "".to_string(),
         g_node.id,
         10,
         Strand::Forward,
-        "".to_string(),
         PATH_END_NODE_ID,
         0,
         Strand::Forward,

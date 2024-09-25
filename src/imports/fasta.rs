@@ -75,11 +75,9 @@ pub fn import_fasta(
         let block_group = BlockGroup::create(conn, &collection.name, None, &name);
         let edge_into = Edge::create(
             conn,
-            Sequence::PATH_START_HASH.to_string(),
 	    PATH_START_NODE_ID,
             0,
             Strand::Forward,
-            seq.hash.to_string(),
 	    node.id,
             0,
             Strand::Forward,

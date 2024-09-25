@@ -16,6 +16,7 @@ use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::collection::Collection;
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::file_types::FileTypes;
+use crate::models::node::Node;
 use crate::models::operations::{
     Branch, FileAddition, Operation, OperationState, OperationSummary,
 };
@@ -109,18 +110,15 @@ pub fn get_changeset_dependencies(conn: &Connection, changes: &[u8]) -> Vec<u8> 
                 }
                 "edges" => {
                     let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
-                    let source_hash =
-                        str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
-                            .unwrap()
-                            .to_string();
-                    let target_hash =
-                        str::from_utf8(item.new_value(5).unwrap().as_bytes().unwrap())
-                            .unwrap()
-                            .to_string();
+                    let source_node_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
+                    let target_node_id = item.new_value(4).unwrap().as_i64().unwrap() as i32;
                     created_edges.insert(edge_pk);
+                    let nodes = Node::get_nodes(conn, vec![source_node_id, target_node_id]);
+                    let source_hash = nodes[0].sequence_hash.clone();
                     if !created_sequences.contains(&source_hash) {
                         previous_sequences.insert(source_hash);
                     }
+                    let target_hash = nodes[1].sequence_hash.clone();
                     if !created_sequences.contains(&target_hash) {
                         previous_sequences.insert(target_hash);
                     }
@@ -334,18 +332,16 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                     edge_map.insert(
                         edge_pk,
                         EdgeData {
-                            source_hash: item.new_value(1).unwrap().as_str().unwrap().to_string(),
-                            source_node_id: item.new_value(2).unwrap().as_i64().unwrap() as i32,
-                            source_coordinate: item.new_value(3).unwrap().as_i64().unwrap() as i32,
-                            source_strand: Strand::column_result(item.new_value(4).unwrap())
+                            source_node_id: item.new_value(1).unwrap().as_i64().unwrap() as i32,
+                            source_coordinate: item.new_value(2).unwrap().as_i64().unwrap() as i32,
+                            source_strand: Strand::column_result(item.new_value(3).unwrap())
                                 .unwrap(),
-                            target_hash: item.new_value(5).unwrap().as_str().unwrap().to_string(),
-                            target_node_id: item.new_value(6).unwrap().as_i64().unwrap() as i32,
-                            target_coordinate: item.new_value(7).unwrap().as_i64().unwrap() as i32,
-                            target_strand: Strand::column_result(item.new_value(8).unwrap())
+                            target_node_id: item.new_value(4).unwrap().as_i64().unwrap() as i32,
+                            target_coordinate: item.new_value(5).unwrap().as_i64().unwrap() as i32,
+                            target_strand: Strand::column_result(item.new_value(6).unwrap())
                                 .unwrap(),
-                            chromosome_index: item.new_value(9).unwrap().as_i64().unwrap() as i32,
-                            phased: item.new_value(10).unwrap().as_i64().unwrap() as i32,
+                            chromosome_index: item.new_value(7).unwrap().as_i64().unwrap() as i32,
+                            phased: item.new_value(8).unwrap().as_i64().unwrap() as i32,
                         },
                     );
                 }
@@ -635,11 +631,9 @@ mod tests {
 
         let new_edge = Edge::create(
             conn,
-            "".to_string(),
             random_node.id,
             0,
             Strand::Forward,
-            "".to_string(),
             existing_node.id,
             0,
             Strand::Forward,

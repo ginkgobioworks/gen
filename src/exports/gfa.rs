@@ -241,11 +241,9 @@ mod tests {
 
         let edge1 = Edge::create(
             &conn,
-            Sequence::PATH_START_HASH.to_string(),
             PATH_START_NODE_ID,
             0,
             Strand::Forward,
-            sequence1.hash.clone(),
             node1.id,
             0,
             Strand::Forward,
@@ -254,11 +252,9 @@ mod tests {
         );
         let edge2 = Edge::create(
             &conn,
-            sequence1.hash,
             node1.id,
             4,
             Strand::Forward,
-            sequence2.hash.clone(),
             node2.id,
             0,
             Strand::Forward,
@@ -267,11 +263,9 @@ mod tests {
         );
         let edge3 = Edge::create(
             &conn,
-            sequence2.hash,
             node2.id,
             4,
             Strand::Forward,
-            sequence3.hash.clone(),
             node3.id,
             0,
             Strand::Forward,
@@ -280,11 +274,9 @@ mod tests {
         );
         let edge4 = Edge::create(
             &conn,
-            sequence3.hash,
             node3.id,
             4,
             Strand::Forward,
-            sequence4.hash.clone(),
             node4.id,
             0,
             Strand::Forward,
@@ -293,11 +285,9 @@ mod tests {
         );
         let edge5 = Edge::create(
             &conn,
-            sequence4.hash,
             node4.id,
             4,
             Strand::Forward,
-            Sequence::PATH_END_HASH.to_string(),
             PATH_END_NODE_ID,
             0,
             Strand::Forward,
