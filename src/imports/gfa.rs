@@ -394,7 +394,7 @@ mod tests {
         let result = Path::sequence(conn, path);
         assert_eq!(result, "AA");
 
-        let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences_new(conn, block_group_id);
         assert_eq!(all_sequences, HashSet::from_iter(vec!["AA".to_string()]));
     }
 }

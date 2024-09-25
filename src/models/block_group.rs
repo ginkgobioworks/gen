@@ -305,6 +305,59 @@ impl BlockGroup {
         sequences
     }
 
+    pub fn get_all_sequences_new(conn: &Connection, block_group_id: i32) -> HashSet<String> {
+        let mut edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
+        let (blocks, boundary_edges) = Edge::blocks_from_edges_new(conn, &edges);
+        edges.extend(boundary_edges.clone());
+        let (graph, _) = Edge::build_graph_new(&edges, &blocks);
+
+        let mut start_nodes = vec![];
+        let mut end_nodes = vec![];
+        for node in graph.nodes() {
+            let has_incoming = graph.neighbors_directed(node, Direction::Incoming).next();
+            let has_outgoing = graph.neighbors_directed(node, Direction::Outgoing).next();
+            if has_incoming.is_none() {
+                start_nodes.push(node);
+            }
+            if has_outgoing.is_none() {
+                end_nodes.push(node);
+            }
+        }
+
+        let blocks_by_id = blocks
+            .clone()
+            .into_iter()
+            .map(|block| (block.id, block))
+            .collect::<HashMap<i32, GroupBlock>>();
+        let mut sequences = HashSet::<String>::new();
+
+        for start_node in start_nodes {
+            for end_node in &end_nodes {
+                // TODO: maybe make all_simple_paths return a single path id where start == end
+                if start_node == *end_node {
+                    let block = blocks_by_id.get(&start_node).unwrap();
+                    if block.sequence_hash != Sequence::PATH_START_HASH
+                        && block.sequence_hash != Sequence::PATH_END_HASH
+                    {
+                        sequences.insert(block.sequence.clone());
+                    }
+                } else {
+                    for path in all_simple_paths(&graph, start_node, *end_node) {
+                        let mut current_sequence = "".to_string();
+                        for node in path {
+                            let block = blocks_by_id.get(&node).unwrap();
+                            let block_sequence = block.sequence.clone();
+                            current_sequence.push_str(&block_sequence);
+                        }
+                        sequences.insert(current_sequence);
+                    }
+                }
+            }
+        }
+
+        sequences
+    }
+
     pub fn insert_changes(conn: &Connection, changes: &Vec<PathChange>, cache: &PathCache) {
         let mut new_edges_by_block_group = HashMap::<i32, Vec<EdgeData>>::new();
         for change in changes {
