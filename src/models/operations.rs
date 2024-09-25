@@ -732,4 +732,63 @@ mod tests {
             change.id,
         );
     }
+
+    #[test]
+    fn test_bifurcation_allowed_on_new_branch() {
+        // We make a simple branch from 1 -> 2 -> 3 -> 4 and ensure we cannot checkout operation 2
+        // and create a new operation from that point on the same branch.
+
+        setup_gen_dir();
+        let db_uuid = "something";
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, db_uuid);
+
+        let change = FileAddition::create(op_conn, "foo", FileTypes::Fasta);
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        OperationState::set_operation(op_conn, db_uuid, 2);
+        let branch_1 = Branch::create(op_conn, db_uuid, "branch-1");
+        OperationState::set_branch(op_conn, db_uuid, "branch-1");
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+    }
 }
