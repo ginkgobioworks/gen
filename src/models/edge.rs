@@ -7,9 +7,7 @@ use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection, Result as SQLResult, Row};
 use serde::{Deserialize, Serialize};
 
-use crate::models::node::{
-    Node, BOGUS_SOURCE_NODE_ID, BOGUS_TARGET_NODE_ID, PATH_END_NODE_ID, PATH_START_NODE_ID,
-};
+use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::{sequence::Sequence, strand::Strand};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
@@ -322,139 +320,6 @@ impl Edge {
     }
 
     pub fn blocks_from_edges(conn: &Connection, edges: &Vec<Edge>) -> (Vec<GroupBlock>, Vec<Edge>) {
-        let mut sequence_hashes = HashSet::new();
-        let mut edges_by_source_hash: HashMap<&str, Vec<&Edge>> = HashMap::new();
-        let mut edges_by_target_hash: HashMap<&str, Vec<&Edge>> = HashMap::new();
-        for edge in edges {
-            if edge.source_hash != Sequence::PATH_START_HASH {
-                sequence_hashes.insert(edge.source_hash.as_str());
-                edges_by_source_hash
-                    .entry(&edge.source_hash)
-                    .and_modify(|edges| edges.push(edge))
-                    .or_default();
-            }
-            if edge.target_hash != Sequence::PATH_END_HASH {
-                sequence_hashes.insert(edge.target_hash.as_str());
-                edges_by_target_hash
-                    .entry(&edge.target_hash)
-                    .and_modify(|edges| edges.push(edge))
-                    .or_default();
-            }
-        }
-
-        let sequences_by_hash =
-            Sequence::sequences_by_hash(conn, sequence_hashes.into_iter().collect::<Vec<&str>>());
-        let mut blocks = vec![];
-        let mut block_index = 0;
-        let mut boundary_edges = vec![];
-        for (hash, sequence) in sequences_by_hash.into_iter() {
-            let block_boundaries = Edge::get_block_boundaries(
-                edges_by_source_hash.get(hash.as_str()),
-                edges_by_target_hash.get(hash.as_str()),
-                sequence.length,
-            );
-            for block_boundary in &block_boundaries {
-                // NOTE: Most of this data is bogus, the Edge struct is just a convenient wrapper
-                // for the data we need to set up boundary edges in the block group graph
-                boundary_edges.push(Edge {
-                    id: -1,
-                    source_hash: hash.clone(),
-                    source_node_id: BOGUS_SOURCE_NODE_ID,
-                    source_coordinate: *block_boundary,
-                    source_strand: Strand::Unknown,
-                    target_hash: hash.clone(),
-                    target_node_id: BOGUS_TARGET_NODE_ID,
-                    target_coordinate: *block_boundary,
-                    target_strand: Strand::Unknown,
-                    chromosome_index: 0,
-                    phased: 0,
-                });
-            }
-
-            if !block_boundaries.is_empty() {
-                let start = 0;
-                let end = block_boundaries[0];
-                let block_sequence = sequence.get_sequence(start, end).to_string();
-                let first_block = GroupBlock {
-                    id: block_index,
-                    sequence_hash: hash.clone(),
-                    node_id: BOGUS_SOURCE_NODE_ID,
-                    sequence: block_sequence,
-                    start,
-                    end,
-                };
-                blocks.push(first_block);
-                block_index += 1;
-                for (start, end) in block_boundaries.clone().into_iter().tuple_windows() {
-                    let block_sequence = sequence.get_sequence(start, end).to_string();
-                    let block = GroupBlock {
-                        id: block_index,
-                        sequence_hash: hash.clone(),
-                        node_id: BOGUS_SOURCE_NODE_ID,
-                        sequence: block_sequence,
-                        start,
-                        end,
-                    };
-                    blocks.push(block);
-                    block_index += 1;
-                }
-                let start = block_boundaries[block_boundaries.len() - 1];
-                let end = sequence.length;
-                let block_sequence = sequence.get_sequence(start, end).to_string();
-                let last_block = GroupBlock {
-                    id: block_index,
-                    sequence_hash: hash.clone(),
-                    node_id: BOGUS_SOURCE_NODE_ID,
-                    sequence: block_sequence,
-                    start,
-                    end,
-                };
-                blocks.push(last_block);
-                block_index += 1;
-            } else {
-                blocks.push(GroupBlock {
-                    id: block_index,
-                    sequence_hash: hash.clone(),
-                    node_id: BOGUS_SOURCE_NODE_ID,
-                    sequence: sequence.get_sequence(None, None),
-                    start: 0,
-                    end: sequence.length,
-                });
-                block_index += 1;
-            }
-        }
-
-        // NOTE: We need a dedicated start node and a dedicated end node for the graph formed by the
-        // block group, since different paths in the block group may start or end at different
-        // places on sequences.  These two "start sequence" and "end sequence" blocks will serve
-        // that role.
-        let start_sequence = Sequence::sequence_from_hash(conn, Sequence::PATH_START_HASH).unwrap();
-        let start_block = GroupBlock {
-            id: block_index + 1,
-            sequence_hash: start_sequence.hash.clone(),
-            node_id: BOGUS_SOURCE_NODE_ID,
-            sequence: "".to_string(),
-            start: 0,
-            end: 0,
-        };
-        blocks.push(start_block);
-        let end_sequence = Sequence::sequence_from_hash(conn, Sequence::PATH_END_HASH).unwrap();
-        let end_block = GroupBlock {
-            id: block_index + 2,
-            sequence_hash: end_sequence.hash.clone(),
-            node_id: BOGUS_SOURCE_NODE_ID,
-            sequence: "".to_string(),
-            start: 0,
-            end: 0,
-        };
-        blocks.push(end_block);
-        (blocks, boundary_edges)
-    }
-
-    pub fn blocks_from_edges_new(
-        conn: &Connection,
-        edges: &Vec<Edge>,
-    ) -> (Vec<GroupBlock>, Vec<Edge>) {
         let mut node_ids = HashSet::new();
         let mut edges_by_source_node_id: HashMap<i32, Vec<&Edge>> = HashMap::new();
         let mut edges_by_target_node_id: HashMap<i32, Vec<&Edge>> = HashMap::new();
@@ -587,65 +452,6 @@ impl Edge {
     }
 
     pub fn build_graph(
-        edges: &Vec<Edge>,
-        blocks: &Vec<GroupBlock>,
-    ) -> (DiGraphMap<i32, ()>, HashMap<(i32, i32), Edge>) {
-        let blocks_by_start = blocks
-            .clone()
-            .into_iter()
-            .map(|block| {
-                (
-                    BlockKey {
-                        sequence_hash: block.sequence_hash,
-                        coordinate: block.start,
-                    },
-                    block.id,
-                )
-            })
-            .collect::<HashMap<BlockKey, i32>>();
-        let blocks_by_end = blocks
-            .clone()
-            .into_iter()
-            .map(|block| {
-                (
-                    BlockKey {
-                        sequence_hash: block.sequence_hash,
-                        coordinate: block.end,
-                    },
-                    block.id,
-                )
-            })
-            .collect::<HashMap<BlockKey, i32>>();
-
-        let mut graph: DiGraphMap<i32, ()> = DiGraphMap::new();
-        let mut edges_by_node_pair = HashMap::new();
-        for block in blocks {
-            graph.add_node(block.id);
-        }
-        for edge in edges {
-            let source_key = BlockKey {
-                sequence_hash: edge.source_hash.clone(),
-                coordinate: edge.source_coordinate,
-            };
-            let source_id = blocks_by_end.get(&source_key);
-            let target_key = BlockKey {
-                sequence_hash: edge.target_hash.clone(),
-                coordinate: edge.target_coordinate,
-            };
-            let target_id = blocks_by_start.get(&target_key);
-
-            if let Some(source_id_value) = source_id {
-                if let Some(target_id_value) = target_id {
-                    graph.add_edge(*source_id_value, *target_id_value, ());
-                    edges_by_node_pair.insert((*source_id_value, *target_id_value), edge.clone());
-                }
-            }
-        }
-
-        (graph, edges_by_node_pair)
-    }
-
-    pub fn build_graph_new(
         edges: &Vec<Edge>,
         blocks: &Vec<GroupBlock>,
     ) -> (DiGraphMap<i32, ()>, HashMap<(i32, i32), Edge>) {

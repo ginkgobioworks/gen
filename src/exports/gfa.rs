@@ -26,10 +26,10 @@ pub fn export_gfa(conn: &Connection, collection_name: &str, filename: &PathBuf) 
     }
 
     let mut edges = edge_set.into_iter().collect();
-    let (blocks, boundary_edges) = Edge::blocks_from_edges_new(conn, &edges);
+    let (blocks, boundary_edges) = Edge::blocks_from_edges(conn, &edges);
     edges.extend(boundary_edges.clone());
 
-    let (graph, edges_by_node_pair) = Edge::build_graph_new(&edges, &blocks);
+    let (graph, edges_by_node_pair) = Edge::build_graph(&edges, &blocks);
 
     let file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(file);
@@ -318,7 +318,7 @@ mod tests {
             &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
         );
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group.id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group.id);
 
         let temp_dir = tempdir().expect("Couldn't get handle to temp directory");
         let mut gfa_path = PathBuf::from(temp_dir.path());
@@ -331,7 +331,7 @@ mod tests {
         let block_group2 = Collection::get_block_groups(&conn, "test collection 2")
             .pop()
             .unwrap();
-        let all_sequences2 = BlockGroup::get_all_sequences_new(&conn, block_group2.id);
+        let all_sequences2 = BlockGroup::get_all_sequences(&conn, block_group2.id);
 
         assert_eq!(all_sequences, all_sequences2);
 
@@ -350,7 +350,7 @@ mod tests {
         import_gfa(&gfa_path, &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
-        let all_sequences = BlockGroup::get_all_sequences_new(conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id);
 
         let temp_dir = tempdir().expect("Couldn't get handle to temp directory");
         let mut gfa_path = PathBuf::from(temp_dir.path());
@@ -362,7 +362,7 @@ mod tests {
         let block_group2 = Collection::get_block_groups(conn, "test collection 2")
             .pop()
             .unwrap();
-        let all_sequences2 = BlockGroup::get_all_sequences_new(conn, block_group2.id);
+        let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id);
 
         assert_eq!(all_sequences, all_sequences2);
     }
@@ -377,7 +377,7 @@ mod tests {
         import_gfa(&gfa_path, &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
-        let all_sequences = BlockGroup::get_all_sequences_new(conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id);
 
         let temp_dir = tempdir().expect("Couldn't get handle to temp directory");
         let mut gfa_path = PathBuf::from(temp_dir.path());
@@ -389,7 +389,7 @@ mod tests {
         let block_group2 = Collection::get_block_groups(conn, "anderson promoters 2")
             .pop()
             .unwrap();
-        let all_sequences2 = BlockGroup::get_all_sequences_new(conn, block_group2.id);
+        let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id);
 
         assert_eq!(all_sequences, all_sequences2);
     }
@@ -404,7 +404,7 @@ mod tests {
         import_gfa(&gfa_path, &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
-        let all_sequences = BlockGroup::get_all_sequences_new(conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id);
 
         let temp_dir = tempdir().expect("Couldn't get handle to temp directory");
         let mut gfa_path = PathBuf::from(temp_dir.path());
@@ -416,7 +416,7 @@ mod tests {
         let block_group2 = Collection::get_block_groups(conn, "test collection 2")
             .pop()
             .unwrap();
-        let all_sequences2 = BlockGroup::get_all_sequences_new(conn, block_group2.id);
+        let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id);
 
         assert_eq!(all_sequences, all_sequences2);
     }

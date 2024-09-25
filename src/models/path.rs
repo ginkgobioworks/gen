@@ -176,7 +176,7 @@ impl Path {
     }
 
     pub fn sequence(conn: &Connection, path: Path) -> String {
-        let blocks = Path::blocks_for_new(conn, &path);
+        let blocks = Path::blocks_for(conn, &path);
         blocks
             .into_iter()
             .map(|block| block.block_sequence)
@@ -185,128 +185,6 @@ impl Path {
     }
 
     pub fn edge_pairs_to_block(
-        block_id: i32,
-        path: &Path,
-        into: Edge,
-        out_of: Edge,
-        sequences_by_hash: &HashMap<String, Sequence>,
-        current_path_length: i32,
-    ) -> NewBlock {
-        if into.target_hash != out_of.source_hash {
-            panic!(
-                "Consecutive edges in path {0} don't share the same sequence",
-                path.id
-            );
-        }
-
-        let sequence = sequences_by_hash.get(&into.target_hash).unwrap();
-        let start = into.target_coordinate;
-        let end = out_of.source_coordinate;
-
-        let strand;
-        let block_sequence_length;
-
-        if into.target_strand == out_of.source_strand {
-            strand = into.target_strand;
-            block_sequence_length = end - start;
-        } else {
-            panic!(
-                "Edge pair with target_strand/source_strand mismatch for path {}",
-                path.id
-            );
-        }
-
-        let block_sequence = if strand == Strand::Reverse {
-            revcomp(&sequence.get_sequence(start, end))
-        } else {
-            sequence.get_sequence(start, end)
-        };
-
-        NewBlock {
-            id: block_id,
-            sequence: sequence.clone(),
-            block_sequence,
-            sequence_start: start,
-            sequence_end: end,
-            path_start: current_path_length,
-            path_end: current_path_length + block_sequence_length,
-            strand,
-        }
-    }
-
-    pub fn blocks_for(conn: &Connection, path: &Path) -> Vec<NewBlock> {
-        let edges = PathEdge::edges_for_path(conn, path.id);
-        let mut sequence_hashes = HashSet::new();
-        for edge in &edges {
-            if edge.source_hash != Sequence::PATH_START_HASH {
-                sequence_hashes.insert(edge.source_hash.as_str());
-            }
-            if edge.target_hash != Sequence::PATH_END_HASH {
-                sequence_hashes.insert(edge.target_hash.as_str());
-            }
-        }
-        let sequences_by_hash =
-            Sequence::sequences_by_hash(conn, sequence_hashes.into_iter().collect::<Vec<&str>>());
-
-        let mut blocks = vec![];
-        let mut path_length = 0;
-
-        // NOTE: Adding a "start block" for the dedicated start sequence with a range from i32::MIN
-        // to 0 makes interval tree lookups work better.  If the point being looked up is -1 (or
-        // below), it will return this block.
-        let start_sequence = Sequence::sequence_from_hash(conn, Sequence::PATH_START_HASH).unwrap();
-        blocks.push(NewBlock {
-            id: -1,
-            sequence: start_sequence,
-            block_sequence: "".to_string(),
-            sequence_start: 0,
-            sequence_end: 0,
-            path_start: i32::MIN + 1,
-            path_end: 0,
-            strand: Strand::Forward,
-        });
-
-        for (index, (into, out_of)) in edges.into_iter().tuple_windows().enumerate() {
-            let block = Path::edge_pairs_to_block(
-                index as i32,
-                path,
-                into,
-                out_of,
-                &sequences_by_hash,
-                path_length,
-            );
-            path_length += block.block_sequence.len() as i32;
-            blocks.push(block);
-        }
-
-        // NOTE: Adding an "end block" for the dedicated end sequence with a range from the path
-        // length to i32::MAX makes interval tree lookups work better.  If the point being looked up
-        // is the path length (or higher), it will return this block.
-        let end_sequence = Sequence::sequence_from_hash(conn, Sequence::PATH_END_HASH).unwrap();
-        blocks.push(NewBlock {
-            id: -2,
-            sequence: end_sequence,
-            block_sequence: "".to_string(),
-            sequence_start: 0,
-            sequence_end: 0,
-            path_start: path_length,
-            path_end: i32::MAX - 1,
-            strand: Strand::Forward,
-        });
-
-        blocks
-    }
-
-    pub fn intervaltree_for(conn: &Connection, path: &Path) -> IntervalTree<i32, NewBlock> {
-        let blocks = Path::blocks_for(conn, path);
-        let tree: IntervalTree<i32, NewBlock> = blocks
-            .into_iter()
-            .map(|block| (block.path_start..block.path_end, block))
-            .collect();
-        tree
-    }
-
-    pub fn edge_pairs_to_block_new(
         block_id: i32,
         path: &Path,
         into: Edge,
@@ -356,7 +234,7 @@ impl Path {
         }
     }
 
-    pub fn blocks_for_new(conn: &Connection, path: &Path) -> Vec<PathBlock> {
+    pub fn blocks_for(conn: &Connection, path: &Path) -> Vec<PathBlock> {
         let edges = PathEdge::edges_for_path(conn, path.id);
         let mut sequence_node_ids = HashSet::new();
         for edge in &edges {
@@ -390,7 +268,7 @@ impl Path {
         });
 
         for (index, (into, out_of)) in edges.into_iter().tuple_windows().enumerate() {
-            let block = Path::edge_pairs_to_block_new(
+            let block = Path::edge_pairs_to_block(
                 index as i32,
                 path,
                 into,
@@ -419,8 +297,8 @@ impl Path {
         blocks
     }
 
-    pub fn intervaltree_for_new(conn: &Connection, path: &Path) -> IntervalTree<i32, PathBlock> {
-        let blocks = Path::blocks_for_new(conn, path);
+    pub fn intervaltree_for(conn: &Connection, path: &Path) -> IntervalTree<i32, PathBlock> {
+        let blocks = Path::blocks_for(conn, path);
         let tree: IntervalTree<i32, PathBlock> = blocks
             .into_iter()
             .map(|block| (block.path_start..block.path_end, block))
@@ -741,7 +619,7 @@ mod tests {
             block_group.id,
             &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
         );
-        let tree = Path::intervaltree_for_new(conn, &path);
+        let tree = Path::intervaltree_for(conn, &path);
         let blocks1: Vec<PathBlock> = tree.query_point(2).map(|x| x.value.clone()).collect();
         assert_eq!(blocks1.len(), 1);
         let block1 = &blocks1[0];

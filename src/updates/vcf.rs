@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::{io, str};
 
 use crate::models::{
-    block_group::{BlockGroup, BlockGroupData, PathCacheNew, PathChangeNew},
+    block_group::{BlockGroup, BlockGroupData, PathCache, PathChange},
     file_types::FileTypes,
     metadata,
     node::Node,
@@ -122,7 +122,7 @@ fn prepare_change(
     block_sequence: String,
     sequence_length: i32,
     node_id: i32,
-) -> PathChangeNew {
+) -> PathChange {
     // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
     let new_block = PathBlock {
         id: 0,
@@ -134,7 +134,7 @@ fn prepare_change(
         path_end: ref_end,
         strand: Strand::Forward,
     };
-    PathChangeNew {
+    PathChange {
         block_group_id: sample_bg_id,
         path: sample_path.clone(),
         start: ref_start,
@@ -194,10 +194,10 @@ pub fn update_with_vcf(
 
     // Cache a bunch of data ahead of making changes
     let mut block_group_cache = BlockGroupCache::new(conn);
-    let mut path_cache = PathCacheNew::new(conn);
+    let mut path_cache = PathCache::new(conn);
     let mut sequence_cache = SequenceCache::new(conn);
 
-    let mut changes: HashMap<(Path, String), Vec<PathChangeNew>> = HashMap::new();
+    let mut changes: HashMap<(Path, String), Vec<PathChange>> = HashMap::new();
 
     for result in reader.records() {
         let record = result.unwrap();
@@ -216,7 +216,7 @@ pub fn update_with_vcf(
                 &fixed_sample,
                 seq_name.clone(),
             );
-            let sample_path = PathCacheNew::lookup(&mut path_cache, sample_bg_id, seq_name.clone());
+            let sample_path = PathCache::lookup(&mut path_cache, sample_bg_id, seq_name.clone());
 
             for (chromosome_index, genotype) in genotype.iter().enumerate() {
                 if let Some(gt) = genotype {
@@ -246,7 +246,7 @@ pub fn update_with_vcf(
                     seq_name.clone(),
                 );
                 let sample_path =
-                    PathCacheNew::lookup(&mut path_cache, sample_bg_id, seq_name.clone());
+                    PathCache::lookup(&mut path_cache, sample_bg_id, seq_name.clone());
 
                 let genotype = sample.get(&header, "GT");
                 if genotype.is_some() {
@@ -301,7 +301,7 @@ pub fn update_with_vcf(
     }
     let mut summary: HashMap<String, HashMap<String, i32>> = HashMap::new();
     for ((path, sample_name), path_changes) in changes {
-        BlockGroup::insert_changes_new(conn, &path_changes, &path_cache);
+        BlockGroup::insert_changes(conn, &path_changes, &path_cache);
         summary
             .entry(sample_name)
             .or_default()
@@ -362,7 +362,7 @@ mod tests {
             op_conn,
         );
         assert_eq!(
-            BlockGroup::get_all_sequences_new(conn, 1),
+            BlockGroup::get_all_sequences(conn, 1),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
         // A homozygous set of variants should only return 1 sequence
@@ -373,12 +373,12 @@ mod tests {
         // );
         // Blockgroup 3 belongs to the `G1` genotype and has no changes
         assert_eq!(
-            BlockGroup::get_all_sequences_new(conn, 3),
+            BlockGroup::get_all_sequences(conn, 3),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
         // This individual is homozygous for the first variant and does not contain the second
         assert_eq!(
-            BlockGroup::get_all_sequences_new(conn, 4),
+            BlockGroup::get_all_sequences(conn, 4),
             HashSet::from_iter(vec![
                 "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
                 "ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
@@ -417,11 +417,11 @@ mod tests {
             op_conn,
         );
         assert_eq!(
-            BlockGroup::get_all_sequences_new(conn, 1),
+            BlockGroup::get_all_sequences(conn, 1),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
         assert_eq!(
-            BlockGroup::get_all_sequences_new(conn, 2),
+            BlockGroup::get_all_sequences(conn, 2),
             HashSet::from_iter(
                 [
                     "ATCGATCGATAGAGATCGATCGGGAACACACAGAGA",

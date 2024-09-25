@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use crate::graph::all_simple_paths;
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData, GroupBlock};
-use crate::models::node::{BOGUS_SOURCE_NODE_ID, BOGUS_TARGET_NODE_ID, PATH_START_NODE_ID};
-use crate::models::path::{NewBlock, Path, PathBlock, PathData};
+use crate::models::node::PATH_START_NODE_ID;
+use crate::models::path::{Path, PathBlock, PathData};
 use crate::models::path_edge::PathEdge;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
@@ -35,17 +35,6 @@ pub struct PathChange {
     pub path: Path,
     pub start: i32,
     pub end: i32,
-    pub block: NewBlock,
-    pub chromosome_index: i32,
-    pub phased: i32,
-}
-
-#[derive(Clone, Debug)]
-pub struct PathChangeNew {
-    pub block_group_id: i32,
-    pub path: Path,
-    pub start: i32,
-    pub end: i32,
     pub block: PathBlock,
     pub chromosome_index: i32,
     pub phased: i32,
@@ -53,7 +42,7 @@ pub struct PathChangeNew {
 
 pub struct PathCache<'a> {
     pub cache: HashMap<PathData, Path>,
-    pub intervaltree_cache: HashMap<Path, IntervalTree<i32, NewBlock>>,
+    pub intervaltree_cache: HashMap<Path, IntervalTree<i32, PathBlock>>,
     pub conn: &'a Connection,
 }
 
@@ -61,7 +50,7 @@ impl PathCache<'_> {
     pub fn new(conn: &Connection) -> PathCache {
         PathCache {
             cache: HashMap::<PathData, Path>::new(),
-            intervaltree_cache: HashMap::<Path, IntervalTree<i32, NewBlock>>::new(),
+            intervaltree_cache: HashMap::<Path, IntervalTree<i32, PathBlock>>::new(),
             conn,
         }
     }
@@ -91,52 +80,6 @@ impl PathCache<'_> {
 
     pub fn get_intervaltree<'a>(
         path_cache: &'a PathCache<'a>,
-        path: &'a Path,
-    ) -> Option<&'a IntervalTree<i32, NewBlock>> {
-        path_cache.intervaltree_cache.get(path)
-    }
-}
-
-pub struct PathCacheNew<'a> {
-    pub cache: HashMap<PathData, Path>,
-    pub intervaltree_cache: HashMap<Path, IntervalTree<i32, PathBlock>>,
-    pub conn: &'a Connection,
-}
-
-impl PathCacheNew<'_> {
-    pub fn new(conn: &Connection) -> PathCacheNew {
-        PathCacheNew {
-            cache: HashMap::<PathData, Path>::new(),
-            intervaltree_cache: HashMap::<Path, IntervalTree<i32, PathBlock>>::new(),
-            conn,
-        }
-    }
-
-    pub fn lookup(path_cache: &mut PathCacheNew, block_group_id: i32, name: String) -> Path {
-        let path_key = PathData {
-            name: name.clone(),
-            block_group_id,
-        };
-        let path_lookup = path_cache.cache.get(&path_key);
-        if let Some(path) = path_lookup {
-            path.clone()
-        } else {
-            let new_path = Path::get_paths(
-                path_cache.conn,
-                "select * from path where block_group_id = ?1 AND name = ?2",
-                vec![SQLValue::from(block_group_id), SQLValue::from(name)],
-            )[0]
-            .clone();
-
-            path_cache.cache.insert(path_key, new_path.clone());
-            let tree = Path::intervaltree_for_new(path_cache.conn, &new_path);
-            path_cache.intervaltree_cache.insert(new_path.clone(), tree);
-            new_path
-        }
-    }
-
-    pub fn get_intervaltree<'a>(
-        path_cache: &'a PathCacheNew<'a>,
         path: &'a Path,
     ) -> Option<&'a IntervalTree<i32, PathBlock>> {
         path_cache.intervaltree_cache.get(path)
@@ -362,59 +305,6 @@ impl BlockGroup {
         sequences
     }
 
-    pub fn get_all_sequences_new(conn: &Connection, block_group_id: i32) -> HashSet<String> {
-        let mut edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
-        let (blocks, boundary_edges) = Edge::blocks_from_edges_new(conn, &edges);
-        edges.extend(boundary_edges.clone());
-        let (graph, _) = Edge::build_graph_new(&edges, &blocks);
-
-        let mut start_nodes = vec![];
-        let mut end_nodes = vec![];
-        for node in graph.nodes() {
-            let has_incoming = graph.neighbors_directed(node, Direction::Incoming).next();
-            let has_outgoing = graph.neighbors_directed(node, Direction::Outgoing).next();
-            if has_incoming.is_none() {
-                start_nodes.push(node);
-            }
-            if has_outgoing.is_none() {
-                end_nodes.push(node);
-            }
-        }
-
-        let blocks_by_id = blocks
-            .clone()
-            .into_iter()
-            .map(|block| (block.id, block))
-            .collect::<HashMap<i32, GroupBlock>>();
-        let mut sequences = HashSet::<String>::new();
-
-        for start_node in start_nodes {
-            for end_node in &end_nodes {
-                // TODO: maybe make all_simple_paths return a single path id where start == end
-                if start_node == *end_node {
-                    let block = blocks_by_id.get(&start_node).unwrap();
-                    if block.sequence_hash != Sequence::PATH_START_HASH
-                        && block.sequence_hash != Sequence::PATH_END_HASH
-                    {
-                        sequences.insert(block.sequence.clone());
-                    }
-                } else {
-                    for path in all_simple_paths(&graph, start_node, *end_node) {
-                        let mut current_sequence = "".to_string();
-                        for node in path {
-                            let block = blocks_by_id.get(&node).unwrap();
-                            let block_sequence = block.sequence.clone();
-                            current_sequence.push_str(&block_sequence);
-                        }
-                        sequences.insert(current_sequence);
-                    }
-                }
-            }
-        }
-
-        sequences
-    }
-
     pub fn insert_changes(conn: &Connection, changes: &Vec<PathChange>, cache: &PathCache) {
         let mut new_edges_by_block_group = HashMap::<i32, Vec<EdgeData>>::new();
         for change in changes {
@@ -432,153 +322,20 @@ impl BlockGroup {
         }
     }
 
-    pub fn insert_changes_new(
-        conn: &Connection,
-        changes: &Vec<PathChangeNew>,
-        cache: &PathCacheNew,
-    ) {
-        let mut new_edges_by_block_group = HashMap::<i32, Vec<EdgeData>>::new();
-        for change in changes {
-            let tree = PathCacheNew::get_intervaltree(cache, &change.path).unwrap();
-            let new_edges = BlockGroup::set_up_new_edges_new(change, tree);
-            new_edges_by_block_group
-                .entry(change.block_group_id)
-                .and_modify(|new_edge_data| new_edge_data.extend(new_edges.clone()))
-                .or_insert_with(|| new_edges.clone());
-        }
-
-        for (block_group_id, new_edges) in new_edges_by_block_group {
-            let edge_ids = Edge::bulk_create(conn, new_edges);
-            BlockGroupEdge::bulk_create(conn, block_group_id, &edge_ids);
-        }
-    }
-
     #[allow(clippy::ptr_arg)]
     #[allow(clippy::needless_late_init)]
     pub fn insert_change(
         conn: &Connection,
         change: &PathChange,
-        tree: &IntervalTree<i32, NewBlock>,
+        tree: &IntervalTree<i32, PathBlock>,
     ) {
         let new_edges = BlockGroup::set_up_new_edges(change, tree);
         let edge_ids = Edge::bulk_create(conn, new_edges);
         BlockGroupEdge::bulk_create(conn, change.block_group_id, &edge_ids);
     }
 
-    #[allow(clippy::ptr_arg)]
-    #[allow(clippy::needless_late_init)]
-    pub fn insert_change_new(
-        conn: &Connection,
-        change: &PathChangeNew,
-        tree: &IntervalTree<i32, PathBlock>,
-    ) {
-        let new_edges = BlockGroup::set_up_new_edges_new(change, tree);
-        let edge_ids = Edge::bulk_create(conn, new_edges);
-        BlockGroupEdge::bulk_create(conn, change.block_group_id, &edge_ids);
-    }
-
     pub fn set_up_new_edges(
         change: &PathChange,
-        tree: &IntervalTree<i32, NewBlock>,
-    ) -> Vec<EdgeData> {
-        let start_blocks: Vec<&NewBlock> =
-            tree.query_point(change.start).map(|x| &x.value).collect();
-        assert_eq!(start_blocks.len(), 1);
-        // NOTE: This may not be used but needs to be initialized here instead of inside the if
-        // statement that uses it, so that the borrow checker is happy
-        let previous_start_blocks: Vec<&NewBlock> = tree
-            .query_point(change.start - 1)
-            .map(|x| &x.value)
-            .collect();
-        assert_eq!(previous_start_blocks.len(), 1);
-        let start_block = if start_blocks[0].path_start == change.start {
-            // First part of this block will be replaced/deleted, need to get previous block to add
-            // edge including it
-            previous_start_blocks[0]
-        } else {
-            start_blocks[0]
-        };
-
-        let end_blocks: Vec<&NewBlock> = tree.query_point(change.end).map(|x| &x.value).collect();
-        assert_eq!(end_blocks.len(), 1);
-        let end_block = end_blocks[0];
-
-        let mut new_edges = vec![];
-
-        if change.block.sequence_start == change.block.sequence_end {
-            // Deletion
-            let new_edge = EdgeData {
-                source_hash: start_block.sequence.hash.clone(),
-                source_node_id: BOGUS_SOURCE_NODE_ID,
-                source_coordinate: change.start - start_block.path_start
-                    + start_block.sequence_start,
-                source_strand: Strand::Forward,
-                target_hash: end_block.sequence.hash.clone(),
-                target_node_id: BOGUS_TARGET_NODE_ID,
-                target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
-                target_strand: Strand::Forward,
-                chromosome_index: change.chromosome_index,
-                phased: change.phased,
-            };
-            new_edges.push(new_edge);
-
-            // NOTE: If the deletion is happening at the very beginning of a path, we need to add
-            // an edge from the dedicated start node to the end of the deletion, to indicate it's
-            // another start point in the block group DAG.
-            if change.start == 0 {
-                let new_beginning_edge = EdgeData {
-                    source_hash: Sequence::PATH_START_HASH.to_string(),
-                    source_node_id: BOGUS_SOURCE_NODE_ID,
-                    source_coordinate: 0,
-                    source_strand: Strand::Forward,
-                    target_hash: end_block.sequence.hash.clone(),
-                    target_node_id: BOGUS_TARGET_NODE_ID,
-                    target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
-                    target_strand: Strand::Forward,
-                    chromosome_index: change.chromosome_index,
-                    phased: change.phased,
-                };
-                new_edges.push(new_beginning_edge);
-            }
-        // NOTE: If the deletion is happening at the very end of a path, we might add an edge
-        // from the beginning of the deletion to the dedicated end node, but in practice it
-        // doesn't affect sequence readouts, so it may not be worth it.
-        } else {
-            // Insertion/replacement
-            let new_start_edge = EdgeData {
-                source_hash: start_block.sequence.hash.clone(),
-                source_node_id: BOGUS_SOURCE_NODE_ID,
-                source_coordinate: change.start - start_block.path_start
-                    + start_block.sequence_start,
-                source_strand: Strand::Forward,
-                target_hash: change.block.sequence.hash.clone(),
-                target_node_id: BOGUS_TARGET_NODE_ID,
-                target_coordinate: change.block.sequence_start,
-                target_strand: Strand::Forward,
-                chromosome_index: change.chromosome_index,
-                phased: change.phased,
-            };
-            let new_end_edge = EdgeData {
-                source_hash: change.block.sequence.hash.clone(),
-                source_node_id: BOGUS_SOURCE_NODE_ID,
-                source_coordinate: change.block.sequence_end,
-                source_strand: Strand::Forward,
-                target_hash: end_block.sequence.hash.clone(),
-                target_node_id: BOGUS_TARGET_NODE_ID,
-                target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
-                target_strand: Strand::Forward,
-                chromosome_index: change.chromosome_index,
-                phased: change.phased,
-            };
-            new_edges.push(new_start_edge);
-            new_edges.push(new_end_edge);
-        }
-
-        new_edges
-    }
-
-    pub fn set_up_new_edges_new(
-        change: &PathChangeNew,
         tree: &IntervalTree<i32, PathBlock>,
     ) -> Vec<EdgeData> {
         let start_blocks: Vec<&PathBlock> =
@@ -733,7 +490,7 @@ mod tests {
             path_end: 15,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 7,
@@ -742,10 +499,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -770,7 +527,7 @@ mod tests {
             strand: Strand::Forward,
         };
 
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 19,
@@ -780,9 +537,9 @@ mod tests {
             phased: 0,
         };
         // take out an entire block.
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -813,7 +570,7 @@ mod tests {
             path_end: 15,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 7,
@@ -822,10 +579,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -854,7 +611,7 @@ mod tests {
             path_end: 15,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 15,
@@ -863,10 +620,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -895,7 +652,7 @@ mod tests {
             path_end: 17,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 12,
@@ -904,10 +661,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -936,7 +693,7 @@ mod tests {
             path_end: 10,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 10,
@@ -945,10 +702,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -977,7 +734,7 @@ mod tests {
             path_end: 9,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 9,
@@ -986,10 +743,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -1018,7 +775,7 @@ mod tests {
             path_end: 20,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 10,
@@ -1027,10 +784,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -1059,7 +816,7 @@ mod tests {
             path_end: 25,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 15,
@@ -1068,10 +825,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -1100,7 +857,7 @@ mod tests {
             path_end: 35,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 5,
@@ -1109,10 +866,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -1142,7 +899,7 @@ mod tests {
             strand: Strand::Forward,
         };
 
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 19,
@@ -1153,9 +910,9 @@ mod tests {
         };
 
         // take out an entire block.
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -1184,7 +941,7 @@ mod tests {
             path_end: 15,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 7,
@@ -1193,10 +950,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -1205,10 +962,10 @@ mod tests {
             ])
         );
 
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -1237,7 +994,7 @@ mod tests {
             path_end: 0,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 0,
@@ -1246,10 +1003,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -1279,7 +1036,7 @@ mod tests {
             path_end: 40,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 40,
@@ -1288,10 +1045,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -1320,7 +1077,7 @@ mod tests {
             path_end: 11,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 10,
@@ -1329,10 +1086,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -1361,7 +1118,7 @@ mod tests {
             path_end: 20,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 19,
@@ -1370,10 +1127,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -1402,7 +1159,7 @@ mod tests {
             path_end: 1,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 0,
@@ -1411,10 +1168,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -1443,7 +1200,7 @@ mod tests {
             path_end: 40,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 35,
@@ -1452,10 +1209,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -1484,7 +1241,7 @@ mod tests {
             path_end: 12,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 10,
@@ -1493,10 +1250,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![
@@ -1525,7 +1282,7 @@ mod tests {
             path_end: 20,
             strand: Strand::Forward,
         };
-        let change = PathChangeNew {
+        let change = PathChange {
             block_group_id,
             path: path.clone(),
             start: 18,
@@ -1534,10 +1291,10 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for_new(&conn, &path);
-        BlockGroup::insert_change_new(&conn, &change, &tree);
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
 
-        let all_sequences = BlockGroup::get_all_sequences_new(&conn, block_group_id);
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![

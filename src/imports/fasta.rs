@@ -140,7 +140,7 @@ mod tests {
             op_conn,
         );
         assert_eq!(
-            BlockGroup::get_all_sequences_new(&conn, 1),
+            BlockGroup::get_all_sequences(&conn, 1),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
 
