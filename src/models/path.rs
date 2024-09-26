@@ -61,18 +61,6 @@ pub fn revcomp(seq: &str) -> String {
 }
 
 #[derive(Clone, Debug)]
-pub struct NewBlock {
-    pub id: i32,
-    pub sequence: Sequence,
-    pub block_sequence: String,
-    pub sequence_start: i32,
-    pub sequence_end: i32,
-    pub path_start: i32,
-    pub path_end: i32,
-    pub strand: Strand,
-}
-
-#[derive(Clone, Debug)]
 pub struct PathBlock {
     pub id: i32,
     pub node_id: i32,

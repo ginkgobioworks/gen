@@ -102,7 +102,6 @@ CREATE TABLE block_group_edges (
 ) STRICT;
 CREATE UNIQUE INDEX block_group_edges_uidx ON block_group_edges(block_group_id, edge_id);
 
-INSERT INTO sequence (hash, sequence_type, sequence, name, file_path, "length") values ("start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "OTHER", "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "", "", 64), ("end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "OTHER", "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "", "", 64);
 INSERT INTO gen_metadata (db_uuid) values (lower(
     hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-' || '4' ||
     substr(hex( randomblob(2)), 2) || '-' ||
@@ -110,6 +109,7 @@ INSERT INTO gen_metadata (db_uuid) values (lower(
     substr(hex(randomblob(2)), 2) || '-' ||
     hex(randomblob(6))
   ));
+INSERT INTO sequence (hash, sequence_type, sequence, name, file_path, "length") values ("start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "OTHER", "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "", "", 64), ("end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "OTHER", "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "", "", 64);
 INSERT INTO nodes (id, sequence_hash) values (1, "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy");
 INSERT INTO nodes (id, sequence_hash) values (2, "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz");
 UPDATE SQLITE_SEQUENCE SET seq = 2 WHERE name = 'nodes';

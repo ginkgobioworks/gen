@@ -618,6 +618,13 @@ mod tests {
             vec![Value::from(bg_id)],
         );
         let dep_bg = binding.first().unwrap();
+
+        let existing_seq = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAATTTT")
+            .save(conn);
+        let existing_node = Node::create(conn, existing_seq.hash.as_str());
+
         let mut session = Session::new(conn).unwrap();
         attach_session(&mut session);
 
@@ -625,9 +632,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCG")
             .save(conn);
-        let existing_seq = Sequence::sequence_from_hash(conn, Sequence::PATH_END_HASH).unwrap();
         let random_node = Node::create(conn, random_seq.hash.as_str());
-        let existing_node = Node::create(conn, existing_seq.hash.as_str());
 
         let new_edge = Edge::create(
             conn,
@@ -651,8 +656,6 @@ mod tests {
             get_changeset_path(&operation).join(format!("{op_id}.dep", op_id = operation.id));
         let dependencies: DependencyModels =
             serde_json::from_reader(fs::File::open(dependency_path).unwrap()).unwrap();
-        println!("here1");
-        println!("{:?}", dependencies);
         assert_eq!(dependencies.sequences.len(), 1);
         assert_eq!(
             dependencies.block_group[0].collection_name,
