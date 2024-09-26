@@ -396,7 +396,6 @@ impl Branch {
         let branch = Branch::get_by_id(conn, branch_id)
             .unwrap_or_else(|| panic!("No branch with id {branch_id}."));
         let mut graph = Operation::get_operation_graph(conn);
-        println!("g is {graph:?}");
         let mut operations: Vec<Operation> = vec![];
         let masked_operations = Branch::get_masked_operations(conn, branch_id);
         for op in masked_operations.iter() {

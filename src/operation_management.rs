@@ -211,7 +211,6 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
         serde_json::from_reader(fs::File::open(dependency_path).unwrap()).unwrap();
 
     for sequence in dependencies.sequences.iter() {
-        println!("dep seq is {sequence:?}");
         if !Sequence::is_delimiter_hash(&sequence.hash) {
             let new_seq = NewSequence::from(sequence).save(conn);
             assert_eq!(new_seq.hash, sequence.hash);
@@ -956,7 +955,6 @@ mod tests {
         assert_eq!(op_count, 3);
 
         // migrate to branch 1 again
-        println!("moving to 1");
         checkout(
             conn,
             operation_conn,
