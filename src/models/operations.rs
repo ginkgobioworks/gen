@@ -1,10 +1,11 @@
 use crate::graph::all_simple_paths;
 use crate::models::file_types::FileTypes;
 use petgraph::graphmap::{DiGraphMap, UnGraphMap};
-use petgraph::visit::{DfsPostOrder, Walker};
+use petgraph::visit::{Dfs, Reversed, Walker};
 use petgraph::Direction;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
+use std::collections::HashSet;
 use std::string::ToString;
 
 #[derive(Clone, Debug)]
@@ -38,7 +39,7 @@ impl Operation {
         if let Some(op_id) = current_op {
             let count: i32 = conn
                 .query_row(
-                    "select count(*) from operation where branch_id = ?1 AND parent_id = ?2",
+                    "select count(*) from operation where branch_id = ?1 AND parent_id = ?2 AND id not in (select operation_id from branch_masked_operations where branch_id = ?1);",
                     (current_branch_id, op_id),
                     |row| row.get(0),
                 )
@@ -98,7 +99,7 @@ impl Operation {
             graph.add_node(op.id);
             if let Some(v) = op.parent_id {
                 graph.add_node(v);
-                graph.add_edge(op.id, v, ());
+                graph.add_edge(v, op.id, ());
             }
         }
         graph
@@ -135,7 +136,7 @@ impl Operation {
                         directed_graph.edges_directed(last_node, Direction::Incoming)
                     {
                         if edge_src == node {
-                            patch_path.push((node, Direction::Incoming, last_node));
+                            patch_path.push((last_node, Direction::Incoming, node));
                             break;
                         }
                     }
@@ -395,6 +396,7 @@ impl Branch {
         let branch = Branch::get_by_id(conn, branch_id)
             .unwrap_or_else(|| panic!("No branch with id {branch_id}."));
         let mut graph = Operation::get_operation_graph(conn);
+        println!("g is {graph:?}");
         let mut operations: Vec<Operation> = vec![];
         let masked_operations = Branch::get_masked_operations(conn, branch_id);
         for op in masked_operations.iter() {
@@ -403,25 +405,43 @@ impl Branch {
 
         let creation_id = branch.start_operation_id.unwrap_or(1);
 
-        let mut dfs = DfsPostOrder::new(&graph, creation_id);
+        let rev_graph = Reversed(&graph);
+        let mut dfs = Dfs::new(rev_graph, creation_id);
 
-        // Traverse all transitive predecessors
-        while let Some(ancestor) = dfs.next(&graph) {
-            operations.push(Operation::get_by_id(conn, ancestor));
+        while let Some(ancestor) = dfs.next(rev_graph) {
+            operations.insert(0, Operation::get_by_id(conn, ancestor));
         }
 
-        for op in Operation::query(
-            conn,
-            "select * from operation where branch_id = ?1 and id > ?2 order by id;",
-            vec![Value::from(branch_id), Value::from(creation_id)],
-        )
-        .iter()
-        {
-            if masked_operations.contains(&op.id) {
-                break;
+        let mut branch_operations: HashSet<i32> = HashSet::from_iter(
+            Operation::query(
+                conn,
+                "select * from operation where branch_id = ?1;",
+                vec![Value::from(branch_id)],
+            )
+            .iter()
+            .map(|op| op.id)
+            .collect::<Vec<i32>>(),
+        );
+        branch_operations.extend(operations.iter().map(|op| op.id).collect::<Vec<i32>>());
+
+        // remove all nodes not in our branch operations. We do this here because upstream operations
+        // may be created in a different branch_id but shared with this branch.
+        for node in graph.clone().nodes() {
+            if !branch_operations.contains(&node) {
+                graph.remove_node(node);
             }
-            operations.push(op.clone());
         }
+
+        // Now traverse down from our starting point, we should only have 1 valid path that is not
+        // cutoff and in our branch operations
+        let mut dfs = Dfs::new(&graph, creation_id);
+        // get rid of the first node which is creation_id
+        dfs.next(&graph);
+
+        while let Some(child) = dfs.next(&graph) {
+            operations.push(Operation::get_by_id(conn, child));
+        }
+
         operations
     }
 
@@ -530,7 +550,11 @@ pub fn setup_db(conn: &Connection, db_uuid: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::{get_operation_connection, setup_gen_dir};
+    use crate::imports::fasta::import_fasta;
+    use crate::models::metadata;
+    use crate::operation_management;
+    use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
+    use std::path::PathBuf;
 
     #[test]
     fn test_gets_operations_of_branch() {
@@ -701,6 +725,209 @@ mod tests {
     }
 
     #[test]
+    fn test_graph_representation() {
+        setup_gen_dir();
+        let db_uuid = "something";
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, db_uuid);
+
+        let change = FileAddition::create(op_conn, "foo", FileTypes::Fasta);
+        // operations will be made in ascending order.
+        // The branch topology is as follows. () indicate where a branch starts
+        //
+        //
+        //
+        //    branch-3   /-> 7
+        //    main      1 -> 2 -> 3
+        //    branch-1             \-> 4 -> 5
+        //    branch-2                  \-> 6
+
+        let mut expected_graph: DiGraphMap<i32, ()> = DiGraphMap::new();
+        expected_graph.add_edge(1, 2, ());
+        expected_graph.add_edge(2, 3, ());
+        expected_graph.add_edge(3, 4, ());
+        expected_graph.add_edge(4, 5, ());
+        expected_graph.add_edge(4, 6, ());
+        expected_graph.add_edge(1, 7, ());
+
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        let branch_1 = Branch::create(op_conn, db_uuid, "branch-1");
+        OperationState::set_branch(op_conn, db_uuid, "branch-1");
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        OperationState::set_operation(op_conn, db_uuid, 4);
+        let branch_2 = Branch::create(op_conn, db_uuid, "branch-2");
+        OperationState::set_branch(op_conn, db_uuid, "branch-2");
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        OperationState::set_operation(op_conn, db_uuid, 1);
+        let branch_3 = Branch::create(op_conn, db_uuid, "branch-3");
+        OperationState::set_branch(op_conn, db_uuid, "branch-3");
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        let graph = Operation::get_operation_graph(op_conn);
+
+        assert_eq!(
+            graph.nodes().collect::<Vec<i32>>(),
+            expected_graph.nodes().collect::<Vec<i32>>()
+        );
+        assert_eq!(
+            graph
+                .all_edges()
+                .map(|(src, dest, _)| (src, dest))
+                .collect::<Vec<(i32, i32)>>(),
+            expected_graph
+                .all_edges()
+                .map(|(src, dest, _)| (src, dest))
+                .collect::<Vec<(i32, i32)>>()
+        );
+    }
+
+    #[test]
+    fn test_path_between() {
+        setup_gen_dir();
+        let db_uuid = "something";
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, db_uuid);
+
+        let change = FileAddition::create(op_conn, "foo", FileTypes::Fasta);
+        // operations will be made in ascending order.
+        // The branch topology is as follows. () indicate where a branch starts
+        //
+        //
+        //
+        //    branch-3   /-> 7
+        //    main      1 -> 2 -> 3
+        //    branch-1             \-> 4 -> 5
+        //    branch-2                  \-> 6
+
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        let branch_1 = Branch::create(op_conn, db_uuid, "branch-1");
+        OperationState::set_branch(op_conn, db_uuid, "branch-1");
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        OperationState::set_operation(op_conn, db_uuid, 4);
+        let branch_2 = Branch::create(op_conn, db_uuid, "branch-2");
+        OperationState::set_branch(op_conn, db_uuid, "branch-2");
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        OperationState::set_operation(op_conn, db_uuid, 1);
+        let branch_3 = Branch::create(op_conn, db_uuid, "branch-3");
+        OperationState::set_branch(op_conn, db_uuid, "branch-3");
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+        let graph = Operation::get_operation_graph(op_conn);
+
+        assert_eq!(
+            Operation::get_path_between(op_conn, 1, 6),
+            vec![
+                (1, Direction::Outgoing, 2),
+                (2, Direction::Outgoing, 3),
+                (3, Direction::Outgoing, 4),
+                (4, Direction::Outgoing, 6),
+            ]
+        );
+
+        assert_eq!(
+            Operation::get_path_between(op_conn, 7, 1),
+            vec![(7, Direction::Incoming, 1),]
+        );
+
+        assert_eq!(
+            Operation::get_path_between(op_conn, 3, 7),
+            vec![
+                (3, Direction::Incoming, 2),
+                (2, Direction::Incoming, 1),
+                (1, Direction::Outgoing, 7),
+            ]
+        );
+    }
+
+    #[test]
     #[should_panic(
         expected = "The current operation is in the middle of a branch. A new operation would create a bifurcation in the branch lineage. Create a new branch if you wish to bifurcate the current set of operations."
     )]
@@ -762,8 +989,8 @@ mod tests {
 
     #[test]
     fn test_bifurcation_allowed_on_new_branch() {
-        // We make a simple branch from 1 -> 2 -> 3 -> 4 and ensure we cannot checkout operation 2
-        // and create a new operation from that point on the same branch.
+        // We make a simple branch from 1 -> 2 -> 3 -> 4 and ensure we can checkout operation 2
+        // because there is a new branch made
 
         setup_gen_dir();
         let db_uuid = "something";
@@ -816,6 +1043,69 @@ mod tests {
             "foo".to_string(),
             "vcf_addition",
             change.id,
+        );
+    }
+
+    #[test]
+    fn test_bifurcation_allowed_on_reset() {
+        // We make a simple branch from 1 -> 2 -> 3 -> 4 and ensure we can reset to operation 2
+        // and create a new operation from that point on the same branch because we reset.
+
+        setup_gen_dir();
+        let conn = &get_connection(None);
+        let db_uuid = &metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection("t.db");
+        setup_db(op_conn, db_uuid);
+
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let collection = "test".to_string();
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+
+        operation_management::reset(conn, op_conn, db_uuid, 2);
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+        assert_eq!(
+            Branch::get_operations(
+                op_conn,
+                OperationState::get_current_branch(op_conn, db_uuid).unwrap()
+            )
+            .iter()
+            .map(|op| op.id)
+            .collect::<Vec<i32>>(),
+            vec![1, 2, 5]
         );
     }
 }

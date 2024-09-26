@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::get_changeset_path;
 use crate::models::block_group::BlockGroup;
 use crate::models::block_group_edge::BlockGroupEdge;
+use crate::models::collection::Collection;
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::file_types::FileTypes;
 use crate::models::operations::{
@@ -210,8 +211,11 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
         serde_json::from_reader(fs::File::open(dependency_path).unwrap()).unwrap();
 
     for sequence in dependencies.sequences.iter() {
-        let new_seq = NewSequence::from(sequence).save(conn);
-        assert_eq!(new_seq.hash, sequence.hash);
+        println!("dep seq is {sequence:?}");
+        if !Sequence::is_delimiter_hash(&sequence.hash) {
+            let new_seq = NewSequence::from(sequence).save(conn);
+            assert_eq!(new_seq.hash, sequence.hash);
+        }
     }
 
     let mut dep_bg_map = HashMap::new();
@@ -359,6 +363,13 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                     let edge_id = item.new_value(2).unwrap().as_i64().unwrap() as i32;
                     insert_block_group_edges.push((bg_id, edge_id));
                 }
+                "collection" => {
+                    Collection::create(
+                        conn,
+                        str::from_utf8(item.new_value(pk_column).unwrap().as_bytes().unwrap())
+                            .unwrap(),
+                    );
+                }
                 _ => {
                     panic!("unhandled table is {v}", v = op.table_name());
                 }
@@ -468,6 +479,7 @@ pub fn reset(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_i
     {
         Branch::mask_operation(operation_conn, current_branch_id, op.id);
     }
+    OperationState::set_operation(operation_conn, db_uuid, op_id);
 }
 
 pub fn apply(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_id: i32) {
@@ -506,15 +518,15 @@ pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Opera
     }
     for (operation_id, direction, next_op) in path.iter() {
         match direction {
-            Direction::Outgoing => {
+            Direction::Incoming => {
                 println!("Reverting operation {operation_id}");
                 revert_changeset(conn, &Operation::get_by_id(operation_conn, *operation_id));
                 OperationState::set_operation(operation_conn, &operation.db_uuid, *next_op);
             }
-            Direction::Incoming => {
-                println!("Applying operation {operation_id}");
-                apply_changeset(conn, &Operation::get_by_id(operation_conn, *operation_id));
-                OperationState::set_operation(operation_conn, &operation.db_uuid, *operation_id);
+            Direction::Outgoing => {
+                println!("Applying operation {next_op}");
+                apply_changeset(conn, &Operation::get_by_id(operation_conn, *next_op));
+                OperationState::set_operation(operation_conn, &operation.db_uuid, *next_op);
             }
         }
     }
@@ -944,6 +956,7 @@ mod tests {
         assert_eq!(op_count, 3);
 
         // migrate to branch 1 again
+        println!("moving to 1");
         checkout(
             conn,
             operation_conn,

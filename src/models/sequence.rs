@@ -89,6 +89,10 @@ impl<'a> NewSequence<'a> {
         hasher.update(self.sequence_type.expect("Sequence type must be defined."));
         hasher.update(";");
         if let Some(v) = self.sequence {
+            println!("v is {v:?}");
+            if v == Sequence::PATH_START_HASH || v == Sequence::PATH_END_HASH {
+                return v.to_string();
+            }
             hasher.update(v);
         } else {
             hasher.update("");
@@ -265,7 +269,7 @@ impl Sequence {
         self.sequence[start as usize..end as usize].to_string()
     }
 
-    fn is_delimiter_hash(hash: &str) -> bool {
+    pub fn is_delimiter_hash(hash: &str) -> bool {
         hash == Self::PATH_START_HASH || hash == Self::PATH_END_HASH
     }
 

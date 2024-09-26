@@ -117,7 +117,7 @@ impl BlockGroup {
                         None => {
                             conn
                             .query_row(
-                                "select id from block_group where collection_name = ?1 and sample_name is null and name = ?3",
+                                "select id from block_group where collection_name = ?1 and sample_name is null and name = ?2",
                                 (collection_name, name),
                                 |row| row.get(0),
                             )
