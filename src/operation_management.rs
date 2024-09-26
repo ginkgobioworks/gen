@@ -6,7 +6,7 @@ use fallible_streaming_iterator::FallibleStreamingIterator;
 use itertools::Itertools;
 use petgraph::Direction;
 use rusqlite::session::ChangesetIter;
-use rusqlite::types::FromSql;
+use rusqlite::types::{FromSql, Value};
 use rusqlite::{session, Connection};
 use serde::{Deserialize, Serialize};
 
@@ -432,6 +432,42 @@ pub fn revert_changeset(conn: &Connection, operation: &Operation) {
     )
     .unwrap();
     conn.pragma_update(None, "foreign_keys", "1").unwrap();
+}
+
+pub fn reset(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_id: i32) {
+    let current_op = OperationState::get_operation(operation_conn, db_uuid).unwrap();
+    let current_branch_id = OperationState::get_current_branch(operation_conn, db_uuid).unwrap();
+    let current_branch = Branch::get_by_id(operation_conn, current_branch_id).unwrap();
+    let branch_operations: Vec<i32> = Branch::get_operations(operation_conn, current_branch_id)
+        .iter()
+        .map(|b| b.id)
+        .collect();
+    if !branch_operations.contains(&current_op) {
+        panic!("{op_id} is not contained in this branch's operations.");
+    }
+    move_to(
+        conn,
+        operation_conn,
+        &Operation::get_by_id(operation_conn, op_id),
+    );
+
+    if current_branch.name != "main" {
+        operation_conn.execute(
+            "UPDATE branch SET start_operation_id = ?2 WHERE id = ?1",
+            (current_branch_id, op_id),
+        );
+    }
+
+    // hide all child operations from this point
+    for op in Operation::query(
+        operation_conn,
+        "select * from operation where parent_id = ?1",
+        vec![Value::from(op_id)],
+    )
+    .iter()
+    {
+        Branch::mask_operation(operation_conn, current_branch_id, op.id);
+    }
 }
 
 pub fn apply(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_id: i32) {
@@ -927,5 +963,242 @@ mod tests {
         assert_eq!(edge_count, 10);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 3);
+    }
+
+    #[test]
+    fn test_reset_hides_operations() {
+        setup_gen_dir();
+        let fasta_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
+        let vcf_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.vcf");
+        let conn = &mut get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let operation_conn = &get_operation_connection(None);
+        setup_db(operation_conn, &db_uuid);
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            operation_conn,
+        );
+
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+
+        let branch_id = OperationState::get_current_branch(operation_conn, &db_uuid).unwrap();
+
+        assert!(Branch::get_masked_operations(operation_conn, branch_id).is_empty());
+        assert_eq!(
+            Branch::get_operations(operation_conn, branch_id)
+                .iter()
+                .map(|op| op.id)
+                .collect::<Vec<i32>>(),
+            vec![1, 2, 3, 4, 5]
+        );
+
+        reset(conn, operation_conn, &db_uuid, 2);
+        assert_eq!(
+            Branch::get_masked_operations(operation_conn, branch_id),
+            vec![3]
+        );
+        assert_eq!(
+            Branch::get_operations(operation_conn, branch_id)
+                .iter()
+                .map(|op| op.id)
+                .collect::<Vec<i32>>(),
+            vec![1, 2]
+        );
+    }
+
+    #[test]
+    fn test_reset_with_branches() {
+        // Our setup is like this:
+        //          -> 3 -> 4 -> 5 -> 10  branch a
+        //        /                \
+        //   1-> 2 -> 6 -> 7 -> 8    -> 9 branch b
+        //
+        // We want to make sure if we reset branch a to 3 that branch b will still show its operations
+        setup_gen_dir();
+        let fasta_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
+        let vcf_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.vcf");
+        let conn = &mut get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let operation_conn = &get_operation_connection(None);
+        setup_db(operation_conn, &db_uuid);
+        let collection = "test".to_string();
+
+        let main_branch = Branch::get_by_name(operation_conn, &db_uuid, "main").unwrap();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            operation_conn,
+        );
+
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+
+        let branch_a = Branch::create(operation_conn, &db_uuid, "branch-a");
+        OperationState::set_branch(operation_conn, &db_uuid, "branch-a");
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+        OperationState::set_branch(operation_conn, &db_uuid, "main");
+        OperationState::set_operation(operation_conn, &db_uuid, 2);
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+        OperationState::set_branch(operation_conn, &db_uuid, "branch-a");
+        OperationState::set_operation(operation_conn, &db_uuid, 5);
+        let branch_b = Branch::create(operation_conn, &db_uuid, "branch-b");
+        OperationState::set_branch(operation_conn, &db_uuid, "branch-b");
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+        OperationState::set_branch(operation_conn, &db_uuid, "branch-a");
+        OperationState::set_operation(operation_conn, &db_uuid, 5);
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+        );
+
+        assert_eq!(
+            Branch::get_operations(operation_conn, main_branch.id)
+                .iter()
+                .map(|op| op.id)
+                .collect::<Vec<i32>>(),
+            vec![1, 2, 6, 7, 8]
+        );
+        assert_eq!(
+            Branch::get_operations(operation_conn, branch_a.id)
+                .iter()
+                .map(|op| op.id)
+                .collect::<Vec<i32>>(),
+            vec![1, 2, 3, 4, 5, 10]
+        );
+        assert_eq!(
+            Branch::get_operations(operation_conn, branch_b.id)
+                .iter()
+                .map(|op| op.id)
+                .collect::<Vec<i32>>(),
+            vec![1, 2, 3, 4, 5, 9]
+        );
+        reset(conn, operation_conn, &db_uuid, 2);
+        assert_eq!(
+            Branch::get_masked_operations(operation_conn, branch_a.id),
+            vec![3, 6]
+        );
+        assert_eq!(
+            Branch::get_operations(operation_conn, main_branch.id)
+                .iter()
+                .map(|op| op.id)
+                .collect::<Vec<i32>>(),
+            vec![1, 2, 6, 7, 8]
+        );
+        assert_eq!(
+            Branch::get_operations(operation_conn, branch_a.id)
+                .iter()
+                .map(|op| op.id)
+                .collect::<Vec<i32>>(),
+            vec![1, 2]
+        );
+        assert_eq!(
+            Branch::get_operations(operation_conn, branch_b.id)
+                .iter()
+                .map(|op| op.id)
+                .collect::<Vec<i32>>(),
+            vec![1, 2, 3, 4, 5, 9]
+        );
     }
 }

@@ -1,7 +1,7 @@
 use crate::graph::all_simple_paths;
 use crate::models::file_types::FileTypes;
 use petgraph::graphmap::{DiGraphMap, UnGraphMap};
-use petgraph::visit::DfsPostOrder;
+use petgraph::visit::{DfsPostOrder, Walker};
 use petgraph::Direction;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
@@ -394,8 +394,13 @@ impl Branch {
     pub fn get_operations(conn: &Connection, branch_id: i32) -> Vec<Operation> {
         let branch = Branch::get_by_id(conn, branch_id)
             .unwrap_or_else(|| panic!("No branch with id {branch_id}."));
-        let graph = Operation::get_operation_graph(conn);
+        let mut graph = Operation::get_operation_graph(conn);
         let mut operations: Vec<Operation> = vec![];
+        let masked_operations = Branch::get_masked_operations(conn, branch_id);
+        for op in masked_operations.iter() {
+            graph.remove_node(*op);
+        }
+
         let creation_id = branch.start_operation_id.unwrap_or(1);
 
         let mut dfs = DfsPostOrder::new(&graph, creation_id);
@@ -405,12 +410,34 @@ impl Branch {
             operations.push(Operation::get_by_id(conn, ancestor));
         }
 
-        operations.extend(Operation::query(
+        for op in Operation::query(
             conn,
             "select * from operation where branch_id = ?1 and id > ?2 order by id;",
             vec![Value::from(branch_id), Value::from(creation_id)],
-        ));
+        )
+        .iter()
+        {
+            if masked_operations.contains(&op.id) {
+                break;
+            }
+            operations.push(op.clone());
+        }
         operations
+    }
+
+    pub fn mask_operation(conn: &Connection, branch_id: i32, operation_id: i32) {
+        conn.execute("INSERT OR IGNORE into branch_masked_operations (branch_id, operation_id) values (?1, ?2);", (branch_id, operation_id)).unwrap();
+    }
+
+    pub fn get_masked_operations(conn: &Connection, branch_id: i32) -> Vec<i32> {
+        let mut stmt = conn
+            .prepare("select operation_id from branch_masked_operations where branch_id = ?1")
+            .unwrap();
+
+        stmt.query_map((branch_id,), |row| row.get(0))
+            .unwrap()
+            .map(|res| res.unwrap())
+            .collect::<Vec<i32>>()
     }
 }
 
