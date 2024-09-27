@@ -36,8 +36,8 @@ pub fn import_gfa(gfa_path: &FilePath, collection_name: &str, conn: &Connection)
             .sequence(input_sequence)
             .save(conn);
         sequences_by_segment_id.insert(segment.id, sequence.clone());
-        let node = Node::create(conn, &sequence.hash);
-        node_ids_by_segment_id.insert(segment.id, node.id);
+        let node_id = Node::create(conn, &sequence.hash);
+        node_ids_by_segment_id.insert(segment.id, node_id);
     }
 
     let mut edges = HashSet::new();

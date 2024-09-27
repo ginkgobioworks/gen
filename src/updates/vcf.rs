@@ -281,7 +281,7 @@ pub fn update_with_vcf(
             let sequence =
                 SequenceCache::lookup(&mut sequence_cache, "DNA", vcf_entry.alt_seq.to_string());
             let sequence_string = sequence.get_sequence(None, None);
-            let node = Node::create(conn, sequence.hash.as_str());
+            let node_id = Node::create(conn, sequence.hash.as_str());
             let change = prepare_change(
                 vcf_entry.block_group_id,
                 &vcf_entry.path,
@@ -291,7 +291,7 @@ pub fn update_with_vcf(
                 vcf_entry.phased,
                 sequence_string.clone(),
                 sequence_string.len() as i32,
-                node.id,
+                node_id,
             );
             changes
                 .entry((vcf_entry.path, vcf_entry.sample_name))

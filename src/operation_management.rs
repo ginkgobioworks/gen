@@ -237,8 +237,8 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
 
     let mut dep_node_map = HashMap::new();
     for node in dependencies.nodes.iter() {
-        let new_node = Node::create(conn, &node.sequence_hash.clone());
-        dep_node_map.insert(&node.id, new_node.id);
+        let new_node_id = Node::create(conn, &node.sequence_hash.clone());
+        dep_node_map.insert(&node.id, new_node_id);
     }
 
     let mut dep_edge_map = HashMap::new();
@@ -405,8 +405,8 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
 
     let mut node_id_map: HashMap<i32, i32> = HashMap::new();
     for (node_id, sequence_hash) in node_map {
-        let new_node = Node::create(conn, &sequence_hash);
-        node_id_map.insert(node_id, new_node.id);
+        let new_node_id = Node::create(conn, &sequence_hash);
+        node_id_map.insert(node_id, new_node_id);
     }
 
     let mut updated_edge_map = HashMap::new();
@@ -689,7 +689,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAATTTT")
             .save(conn);
-        let existing_node = Node::create(conn, existing_seq.hash.as_str());
+        let existing_node_id = Node::create(conn, existing_seq.hash.as_str());
 
         let mut session = Session::new(conn).unwrap();
         attach_session(&mut session);
@@ -698,14 +698,14 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCG")
             .save(conn);
-        let random_node = Node::create(conn, random_seq.hash.as_str());
+        let random_node_id = Node::create(conn, random_seq.hash.as_str());
 
         let new_edge = Edge::create(
             conn,
-            random_node.id,
+            random_node_id,
             0,
             Strand::Forward,
-            existing_node.id,
+            existing_node_id,
             0,
             Strand::Forward,
             0,

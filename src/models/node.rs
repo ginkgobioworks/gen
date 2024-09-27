@@ -14,16 +14,13 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn create(conn: &Connection, sequence_hash: &str) -> Node {
+    pub fn create(conn: &Connection, sequence_hash: &str) -> i32 {
         let insert_statement = format!(
             "INSERT INTO nodes (sequence_hash) VALUES ('{}');",
             sequence_hash
         );
         let _ = conn.execute(&insert_statement, ());
-        Node {
-            id: conn.last_insert_rowid() as i32,
-            sequence_hash: sequence_hash.to_string(),
-        }
+        conn.last_insert_rowid() as i32
     }
 
     pub fn query(conn: &Connection, query: &str, placeholders: Vec<SQLValue>) -> Vec<Node> {

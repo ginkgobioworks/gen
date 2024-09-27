@@ -63,22 +63,22 @@ pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
         .sequence_type("DNA")
         .sequence("AAAAAAAAAA")
         .save(conn);
-    let a_node = Node::create(conn, a_seq.hash.as_str());
+    let a_node_id = Node::create(conn, a_seq.hash.as_str());
     let t_seq = Sequence::new()
         .sequence_type("DNA")
         .sequence("TTTTTTTTTT")
         .save(conn);
-    let t_node = Node::create(conn, t_seq.hash.as_str());
+    let t_node_id = Node::create(conn, t_seq.hash.as_str());
     let c_seq = Sequence::new()
         .sequence_type("DNA")
         .sequence("CCCCCCCCCC")
         .save(conn);
-    let c_node = Node::create(conn, c_seq.hash.as_str());
+    let c_node_id = Node::create(conn, c_seq.hash.as_str());
     let g_seq = Sequence::new()
         .sequence_type("DNA")
         .sequence("GGGGGGGGGG")
         .save(conn);
-    let g_node = Node::create(conn, g_seq.hash.as_str());
+    let g_node_id = Node::create(conn, g_seq.hash.as_str());
     let _collection = Collection::create(conn, "test");
     let block_group = BlockGroup::create(conn, "test", None, "hg19");
     let edge0 = Edge::create(
@@ -86,7 +86,7 @@ pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
         PATH_START_NODE_ID,
         0,
         Strand::Forward,
-        a_node.id,
+        a_node_id,
         0,
         Strand::Forward,
         0,
@@ -94,10 +94,10 @@ pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
     );
     let edge1 = Edge::create(
         conn,
-        a_node.id,
+        a_node_id,
         10,
         Strand::Forward,
-        t_node.id,
+        t_node_id,
         0,
         Strand::Forward,
         0,
@@ -105,10 +105,10 @@ pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
     );
     let edge2 = Edge::create(
         conn,
-        t_node.id,
+        t_node_id,
         10,
         Strand::Forward,
-        c_node.id,
+        c_node_id,
         0,
         Strand::Forward,
         0,
@@ -116,10 +116,10 @@ pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
     );
     let edge3 = Edge::create(
         conn,
-        c_node.id,
+        c_node_id,
         10,
         Strand::Forward,
-        g_node.id,
+        g_node_id,
         0,
         Strand::Forward,
         0,
@@ -127,7 +127,7 @@ pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
     );
     let edge4 = Edge::create(
         conn,
-        g_node.id,
+        g_node_id,
         10,
         Strand::Forward,
         PATH_END_NODE_ID,
