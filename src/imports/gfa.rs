@@ -245,6 +245,9 @@ mod tests {
 
         let result = Path::sequence(conn, path);
         assert_eq!(result, "ATGGCATATTCGCAGCT");
+
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
+        assert_eq!(node_count, 6);
     }
 
     #[test]
@@ -261,6 +264,9 @@ mod tests {
             all_sequences,
             HashSet::from_iter(vec!["AAAATTTTGGGGCCCC".to_string()])
         );
+
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
+        assert_eq!(node_count, 6);
     }
 
     #[test]
@@ -284,6 +290,9 @@ mod tests {
 
         let result = Path::sequence(conn, path);
         assert_eq!(result, "ACCTACAAATTCAAAC");
+
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
+        assert_eq!(node_count, 6);
     }
 
     #[test]
@@ -307,6 +316,9 @@ mod tests {
 
         let result = Path::sequence(conn, path);
         assert_eq!(result, "TATGCCAGCTGCGAATA");
+
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
+        assert_eq!(node_count, 6);
     }
 
     #[test]
@@ -409,6 +421,9 @@ mod tests {
         let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id);
         assert_eq!(all_sequences.len(), 1024);
         assert_eq!(all_sequences, expected_sequences);
+
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
+        assert_eq!(node_count, 28);
     }
 
     #[test]
@@ -436,5 +451,8 @@ mod tests {
 
         let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id);
         assert_eq!(all_sequences, HashSet::from_iter(vec!["AA".to_string()]));
+
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
+        assert_eq!(node_count, 4);
     }
 }
