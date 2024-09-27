@@ -1,4 +1,5 @@
 use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::models::sequence::Sequence;
@@ -6,7 +7,7 @@ use crate::models::sequence::Sequence;
 pub const PATH_START_NODE_ID: i32 = 1;
 pub const PATH_END_NODE_ID: i32 = 2;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Node {
     pub id: i32,
     pub sequence_hash: String,
