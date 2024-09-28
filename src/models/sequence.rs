@@ -265,7 +265,7 @@ impl Sequence {
         self.sequence[start as usize..end as usize].to_string()
     }
 
-    fn is_delimiter_hash(hash: &str) -> bool {
+    pub fn is_delimiter_hash(hash: &str) -> bool {
         hash == Self::PATH_START_HASH || hash == Self::PATH_END_HASH
     }
 

@@ -14,6 +14,13 @@ To list all available branches, `gen --db db_name.db branch --list`. The current
 To checkout a branch, `gen --db db_name.db branch --checkout branch_name`. This will migrate the database to the last change
 applied in a given branch.
 
+# Reset
+
+This will revert a branch to a given operation id and detach operations made beneath this operation id. This should be
+done when work after a given point is no longer desired and you wish to start at a fresh point in the branch.
+
+To reset the database to a given operation, run the command `gen --db db_name.db reset operation_id`.
+
 # Operations
 
 Operations are changes that have been made to the database. Commands such as `import` and `update` create a new operation.

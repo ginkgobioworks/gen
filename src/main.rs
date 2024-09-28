@@ -90,6 +90,11 @@ enum Commands {
         #[clap(index = 1)]
         id: Option<i32>,
     },
+    Reset {
+        /// The operation id to reset to
+        #[clap(index = 1)]
+        id: i32,
+    },
     /// View operations carried out against a database
     Operations {
         /// The branch to list operations for
@@ -286,6 +291,9 @@ fn main() {
         }
         Some(Commands::Checkout { branch, id }) => {
             operation_management::checkout(&conn, &operation_conn, &db_uuid, branch, *id);
+        }
+        Some(Commands::Reset { id }) => {
+            operation_management::reset(&conn, &operation_conn, &db_uuid, *id);
         }
         Some(Commands::Export { name, gfa }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
