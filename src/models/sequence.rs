@@ -1,3 +1,5 @@
+use cached::proc_macro::cached;
+use noodles::bgzf::{self, gzi};
 use noodles::core::Position;
 use noodles::fasta::{self, fai, indexed_reader::Builder as IndexBuilder};
 use rusqlite::types::Value;
@@ -5,7 +7,8 @@ use rusqlite::{params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::{cell::LazyCell, fs, str, sync::RwLock};
+use std::path::PathBuf;
+use std::{fs, str};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub struct Sequence {
@@ -188,6 +191,24 @@ impl<'a> NewSequence<'a> {
     }
 }
 
+#[cached(key = "String", convert = r#"{ format!("{}", path) }"#)]
+fn fasta_index(path: &str) -> Option<fai::Index> {
+    let index_path = format!("{path}.fai");
+    if fs::metadata(&index_path).is_ok() {
+        return Some(fai::read(&index_path).unwrap());
+    }
+    None
+}
+
+#[cached(key = "String", convert = r#"{ format!("{}", path) }"#)]
+fn fasta_gzi_index(path: &str) -> Option<gzi::Index> {
+    let index_path = format!("{path}.gzi");
+    if fs::metadata(&index_path).is_ok() {
+        return Some(gzi::read(&index_path).unwrap());
+    }
+    None
+}
+
 impl Sequence {
     pub const PATH_START_HASH: &'static str =
         "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
@@ -204,8 +225,6 @@ impl Sequence {
         end: impl Into<Option<i32>>,
     ) -> String {
         // todo: handle circles
-        let index_cache: LazyCell<RwLock<HashMap<String, fai::Index>>> =
-            LazyCell::new(|| RwLock::new(HashMap::new()));
 
         let start: Option<i32> = start.into();
         let end: Option<i32> = end.into();
@@ -217,38 +236,46 @@ impl Sequence {
             let name = self.name.clone();
             // noodles reader query is 1 based so offset start by 1
             start += 1;
-            let mut fasta_index: Option<fai::Index> = None;
-            let index_binding: fai::Index;
-            let index_reader = index_cache.read().unwrap();
-            if let Some(index) = index_reader.get(&file_path) {
-                fasta_index = Some(index.clone());
-            } else {
-                drop(index_reader);
-                let index_path = format!("{file_path}.fai");
-                if fs::metadata(&index_path).is_ok() {
-                    index_binding = fai::read(&index_path).unwrap();
-                    fasta_index = Some(index_binding.clone());
-                    let mut w = index_cache.write().unwrap();
-                    w.insert(file_path.clone(), index_binding.clone());
+
+            if let Some(index) = fasta_index(&file_path) {
+                if let Some(gzi_index) = fasta_gzi_index(&file_path) {
+                    let bgzf_reader = bgzf::indexed_reader::Builder::default()
+                        .set_index(gzi_index)
+                        .build_from_path(&file_path)
+                        .unwrap();
+                    let mut reader = fasta::indexed_reader::Builder::default()
+                        .set_index(index)
+                        .build_from_reader(bgzf_reader)
+                        .unwrap();
+                    sequence = Some(
+                        str::from_utf8(
+                            reader
+                                .query(&format!("{name}:{start}-{end}").parse().unwrap())
+                                .unwrap()
+                                .sequence()
+                                .as_ref(),
+                        )
+                        .unwrap()
+                        .to_string(),
+                    );
+                } else {
+                    // noodles reader query is 1 based, inclusive
+                    let mut reader = IndexBuilder::default()
+                        .set_index(index)
+                        .build_from_path(&file_path)
+                        .unwrap();
+                    sequence = Some(
+                        str::from_utf8(
+                            reader
+                                .query(&format!("{name}:{start}-{end}").parse().unwrap())
+                                .unwrap()
+                                .sequence()
+                                .as_ref(),
+                        )
+                        .unwrap()
+                        .to_string(),
+                    );
                 }
-            }
-            if let Some(index) = fasta_index {
-                // noodles reader query is 1 based, inclusive
-                let mut reader = IndexBuilder::default()
-                    .set_index(index.clone())
-                    .build_from_path(&file_path)
-                    .unwrap();
-                sequence = Some(
-                    str::from_utf8(
-                        reader
-                            .query(&format!("{name}:{start}-{end}").parse().unwrap())
-                            .unwrap()
-                            .sequence()
-                            .as_ref(),
-                    )
-                    .unwrap()
-                    .to_string(),
-                );
             } else {
                 let mut reader = fasta::io::reader::Builder
                     .build_from_path(&file_path)
