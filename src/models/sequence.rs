@@ -1,7 +1,5 @@
 use noodles::core::Position;
-use noodles::fasta::{
-    self, fai, indexed_reader::Builder as IndexBuilder, reader::Builder as FastaBuilder,
-};
+use noodles::fasta::{self, fai, indexed_reader::Builder as IndexBuilder};
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
@@ -206,7 +204,7 @@ impl Sequence {
         end: impl Into<Option<i32>>,
     ) -> String {
         // todo: handle circles
-        let INDEX_READER_CACHE: LazyCell<RwLock<HashMap<String, fai::Index>>> =
+        let index_cache: LazyCell<RwLock<HashMap<String, fai::Index>>> =
             LazyCell::new(|| RwLock::new(HashMap::new()));
 
         let start: Option<i32> = start.into();
@@ -221,7 +219,7 @@ impl Sequence {
             start += 1;
             let mut fasta_index: Option<fai::Index> = None;
             let index_binding: fai::Index;
-            let index_reader = INDEX_READER_CACHE.read().unwrap();
+            let index_reader = index_cache.read().unwrap();
             if let Some(index) = index_reader.get(&file_path) {
                 fasta_index = Some(index.clone());
             } else {
@@ -230,7 +228,7 @@ impl Sequence {
                 if fs::metadata(&index_path).is_ok() {
                     index_binding = fai::read(&index_path).unwrap();
                     fasta_index = Some(index_binding.clone());
-                    let mut w = INDEX_READER_CACHE.write().unwrap();
+                    let mut w = index_cache.write().unwrap();
                     w.insert(file_path.clone(), index_binding.clone());
                 }
             }
