@@ -238,15 +238,13 @@ impl Sequence {
             start += 1;
 
             if let Some(index) = fasta_index(&file_path) {
+                let builder = IndexBuilder::default().set_index(index);
                 if let Some(gzi_index) = fasta_gzi_index(&file_path) {
                     let bgzf_reader = bgzf::indexed_reader::Builder::default()
                         .set_index(gzi_index)
                         .build_from_path(&file_path)
                         .unwrap();
-                    let mut reader = fasta::indexed_reader::Builder::default()
-                        .set_index(index)
-                        .build_from_reader(bgzf_reader)
-                        .unwrap();
+                    let mut reader = builder.build_from_reader(bgzf_reader).unwrap();
                     sequence = Some(
                         str::from_utf8(
                             reader
@@ -260,10 +258,7 @@ impl Sequence {
                     );
                 } else {
                     // noodles reader query is 1 based, inclusive
-                    let mut reader = IndexBuilder::default()
-                        .set_index(index)
-                        .build_from_path(&file_path)
-                        .unwrap();
+                    let mut reader = builder.build_from_path(&file_path).unwrap();
                     sequence = Some(
                         str::from_utf8(
                             reader
