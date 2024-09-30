@@ -1,11 +1,13 @@
 use noodles::core::Position;
-use noodles::fasta;
+use noodles::fasta::{
+    self, fai, indexed_reader::Builder as IndexBuilder, reader::Builder as FastaBuilder,
+};
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::{fs, str};
+use std::{cell::LazyCell, fs, str, sync::RwLock};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub struct Sequence {
@@ -203,6 +205,10 @@ impl Sequence {
         start: impl Into<Option<i32>>,
         end: impl Into<Option<i32>>,
     ) -> String {
+        // todo: handle circles
+        let INDEX_READER_CACHE: LazyCell<RwLock<HashMap<String, fai::Index>>> =
+            LazyCell::new(|| RwLock::new(HashMap::new()));
+
         let start: Option<i32> = start.into();
         let end: Option<i32> = end.into();
         let mut start = start.unwrap_or(0);
@@ -211,13 +217,27 @@ impl Sequence {
             let mut sequence: Option<String> = None;
             let file_path = self.file_path.clone();
             let name = self.name.clone();
-            // noodles is 1 index inclusive and we use that for fetching fastas
+            // noodles reader query is 1 based so offset start by 1
             start += 1;
-            // todo: handle circles
-            let index = format!("{file_path}.fai");
-            if fs::metadata(index).is_ok() {
+            let mut fasta_index: Option<fai::Index> = None;
+            let index_binding: fai::Index;
+            let index_reader = INDEX_READER_CACHE.read().unwrap();
+            if let Some(index) = index_reader.get(&file_path) {
+                fasta_index = Some(index.clone());
+            } else {
+                drop(index_reader);
+                let index_path = format!("{file_path}.fai");
+                if fs::metadata(&index_path).is_ok() {
+                    index_binding = fai::read(&index_path).unwrap();
+                    fasta_index = Some(index_binding.clone());
+                    let mut w = INDEX_READER_CACHE.write().unwrap();
+                    w.insert(file_path.clone(), index_binding.clone());
+                }
+            }
+            if let Some(index) = fasta_index {
                 // noodles reader query is 1 based, inclusive
-                let mut reader = fasta::io::indexed_reader::Builder::default()
+                let mut reader = IndexBuilder::default()
+                    .set_index(index.clone())
                     .build_from_path(&file_path)
                     .unwrap();
                 sequence = Some(
