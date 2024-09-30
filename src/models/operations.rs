@@ -1034,7 +1034,7 @@ mod tests {
             change.id,
         );
         OperationState::set_operation(op_conn, db_uuid, 2);
-        let branch_1 = Branch::create(op_conn, db_uuid, "branch-1");
+        Branch::create(op_conn, db_uuid, "branch-1");
         OperationState::set_branch(op_conn, db_uuid, "branch-1");
         Operation::create(
             op_conn,
