@@ -290,9 +290,6 @@ pub fn update_with_vcf(
                 .entry((vcf_entry.path, vcf_entry.sample_name))
                 .or_default()
                 .push(change);
-            if changes.len() % 10000 == 0 {
-                println!("{v} changes done", v = changes.len());
-            }
         }
     }
     let mut summary: HashMap<String, HashMap<String, i32>> = HashMap::new();
