@@ -343,22 +343,20 @@ impl Edge {
             if !block_boundaries.is_empty() {
                 let start = 0;
                 let end = block_boundaries[0];
-                let block_sequence = sequence.get_sequence(start, end).to_string();
                 let first_block = GroupBlock {
                     id: block_index,
                     node_id: *node_id,
-                    sequence: block_sequence,
+                    sequence: sequence.get_sequence(start, end),
                     start,
                     end,
                 };
                 blocks.push(first_block);
                 block_index += 1;
                 for (start, end) in block_boundaries.clone().into_iter().tuple_windows() {
-                    let block_sequence = sequence.get_sequence(start, end).to_string();
                     let block = GroupBlock {
                         id: block_index,
                         node_id: *node_id,
-                        sequence: block_sequence,
+                        sequence: sequence.get_sequence(start, end),
                         start,
                         end,
                     };
@@ -367,11 +365,10 @@ impl Edge {
                 }
                 let start = block_boundaries[block_boundaries.len() - 1];
                 let end = sequence.length;
-                let block_sequence = sequence.get_sequence(start, end).to_string();
                 let last_block = GroupBlock {
                     id: block_index,
                     node_id: *node_id,
-                    sequence: block_sequence,
+                    sequence: sequence.get_sequence(start, end),
                     start,
                     end,
                 };
