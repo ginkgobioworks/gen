@@ -7,7 +7,6 @@ use rusqlite::{params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::{fs, str};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
@@ -276,7 +275,7 @@ impl Sequence {
 
         let start: Option<i32> = start.into();
         let end: Option<i32> = end.into();
-        let mut start = start.unwrap_or(0) as usize;
+        let start = start.unwrap_or(0) as usize;
         let end = end.unwrap_or(self.length) as usize;
         if self.external_sequence {
             let file_path = self.file_path.clone();
