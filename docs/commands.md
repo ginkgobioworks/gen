@@ -1,3 +1,12 @@
+# Defaults
+
+This controls default choices for the `gen` command line
+
+- database
+  - This controls the default database for `gen` to work on, it is what is passed to the `--db` argument. 
+- collection
+  - This controls the default collection for `gen` to work on, it is what is passed to the `--name` argument.
+
 # Apply
 
 Apply operations to the current branch.
@@ -13,6 +22,13 @@ Deleting a branch can be accomplished via `gen --db db_name.db branch --delete b
 To list all available branches, `gen --db db_name.db branch --list`. The current branch will be marked with a `>` before it.
 To checkout a branch, `gen --db db_name.db branch --checkout branch_name`. This will migrate the database to the last change
 applied in a given branch.
+
+# Reset
+
+This will revert a branch to a given operation id and detach operations made beneath this operation id. This should be
+done when work after a given point is no longer desired and you wish to start at a fresh point in the branch.
+
+To reset the database to a given operation, run the command `gen --db db_name.db reset operation_id`.
 
 # Operations
 

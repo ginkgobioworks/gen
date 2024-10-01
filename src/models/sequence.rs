@@ -257,10 +257,6 @@ fn cached_sequence(file_path: &str, name: &str) -> Option<String> {
 }
 
 impl Sequence {
-    pub const PATH_START_HASH: &'static str =
-        "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
-    pub const PATH_END_HASH: &'static str =
-        "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
     #[allow(clippy::new_ret_no_self)]
     pub fn new() -> NewSequence<'static> {
         NewSequence::new()
@@ -292,10 +288,6 @@ impl Sequence {
         self.sequence[start..end].to_string()
     }
 
-    fn is_delimiter_hash(hash: &str) -> bool {
-        hash == Self::PATH_START_HASH || hash == Self::PATH_END_HASH
-    }
-
     pub fn sequences(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Sequence> {
         let mut stmt = conn.prepare_cached(query).unwrap();
         let rows = stmt
@@ -306,15 +298,7 @@ impl Sequence {
                     external_sequence = true;
                 }
                 let hash: String = row.get(0).unwrap();
-                // NOTE: "Delimiter" sequences are present to point to the actual start or end of a
-                // path or node in a block group.  They are stored with a non-empty sequence in the
-                // database in order to satisfy foreign key constraints, so we must make them empty
-                // here.
-                let sequence: String = if Sequence::is_delimiter_hash(&hash) {
-                    "".to_string()
-                } else {
-                    row.get(2).unwrap()
-                };
+                let sequence = row.get(2).unwrap();
                 Ok(Sequence {
                     hash,
                     sequence_type: row.get(1).unwrap(),
