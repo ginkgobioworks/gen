@@ -48,4 +48,13 @@ CREATE TABLE branch (
 ) STRICT;
 CREATE UNIQUE INDEX branch_uidx ON branch(db_uuid, name);
 
+CREATE TABLE branch_masked_operations (
+  id INTEGER PRIMARY KEY NOT NULL,
+  branch_id INTEGER NOT NULL,
+  operation_id INTEGER NOT NULL,
+  FOREIGN KEY(branch_id) REFERENCES branch(id),
+  FOREIGN KEY(operation_id) REFERENCES operation(id)
+) STRICT;
+CREATE UNIQUE INDEX branch_mask_op_uidx ON branch_masked_operations(branch_id, operation_id);
+
 INSERT INTO defaults values (1, NULL, NULL);

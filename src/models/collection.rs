@@ -18,12 +18,29 @@ impl Collection {
 
     pub fn create(conn: &Connection, name: &str) -> Collection {
         let mut stmt = conn
-            .prepare("INSERT INTO collection (name) VALUES (?1) RETURNING *")
+            .prepare("INSERT INTO collection (name) VALUES (?1) RETURNING *;")
             .unwrap();
-        let mut rows = stmt
-            .query_map((name,), |row| Ok(Collection { name: row.get(0)? }))
-            .unwrap();
-        rows.next().unwrap().unwrap()
+
+        match stmt.query_row((name,), |_row| {
+            Ok(Collection {
+                name: name.to_string(),
+            })
+        }) {
+            Ok(res) => res,
+            Err(rusqlite::Error::SqliteFailure(err, _details)) => {
+                if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                    Collection {
+                        name: name.to_string(),
+                    }
+                } else {
+                    panic!("something bad happened querying the database")
+                }
+            }
+            Err(err) => {
+                println!("{err:?}");
+                panic!("something bad happened querying the database")
+            }
+        }
     }
 
     pub fn bulk_create(conn: &Connection, names: &Vec<String>) -> Vec<Collection> {

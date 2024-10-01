@@ -6,8 +6,9 @@ use crate::models::{
     block_group::{BlockGroup, BlockGroupData, PathCache, PathChange},
     file_types::FileTypes,
     metadata,
+    node::Node,
     operations::{FileAddition, Operation, OperationSummary},
-    path::{NewBlock, Path},
+    path::{Path, PathBlock},
     sample::Sample,
     sequence::Sequence,
     strand::Strand,
@@ -118,15 +119,17 @@ fn prepare_change(
     ref_end: i32,
     chromosome_index: i32,
     phased: i32,
-    sequence: Sequence,
+    block_sequence: String,
+    sequence_length: i32,
+    node_id: i32,
 ) -> PathChange {
     // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
-    let new_block = NewBlock {
+    let new_block = PathBlock {
         id: 0,
-        sequence: sequence.clone(),
-        block_sequence: sequence.get_sequence(None, None),
+        node_id,
+        block_sequence,
         sequence_start: 0,
-        sequence_end: sequence.length,
+        sequence_end: sequence_length,
         path_start: ref_start,
         path_end: ref_end,
         strand: Strand::Forward,
@@ -277,6 +280,8 @@ pub fn update_with_vcf(
         for vcf_entry in vcf_entries {
             let sequence =
                 SequenceCache::lookup(&mut sequence_cache, "DNA", vcf_entry.alt_seq.to_string());
+            let sequence_string = sequence.get_sequence(None, None);
+            let node_id = Node::create(conn, sequence.hash.as_str());
             let change = prepare_change(
                 vcf_entry.block_group_id,
                 &vcf_entry.path,
@@ -284,7 +289,9 @@ pub fn update_with_vcf(
                 ref_end as i32,
                 vcf_entry.chromosome_index,
                 vcf_entry.phased,
-                sequence,
+                sequence_string.clone(),
+                sequence_string.len() as i32,
+                node_id,
             );
             changes
                 .entry((vcf_entry.path, vcf_entry.sample_name))
