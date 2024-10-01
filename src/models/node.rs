@@ -16,11 +16,28 @@ pub struct Node {
 impl Node {
     pub fn create(conn: &Connection, sequence_hash: &str) -> i32 {
         let insert_statement = format!(
-            "INSERT INTO nodes (sequence_hash) VALUES ('{}');",
+            "INSERT INTO nodes (sequence_hash) VALUES ('{}') RETURNING (id);",
             sequence_hash
         );
-        let _ = conn.execute(&insert_statement, ());
-        conn.last_insert_rowid() as i32
+        let mut stmt = conn.prepare(&insert_statement).unwrap();
+        let mut rows = stmt.query_map([], |row| row.get(0)).unwrap();
+        match rows.next().unwrap() {
+            Ok(res) => res,
+            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+                if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                    println!("{err:?} {details:?}");
+                    let placeholders = vec![sequence_hash];
+                    let query = "SELECT id from nodes where sequence_hash = ?1;";
+                    conn.query_row(query, params_from_iter(&placeholders), |row| row.get(0))
+                        .unwrap()
+                } else {
+                    panic!("something bad happened querying the database")
+                }
+            }
+            Err(_) => {
+                panic!("something bad happened querying the database")
+            }
+        }
     }
 
     pub fn query(conn: &Connection, query: &str, placeholders: Vec<SQLValue>) -> Vec<Node> {
