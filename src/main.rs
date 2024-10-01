@@ -175,8 +175,6 @@ fn main() {
     let conn = get_connection(db);
     let db_uuid = metadata::get_db_uuid(&conn);
 
-    let default_collection = get_default_collection(&operation_conn);
-
     // initialize the selected database if needed.
     setup_db(&operation_conn, &db_uuid);
 
@@ -189,7 +187,8 @@ fn main() {
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             let name = &name.clone().unwrap_or_else(|| {
-                default_collection.expect("No collection specified and default not setup.")
+                get_default_collection(&operation_conn)
+                    .expect("No collection specified and default not setup.")
             });
             if fasta.is_some() {
                 import_fasta(
@@ -217,7 +216,8 @@ fn main() {
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             let name = &name.clone().unwrap_or_else(|| {
-                default_collection.expect("No collection specified and default not setup.")
+                get_default_collection(&operation_conn)
+                    .expect("No collection specified and default not setup.")
             });
             update_with_vcf(
                 vcf,
@@ -345,7 +345,8 @@ fn main() {
         }
         Some(Commands::Export { name, gfa }) => {
             let name = &name.clone().unwrap_or_else(|| {
-                default_collection.expect("No collection specified and default not setup.")
+                get_default_collection(&operation_conn)
+                    .expect("No collection specified and default not setup.")
             });
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             export_gfa(&conn, name, &PathBuf::from(gfa));
