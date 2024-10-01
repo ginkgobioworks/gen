@@ -10,13 +10,13 @@ use std::string::ToString;
 
 #[derive(Clone, Debug)]
 pub struct Operation {
-    pub id: i32,
+    pub id: i64,
     pub db_uuid: String,
-    pub parent_id: Option<i32>,
-    pub branch_id: i32,
+    pub parent_id: Option<i64>,
+    pub branch_id: i64,
     pub collection_name: Option<String>,
     pub change_type: String,
-    pub change_id: i32,
+    pub change_id: i64,
 }
 
 impl Operation {
@@ -25,7 +25,7 @@ impl Operation {
         db_uuid: &str,
         collection_name: impl Into<Option<String>>,
         change_type: &str,
-        change_id: i32,
+        change_id: i64,
     ) -> Operation {
         let collection_name = collection_name.into();
         let current_op = OperationState::get_operation(conn, db_uuid);
@@ -37,7 +37,7 @@ impl Operation {
         // of operations. We ensure there is no child operation in this branch of the current operation.
 
         if let Some(op_id) = current_op {
-            let count: i32 = conn
+            let count: i64 = conn
                 .query_row(
                     "select count(*) from operation where branch_id = ?1 AND parent_id = ?2 AND id not in (select operation_id from branch_masked_operations where branch_id = ?1);",
                     (current_branch_id, op_id),
@@ -80,7 +80,7 @@ impl Operation {
         operation
     }
 
-    pub fn get_upstream(conn: &Connection, operation_id: i32) -> Vec<i32> {
+    pub fn get_upstream(conn: &Connection, operation_id: i64) -> Vec<i64> {
         let query = "WITH RECURSIVE operations(operation_id) AS ( \
         select ?1 UNION \
         select parent_id from operation join operations ON id=operation_id \
@@ -89,11 +89,11 @@ impl Operation {
         stmt.query_map((operation_id,), |row| row.get(0))
             .unwrap()
             .map(|id| id.unwrap())
-            .collect::<Vec<i32>>()
+            .collect::<Vec<i64>>()
     }
 
-    pub fn get_operation_graph(conn: &Connection) -> DiGraphMap<i32, ()> {
-        let mut graph: DiGraphMap<i32, ()> = DiGraphMap::new();
+    pub fn get_operation_graph(conn: &Connection) -> DiGraphMap<i64, ()> {
+        let mut graph: DiGraphMap<i64, ()> = DiGraphMap::new();
         let operations = Operation::query(conn, "select * from operation;", vec![]);
         for op in operations.iter() {
             graph.add_node(op.id);
@@ -107,11 +107,11 @@ impl Operation {
 
     pub fn get_path_between(
         conn: &Connection,
-        source_id: i32,
-        target_id: i32,
-    ) -> Vec<(i32, Direction, i32)> {
+        source_id: i64,
+        target_id: i64,
+    ) -> Vec<(i64, Direction, i64)> {
         let directed_graph = Operation::get_operation_graph(conn);
-        let mut undirected_graph: UnGraphMap<i32, ()> = Default::default();
+        let mut undirected_graph: UnGraphMap<i64, ()> = Default::default();
 
         for node in directed_graph.nodes() {
             undirected_graph.add_node(node);
@@ -119,7 +119,7 @@ impl Operation {
         for (source, target, _weight) in directed_graph.all_edges() {
             undirected_graph.add_edge(source, target, ());
         }
-        let mut patch_path: Vec<(i32, Direction, i32)> = vec![];
+        let mut patch_path: Vec<(i64, Direction, i64)> = vec![];
         for path in all_simple_paths(&undirected_graph, source_id, target_id) {
             let mut last_node = 0;
             for node in path {
@@ -187,7 +187,7 @@ impl Operation {
         rows.next().unwrap().unwrap()
     }
 
-    pub fn get_by_id(conn: &Connection, op_id: i32) -> Operation {
+    pub fn get_by_id(conn: &Connection, op_id: i64) -> Operation {
         Operation::get(
             conn,
             "select * from operation where id = ?1",
@@ -197,7 +197,7 @@ impl Operation {
 }
 
 pub struct FileAddition {
-    pub id: i32,
+    pub id: i64,
     pub file_path: String,
     pub file_type: FileTypes,
 }
@@ -228,13 +228,13 @@ impl FileAddition {
 
 #[derive(Clone, Debug)]
 pub struct OperationSummary {
-    pub id: i32,
-    pub operation_id: i32,
+    pub id: i64,
+    pub operation_id: i64,
     pub summary: String,
 }
 
 impl OperationSummary {
-    pub fn create(conn: &Connection, operation_id: i32, summary: &str) -> OperationSummary {
+    pub fn create(conn: &Connection, operation_id: i64, summary: &str) -> OperationSummary {
         let query =
             "INSERT INTO operation_summary (operation_id, summary) VALUES (?1, ?2) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
@@ -277,11 +277,11 @@ impl OperationSummary {
 
 #[derive(Clone, Debug)]
 pub struct Branch {
-    pub id: i32,
+    pub id: i64,
     pub db_uuid: String,
     pub name: String,
-    pub start_operation_id: Option<i32>,
-    pub current_operation_id: Option<i32>,
+    pub start_operation_id: Option<i64>,
+    pub current_operation_id: Option<i64>,
 }
 
 impl Branch {
@@ -370,7 +370,7 @@ impl Branch {
         branch
     }
 
-    pub fn get_by_id(conn: &Connection, branch_id: i32) -> Option<Branch> {
+    pub fn get_by_id(conn: &Connection, branch_id: i64) -> Option<Branch> {
         let mut branch: Option<Branch> = None;
         for result in Branch::query(
             conn,
@@ -384,7 +384,7 @@ impl Branch {
         branch
     }
 
-    pub fn set_current_operation(conn: &Connection, branch_id: i32, operation_id: i32) {
+    pub fn set_current_operation(conn: &Connection, branch_id: i64, operation_id: i64) {
         conn.execute(
             "UPDATE branch set current_operation_id = ?2 where id = ?1",
             (branch_id, operation_id),
@@ -392,7 +392,7 @@ impl Branch {
         .unwrap();
     }
 
-    pub fn get_operations(conn: &Connection, branch_id: i32) -> Vec<Operation> {
+    pub fn get_operations(conn: &Connection, branch_id: i64) -> Vec<Operation> {
         let branch = Branch::get_by_id(conn, branch_id)
             .unwrap_or_else(|| panic!("No branch with id {branch_id}."));
         let mut graph = Operation::get_operation_graph(conn);
@@ -411,7 +411,7 @@ impl Branch {
             operations.insert(0, Operation::get_by_id(conn, ancestor));
         }
 
-        let mut branch_operations: HashSet<i32> = HashSet::from_iter(
+        let mut branch_operations: HashSet<i64> = HashSet::from_iter(
             Operation::query(
                 conn,
                 "select * from operation where branch_id = ?1;",
@@ -419,9 +419,9 @@ impl Branch {
             )
             .iter()
             .map(|op| op.id)
-            .collect::<Vec<i32>>(),
+            .collect::<Vec<i64>>(),
         );
-        branch_operations.extend(operations.iter().map(|op| op.id).collect::<Vec<i32>>());
+        branch_operations.extend(operations.iter().map(|op| op.id).collect::<Vec<i64>>());
 
         // remove all nodes not in our branch operations. We do this here because upstream operations
         // may be created in a different branch_id but shared with this branch.
@@ -444,11 +444,11 @@ impl Branch {
         operations
     }
 
-    pub fn mask_operation(conn: &Connection, branch_id: i32, operation_id: i32) {
+    pub fn mask_operation(conn: &Connection, branch_id: i64, operation_id: i64) {
         conn.execute("INSERT OR IGNORE into branch_masked_operations (branch_id, operation_id) values (?1, ?2);", (branch_id, operation_id)).unwrap();
     }
 
-    pub fn get_masked_operations(conn: &Connection, branch_id: i32) -> Vec<i32> {
+    pub fn get_masked_operations(conn: &Connection, branch_id: i64) -> Vec<i64> {
         let mut stmt = conn
             .prepare("select operation_id from branch_masked_operations where branch_id = ?1")
             .unwrap();
@@ -456,14 +456,14 @@ impl Branch {
         stmt.query_map((branch_id,), |row| row.get(0))
             .unwrap()
             .map(|res| res.unwrap())
-            .collect::<Vec<i32>>()
+            .collect::<Vec<i64>>()
     }
 }
 
 pub struct OperationState {}
 
 impl OperationState {
-    pub fn set_operation(conn: &Connection, db_uuid: &str, op_id: i32) {
+    pub fn set_operation(conn: &Connection, db_uuid: &str, op_id: i64) {
         let mut stmt = conn
             .prepare(
                 "INSERT INTO operation_state (db_uuid, operation_id)
@@ -478,8 +478,8 @@ impl OperationState {
         Branch::set_current_operation(conn, branch_id, op_id);
     }
 
-    pub fn get_operation(conn: &Connection, db_uuid: &str) -> Option<i32> {
-        let mut id: Option<i32> = None;
+    pub fn get_operation(conn: &Connection, db_uuid: &str) -> Option<i64> {
+        let mut id: Option<i64> = None;
         let mut stmt = conn
             .prepare("SELECT operation_id from operation_state where db_uuid = ?1;")
             .unwrap();
@@ -517,8 +517,8 @@ impl OperationState {
         }
     }
 
-    pub fn get_current_branch(conn: &Connection, db_uuid: &str) -> Option<i32> {
-        let mut id: Option<i32> = None;
+    pub fn get_current_branch(conn: &Connection, db_uuid: &str) -> Option<i64> {
+        let mut id: Option<i64> = None;
         let mut stmt = conn
             .prepare("SELECT branch_id from operation_state where db_uuid = ?1;")
             .unwrap();
@@ -695,31 +695,31 @@ mod tests {
         let ops = Branch::get_operations(op_conn, branch_2_midpoint_1.id)
             .iter()
             .map(|f| f.id)
-            .collect::<Vec<i32>>();
+            .collect::<Vec<i64>>();
         assert_eq!(ops, vec![1, 6, 7, 12, 13]);
 
         let ops = Branch::get_operations(op_conn, branch_1.id)
             .iter()
             .map(|f| f.id)
-            .collect::<Vec<i32>>();
+            .collect::<Vec<i64>>();
         assert_eq!(ops, vec![1, 2, 3]);
 
         let ops = Branch::get_operations(op_conn, branch_2.id)
             .iter()
             .map(|f| f.id)
-            .collect::<Vec<i32>>();
+            .collect::<Vec<i64>>();
         assert_eq!(ops, vec![1, 6, 7, 8]);
 
         let ops = Branch::get_operations(op_conn, branch_1_sub_1.id)
             .iter()
             .map(|f| f.id)
-            .collect::<Vec<i32>>();
+            .collect::<Vec<i64>>();
         assert_eq!(ops, vec![1, 2, 3, 4, 5]);
 
         let ops = Branch::get_operations(op_conn, branch_2_sub_1.id)
             .iter()
             .map(|f| f.id)
-            .collect::<Vec<i32>>();
+            .collect::<Vec<i64>>();
         assert_eq!(ops, vec![1, 6, 7, 8, 9, 10, 11]);
     }
 
@@ -741,7 +741,7 @@ mod tests {
         //    branch-1             \-> 4 -> 5
         //    branch-2                  \-> 6
 
-        let mut expected_graph: DiGraphMap<i32, ()> = DiGraphMap::new();
+        let mut expected_graph: DiGraphMap<i64, ()> = DiGraphMap::new();
         expected_graph.add_edge(1, 2, ());
         expected_graph.add_edge(2, 3, ());
         expected_graph.add_edge(3, 4, ());
@@ -809,18 +809,18 @@ mod tests {
         let graph = Operation::get_operation_graph(op_conn);
 
         assert_eq!(
-            graph.nodes().collect::<Vec<i32>>(),
-            expected_graph.nodes().collect::<Vec<i32>>()
+            graph.nodes().collect::<Vec<i64>>(),
+            expected_graph.nodes().collect::<Vec<i64>>()
         );
         assert_eq!(
             graph
                 .all_edges()
                 .map(|(src, dest, _)| (src, dest))
-                .collect::<Vec<(i32, i32)>>(),
+                .collect::<Vec<(i64, i64)>>(),
             expected_graph
                 .all_edges()
                 .map(|(src, dest, _)| (src, dest))
-                .collect::<Vec<(i32, i32)>>()
+                .collect::<Vec<(i64, i64)>>()
         );
     }
 
@@ -1102,7 +1102,7 @@ mod tests {
             )
             .iter()
             .map(|op| op.id)
-            .collect::<Vec<i32>>(),
+            .collect::<Vec<i64>>(),
             vec![1, 2, 5]
         );
     }
