@@ -1,6 +1,6 @@
 use cached::proc_macro::cached;
 use noodles::bgzf::{self, gzi};
-use noodles::core::Position;
+use noodles::core::Region;
 use noodles::fasta::{self, fai, indexed_reader::Builder as IndexBuilder};
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
@@ -209,6 +209,54 @@ fn fasta_gzi_index(path: &str) -> Option<gzi::Index> {
     None
 }
 
+#[cached(
+    key = "String",
+    convert = r#"{ format!("{},{}", file_path, name) }"#,
+    size = 1
+)]
+fn cached_sequence(file_path: &str, name: &str) -> Option<String> {
+    let mut sequence: Option<String> = None;
+    let region = name.parse::<Region>().unwrap();
+    if let Some(index) = fasta_index(file_path) {
+        let builder = IndexBuilder::default().set_index(index);
+        if let Some(gzi_index) = fasta_gzi_index(file_path) {
+            let bgzf_reader = bgzf::indexed_reader::Builder::default()
+                .set_index(gzi_index)
+                .build_from_path(file_path)
+                .unwrap();
+            let mut reader = builder.build_from_reader(bgzf_reader).unwrap();
+            sequence = Some(
+                str::from_utf8(reader.query(&region).unwrap().sequence().as_ref())
+                    .unwrap()
+                    .to_string(),
+            )
+        } else {
+            let mut reader = builder.build_from_path(file_path).unwrap();
+            sequence = Some(
+                str::from_utf8(reader.query(&region).unwrap().sequence().as_ref())
+                    .unwrap()
+                    .to_string(),
+            );
+        }
+    } else {
+        let mut reader = fasta::io::reader::Builder
+            .build_from_path(file_path)
+            .unwrap();
+        for result in reader.records() {
+            let record = result.unwrap();
+            if String::from_utf8(record.name().to_vec()).unwrap() == name {
+                sequence = Some(
+                    str::from_utf8(record.sequence().as_ref())
+                        .unwrap()
+                        .to_string(),
+                );
+                break;
+            }
+        }
+    }
+    sequence
+}
+
 impl Sequence {
     pub const PATH_START_HASH: &'static str =
         "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
@@ -228,81 +276,21 @@ impl Sequence {
 
         let start: Option<i32> = start.into();
         let end: Option<i32> = end.into();
-        let mut start = start.unwrap_or(0);
-        let end = end.unwrap_or(self.length);
+        let mut start = start.unwrap_or(0) as usize;
+        let end = end.unwrap_or(self.length) as usize;
         if self.external_sequence {
-            let mut sequence: Option<String> = None;
             let file_path = self.file_path.clone();
             let name = self.name.clone();
-            // noodles reader query is 1 based so offset start by 1
-            start += 1;
-
-            if let Some(index) = fasta_index(&file_path) {
-                let builder = IndexBuilder::default().set_index(index);
-                if let Some(gzi_index) = fasta_gzi_index(&file_path) {
-                    let bgzf_reader = bgzf::indexed_reader::Builder::default()
-                        .set_index(gzi_index)
-                        .build_from_path(&file_path)
-                        .unwrap();
-                    let mut reader = builder.build_from_reader(bgzf_reader).unwrap();
-                    sequence = Some(
-                        str::from_utf8(
-                            reader
-                                .query(&format!("{name}:{start}-{end}").parse().unwrap())
-                                .unwrap()
-                                .sequence()
-                                .as_ref(),
-                        )
-                        .unwrap()
-                        .to_string(),
-                    );
-                } else {
-                    // noodles reader query is 1 based, inclusive
-                    let mut reader = builder.build_from_path(&file_path).unwrap();
-                    sequence = Some(
-                        str::from_utf8(
-                            reader
-                                .query(&format!("{name}:{start}-{end}").parse().unwrap())
-                                .unwrap()
-                                .sequence()
-                                .as_ref(),
-                        )
-                        .unwrap()
-                        .to_string(),
-                    );
-                }
+            if let Some(sequence) = cached_sequence(&file_path, &name) {
+                return sequence[start..end].to_string();
             } else {
-                let mut reader = fasta::io::reader::Builder
-                    .build_from_path(&file_path)
-                    .unwrap();
-                for result in reader.records() {
-                    let record = result.unwrap();
-                    if String::from_utf8(record.name().to_vec()).unwrap() == name {
-                        sequence = Some(
-                            str::from_utf8(
-                                record
-                                    .sequence()
-                                    .slice(
-                                        Position::try_from(start as usize).unwrap()
-                                            ..=Position::try_from(end as usize).unwrap(),
-                                    )
-                                    .unwrap()
-                                    .as_ref(),
-                            )
-                            .unwrap()
-                            .to_string(),
-                        );
-                        break;
-                    }
-                }
+                panic!("{name} not found in fasta file {file_path}");
             }
-            return sequence
-                .unwrap_or_else(|| panic!("{name} not found in fasta file {file_path}"));
         }
-        if start == 0 && end == self.length {
+        if start == 0 && end as i32 == self.length {
             return self.sequence.clone();
         }
-        self.sequence[start as usize..end as usize].to_string()
+        self.sequence[start..end].to_string()
     }
 
     fn is_delimiter_hash(hash: &str) -> bool {

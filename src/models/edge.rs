@@ -315,7 +315,9 @@ impl Edge {
         let mut blocks = vec![];
         let mut block_index = 0;
         let mut boundary_edges = vec![];
-        for (hash, sequence) in sequences_by_hash.into_iter() {
+        // we sort by keys to exploit the external sequence cache which keeps the most recently used
+        // external sequence in memory.
+        for (hash, sequence) in sequences_by_hash.iter().sorted_by_key(|k| k.0) {
             let block_boundaries = Edge::get_block_boundaries(
                 edges_by_source_hash.get(hash.as_str()),
                 edges_by_target_hash.get(hash.as_str()),
