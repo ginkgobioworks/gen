@@ -62,6 +62,7 @@ pub fn import_fasta(
                 .sequence_type("DNA")
                 .name(&name)
                 .file_path(fasta)
+                .length(sequence_length)
                 .save(conn)
         } else {
             Sequence::new()
@@ -132,6 +133,35 @@ mod tests {
             &fasta_path.to_str().unwrap().to_string(),
             "test",
             false,
+            &conn,
+            op_conn,
+        );
+        assert_eq!(
+            BlockGroup::get_all_sequences(&conn, 1),
+            HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
+        );
+
+        let path = Path::get(&conn, 1);
+        assert_eq!(
+            Path::sequence(&conn, path),
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()
+        );
+    }
+
+    #[test]
+    fn test_add_fasta_shallow() {
+        setup_gen_dir();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let conn = get_connection(None);
+        let db_uuid = metadata::get_db_uuid(&conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            "test",
+            true,
             &conn,
             op_conn,
         );

@@ -313,10 +313,15 @@ impl Edge {
         let mut blocks = vec![];
         let mut block_index = 0;
         let mut boundary_edges = vec![];
-        for (node_id, sequence) in sequences_by_node_id.into_iter() {
+        // we sort by keys to exploit the external sequence cache which keeps the most recently used
+        // external sequence in memory.
+        for (node_id, sequence) in sequences_by_node_id
+            .iter()
+            .sorted_by_key(|(_node_id, seq)| seq.hash.clone())
+        {
             let block_boundaries = Edge::get_block_boundaries(
-                edges_by_source_node_id.get(&node_id),
-                edges_by_target_node_id.get(&node_id),
+                edges_by_source_node_id.get(node_id),
+                edges_by_target_node_id.get(node_id),
                 sequence.length,
             );
             for block_boundary in &block_boundaries {
@@ -324,10 +329,10 @@ impl Edge {
                 // for the data we need to set up boundary edges in the block group graph
                 boundary_edges.push(Edge {
                     id: -1,
-                    source_node_id: node_id,
+                    source_node_id: *node_id,
                     source_coordinate: *block_boundary,
                     source_strand: Strand::Unknown,
-                    target_node_id: node_id,
+                    target_node_id: *node_id,
                     target_coordinate: *block_boundary,
                     target_strand: Strand::Unknown,
                     chromosome_index: 0,
@@ -341,7 +346,7 @@ impl Edge {
                 let block_sequence = sequence.get_sequence(start, end).to_string();
                 let first_block = GroupBlock {
                     id: block_index,
-                    node_id,
+                    node_id: *node_id,
                     sequence: block_sequence,
                     start,
                     end,
@@ -352,7 +357,7 @@ impl Edge {
                     let block_sequence = sequence.get_sequence(start, end).to_string();
                     let block = GroupBlock {
                         id: block_index,
-                        node_id,
+                        node_id: *node_id,
                         sequence: block_sequence,
                         start,
                         end,
@@ -365,7 +370,7 @@ impl Edge {
                 let block_sequence = sequence.get_sequence(start, end).to_string();
                 let last_block = GroupBlock {
                     id: block_index,
-                    node_id,
+                    node_id: *node_id,
                     sequence: block_sequence,
                     start,
                     end,
@@ -375,7 +380,7 @@ impl Edge {
             } else {
                 blocks.push(GroupBlock {
                     id: block_index,
-                    node_id,
+                    node_id: *node_id,
                     sequence: sequence.get_sequence(None, None),
                     start: 0,
                     end: sequence.length,

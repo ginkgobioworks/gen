@@ -13,10 +13,11 @@ rusqlite = { version = "0.31.0", features = ["bundled", "array", "session"] }
 rusqlite_migration = { version = "1.2.0" , features = ["from-directory"]}
 sha2 = "0.10.8"
 tempfile = "3.12.0"
-noodles = { version = "0.78.0", features = ["core", "vcf", "fasta", "async"] }
+noodles = { version = "0.78.0", features = ["bgzf", "core", "vcf", "fasta", "async"] }
 petgraph = "0.6.5"
 chrono = "0.4.38"
 tempdir = "0.3.7"
 fallible-streaming-iterator = "0.1.9"
 serde = {  version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.128"
+cached = "0.53.1"

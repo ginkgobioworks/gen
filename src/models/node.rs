@@ -42,6 +42,7 @@ impl Node {
 
     pub fn query(conn: &Connection, query: &str, placeholders: Vec<SQLValue>) -> Vec<Node> {
         let mut stmt = conn.prepare(query).unwrap();
+        let mut objs = vec![];
         let rows = stmt
             .query_map(params_from_iter(placeholders), |row| {
                 Ok(Node {
@@ -50,7 +51,6 @@ impl Node {
                 })
             })
             .unwrap();
-        let mut objs = vec![];
         for row in rows {
             objs.push(row.unwrap());
         }
@@ -58,17 +58,21 @@ impl Node {
     }
 
     pub fn get_nodes(conn: &Connection, node_ids: Vec<i32>) -> Vec<Node> {
-        Node::query(
-            conn,
-            &format!(
-                "SELECT * FROM nodes WHERE id IN ({})",
-                node_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ")
-            ),
-            node_ids
-                .iter()
-                .map(|id| SQLValue::Integer(*id as i64))
-                .collect(),
-        )
+        let mut nodes: Vec<Node> = vec![];
+        for chunk in node_ids.chunks(1000) {
+            nodes.extend(Node::query(
+                conn,
+                &format!(
+                    "SELECT * FROM nodes WHERE id IN ({})",
+                    chunk.iter().map(|_| "?").collect::<Vec<_>>().join(", ")
+                ),
+                chunk
+                    .iter()
+                    .map(|id| SQLValue::Integer(*id as i64))
+                    .collect(),
+            ))
+        }
+        nodes
     }
 
     pub fn get_sequences_by_node_ids(
