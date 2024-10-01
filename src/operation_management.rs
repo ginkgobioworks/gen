@@ -22,7 +22,7 @@ use crate::models::operations::{
 };
 use crate::models::path::Path;
 use crate::models::sample::Sample;
-use crate::models::sequence::{NewSequence, Sequence};
+use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 
 /* General information
@@ -65,8 +65,8 @@ pub fn get_file(path: &PathBuf, mode: FileMode) -> fs::File {
     file.unwrap()
 }
 
-pub fn get_changeset_dependencies(conn: &Connection, changes: &[u8]) -> Vec<u8> {
-    let input: &mut dyn Read = &mut changes.clone();
+pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<u8> {
+    let input: &mut dyn Read = &mut changes;
     let mut iter = ChangesetIter::start_strm(&input).unwrap();
     // the purpose of this function is to capture external changes to the changeset, notably foreign keys
     // that may be made in previous changesets.
@@ -221,10 +221,9 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
     let dependencies: DependencyModels =
         serde_json::from_reader(fs::File::open(dependency_path).unwrap()).unwrap();
 
-    for sequence in dependencies.sequences.iter() {
-        if !Sequence::is_delimiter_hash(&sequence.hash) {
-            let new_seq = NewSequence::from(sequence).save(conn);
-            assert_eq!(new_seq.hash, sequence.hash);
+    for node in dependencies.nodes.iter() {
+        if !Node::is_terminal(node.id) {
+            assert!(Sequence::sequence_from_hash(conn, &node.sequence_hash).is_some());
         }
     }
 
@@ -526,10 +525,15 @@ pub fn reset(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_i
     );
 
     if current_branch.name != "main" {
-        operation_conn.execute(
+        match operation_conn.execute(
             "UPDATE branch SET start_operation_id = ?2 WHERE id = ?1",
             (current_branch_id, op_id),
-        );
+        ) {
+            Ok(_) => {}
+            Err(e) => {
+                panic!("Unable to reset branch: {e}");
+            }
+        }
     }
 
     // hide all child operations from this point

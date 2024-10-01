@@ -81,4 +81,8 @@ impl Node {
             })
             .collect::<HashMap<i32, Sequence>>()
     }
+
+    pub fn is_terminal(node_id: i32) -> bool {
+        node_id == PATH_START_NODE_ID || node_id == PATH_END_NODE_ID
+    }
 }

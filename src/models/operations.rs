@@ -1,7 +1,7 @@
 use crate::graph::all_simple_paths;
 use crate::models::file_types::FileTypes;
 use petgraph::graphmap::{DiGraphMap, UnGraphMap};
-use petgraph::visit::{Dfs, Reversed, Walker};
+use petgraph::visit::{Dfs, Reversed};
 use petgraph::Direction;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
@@ -770,7 +770,7 @@ mod tests {
             "vcf_addition",
             change.id,
         );
-        let branch_1 = Branch::create(op_conn, db_uuid, "branch-1");
+        Branch::create(op_conn, db_uuid, "branch-1");
         OperationState::set_branch(op_conn, db_uuid, "branch-1");
         Operation::create(
             op_conn,
@@ -787,7 +787,7 @@ mod tests {
             change.id,
         );
         OperationState::set_operation(op_conn, db_uuid, 4);
-        let branch_2 = Branch::create(op_conn, db_uuid, "branch-2");
+        Branch::create(op_conn, db_uuid, "branch-2");
         OperationState::set_branch(op_conn, db_uuid, "branch-2");
         Operation::create(
             op_conn,
@@ -797,7 +797,7 @@ mod tests {
             change.id,
         );
         OperationState::set_operation(op_conn, db_uuid, 1);
-        let branch_3 = Branch::create(op_conn, db_uuid, "branch-3");
+        Branch::create(op_conn, db_uuid, "branch-3");
         OperationState::set_branch(op_conn, db_uuid, "branch-3");
         Operation::create(
             op_conn,
@@ -863,7 +863,7 @@ mod tests {
             "vcf_addition",
             change.id,
         );
-        let branch_1 = Branch::create(op_conn, db_uuid, "branch-1");
+        Branch::create(op_conn, db_uuid, "branch-1");
         OperationState::set_branch(op_conn, db_uuid, "branch-1");
         Operation::create(
             op_conn,
@@ -880,7 +880,7 @@ mod tests {
             change.id,
         );
         OperationState::set_operation(op_conn, db_uuid, 4);
-        let branch_2 = Branch::create(op_conn, db_uuid, "branch-2");
+        Branch::create(op_conn, db_uuid, "branch-2");
         OperationState::set_branch(op_conn, db_uuid, "branch-2");
         Operation::create(
             op_conn,
@@ -890,7 +890,7 @@ mod tests {
             change.id,
         );
         OperationState::set_operation(op_conn, db_uuid, 1);
-        let branch_3 = Branch::create(op_conn, db_uuid, "branch-3");
+        Branch::create(op_conn, db_uuid, "branch-3");
         OperationState::set_branch(op_conn, db_uuid, "branch-3");
         Operation::create(
             op_conn,
@@ -899,7 +899,6 @@ mod tests {
             "vcf_addition",
             change.id,
         );
-        let graph = Operation::get_operation_graph(op_conn);
 
         assert_eq!(
             Operation::get_path_between(op_conn, 1, 6),

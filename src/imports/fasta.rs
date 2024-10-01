@@ -41,15 +41,13 @@ pub fn import_fasta(
         change.id,
     );
 
-    let mut collection;
-
-    if !Collection::exists(conn, name) {
-        collection = Collection::create(conn, name);
+    let collection = if !Collection::exists(conn, name) {
+        Collection::create(conn, name)
     } else {
-        collection = Collection {
+        Collection {
             name: name.to_string(),
-        };
-    }
+        }
+    };
     let mut summary: HashMap<String, i32> = HashMap::new();
 
     for result in reader.records() {
@@ -71,14 +69,14 @@ pub fn import_fasta(
                 .sequence(&sequence)
                 .save(conn)
         };
-        let node = Node::create(conn, &seq.hash);
+        let node_id = Node::create(conn, &seq.hash);
         let block_group = BlockGroup::create(conn, &collection.name, None, &name);
         let edge_into = Edge::create(
             conn,
-	    PATH_START_NODE_ID,
+            PATH_START_NODE_ID,
             0,
             Strand::Forward,
-	    node.id,
+            node_id,
             0,
             Strand::Forward,
             0,
@@ -86,10 +84,10 @@ pub fn import_fasta(
         );
         let edge_out_of = Edge::create(
             conn,
-	    node.id,
+            node_id,
             sequence_length,
             Strand::Forward,
-	    PATH_END_NODE_ID,
+            PATH_END_NODE_ID,
             0,
             Strand::Forward,
             0,
