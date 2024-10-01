@@ -1,3 +1,9 @@
+CREATE TABLE defaults (
+  id INTEGER PRIMARY KEY NOT NULL,
+  db_name TEXT,
+  collection_name TEXT
+) STRICT;
+
 CREATE TABLE operation_state (
   db_uuid TEXT PRIMARY KEY NOT NULL,
   operation_id INTEGER,
@@ -50,3 +56,5 @@ CREATE TABLE branch_masked_operations (
   FOREIGN KEY(operation_id) REFERENCES operation(id)
 ) STRICT;
 CREATE UNIQUE INDEX branch_mask_op_uidx ON branch_masked_operations(branch_id, operation_id);
+
+INSERT INTO defaults values (1, NULL, NULL);
