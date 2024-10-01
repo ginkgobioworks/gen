@@ -21,13 +21,13 @@ impl Collection {
             .prepare("INSERT INTO collection (name) VALUES (?1) RETURNING *;")
             .unwrap();
 
-        match stmt.query_row((name,), |row| {
+        match stmt.query_row((name,), |_row| {
             Ok(Collection {
                 name: name.to_string(),
             })
         }) {
             Ok(res) => res,
-            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+            Err(rusqlite::Error::SqliteFailure(err, _details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
                     Collection {
                         name: name.to_string(),

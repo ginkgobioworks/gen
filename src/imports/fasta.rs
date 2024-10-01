@@ -4,8 +4,15 @@ use std::str;
 use crate::models::file_types::FileTypes;
 use crate::models::operations::{FileAddition, Operation, OperationSummary};
 use crate::models::{
-    block_group::BlockGroup, block_group_edge::BlockGroupEdge, collection::Collection, edge::Edge,
-    metadata, path::Path, sequence::Sequence, strand::Strand,
+    block_group::BlockGroup,
+    block_group_edge::BlockGroupEdge,
+    collection::Collection,
+    edge::Edge,
+    metadata,
+    node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
+    path::Path,
+    sequence::Sequence,
+    strand::Strand,
 };
 use crate::operation_management;
 use noodles::fasta;
@@ -34,15 +41,13 @@ pub fn import_fasta(
         change.id,
     );
 
-    let mut collection;
-
-    if !Collection::exists(conn, name) {
-        collection = Collection::create(conn, name);
+    let collection = if !Collection::exists(conn, name) {
+        Collection::create(conn, name)
     } else {
-        collection = Collection {
+        Collection {
             name: name.to_string(),
-        };
-    }
+        }
+    };
     let mut summary: HashMap<String, i32> = HashMap::new();
 
     for result in reader.records() {
@@ -64,13 +69,14 @@ pub fn import_fasta(
                 .sequence(&sequence)
                 .save(conn)
         };
+        let node_id = Node::create(conn, &seq.hash);
         let block_group = BlockGroup::create(conn, &collection.name, None, &name);
         let edge_into = Edge::create(
             conn,
-            Sequence::PATH_START_HASH.to_string(),
+            PATH_START_NODE_ID,
             0,
             Strand::Forward,
-            seq.hash.to_string(),
+            node_id,
             0,
             Strand::Forward,
             0,
@@ -78,10 +84,10 @@ pub fn import_fasta(
         );
         let edge_out_of = Edge::create(
             conn,
-            seq.hash.to_string(),
+            node_id,
             sequence_length,
             Strand::Forward,
-            Sequence::PATH_END_HASH.to_string(),
+            PATH_END_NODE_ID,
             0,
             Strand::Forward,
             0,

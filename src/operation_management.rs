@@ -16,12 +16,13 @@ use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::collection::Collection;
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::file_types::FileTypes;
+use crate::models::node::Node;
 use crate::models::operations::{
     Branch, FileAddition, Operation, OperationState, OperationSummary,
 };
 use crate::models::path::Path;
 use crate::models::sample::Sample;
-use crate::models::sequence::{NewSequence, Sequence};
+use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 
 /* General information
@@ -41,6 +42,7 @@ pub enum FileMode {
 struct DependencyModels {
     sequences: Vec<Sequence>,
     block_group: Vec<BlockGroup>,
+    nodes: Vec<Node>,
     edges: Vec<Edge>,
     paths: Vec<Path>,
 }
@@ -63,8 +65,8 @@ pub fn get_file(path: &PathBuf, mode: FileMode) -> fs::File {
     file.unwrap()
 }
 
-pub fn get_changeset_dependencies(conn: &Connection, changes: &[u8]) -> Vec<u8> {
-    let input: &mut dyn Read = &mut changes.clone();
+pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<u8> {
+    let input: &mut dyn Read = &mut changes;
     let mut iter = ChangesetIter::start_strm(&input).unwrap();
     // the purpose of this function is to capture external changes to the changeset, notably foreign keys
     // that may be made in previous changesets.
@@ -75,6 +77,7 @@ pub fn get_changeset_dependencies(conn: &Connection, changes: &[u8]) -> Vec<u8> 
     let mut created_block_groups = HashSet::new();
     let mut created_paths = HashSet::new();
     let mut created_edges = HashSet::new();
+    let mut created_nodes = HashSet::new();
     let mut created_sequences: HashSet<String> = HashSet::new();
     while let Some(item) = iter.next().unwrap() {
         let op = item.op().unwrap();
@@ -107,22 +110,28 @@ pub fn get_changeset_dependencies(conn: &Connection, changes: &[u8]) -> Vec<u8> 
                         previous_block_groups.insert(bg_id);
                     }
                 }
-                "edges" => {
-                    let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
-                    let source_hash =
+                "nodes" => {
+                    created_nodes
+                        .insert(item.new_value(pk_column).unwrap().as_i64().unwrap() as i32);
+                    let sequence_hash =
                         str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
                             .unwrap()
                             .to_string();
-                    let target_hash =
-                        str::from_utf8(item.new_value(4).unwrap().as_bytes().unwrap())
-                            .unwrap()
-                            .to_string();
-                    created_edges.insert(edge_pk);
-                    if !created_sequences.contains(&source_hash) {
-                        previous_sequences.insert(source_hash);
+                    if !created_sequences.contains(&sequence_hash) {
+                        previous_sequences.insert(sequence_hash);
                     }
-                    if !created_sequences.contains(&target_hash) {
-                        previous_sequences.insert(target_hash);
+                }
+                "edges" => {
+                    let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
+                    let source_node_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
+                    let target_node_id = item.new_value(4).unwrap().as_i64().unwrap() as i32;
+                    created_edges.insert(edge_pk);
+                    let nodes = Node::get_nodes(conn, vec![source_node_id, target_node_id]);
+                    if !created_nodes.contains(&source_node_id) {
+                        previous_sequences.insert(nodes[0].sequence_hash.clone());
+                    }
+                    if !created_nodes.contains(&target_node_id) {
+                        previous_sequences.insert(nodes[1].sequence_hash.clone());
                     }
                 }
                 "path_edges" => {
@@ -167,6 +176,7 @@ pub fn get_changeset_dependencies(conn: &Connection, changes: &[u8]) -> Vec<u8> 
             ),
             vec![],
         ),
+        nodes: vec![],
         edges: Edge::query(
             conn,
             &format!(
@@ -201,6 +211,7 @@ pub fn write_changeset(conn: &Connection, operation: &Operation, changes: &[u8])
 
     let mut file = fs::File::create_new(&change_path)
         .unwrap_or_else(|_| panic!("Unable to open {change_path:?}"));
+
     file.write_all(changes).unwrap()
 }
 
@@ -210,10 +221,9 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
     let dependencies: DependencyModels =
         serde_json::from_reader(fs::File::open(dependency_path).unwrap()).unwrap();
 
-    for sequence in dependencies.sequences.iter() {
-        if !Sequence::is_delimiter_hash(&sequence.hash) {
-            let new_seq = NewSequence::from(sequence).save(conn);
-            assert_eq!(new_seq.hash, sequence.hash);
+    for node in dependencies.nodes.iter() {
+        if !Node::is_terminal(node.id) {
+            assert!(Sequence::sequence_from_hash(conn, &node.sequence_hash).is_some());
         }
     }
 
@@ -222,6 +232,12 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
         let sample_name = bg.sample_name.as_ref().map(|v| v as &str);
         let new_bg = BlockGroup::create(conn, &bg.collection_name, sample_name, &bg.name);
         dep_bg_map.insert(&bg.id, new_bg.id);
+    }
+
+    let mut dep_node_map = HashMap::new();
+    for node in dependencies.nodes.iter() {
+        let new_node_id = Node::create(conn, &node.sequence_hash.clone());
+        dep_node_map.insert(&node.id, new_node_id);
     }
 
     let mut dep_edge_map = HashMap::new();
@@ -258,6 +274,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
 
     let mut blockgroup_map: HashMap<i32, i32> = HashMap::new();
     let mut edge_map: HashMap<i32, EdgeData> = HashMap::new();
+    let mut node_map: HashMap<i32, String> = HashMap::new();
     let mut path_edges: HashMap<i32, Vec<(i32, i32)>> = HashMap::new();
     let mut insert_paths = vec![];
     let mut insert_block_group_edges = vec![];
@@ -328,16 +345,25 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                             .to_string(),
                     });
                 }
+                "nodes" => {
+                    let node_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
+                    node_map.insert(
+                        node_pk,
+                        str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
+                            .unwrap()
+                            .to_string(),
+                    );
+                }
                 "edges" => {
                     let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
                     edge_map.insert(
                         edge_pk,
                         EdgeData {
-                            source_hash: item.new_value(1).unwrap().as_str().unwrap().to_string(),
+                            source_node_id: item.new_value(1).unwrap().as_i64().unwrap() as i32,
                             source_coordinate: item.new_value(2).unwrap().as_i64().unwrap() as i32,
                             source_strand: Strand::column_result(item.new_value(3).unwrap())
                                 .unwrap(),
-                            target_hash: item.new_value(4).unwrap().as_str().unwrap().to_string(),
+                            target_node_id: item.new_value(4).unwrap().as_i64().unwrap() as i32,
                             target_coordinate: item.new_value(5).unwrap().as_i64().unwrap() as i32,
                             target_strand: Strand::column_result(item.new_value(6).unwrap())
                                 .unwrap(),
@@ -376,12 +402,49 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
         }
     }
 
-    let sorted_edge_ids = edge_map.keys().copied().sorted().collect::<Vec<i32>>();
+    let mut node_id_map: HashMap<i32, i32> = HashMap::new();
+    for (node_id, sequence_hash) in node_map {
+        let new_node_id = Node::create(conn, &sequence_hash);
+        node_id_map.insert(node_id, new_node_id);
+    }
+
+    let mut updated_edge_map = HashMap::new();
+    for (edge_id, edge) in edge_map {
+        let updated_source_node_id = dep_node_map.get(&edge.source_node_id).unwrap_or(
+            node_id_map
+                .get(&edge.source_node_id)
+                .unwrap_or(&edge.source_node_id),
+        );
+        let updated_target_node_id = dep_node_map.get(&edge.target_node_id).unwrap_or(
+            node_id_map
+                .get(&edge.target_node_id)
+                .unwrap_or(&edge.target_node_id),
+        );
+        updated_edge_map.insert(
+            edge_id,
+            EdgeData {
+                source_node_id: *updated_source_node_id,
+                source_coordinate: edge.source_coordinate,
+                source_strand: edge.source_strand,
+                target_node_id: *updated_target_node_id,
+                target_coordinate: edge.target_coordinate,
+                target_strand: edge.target_strand,
+                chromosome_index: edge.chromosome_index,
+                phased: edge.phased,
+            },
+        );
+    }
+
+    let sorted_edge_ids = updated_edge_map
+        .keys()
+        .copied()
+        .sorted()
+        .collect::<Vec<i32>>();
     let created_edges = Edge::bulk_create(
         conn,
         sorted_edge_ids
             .iter()
-            .map(|id| edge_map[id].clone())
+            .map(|id| updated_edge_map[id].clone())
             .collect::<Vec<EdgeData>>(),
     );
     let mut edge_id_map: HashMap<i32, i32> = HashMap::new();
@@ -462,10 +525,15 @@ pub fn reset(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_i
     );
 
     if current_branch.name != "main" {
-        operation_conn.execute(
+        match operation_conn.execute(
             "UPDATE branch SET start_operation_id = ?2 WHERE id = ?1",
             (current_branch_id, op_id),
-        );
+        ) {
+            Ok(_) => {}
+            Err(e) => {
+                panic!("Unable to reset branch: {e}");
+            }
+        }
     }
 
     // hide all child operations from this point
@@ -538,6 +606,7 @@ pub fn attach_session(session: &mut session::Session) {
         "sequence",
         "block_group",
         "path",
+        "nodes",
         "edges",
         "path_edges",
         "block_group_edges",
@@ -582,7 +651,7 @@ mod tests {
     use crate::imports::fasta::import_fasta;
     use crate::models::file_types::FileTypes;
     use crate::models::operations::{setup_db, Branch, FileAddition, Operation, OperationState};
-    use crate::models::{edge::Edge, metadata, sample::Sample};
+    use crate::models::{edge::Edge, metadata, node::Node, sample::Sample};
     use crate::test_helpers::{
         get_connection, get_operation_connection, setup_block_group, setup_gen_dir,
     };
@@ -612,13 +681,20 @@ mod tests {
         setup_db(op_conn, &db_uuid);
 
         // create some stuff before we attach to our main session that will be required as extra information
-        let (bg_id, path_id) = setup_block_group(conn);
+        let (bg_id, _path_id) = setup_block_group(conn);
         let binding = BlockGroup::query(
             conn,
             "select * from block_group where id = ?1;",
             vec![Value::from(bg_id)],
         );
         let dep_bg = binding.first().unwrap();
+
+        let existing_seq = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAATTTT")
+            .save(conn);
+        let existing_node_id = Node::create(conn, existing_seq.hash.as_str());
+
         let mut session = Session::new(conn).unwrap();
         attach_session(&mut session);
 
@@ -626,14 +702,14 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCG")
             .save(conn);
-        let existing_seq = Sequence::sequence_from_hash(conn, Sequence::PATH_END_HASH).unwrap();
+        let random_node_id = Node::create(conn, random_seq.hash.as_str());
 
         let new_edge = Edge::create(
             conn,
-            random_seq.hash.clone(),
+            random_node_id,
             0,
             Strand::Forward,
-            existing_seq.hash.clone(),
+            existing_node_id,
             0,
             Strand::Forward,
             0,
@@ -679,10 +755,12 @@ mod tests {
             operation_conn,
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
         let op_count =
             Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
         assert_eq!(edge_count, 2);
+        assert_eq!(node_count, 3);
         assert_eq!(sample_count, 0);
         assert_eq!(op_count, 1);
         update_with_vcf(
@@ -694,10 +772,25 @@ mod tests {
             operation_conn,
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
         let op_count =
             Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
-        assert_eq!(edge_count, 10);
+        // NOTE: The edge count is 14 because of the following:
+        // * 1 edge from the source node to the node created by the fasta import
+        // * 1 edge from the node created by the fasta import to the sink node
+        // * 8 edges to and from nodes representing the first alt sequence.  Topologically there are
+        // just 2 edges, but there is redundancy because of phasing.  There is further redundancy
+        // because there are 2 non-reference samples, causing 2 nodes to be created for each alt
+        // sequence.
+        // * 4 edges to and from nodes representing the second alt sequence.  (One sample uses the
+        // reference part instead of the alt sequence in this case.)
+        assert_eq!(edge_count, 14);
+        // NOTE: The node count is 9:
+        // * 2 source and sink nodes
+        // * 1 node created by the initial fasta import
+        // * 6 nodes created by the VCF update.  See above explanation of edge count for more details.
+        assert_eq!(node_count, 9);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
 
@@ -711,10 +804,12 @@ mod tests {
         );
 
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
         let op_count =
             Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
         assert_eq!(edge_count, 2);
+        assert_eq!(node_count, 3);
         assert_eq!(sample_count, 0);
         assert_eq!(op_count, 2);
 
@@ -726,10 +821,12 @@ mod tests {
             ),
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
         let op_count =
             Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
-        assert_eq!(edge_count, 10);
+        assert_eq!(edge_count, 14);
+        assert_eq!(node_count, 9);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
     }
@@ -754,8 +851,8 @@ mod tests {
             operation_conn,
         );
 
-        let branch_1 = Branch::create(operation_conn, &db_uuid, "branch-1");
-        let branch_2 = Branch::create(operation_conn, &db_uuid, "branch-2");
+        Branch::create(operation_conn, &db_uuid, "branch-1");
+        Branch::create(operation_conn, &db_uuid, "branch-2");
         checkout(
             conn,
             operation_conn,
@@ -881,10 +978,12 @@ mod tests {
             operation_conn,
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
         let op_count =
             Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
         assert_eq!(edge_count, 2);
+        assert_eq!(node_count, 3);
         assert_eq!(sample_count, 0);
         assert_eq!(op_count, 1);
 
@@ -907,10 +1006,12 @@ mod tests {
             operation_conn,
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
         let op_count =
             Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
-        assert_eq!(edge_count, 10);
+        assert_eq!(edge_count, 14);
+        assert_eq!(node_count, 9);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
 
@@ -930,10 +1031,12 @@ mod tests {
 
         // ensure branch 1 operations have been undone
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
         let op_count =
             Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
         assert_eq!(edge_count, 2);
+        assert_eq!(node_count, 3);
         assert_eq!(sample_count, 0);
         assert_eq!(op_count, 2);
 
@@ -947,10 +1050,12 @@ mod tests {
             operation_conn,
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
         let op_count =
             Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
         assert_eq!(edge_count, 6);
+        assert_eq!(node_count, 5);
         assert_eq!(sample_count, 1);
         assert_eq!(op_count, 3);
 
@@ -968,10 +1073,12 @@ mod tests {
         );
 
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
         let op_count =
             Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
-        assert_eq!(edge_count, 10);
+        assert_eq!(edge_count, 14);
+        assert_eq!(node_count, 9);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 3);
     }
