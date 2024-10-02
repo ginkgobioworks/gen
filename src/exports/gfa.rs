@@ -165,7 +165,6 @@ fn write_paths(
         .map(|block| ((block.node_id, block.end), block.clone()))
         .collect::<HashMap<(i64, i64), GroupBlock>>();
 
-    println!("here1");
     for path in paths {
         let block_group = BlockGroup::get_by_id(conn, path.block_group_id);
         let sample_name = block_group.sample_name;
@@ -191,7 +190,6 @@ fn write_paths(
         } else {
             path.name
         };
-        println!("path name: {}", full_path_name);
         writer
             .write_all(&path_line(&full_path_name, &graph_node_ids, &node_strands).into_bytes())
             .unwrap_or_else(|_| panic!("Error writing path {} to GFA stream", full_path_name));
@@ -205,7 +203,7 @@ fn path_line(path_name: &str, node_ids: &[i64], node_strands: &[Strand]) -> Stri
         .map(|(node_id, node_strand)| format!("{}{}", *node_id + 1, node_strand))
         .collect::<Vec<String>>()
         .join(",");
-    format!("P\t{}\t{}\n", path_name, nodes)
+    format!("P\t{}\t{}\t*\n", path_name, nodes)
 }
 
 #[cfg(test)]
