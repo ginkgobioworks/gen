@@ -60,51 +60,41 @@ pub struct BlockKey {
 pub struct GroupBlock {
     pub id: i64,
     pub node_id: i64,
-    pub sequence: String,
-    pub external_sequence: bool,
+    sequence: Option<String>,
+    external_sequence: Option<(String, String)>,
     pub start: i64,
     pub end: i64,
 }
 
 impl GroupBlock {
-    const SEQUENCE_KEY_DELIMITER: &'static str = "^^^";
-    fn get_sequence_key(sequence: &Sequence, start: i32, end: i32) -> String {
+    pub fn new(id: i32, node_id: i64, sequence: &Sequence, start: i64, end: i64) -> Self {
         if sequence.external_sequence {
-            format!(
-                "{path}{delimiter}{name}",
-                path = sequence.file_path,
-                name = sequence.name,
-                delimiter = GroupBlock::SEQUENCE_KEY_DELIMITER
-            )
+            GroupBlock {
+                id,
+                node_id,
+                sequence: None,
+                external_sequence: Some((sequence.file_path.clone(), sequence.name.clone())),
+                start,
+                end,
+            }
         } else {
-            sequence.get_sequence(start, end)
-        }
-    }
-
-    fn deconstruct_sequence_key(sequence: &str) -> (String, String) {
-        let mut split = sequence.splitn(2, &GroupBlock::SEQUENCE_KEY_DELIMITER);
-        (
-            split.next().unwrap().to_string(),
-            split.next().unwrap().to_string(),
-        )
-    }
-
-    pub fn new(id: i32, node_id: i32, sequence: &Sequence, start: i32, end: i32) -> Self {
-        GroupBlock {
-            id,
-            node_id,
-            sequence: GroupBlock::get_sequence_key(sequence, start, end),
-            external_sequence: sequence.external_sequence,
-            start,
-            end,
+            GroupBlock {
+                id,
+                node_id,
+                sequence: Some(sequence.get_sequence(start, end)),
+                external_sequence: None,
+                start,
+                end,
+            }
         }
     }
     pub fn sequence(&self) -> String {
-        if self.external_sequence {
-            let (path, name) = GroupBlock::deconstruct_sequence_key(&self.sequence);
-            cached_sequence(&path, &name, self.start as usize, self.end as usize).unwrap()
+        if let Some(sequence) = &self.sequence {
+            sequence.to_string()
+        } else if let Some((path, name)) = &self.external_sequence {
+            cached_sequence(path, name, self.start as usize, self.end as usize).unwrap()
         } else {
-            self.sequence.clone()
+            panic!("Sequence or external sequence is not set.")
         }
     }
 }
