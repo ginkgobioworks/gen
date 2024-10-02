@@ -42,22 +42,22 @@ pub fn export_gfa(conn: &Connection, collection_name: &str, filename: &PathBuf) 
         }
     }
 
-    write_segments(&mut writer, blocks.clone(), terminal_block_ids.clone());
+    write_segments(&mut writer, &blocks, &terminal_block_ids);
     write_links(
         &mut writer,
-        graph,
-        edges_by_node_pair.clone(),
-        terminal_block_ids,
+        &graph,
+        &edges_by_node_pair,
+        &terminal_block_ids,
     );
     write_paths(&mut writer, conn, collection_name, &blocks);
 }
 
 fn write_segments(
     writer: &mut BufWriter<File>,
-    blocks: Vec<GroupBlock>,
-    terminal_block_ids: HashSet<i32>,
+    blocks: &Vec<GroupBlock>,
+    terminal_block_ids: &HashSet<i32>,
 ) {
-    for block in &blocks {
+    for block in blocks {
         if terminal_block_ids.contains(&block.id) {
             continue;
         }
@@ -78,9 +78,9 @@ fn segment_line(sequence: &str, index: usize) -> String {
 
 fn write_links(
     writer: &mut BufWriter<File>,
-    graph: DiGraphMap<i32, ()>,
-    edges_by_node_pair: HashMap<(i32, i32), Edge>,
-    terminal_block_ids: HashSet<i32>,
+    graph: &DiGraphMap<i32, ()>,
+    edges_by_node_pair: &HashMap<(i32, i32), Edge>,
+    terminal_block_ids: &HashSet<i32>,
 ) {
     for (source, target, ()) in graph.all_edges() {
         if terminal_block_ids.contains(&source) || terminal_block_ids.contains(&target) {

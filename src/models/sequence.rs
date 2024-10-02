@@ -7,7 +7,7 @@ use rusqlite::{params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::{fs, str};
+use std::{fs, str, sync};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub struct Sequence {
@@ -208,12 +208,23 @@ fn fasta_gzi_index(path: &str) -> Option<gzi::Index> {
     None
 }
 
-#[cached(
-    key = "String",
-    convert = r#"{ format!("{},{}", file_path, name) }"#,
-    size = 1
-)]
-fn cached_sequence(file_path: &str, name: &str) -> Option<String> {
+fn cached_sequence(file_path: &str, name: &str, start: usize, end: usize) -> Option<String> {
+    static SEQUENCE_CACHE: sync::LazyLock<sync::RwLock<HashMap<String, Option<String>>>> =
+        sync::LazyLock::new(|| sync::RwLock::new(HashMap::new()));
+    let key = format!("{file_path}-{name}");
+
+    {
+        let cache = SEQUENCE_CACHE.read().unwrap();
+        if let Some(cached_sequence) = cache.get(&key) {
+            if let Some(sequence) = cached_sequence {
+                return Some(sequence[start..end].to_string());
+            }
+            return None;
+        }
+    }
+
+    let mut cache = SEQUENCE_CACHE.write().unwrap();
+
     let mut sequence: Option<String> = None;
     let region = name.parse::<Region>().unwrap();
     if let Some(index) = fasta_index(file_path) {
@@ -253,7 +264,15 @@ fn cached_sequence(file_path: &str, name: &str) -> Option<String> {
             }
         }
     }
-    sequence
+    // this is a LRU cache setup, we just keep the last sequence we fetched so we don't end up loading
+    // plant genomes into memory.
+    cache.clear();
+    cache.insert(key.clone(), sequence);
+    // we do this to avoid a clone of potentially large data.
+    if let Some(seq) = &cache[&key] {
+        return Some(seq[start..end].to_string());
+    }
+    None
 }
 
 impl Sequence {
@@ -274,12 +293,14 @@ impl Sequence {
         let start = start.unwrap_or(0) as usize;
         let end = end.unwrap_or(self.length) as usize;
         if self.external_sequence {
-            let file_path = self.file_path.clone();
-            let name = self.name.clone();
-            if let Some(sequence) = cached_sequence(&file_path, &name) {
-                return sequence[start..end].to_string();
+            if let Some(sequence) = cached_sequence(&self.file_path, &self.name, start, end) {
+                return sequence;
             } else {
-                panic!("{name} not found in fasta file {file_path}");
+                panic!(
+                    "{name} not found in fasta file {file_path}",
+                    name = self.name,
+                    file_path = self.file_path
+                );
             }
         }
         if start == 0 && end as i32 == self.length {
@@ -345,8 +366,8 @@ mod tests {
     use std::path::PathBuf;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-
     use crate::test_helpers::get_connection;
+    use std::time;
 
     #[test]
     fn test_builder() {
@@ -440,5 +461,23 @@ mod tests {
         assert_eq!(seq.get_sequence(10, 15), "CGATC");
         assert_eq!(seq.get_sequence(3, None), "GATCGATCGATCGATCGGGAACACACAGAGA");
         assert_eq!(seq.get_sequence(None, 5), "ATCGA");
+    }
+
+    #[test]
+    fn test_cached_sequence_performance() {
+        let conn = &mut get_connection(None);
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/chr22.fa.gz");
+        let sequence = Sequence::new()
+            .sequence_type("DNA")
+            .file_path(fasta_path.to_str().unwrap())
+            .name("chr22")
+            .length(51_000_000)
+            .save(conn);
+        let s = time::Instant::now();
+        for _ in 1..1_000_000 {
+            sequence.get_sequence(1, 20);
+        }
+        assert!(s.elapsed().as_secs() < 5);
     }
 }
