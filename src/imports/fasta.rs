@@ -48,7 +48,7 @@ pub fn import_fasta(
             name: name.to_string(),
         }
     };
-    let mut summary: HashMap<String, i32> = HashMap::new();
+    let mut summary: HashMap<String, i64> = HashMap::new();
 
     for result in reader.records() {
         let record = result.expect("Error during fasta record parsing");
@@ -56,7 +56,7 @@ pub fn import_fasta(
             .unwrap()
             .to_string();
         let name = String::from_utf8(record.name().to_vec()).unwrap();
-        let sequence_length = record.sequence().len() as i32;
+        let sequence_length = record.sequence().len() as i64;
         let seq = if shallow {
             Sequence::new()
                 .sequence_type("DNA")

@@ -16,15 +16,15 @@ use crate::models::{
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub struct Path {
-    pub id: i32,
-    pub block_group_id: i32,
+    pub id: i64,
+    pub block_group_id: i64,
     pub name: String,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct PathData {
     pub name: String,
-    pub block_group_id: i32,
+    pub block_group_id: i64,
 }
 
 // interesting gist here: https://gist.github.com/mbhall88/cd900add6335c96127efea0e0f6a9f48, see if we
@@ -62,18 +62,18 @@ pub fn revcomp(seq: &str) -> String {
 
 #[derive(Clone, Debug)]
 pub struct PathBlock {
-    pub id: i32,
-    pub node_id: i32,
+    pub id: i64,
+    pub node_id: i64,
     pub block_sequence: String,
-    pub sequence_start: i32,
-    pub sequence_end: i32,
-    pub path_start: i32,
-    pub path_end: i32,
+    pub sequence_start: i64,
+    pub sequence_end: i64,
+    pub path_start: i64,
+    pub path_end: i64,
     pub strand: Strand,
 }
 
 impl Path {
-    pub fn create(conn: &Connection, name: &str, block_group_id: i32, edge_ids: &[i32]) -> Path {
+    pub fn create(conn: &Connection, name: &str, block_group_id: i64, edge_ids: &[i64]) -> Path {
         // TODO: Should we do something if edge_ids don't match here? Suppose we have a path
         // for a block group with edges 1,2,3. And then the same path is added again with edges
         // 5,6,7, should this be an error? Should we just keep adding edges?
@@ -124,7 +124,7 @@ impl Path {
         path
     }
 
-    pub fn get(conn: &Connection, path_id: i32) -> Path {
+    pub fn get(conn: &Connection, path_id: i64) -> Path {
         let query = "SELECT id, block_group_id, name from path where id = ?1;";
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
@@ -173,12 +173,12 @@ impl Path {
     }
 
     pub fn edge_pairs_to_block(
-        block_id: i32,
+        block_id: i64,
         path: &Path,
         into: Edge,
         out_of: Edge,
-        sequences_by_node_id: &HashMap<i32, Sequence>,
-        current_path_length: i32,
+        sequences_by_node_id: &HashMap<i64, Sequence>,
+        current_path_length: i64,
     ) -> PathBlock {
         if into.target_node_id != out_of.source_node_id {
             panic!(
@@ -235,13 +235,13 @@ impl Path {
         }
         let sequences_by_node_id = Node::get_sequences_by_node_ids(
             conn,
-            sequence_node_ids.into_iter().collect::<Vec<i32>>(),
+            sequence_node_ids.into_iter().collect::<Vec<i64>>(),
         );
 
         let mut blocks = vec![];
         let mut path_length = 0;
 
-        // NOTE: Adding a "start block" for the dedicated start sequence with a range from i32::MIN
+        // NOTE: Adding a "start block" for the dedicated start sequence with a range from i64::MIN
         // to 0 makes interval tree lookups work better.  If the point being looked up is -1 (or
         // below), it will return this block.
         blocks.push(PathBlock {
@@ -250,26 +250,26 @@ impl Path {
             block_sequence: "".to_string(),
             sequence_start: 0,
             sequence_end: 0,
-            path_start: i32::MIN + 1,
+            path_start: i64::MIN + 1,
             path_end: 0,
             strand: Strand::Forward,
         });
 
         for (index, (into, out_of)) in edges.into_iter().tuple_windows().enumerate() {
             let block = Path::edge_pairs_to_block(
-                index as i32,
+                index as i64,
                 path,
                 into,
                 out_of,
                 &sequences_by_node_id,
                 path_length,
             );
-            path_length += block.block_sequence.len() as i32;
+            path_length += block.block_sequence.len() as i64;
             blocks.push(block);
         }
 
         // NOTE: Adding an "end block" for the dedicated end sequence with a range from the path
-        // length to i32::MAX makes interval tree lookups work better.  If the point being looked up
+        // length to i64::MAX makes interval tree lookups work better.  If the point being looked up
         // is the path length (or higher), it will return this block.
         blocks.push(PathBlock {
             id: -2,
@@ -278,16 +278,16 @@ impl Path {
             sequence_start: 0,
             sequence_end: 0,
             path_start: path_length,
-            path_end: i32::MAX - 1,
+            path_end: i64::MAX - 1,
             strand: Strand::Forward,
         });
 
         blocks
     }
 
-    pub fn intervaltree_for(conn: &Connection, path: &Path) -> IntervalTree<i32, PathBlock> {
+    pub fn intervaltree_for(conn: &Connection, path: &Path) -> IntervalTree<i64, PathBlock> {
         let blocks = Path::blocks_for(conn, path);
-        let tree: IntervalTree<i32, PathBlock> = blocks
+        let tree: IntervalTree<i64, PathBlock> = blocks
             .into_iter()
             .map(|block| (block.path_start..block.path_end, block))
             .collect();

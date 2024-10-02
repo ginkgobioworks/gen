@@ -24,14 +24,14 @@ use rusqlite::{session, Connection};
 
 #[derive(Debug)]
 struct BlockGroupCache<'a> {
-    pub cache: HashMap<BlockGroupData<'a>, i32>,
+    pub cache: HashMap<BlockGroupData<'a>, i64>,
     pub conn: &'a Connection,
 }
 
 impl<'a> BlockGroupCache<'_> {
     pub fn new(conn: &Connection) -> BlockGroupCache {
         BlockGroupCache {
-            cache: HashMap::<BlockGroupData, i32>::new(),
+            cache: HashMap::<BlockGroupData, i64>::new(),
             conn,
         }
     }
@@ -41,7 +41,7 @@ impl<'a> BlockGroupCache<'_> {
         collection_name: &'a str,
         sample_name: &'a str,
         name: String,
-    ) -> i32 {
+    ) -> i64 {
         let block_group_key = BlockGroupData {
             collection_name,
             sample_name: Some(sample_name),
@@ -113,15 +113,15 @@ impl<'a> SequenceCache<'_> {
 
 #[allow(clippy::too_many_arguments)]
 fn prepare_change(
-    sample_bg_id: i32,
+    sample_bg_id: i64,
     sample_path: &Path,
-    ref_start: i32,
-    ref_end: i32,
-    chromosome_index: i32,
-    phased: i32,
+    ref_start: i64,
+    ref_end: i64,
+    chromosome_index: i64,
+    phased: i64,
     block_sequence: String,
-    sequence_length: i32,
-    node_id: i32,
+    sequence_length: i64,
+    node_id: i64,
 ) -> PathChange {
     // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
     let new_block = PathBlock {
@@ -146,12 +146,12 @@ fn prepare_change(
 }
 
 struct VcfEntry<'a> {
-    block_group_id: i32,
+    block_group_id: i64,
     sample_name: String,
     path: Path,
     alt_seq: &'a str,
-    chromosome_index: i32,
-    phased: i32,
+    chromosome_index: i64,
+    phased: i64,
 }
 
 pub fn update_with_vcf(
@@ -231,7 +231,7 @@ pub fn update_with_vcf(
                             path: sample_path.clone(),
                             sample_name: fixed_sample.clone(),
                             alt_seq,
-                            chromosome_index: chromosome_index as i32,
+                            chromosome_index: chromosome_index as i64,
                             phased,
                         });
                     }
@@ -266,7 +266,7 @@ pub fn update_with_vcf(
                                         path: sample_path.clone(),
                                         sample_name: sample_names[sample_index].clone(),
                                         alt_seq,
-                                        chromosome_index: chromosome_index as i32,
+                                        chromosome_index: chromosome_index as i64,
                                         phased,
                                     });
                                 }
@@ -285,12 +285,12 @@ pub fn update_with_vcf(
             let change = prepare_change(
                 vcf_entry.block_group_id,
                 &vcf_entry.path,
-                ref_start as i32,
-                ref_end as i32,
+                ref_start as i64,
+                ref_end as i64,
                 vcf_entry.chromosome_index,
                 vcf_entry.phased,
                 sequence_string.clone(),
-                sequence_string.len() as i32,
+                sequence_string.len() as i64,
                 node_id,
             );
             changes
@@ -299,14 +299,14 @@ pub fn update_with_vcf(
                 .push(change);
         }
     }
-    let mut summary: HashMap<String, HashMap<String, i32>> = HashMap::new();
+    let mut summary: HashMap<String, HashMap<String, i64>> = HashMap::new();
     for ((path, sample_name), path_changes) in changes {
         BlockGroup::insert_changes(conn, &path_changes, &path_cache);
         summary
             .entry(sample_name)
             .or_default()
             .entry(path.name)
-            .or_insert(path_changes.len() as i32);
+            .or_insert(path_changes.len() as i64);
     }
     let mut summary_str = "".to_string();
     for (sample_name, sample_changes) in summary.iter() {

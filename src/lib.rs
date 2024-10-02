@@ -39,7 +39,7 @@ pub fn calculate_hash(t: &str) -> String {
 }
 
 pub struct Genotype {
-    pub allele: i32,
+    pub allele: i64,
     pub phasing: Phasing,
 }
 
@@ -66,7 +66,7 @@ pub fn parse_genotype(gt: &str) -> Vec<Option<Genotype>> {
             genotypes.push(None);
         } else {
             genotypes.push(Some(Genotype {
-                allele: allele.parse::<i32>().unwrap(),
+                allele: allele.parse::<i64>().unwrap(),
                 phasing: phase,
             }));
         }
@@ -76,7 +76,7 @@ pub fn parse_genotype(gt: &str) -> Vec<Option<Genotype>> {
     genotypes
 }
 
-pub fn get_overlap(a: i32, b: i32, x: i32, y: i32) -> (bool, bool, bool) {
+pub fn get_overlap(a: i64, b: i64, x: i64, y: i64) -> (bool, bool, bool) {
     let contains_start = a <= x && x < b;
     let contains_end = a <= y && y < b;
     let overlap = a < y && x < b;
@@ -99,7 +99,7 @@ mod tests {
     #[test]
     fn it_queries() {
         let conn = get_connection(None);
-        let sequence_count: i32 = conn
+        let sequence_count: i64 = conn
             .query_row(
                 "SELECT count(*) from sequence where hash = 'foo'",
                 [],
