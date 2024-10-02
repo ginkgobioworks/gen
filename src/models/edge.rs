@@ -67,7 +67,7 @@ pub struct GroupBlock {
 }
 
 impl GroupBlock {
-    pub fn new(id: i32, node_id: i64, sequence: &Sequence, start: i64, end: i64) -> Self {
+    pub fn new(id: i64, node_id: i64, sequence: &Sequence, start: i64, end: i64) -> Self {
         if sequence.external_sequence {
             GroupBlock {
                 id,
