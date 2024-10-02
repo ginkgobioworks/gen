@@ -12,27 +12,27 @@ use crate::models::strand::Strand;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub struct Edge {
-    pub id: i32,
-    pub source_node_id: i32,
-    pub source_coordinate: i32,
+    pub id: i64,
+    pub source_node_id: i64,
+    pub source_coordinate: i64,
     pub source_strand: Strand,
-    pub target_node_id: i32,
-    pub target_coordinate: i32,
+    pub target_node_id: i64,
+    pub target_coordinate: i64,
     pub target_strand: Strand,
-    pub chromosome_index: i32,
-    pub phased: i32,
+    pub chromosome_index: i64,
+    pub phased: i64,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct EdgeData {
-    pub source_node_id: i32,
-    pub source_coordinate: i32,
+    pub source_node_id: i64,
+    pub source_coordinate: i64,
     pub source_strand: Strand,
-    pub target_node_id: i32,
-    pub target_coordinate: i32,
+    pub target_node_id: i64,
+    pub target_coordinate: i64,
     pub target_strand: Strand,
-    pub chromosome_index: i32,
-    pub phased: i32,
+    pub chromosome_index: i64,
+    pub phased: i64,
 }
 
 impl From<&Edge> for EdgeData {
@@ -52,31 +52,31 @@ impl From<&Edge> for EdgeData {
 
 #[derive(Eq, Hash, PartialEq)]
 pub struct BlockKey {
-    pub node_id: i32,
-    pub coordinate: i32,
+    pub node_id: i64,
+    pub coordinate: i64,
 }
 
 #[derive(Clone, Debug)]
 pub struct GroupBlock {
-    pub id: i32,
-    pub node_id: i32,
+    pub id: i64,
+    pub node_id: i64,
     pub sequence: String,
-    pub start: i32,
-    pub end: i32,
+    pub start: i64,
+    pub end: i64,
 }
 
 impl Edge {
     #[allow(clippy::too_many_arguments)]
     pub fn create(
         conn: &Connection,
-        source_node_id: i32,
-        source_coordinate: i32,
+        source_node_id: i64,
+        source_coordinate: i64,
         source_strand: Strand,
-        target_node_id: i32,
-        target_coordinate: i32,
+        target_node_id: i64,
+        target_coordinate: i64,
         target_strand: Strand,
-        chromosome_index: i32,
-        phased: i32,
+        chromosome_index: i64,
+        phased: i64,
     ) -> Edge {
         let query = "INSERT INTO edges (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) RETURNING *";
         let id_query = "select id from edges where and source_node_id = ?1 and source_coordinate = ?2 and source_strand = ?3 and target_node_id = ?4 and target_coordinate = ?5 and target_strand = ?6 and chromosome_index = ?7 and phased = ?8";
@@ -146,7 +146,7 @@ impl Edge {
         })
     }
 
-    pub fn bulk_load(conn: &Connection, edge_ids: &[i32]) -> Vec<Edge> {
+    pub fn bulk_load(conn: &Connection, edge_ids: &[i64]) -> Vec<Edge> {
         let formatted_edge_ids = edge_ids
             .iter()
             .map(|edge_id| edge_id.to_string())
@@ -168,9 +168,9 @@ impl Edge {
         edges
     }
 
-    pub fn bulk_create(conn: &Connection, edges: Vec<EdgeData>) -> Vec<i32> {
+    pub fn bulk_create(conn: &Connection, edges: Vec<EdgeData>) -> Vec<i64> {
         let mut edge_rows = vec![];
-        let mut edge_map: HashMap<EdgeData, i32> = HashMap::new();
+        let mut edge_map: HashMap<EdgeData, i64> = HashMap::new();
         for edge in &edges {
             let source_strand = format!("\"{0}\"", edge.source_strand);
             let target_strand = format!("\"{0}\"", edge.target_strand);
@@ -239,7 +239,7 @@ impl Edge {
         edges
             .iter()
             .map(|edge| *edge_map.get(edge).unwrap())
-            .collect::<Vec<i32>>()
+            .collect::<Vec<i64>>()
     }
 
     pub fn to_data(edge: Edge) -> EdgeData {
@@ -258,8 +258,8 @@ impl Edge {
     fn get_block_boundaries(
         source_edges: Option<&Vec<&Edge>>,
         target_edges: Option<&Vec<&Edge>>,
-        sequence_length: i32,
-    ) -> Vec<i32> {
+        sequence_length: i64,
+    ) -> Vec<i64> {
         let mut block_boundary_coordinates = HashSet::new();
         if let Some(actual_source_edges) = source_edges {
             for source_edge in actual_source_edges {
@@ -283,13 +283,13 @@ impl Edge {
         block_boundary_coordinates
             .into_iter()
             .sorted_by(|c1, c2| Ord::cmp(&c1, &c2))
-            .collect::<Vec<i32>>()
+            .collect::<Vec<i64>>()
     }
 
     pub fn blocks_from_edges(conn: &Connection, edges: &Vec<Edge>) -> (Vec<GroupBlock>, Vec<Edge>) {
         let mut node_ids = HashSet::new();
-        let mut edges_by_source_node_id: HashMap<i32, Vec<&Edge>> = HashMap::new();
-        let mut edges_by_target_node_id: HashMap<i32, Vec<&Edge>> = HashMap::new();
+        let mut edges_by_source_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
+        let mut edges_by_target_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
         for edge in edges {
             if edge.source_node_id != PATH_START_NODE_ID {
                 node_ids.insert(edge.source_node_id);
@@ -308,7 +308,7 @@ impl Edge {
         }
 
         let sequences_by_node_id =
-            Node::get_sequences_by_node_ids(conn, node_ids.into_iter().collect::<Vec<i32>>());
+            Node::get_sequences_by_node_ids(conn, node_ids.into_iter().collect::<Vec<i64>>());
 
         let mut blocks = vec![];
         let mut block_index = 0;
@@ -412,7 +412,7 @@ impl Edge {
     pub fn build_graph(
         edges: &Vec<Edge>,
         blocks: &Vec<GroupBlock>,
-    ) -> (DiGraphMap<i32, ()>, HashMap<(i32, i32), Edge>) {
+    ) -> (DiGraphMap<i64, ()>, HashMap<(i64, i64), Edge>) {
         let blocks_by_start = blocks
             .clone()
             .into_iter()
@@ -425,7 +425,7 @@ impl Edge {
                     block.id,
                 )
             })
-            .collect::<HashMap<BlockKey, i32>>();
+            .collect::<HashMap<BlockKey, i64>>();
         let blocks_by_end = blocks
             .clone()
             .into_iter()
@@ -438,9 +438,9 @@ impl Edge {
                     block.id,
                 )
             })
-            .collect::<HashMap<BlockKey, i32>>();
+            .collect::<HashMap<BlockKey, i64>>();
 
-        let mut graph: DiGraphMap<i32, ()> = DiGraphMap::new();
+        let mut graph: DiGraphMap<i64, ()> = DiGraphMap::new();
         let mut edges_by_node_pair = HashMap::new();
         for block in blocks {
             graph.add_node(block.id);
@@ -529,7 +529,7 @@ mod tests {
         let edges_by_source_node_id = edges
             .into_iter()
             .map(|edge| (edge.source_node_id, edge))
-            .collect::<HashMap<i32, Edge>>();
+            .collect::<HashMap<i64, Edge>>();
 
         let edge_result1 = edges_by_source_node_id.get(&PATH_START_NODE_ID).unwrap();
         assert_eq!(edge_result1.source_coordinate, -1);
@@ -690,7 +690,7 @@ mod tests {
         let edges_by_source_node_id = edges
             .into_iter()
             .map(|edge| (edge.source_node_id, edge))
-            .collect::<HashMap<i32, Edge>>();
+            .collect::<HashMap<i64, Edge>>();
 
         let edge_result1 = edges_by_source_node_id.get(&PATH_START_NODE_ID).unwrap();
 

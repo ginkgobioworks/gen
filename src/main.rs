@@ -95,12 +95,12 @@ enum Commands {
         branch: Option<String>,
         /// The operation id to move to
         #[clap(index = 1)]
-        id: Option<i32>,
+        id: Option<i64>,
     },
     Reset {
         /// The operation id to reset to
         #[clap(index = 1)]
-        id: i32,
+        id: i64,
     },
     /// View operations carried out against a database
     Operations {
@@ -111,7 +111,7 @@ enum Commands {
     Apply {
         /// The operation id to apply
         #[clap(index = 1)]
-        id: i32,
+        id: i64,
     },
     Export {
         /// The name of the collection to export

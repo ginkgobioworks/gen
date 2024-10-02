@@ -7,14 +7,14 @@ use crate::models::edge::Edge;
 
 #[derive(Clone, Debug)]
 pub struct PathEdge {
-    pub id: i32,
-    pub path_id: i32,
-    pub index_in_path: i32,
-    pub edge_id: i32,
+    pub id: i64,
+    pub path_id: i64,
+    pub index_in_path: i64,
+    pub edge_id: i64,
 }
 
 impl PathEdge {
-    pub fn create(conn: &Connection, path_id: i32, index_in_path: i32, edge_id: i32) -> PathEdge {
+    pub fn create(conn: &Connection, path_id: i64, index_in_path: i64, edge_id: i64) -> PathEdge {
         let query =
             "INSERT INTO path_edges (path_id, index_in_path, edge_id) VALUES (?1, ?2, ?3) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
@@ -74,7 +74,7 @@ impl PathEdge {
         objs
     }
 
-    pub fn edges_for_path(conn: &Connection, path_id: i32) -> Vec<Edge> {
+    pub fn edges_for_path(conn: &Connection, path_id: i64) -> Vec<Edge> {
         let path_edges = PathEdge::query(
             conn,
             "select * from path_edges where path_id = ?1 order by index_in_path ASC",
@@ -83,19 +83,19 @@ impl PathEdge {
         let edge_ids = path_edges
             .into_iter()
             .map(|path_edge| path_edge.edge_id)
-            .collect::<Vec<i32>>();
+            .collect::<Vec<i64>>();
         let edges = Edge::bulk_load(conn, &edge_ids);
         let edges_by_id = edges
             .into_iter()
             .map(|edge| (edge.id, edge))
-            .collect::<HashMap<i32, Edge>>();
+            .collect::<HashMap<i64, Edge>>();
         edge_ids
             .into_iter()
             .map(|edge_id| edges_by_id[&edge_id].clone())
             .collect::<Vec<Edge>>()
     }
 
-    pub fn edges_for_paths(conn: &Connection, path_ids: Vec<i32>) -> HashMap<i32, Vec<Edge>> {
+    pub fn edges_for_paths(conn: &Connection, path_ids: Vec<i64>) -> HashMap<i64, Vec<Edge>> {
         let placeholder_string = path_ids.iter().map(|_| "?").join(",");
         let path_edges = PathEdge::query(
             conn,
@@ -113,12 +113,12 @@ impl PathEdge {
             .clone()
             .into_iter()
             .map(|path_edge| path_edge.edge_id)
-            .collect::<Vec<i32>>();
+            .collect::<Vec<i64>>();
         let edges = Edge::bulk_load(conn, &edge_ids);
         let edges_by_id = edges
             .into_iter()
             .map(|edge| (edge.id, edge))
-            .collect::<HashMap<i32, Edge>>();
+            .collect::<HashMap<i64, Edge>>();
         let path_edges_by_path_id = path_edges
             .into_iter()
             .map(|path_edge| (path_edge.path_id, path_edge.edge_id))
@@ -134,7 +134,7 @@ impl PathEdge {
                         .collect::<Vec<Edge>>(),
                 )
             })
-            .collect::<HashMap<i32, Vec<Edge>>>()
+            .collect::<HashMap<i64, Vec<Edge>>>()
     }
 }
 

@@ -58,7 +58,7 @@ pub fn setup_gen_dir() {
     get_or_create_gen_dir();
 }
 
-pub fn setup_block_group(conn: &Connection) -> (i32, Path) {
+pub fn setup_block_group(conn: &Connection) -> (i64, Path) {
     let a_seq = Sequence::new()
         .sequence_type("DNA")
         .sequence("AAAAAAAAAA")

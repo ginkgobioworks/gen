@@ -99,20 +99,18 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                     created_sequences.insert(hash.to_string());
                 }
                 "block_group" => {
-                    let bg_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
+                    let bg_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     created_block_groups.insert(bg_pk);
                 }
                 "path" => {
-                    created_paths
-                        .insert(item.new_value(pk_column).unwrap().as_i64().unwrap() as i32);
-                    let bg_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
+                    created_paths.insert(item.new_value(pk_column).unwrap().as_i64().unwrap());
+                    let bg_id = item.new_value(1).unwrap().as_i64().unwrap();
                     if !created_block_groups.contains(&bg_id) {
                         previous_block_groups.insert(bg_id);
                     }
                 }
                 "nodes" => {
-                    created_nodes
-                        .insert(item.new_value(pk_column).unwrap().as_i64().unwrap() as i32);
+                    created_nodes.insert(item.new_value(pk_column).unwrap().as_i64().unwrap());
                     let sequence_hash =
                         str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
                             .unwrap()
@@ -122,9 +120,9 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                     }
                 }
                 "edges" => {
-                    let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
-                    let source_node_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
-                    let target_node_id = item.new_value(4).unwrap().as_i64().unwrap() as i32;
+                    let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
+                    let source_node_id = item.new_value(1).unwrap().as_i64().unwrap();
+                    let target_node_id = item.new_value(4).unwrap().as_i64().unwrap();
                     created_edges.insert(edge_pk);
                     let nodes = Node::get_nodes(conn, vec![source_node_id, target_node_id]);
                     if !created_nodes.contains(&source_node_id) {
@@ -135,8 +133,8 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                     }
                 }
                 "path_edges" => {
-                    let path_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
-                    let edge_id = item.new_value(3).unwrap().as_i64().unwrap() as i32;
+                    let path_id = item.new_value(1).unwrap().as_i64().unwrap();
+                    let edge_id = item.new_value(3).unwrap().as_i64().unwrap();
                     if !created_paths.contains(&path_id) {
                         previous_paths.insert(path_id);
                     }
@@ -146,8 +144,8 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                 }
                 "block_group_edges" => {
                     // make sure blockgroup_map has blockgroups for bg ids made in external changes.
-                    let bg_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
-                    let edge_id = item.new_value(2).unwrap().as_i64().unwrap() as i32;
+                    let bg_id = item.new_value(1).unwrap().as_i64().unwrap();
+                    let edge_id = item.new_value(2).unwrap().as_i64().unwrap();
                     if !created_edges.contains(&edge_id) {
                         previous_edges.insert(edge_id);
                     }
@@ -272,10 +270,10 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
     let input: &mut dyn Read = &mut contents.as_slice();
     let mut iter = ChangesetIter::start_strm(&input).unwrap();
 
-    let mut blockgroup_map: HashMap<i32, i32> = HashMap::new();
-    let mut edge_map: HashMap<i32, EdgeData> = HashMap::new();
-    let mut node_map: HashMap<i32, String> = HashMap::new();
-    let mut path_edges: HashMap<i32, Vec<(i32, i32)>> = HashMap::new();
+    let mut blockgroup_map: HashMap<i64, i64> = HashMap::new();
+    let mut edge_map: HashMap<i64, EdgeData> = HashMap::new();
+    let mut node_map: HashMap<i64, String> = HashMap::new();
+    let mut path_edges: HashMap<i64, Vec<(i64, i64)>> = HashMap::new();
     let mut insert_paths = vec![];
     let mut insert_block_group_edges = vec![];
 
@@ -313,11 +311,11 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                         .file_path(
                             str::from_utf8(item.new_value(4).unwrap().as_bytes().unwrap()).unwrap(),
                         )
-                        .length(item.new_value(5).unwrap().as_i64().unwrap() as i32)
+                        .length(item.new_value(5).unwrap().as_i64().unwrap())
                         .save(conn);
                 }
                 "block_group" => {
-                    let bg_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
+                    let bg_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     if let Some(v) = dep_bg_map.get(&bg_pk) {
                         blockgroup_map.insert(bg_pk, *v);
                     } else {
@@ -338,15 +336,15 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                 "path" => {
                     // defer path creation until edges are made
                     insert_paths.push(Path {
-                        id: item.new_value(pk_column).unwrap().as_i64().unwrap() as i32,
-                        block_group_id: item.new_value(1).unwrap().as_i64().unwrap() as i32,
+                        id: item.new_value(pk_column).unwrap().as_i64().unwrap(),
+                        block_group_id: item.new_value(1).unwrap().as_i64().unwrap(),
                         name: str::from_utf8(item.new_value(2).unwrap().as_bytes().unwrap())
                             .unwrap()
                             .to_string(),
                     });
                 }
                 "nodes" => {
-                    let node_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
+                    let node_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     node_map.insert(
                         node_pk,
                         str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
@@ -355,28 +353,28 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                     );
                 }
                 "edges" => {
-                    let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap() as i32;
+                    let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     edge_map.insert(
                         edge_pk,
                         EdgeData {
-                            source_node_id: item.new_value(1).unwrap().as_i64().unwrap() as i32,
-                            source_coordinate: item.new_value(2).unwrap().as_i64().unwrap() as i32,
+                            source_node_id: item.new_value(1).unwrap().as_i64().unwrap(),
+                            source_coordinate: item.new_value(2).unwrap().as_i64().unwrap(),
                             source_strand: Strand::column_result(item.new_value(3).unwrap())
                                 .unwrap(),
-                            target_node_id: item.new_value(4).unwrap().as_i64().unwrap() as i32,
-                            target_coordinate: item.new_value(5).unwrap().as_i64().unwrap() as i32,
+                            target_node_id: item.new_value(4).unwrap().as_i64().unwrap(),
+                            target_coordinate: item.new_value(5).unwrap().as_i64().unwrap(),
                             target_strand: Strand::column_result(item.new_value(6).unwrap())
                                 .unwrap(),
-                            chromosome_index: item.new_value(7).unwrap().as_i64().unwrap() as i32,
-                            phased: item.new_value(8).unwrap().as_i64().unwrap() as i32,
+                            chromosome_index: item.new_value(7).unwrap().as_i64().unwrap(),
+                            phased: item.new_value(8).unwrap().as_i64().unwrap(),
                         },
                     );
                 }
                 "path_edges" => {
-                    let path_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
-                    let path_index = item.new_value(2).unwrap().as_i64().unwrap() as i32;
+                    let path_id = item.new_value(1).unwrap().as_i64().unwrap();
+                    let path_index = item.new_value(2).unwrap().as_i64().unwrap();
                     // the edge_id here may not be valid and in this database may have a different pk
-                    let edge_id = item.new_value(3).unwrap().as_i64().unwrap() as i32;
+                    let edge_id = item.new_value(3).unwrap().as_i64().unwrap();
                     path_edges
                         .entry(path_id)
                         .or_default()
@@ -384,8 +382,8 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                 }
                 "block_group_edges" => {
                     // make sure blockgroup_map has blockgroups for bg ids made in external changes.
-                    let bg_id = item.new_value(1).unwrap().as_i64().unwrap() as i32;
-                    let edge_id = item.new_value(2).unwrap().as_i64().unwrap() as i32;
+                    let bg_id = item.new_value(1).unwrap().as_i64().unwrap();
+                    let edge_id = item.new_value(2).unwrap().as_i64().unwrap();
                     insert_block_group_edges.push((bg_id, edge_id));
                 }
                 "collection" => {
@@ -402,7 +400,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
         }
     }
 
-    let mut node_id_map: HashMap<i32, i32> = HashMap::new();
+    let mut node_id_map: HashMap<i64, i64> = HashMap::new();
     for (node_id, sequence_hash) in node_map {
         let new_node_id = Node::create(conn, &sequence_hash);
         node_id_map.insert(node_id, new_node_id);
@@ -439,7 +437,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
         .keys()
         .copied()
         .sorted()
-        .collect::<Vec<i32>>();
+        .collect::<Vec<i64>>();
     let created_edges = Edge::bulk_create(
         conn,
         sorted_edge_ids
@@ -447,7 +445,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
             .map(|id| updated_edge_map[id].clone())
             .collect::<Vec<EdgeData>>(),
     );
-    let mut edge_id_map: HashMap<i32, i32> = HashMap::new();
+    let mut edge_id_map: HashMap<i64, i64> = HashMap::new();
     for (index, edge_id) in created_edges.iter().enumerate() {
         edge_id_map.insert(sorted_edge_ids[index], *edge_id);
     }
@@ -468,7 +466,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
         Path::create(conn, &path.name, path.block_group_id, &sorted_edges);
     }
 
-    let mut block_group_edges: HashMap<i32, Vec<i32>> = HashMap::new();
+    let mut block_group_edges: HashMap<i64, Vec<i64>> = HashMap::new();
 
     for (bg_id, edge_id) in insert_block_group_edges {
         let bg_id = *dep_bg_map
@@ -507,11 +505,11 @@ pub fn revert_changeset(conn: &Connection, operation: &Operation) {
     conn.pragma_update(None, "foreign_keys", "1").unwrap();
 }
 
-pub fn reset(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_id: i32) {
+pub fn reset(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_id: i64) {
     let current_op = OperationState::get_operation(operation_conn, db_uuid).unwrap();
     let current_branch_id = OperationState::get_current_branch(operation_conn, db_uuid).unwrap();
     let current_branch = Branch::get_by_id(operation_conn, current_branch_id).unwrap();
-    let branch_operations: Vec<i32> = Branch::get_operations(operation_conn, current_branch_id)
+    let branch_operations: Vec<i64> = Branch::get_operations(operation_conn, current_branch_id)
         .iter()
         .map(|b| b.id)
         .collect();
@@ -549,7 +547,7 @@ pub fn reset(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_i
     OperationState::set_operation(operation_conn, db_uuid, op_id);
 }
 
-pub fn apply(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_id: i32) {
+pub fn apply(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_id: i64) {
     let mut session = session::Session::new(conn).unwrap();
     attach_session(&mut session);
     let change = FileAddition::create(operation_conn, &format!("{op_id}.cs"), FileTypes::Changeset);
@@ -620,7 +618,7 @@ pub fn checkout(
     operation_conn: &Connection,
     db_uuid: &str,
     branch_name: &Option<String>,
-    operation_id: Option<i32>,
+    operation_id: Option<i64>,
 ) {
     let mut dest_op_id = operation_id.unwrap_or(0);
     if let Some(name) = branch_name {
@@ -754,11 +752,10 @@ mod tests {
             conn,
             operation_conn,
         );
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
-        let op_count =
-            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
+        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
         assert_eq!(sample_count, 0);
@@ -771,11 +768,10 @@ mod tests {
             conn,
             operation_conn,
         );
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
-        let op_count =
-            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
+        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         // NOTE: The edge count is 14 because of the following:
         // * 1 edge from the source node to the node created by the fasta import
         // * 1 edge from the node created by the fasta import to the sink node
@@ -803,11 +799,10 @@ mod tests {
             ),
         );
 
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
-        let op_count =
-            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
+        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
         assert_eq!(sample_count, 0);
@@ -820,11 +815,10 @@ mod tests {
                 OperationState::get_operation(operation_conn, &db_uuid).unwrap(),
             ),
         );
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
-        let op_count =
-            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
+        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 14);
         assert_eq!(node_count, 9);
         assert_eq!(sample_count, 3);
@@ -977,11 +971,10 @@ mod tests {
             conn,
             operation_conn,
         );
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
-        let op_count =
-            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
+        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
         assert_eq!(sample_count, 0);
@@ -1005,11 +998,10 @@ mod tests {
             conn,
             operation_conn,
         );
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
-        let op_count =
-            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
+        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 14);
         assert_eq!(node_count, 9);
         assert_eq!(sample_count, 3);
@@ -1030,11 +1022,10 @@ mod tests {
         );
 
         // ensure branch 1 operations have been undone
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
-        let op_count =
-            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
+        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
         assert_eq!(sample_count, 0);
@@ -1049,11 +1040,10 @@ mod tests {
             conn,
             operation_conn,
         );
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
-        let op_count =
-            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
+        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 6);
         assert_eq!(node_count, 5);
         assert_eq!(sample_count, 1);
@@ -1072,11 +1062,10 @@ mod tests {
             branch_1.id
         );
 
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len() as i32;
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i32;
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len() as i32;
-        let op_count =
-            Operation::query(operation_conn, "select * from operation", vec![]).len() as i32;
+        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
+        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 14);
         assert_eq!(node_count, 9);
         assert_eq!(sample_count, 3);
@@ -1142,7 +1131,7 @@ mod tests {
             Branch::get_operations(operation_conn, branch_id)
                 .iter()
                 .map(|op| op.id)
-                .collect::<Vec<i32>>(),
+                .collect::<Vec<i64>>(),
             vec![1, 2, 3, 4, 5]
         );
 
@@ -1155,7 +1144,7 @@ mod tests {
             Branch::get_operations(operation_conn, branch_id)
                 .iter()
                 .map(|op| op.id)
-                .collect::<Vec<i32>>(),
+                .collect::<Vec<i64>>(),
             vec![1, 2]
         );
     }
@@ -1275,21 +1264,21 @@ mod tests {
             Branch::get_operations(operation_conn, main_branch.id)
                 .iter()
                 .map(|op| op.id)
-                .collect::<Vec<i32>>(),
+                .collect::<Vec<i64>>(),
             vec![1, 2, 6, 7, 8]
         );
         assert_eq!(
             Branch::get_operations(operation_conn, branch_a.id)
                 .iter()
                 .map(|op| op.id)
-                .collect::<Vec<i32>>(),
+                .collect::<Vec<i64>>(),
             vec![1, 2, 3, 4, 5, 10]
         );
         assert_eq!(
             Branch::get_operations(operation_conn, branch_b.id)
                 .iter()
                 .map(|op| op.id)
-                .collect::<Vec<i32>>(),
+                .collect::<Vec<i64>>(),
             vec![1, 2, 3, 4, 5, 9]
         );
         reset(conn, operation_conn, &db_uuid, 2);
@@ -1301,21 +1290,21 @@ mod tests {
             Branch::get_operations(operation_conn, main_branch.id)
                 .iter()
                 .map(|op| op.id)
-                .collect::<Vec<i32>>(),
+                .collect::<Vec<i64>>(),
             vec![1, 2, 6, 7, 8]
         );
         assert_eq!(
             Branch::get_operations(operation_conn, branch_a.id)
                 .iter()
                 .map(|op| op.id)
-                .collect::<Vec<i32>>(),
+                .collect::<Vec<i64>>(),
             vec![1, 2]
         );
         assert_eq!(
             Branch::get_operations(operation_conn, branch_b.id)
                 .iter()
                 .map(|op| op.id)
-                .collect::<Vec<i32>>(),
+                .collect::<Vec<i64>>(),
             vec![1, 2, 3, 4, 5, 9]
         );
     }

@@ -15,7 +15,7 @@ use crate::models::strand::Strand;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BlockGroup {
-    pub id: i32,
+    pub id: i64,
     pub collection_name: String,
     pub sample_name: Option<String>,
     pub name: String,
@@ -30,18 +30,18 @@ pub struct BlockGroupData<'a> {
 
 #[derive(Clone, Debug)]
 pub struct PathChange {
-    pub block_group_id: i32,
+    pub block_group_id: i64,
     pub path: Path,
-    pub start: i32,
-    pub end: i32,
+    pub start: i64,
+    pub end: i64,
     pub block: PathBlock,
-    pub chromosome_index: i32,
-    pub phased: i32,
+    pub chromosome_index: i64,
+    pub phased: i64,
 }
 
 pub struct PathCache<'a> {
     pub cache: HashMap<PathData, Path>,
-    pub intervaltree_cache: HashMap<Path, IntervalTree<i32, PathBlock>>,
+    pub intervaltree_cache: HashMap<Path, IntervalTree<i64, PathBlock>>,
     pub conn: &'a Connection,
 }
 
@@ -49,12 +49,12 @@ impl PathCache<'_> {
     pub fn new(conn: &Connection) -> PathCache {
         PathCache {
             cache: HashMap::<PathData, Path>::new(),
-            intervaltree_cache: HashMap::<Path, IntervalTree<i32, PathBlock>>::new(),
+            intervaltree_cache: HashMap::<Path, IntervalTree<i64, PathBlock>>::new(),
             conn,
         }
     }
 
-    pub fn lookup(path_cache: &mut PathCache, block_group_id: i32, name: String) -> Path {
+    pub fn lookup(path_cache: &mut PathCache, block_group_id: i64, name: String) -> Path {
         let path_key = PathData {
             name: name.clone(),
             block_group_id,
@@ -80,7 +80,7 @@ impl PathCache<'_> {
     pub fn get_intervaltree<'a>(
         path_cache: &'a PathCache<'a>,
         path: &'a Path,
-    ) -> Option<&'a IntervalTree<i32, PathBlock>> {
+    ) -> Option<&'a IntervalTree<i64, PathBlock>> {
         path_cache.intervaltree_cache.get(path)
     }
 }
@@ -159,7 +159,7 @@ impl BlockGroup {
         objs
     }
 
-    pub fn clone(conn: &Connection, source_block_group_id: i32, target_block_group_id: i32) {
+    pub fn clone(conn: &Connection, source_block_group_id: i64, target_block_group_id: i64) {
         let existing_paths = Path::get_paths(
             conn,
             "SELECT * from path where block_group_id = ?1",
@@ -169,14 +169,14 @@ impl BlockGroup {
         let edge_ids = BlockGroupEdge::edges_for_block_group(conn, source_block_group_id)
             .iter()
             .map(|edge| edge.id)
-            .collect::<Vec<i32>>();
+            .collect::<Vec<i64>>();
         BlockGroupEdge::bulk_create(conn, target_block_group_id, &edge_ids);
 
         for path in existing_paths {
             let edge_ids = PathEdge::edges_for_path(conn, path.id)
                 .into_iter()
                 .map(|edge| edge.id)
-                .collect::<Vec<i32>>();
+                .collect::<Vec<i64>>();
             Path::create(conn, &path.name, target_block_group_id, &edge_ids);
         }
     }
@@ -186,8 +186,8 @@ impl BlockGroup {
         collection_name: &str,
         sample_name: &str,
         group_name: &str,
-    ) -> i32 {
-        let mut bg_id : i32 = match conn.query_row(
+    ) -> i64 {
+        let mut bg_id : i64 = match conn.query_row(
             "select id from block_group where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
             (collection_name, sample_name, group_name),
             |row| row.get(0),
@@ -227,7 +227,7 @@ impl BlockGroup {
         collection_name: &str,
         sample_name: Option<&str>,
         group_name: &str,
-    ) -> i32 {
+    ) -> i64 {
         let result = if sample_name.is_some() {
             conn.query_row(
 		"select id from block_group where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
@@ -251,7 +251,7 @@ impl BlockGroup {
         }
     }
 
-    pub fn get_all_sequences(conn: &Connection, block_group_id: i32) -> HashSet<String> {
+    pub fn get_all_sequences(conn: &Connection, block_group_id: i64) -> HashSet<String> {
         let mut edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
         let (blocks, boundary_edges) = Edge::blocks_from_edges(conn, &edges);
         edges.extend(boundary_edges.clone());
@@ -274,7 +274,7 @@ impl BlockGroup {
             .clone()
             .into_iter()
             .map(|block| (block.id, block))
-            .collect::<HashMap<i32, GroupBlock>>();
+            .collect::<HashMap<i64, GroupBlock>>();
         let mut sequences = HashSet::<String>::new();
 
         for start_node in start_nodes {
@@ -303,7 +303,7 @@ impl BlockGroup {
     }
 
     pub fn insert_changes(conn: &Connection, changes: &Vec<PathChange>, cache: &PathCache) {
-        let mut new_edges_by_block_group = HashMap::<i32, Vec<EdgeData>>::new();
+        let mut new_edges_by_block_group = HashMap::<i64, Vec<EdgeData>>::new();
         for change in changes {
             let tree = PathCache::get_intervaltree(cache, &change.path).unwrap();
             let new_edges = BlockGroup::set_up_new_edges(change, tree);
@@ -324,7 +324,7 @@ impl BlockGroup {
     pub fn insert_change(
         conn: &Connection,
         change: &PathChange,
-        tree: &IntervalTree<i32, PathBlock>,
+        tree: &IntervalTree<i64, PathBlock>,
     ) {
         let new_edges = BlockGroup::set_up_new_edges(change, tree);
         let edge_ids = Edge::bulk_create(conn, new_edges);
@@ -333,7 +333,7 @@ impl BlockGroup {
 
     pub fn set_up_new_edges(
         change: &PathChange,
-        tree: &IntervalTree<i32, PathBlock>,
+        tree: &IntervalTree<i64, PathBlock>,
     ) -> Vec<EdgeData> {
         let start_blocks: Vec<&PathBlock> =
             tree.query_point(change.start).map(|x| &x.value).collect();

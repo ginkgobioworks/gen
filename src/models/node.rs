@@ -4,17 +4,17 @@ use std::collections::HashMap;
 
 use crate::models::sequence::Sequence;
 
-pub const PATH_START_NODE_ID: i32 = 1;
-pub const PATH_END_NODE_ID: i32 = 2;
+pub const PATH_START_NODE_ID: i64 = 1;
+pub const PATH_END_NODE_ID: i64 = 2;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Node {
-    pub id: i32,
+    pub id: i64,
     pub sequence_hash: String,
 }
 
 impl Node {
-    pub fn create(conn: &Connection, sequence_hash: &str) -> i32 {
+    pub fn create(conn: &Connection, sequence_hash: &str) -> i64 {
         let insert_statement = format!(
             "INSERT INTO nodes (sequence_hash) VALUES ('{}') RETURNING (id);",
             sequence_hash
@@ -57,7 +57,7 @@ impl Node {
         objs
     }
 
-    pub fn get_nodes(conn: &Connection, node_ids: Vec<i32>) -> Vec<Node> {
+    pub fn get_nodes(conn: &Connection, node_ids: Vec<i64>) -> Vec<Node> {
         let mut nodes: Vec<Node> = vec![];
         for chunk in node_ids.chunks(1000) {
             nodes.extend(Node::query(
@@ -66,10 +66,7 @@ impl Node {
                     "SELECT * FROM nodes WHERE id IN ({})",
                     chunk.iter().map(|_| "?").collect::<Vec<_>>().join(", ")
                 ),
-                chunk
-                    .iter()
-                    .map(|id| SQLValue::Integer(*id as i64))
-                    .collect(),
+                chunk.iter().map(|id| SQLValue::Integer(*id)).collect(),
             ))
         }
         nodes
@@ -77,13 +74,13 @@ impl Node {
 
     pub fn get_sequences_by_node_ids(
         conn: &Connection,
-        node_ids: Vec<i32>,
-    ) -> HashMap<i32, Sequence> {
-        let nodes = Node::get_nodes(conn, node_ids.into_iter().collect::<Vec<i32>>());
+        node_ids: Vec<i64>,
+    ) -> HashMap<i64, Sequence> {
+        let nodes = Node::get_nodes(conn, node_ids.into_iter().collect::<Vec<i64>>());
         let sequence_hashes_by_node_id = nodes
             .iter()
             .map(|node| (node.id, node.sequence_hash.clone()))
-            .collect::<HashMap<i32, String>>();
+            .collect::<HashMap<i64, String>>();
         let sequences_by_hash = Sequence::sequences_by_hash(
             conn,
             sequence_hashes_by_node_id
@@ -100,10 +97,10 @@ impl Node {
                     sequences_by_hash.get(&sequence_hash).unwrap().clone(),
                 )
             })
-            .collect::<HashMap<i32, Sequence>>()
+            .collect::<HashMap<i64, Sequence>>()
     }
 
-    pub fn is_terminal(node_id: i32) -> bool {
+    pub fn is_terminal(node_id: i64) -> bool {
         node_id == PATH_START_NODE_ID || node_id == PATH_END_NODE_ID
     }
 }

@@ -4,13 +4,13 @@ use rusqlite::{params_from_iter, Connection};
 
 #[derive(Clone, Debug)]
 pub struct BlockGroupEdge {
-    pub id: i32,
-    pub block_group_id: i32,
-    pub edge_id: i32,
+    pub id: i64,
+    pub block_group_id: i64,
+    pub edge_id: i64,
 }
 
 impl BlockGroupEdge {
-    pub fn bulk_create(conn: &Connection, block_group_id: i32, edge_ids: &[i32]) {
+    pub fn bulk_create(conn: &Connection, block_group_id: i64, edge_ids: &[i64]) {
         for chunk in edge_ids.chunks(100000) {
             let mut rows_to_insert = vec![];
             for edge_id in chunk {
@@ -28,7 +28,7 @@ impl BlockGroupEdge {
         }
     }
 
-    pub fn edges_for_block_group(conn: &Connection, block_group_id: i32) -> Vec<Edge> {
+    pub fn edges_for_block_group(conn: &Connection, block_group_id: i64) -> Vec<Edge> {
         let query = format!(
             "select * from block_group_edges where block_group_id = {};",
             block_group_id
@@ -37,7 +37,7 @@ impl BlockGroupEdge {
         let edge_ids = block_group_edges
             .into_iter()
             .map(|block_group_edge| block_group_edge.edge_id)
-            .collect::<Vec<i32>>();
+            .collect::<Vec<i64>>();
         Edge::bulk_load(conn, &edge_ids)
     }
 

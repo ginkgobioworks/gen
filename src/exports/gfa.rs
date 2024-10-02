@@ -55,7 +55,7 @@ pub fn export_gfa(conn: &Connection, collection_name: &str, filename: &PathBuf) 
 fn write_segments(
     writer: &mut BufWriter<File>,
     blocks: &Vec<GroupBlock>,
-    terminal_block_ids: &HashSet<i32>,
+    terminal_block_ids: &HashSet<i64>,
 ) {
     for block in blocks {
         if terminal_block_ids.contains(&block.id) {
@@ -78,9 +78,9 @@ fn segment_line(sequence: &str, index: usize) -> String {
 
 fn write_links(
     writer: &mut BufWriter<File>,
-    graph: &DiGraphMap<i32, ()>,
-    edges_by_node_pair: &HashMap<(i32, i32), Edge>,
-    terminal_block_ids: &HashSet<i32>,
+    graph: &DiGraphMap<i64, ()>,
+    edges_by_node_pair: &HashMap<(i64, i64), Edge>,
+    terminal_block_ids: &HashSet<i64>,
 ) {
     for (source, target, ()) in graph.all_edges() {
         if terminal_block_ids.contains(&source) || terminal_block_ids.contains(&target) {
@@ -101,9 +101,9 @@ fn write_links(
 }
 
 fn link_line(
-    source_index: i32,
+    source_index: i64,
     source_strand: Strand,
-    target_index: i32,
+    target_index: i64,
     target_strand: Strand,
 ) -> String {
     format!(
@@ -123,9 +123,9 @@ fn link_line(
 fn nodes_for_edges(
     edge1: &Edge,
     edge2: &Edge,
-    blocks_by_node_and_start: &HashMap<(i32, i32), GroupBlock>,
-    blocks_by_node_and_end: &HashMap<(i32, i32), GroupBlock>,
-) -> Vec<i32> {
+    blocks_by_node_and_start: &HashMap<(i64, i64), GroupBlock>,
+    blocks_by_node_and_end: &HashMap<(i64, i64), GroupBlock>,
+) -> Vec<i64> {
     let mut current_block = blocks_by_node_and_start
         .get(&(edge1.target_node_id, edge1.target_coordinate))
         .unwrap();
@@ -158,11 +158,11 @@ fn write_paths(
     let blocks_by_node_and_start = blocks
         .iter()
         .map(|block| ((block.node_id, block.start), block.clone()))
-        .collect::<HashMap<(i32, i32), GroupBlock>>();
+        .collect::<HashMap<(i64, i64), GroupBlock>>();
     let blocks_by_node_and_end = blocks
         .iter()
         .map(|block| ((block.node_id, block.end), block.clone()))
-        .collect::<HashMap<(i32, i32), GroupBlock>>();
+        .collect::<HashMap<(i64, i64), GroupBlock>>();
 
     for path in paths {
         let edges_for_path = edges_by_path_id.get(&path.id).unwrap();
@@ -187,7 +187,7 @@ fn write_paths(
     }
 }
 
-fn path_line(path_name: &str, node_ids: &[i32], node_strands: &[Strand]) -> String {
+fn path_line(path_name: &str, node_ids: &[i64], node_strands: &[Strand]) -> String {
     let nodes = node_ids
         .iter()
         .zip(node_strands.iter())

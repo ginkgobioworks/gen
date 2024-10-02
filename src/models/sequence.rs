@@ -17,7 +17,7 @@ pub struct Sequence {
     // these 2 fields are only relevant when the sequence is stored externally
     pub name: String,
     pub file_path: String,
-    pub length: i32,
+    pub length: i64,
     // indicates whether the sequence is stored externally, a quick flag instead of having to
     // check sequence or file_path and do the logic in function calls.
     pub external_sequence: bool,
@@ -29,7 +29,7 @@ pub struct NewSequence<'a> {
     sequence: Option<&'a str>,
     name: Option<&'a str>,
     file_path: Option<&'a str>,
-    length: Option<i32>,
+    length: Option<i64>,
     shallow: bool,
 }
 
@@ -64,7 +64,7 @@ impl<'a> NewSequence<'a> {
 
     pub fn sequence(mut self, sequence: &'a str) -> Self {
         self.sequence = Some(sequence);
-        self.length = Some(sequence.len() as i32);
+        self.length = Some(sequence.len() as i64);
         self
     }
 
@@ -81,7 +81,7 @@ impl<'a> NewSequence<'a> {
         self
     }
 
-    pub fn length(mut self, length: i32) -> Self {
+    pub fn length(mut self, length: i64) -> Self {
         self.length = Some(length);
         self
     }
@@ -136,7 +136,7 @@ impl<'a> NewSequence<'a> {
         }
         if self.length.is_none() {
             if let Some(v) = self.sequence {
-                length = v.len() as i32;
+                length = v.len() as i64;
             } else {
                 // TODO: if name/path specified, grab length automatically
                 panic!("Sequence length must be specified.");
@@ -283,13 +283,13 @@ impl Sequence {
 
     pub fn get_sequence(
         &self,
-        start: impl Into<Option<i32>>,
-        end: impl Into<Option<i32>>,
+        start: impl Into<Option<i64>>,
+        end: impl Into<Option<i64>>,
     ) -> String {
         // todo: handle circles
 
-        let start: Option<i32> = start.into();
-        let end: Option<i32> = end.into();
+        let start: Option<i64> = start.into();
+        let end: Option<i64> = end.into();
         let start = start.unwrap_or(0) as usize;
         let end = end.unwrap_or(self.length) as usize;
         if self.external_sequence {
@@ -303,7 +303,7 @@ impl Sequence {
                 );
             }
         }
-        if start == 0 && end as i32 == self.length {
+        if start == 0 && end as i64 == self.length {
             return self.sequence.clone();
         }
         self.sequence[start..end].to_string()
