@@ -117,9 +117,7 @@ impl Path {
             }
         };
 
-        for (index, edge_id) in edge_ids.iter().enumerate() {
-            PathEdge::create(conn, path.id, index.try_into().unwrap(), *edge_id);
-        }
+        PathEdge::bulk_create(conn, path.id, edge_ids);
 
         path
     }

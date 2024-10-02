@@ -13,6 +13,9 @@ pub fn run_migrations(conn: &mut Connection) {
         .unwrap();
     conn.pragma_update(None, "foreign_keys", "ON").unwrap();
     conn.execute("PRAGMA cache_size=50000;", []).unwrap();
+    // synchronous = NORMAL should be fine with WAL mode, and helps with performance
+    // https://developer.android.com/topic/performance/sqlite-performance-best-practices
+    conn.execute("PRAGMA synchronous = NORMAL;", []).unwrap();
 
     // 2️⃣ Update the database schema, atomically
     let r = migrations.to_latest(conn);

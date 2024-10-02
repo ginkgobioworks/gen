@@ -7,6 +7,7 @@ use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
 use crate::models::{
+    block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
     collection::Collection,
     edge::{Edge, GroupBlock},
@@ -164,7 +165,11 @@ fn write_paths(
         .map(|block| ((block.node_id, block.end), block.clone()))
         .collect::<HashMap<(i64, i64), GroupBlock>>();
 
+    println!("here1");
     for path in paths {
+        let block_group = BlockGroup::get_by_id(conn, path.block_group_id);
+        let sample_name = block_group.sample_name;
+
         let edges_for_path = edges_by_path_id.get(&path.id).unwrap();
         let mut graph_node_ids = vec![];
         let mut node_strands = vec![];
@@ -181,9 +186,15 @@ fn write_paths(
             }
         }
 
+        let full_path_name = if sample_name.is_some() {
+            format!("{}.{}", path.name, sample_name.unwrap()).to_string()
+        } else {
+            path.name
+        };
+        println!("path name: {}", full_path_name);
         writer
-            .write_all(&path_line(&path.name, &graph_node_ids, &node_strands).into_bytes())
-            .unwrap_or_else(|_| panic!("Error writing path {} to GFA stream", path.name));
+            .write_all(&path_line(&full_path_name, &graph_node_ids, &node_strands).into_bytes())
+            .unwrap_or_else(|_| panic!("Error writing path {} to GFA stream", full_path_name));
     }
 }
 

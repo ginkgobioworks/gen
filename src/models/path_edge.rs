@@ -55,6 +55,29 @@ impl PathEdge {
         }
     }
 
+    pub fn bulk_create(conn: &Connection, path_id: i64, edge_ids: &[i64]) {
+        for (index1, chunk) in edge_ids.chunks(100000).enumerate() {
+            let mut rows_to_insert = vec![];
+            for (index2, edge_id) in chunk.iter().enumerate() {
+                let row = format!(
+                    "({0}, {1}, {2})",
+                    path_id,
+                    edge_id,
+                    index1 * 100000 + index2
+                );
+                rows_to_insert.push(row);
+            }
+
+            let formatted_rows_to_insert = rows_to_insert.join(", ");
+
+            let insert_statement = format!(
+                "INSERT OR IGNORE INTO path_edges (path_id, edge_id, index_in_path) VALUES {0};",
+                formatted_rows_to_insert
+            );
+            let _ = conn.execute(&insert_statement, ());
+        }
+    }
+
     pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<PathEdge> {
         let mut stmt = conn.prepare(query).unwrap();
         let rows = stmt
