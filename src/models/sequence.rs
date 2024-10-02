@@ -208,7 +208,7 @@ fn fasta_gzi_index(path: &str) -> Option<gzi::Index> {
     None
 }
 
-fn cached_sequence(file_path: &str, name: &str, start: usize, end: usize) -> Option<String> {
+pub fn cached_sequence(file_path: &str, name: &str, start: usize, end: usize) -> Option<String> {
     static SEQUENCE_CACHE: sync::LazyLock<sync::RwLock<HashMap<String, Option<String>>>> =
         sync::LazyLock::new(|| sync::RwLock::new(HashMap::new()));
     let key = format!("{file_path}-{name}");

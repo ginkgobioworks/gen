@@ -1,13 +1,13 @@
-use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, RandomState};
-
 use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection, Result as SQLResult, Row};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, RandomState};
 
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
+use crate::models::sequence::{cached_sequence, Sequence};
 use crate::models::strand::Strand;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
@@ -60,9 +60,53 @@ pub struct BlockKey {
 pub struct GroupBlock {
     pub id: i32,
     pub node_id: i32,
-    pub sequence: String,
+    sequence: String,
+    pub external_sequence: bool,
     pub start: i32,
     pub end: i32,
+}
+
+impl GroupBlock {
+    const SEQUENCE_KEY_DELIMITER: &'static str = "^^^";
+    fn get_sequence_key(sequence: &Sequence, start: i32, end: i32) -> String {
+        if sequence.external_sequence {
+            format!(
+                "{path}{delimiter}{name}",
+                path = sequence.file_path,
+                name = sequence.name,
+                delimiter = GroupBlock::SEQUENCE_KEY_DELIMITER
+            )
+        } else {
+            sequence.get_sequence(start, end)
+        }
+    }
+
+    fn deconstruct_sequence_key(sequence: &str) -> (String, String) {
+        let mut split = sequence.splitn(2, &GroupBlock::SEQUENCE_KEY_DELIMITER);
+        (
+            split.next().unwrap().to_string(),
+            split.next().unwrap().to_string(),
+        )
+    }
+
+    pub fn new(id: i32, node_id: i32, sequence: &Sequence, start: i32, end: i32) -> Self {
+        GroupBlock {
+            id,
+            node_id,
+            sequence: GroupBlock::get_sequence_key(sequence, start, end),
+            external_sequence: sequence.external_sequence,
+            start,
+            end,
+        }
+    }
+    pub fn sequence(&self) -> String {
+        if self.external_sequence {
+            let (path, name) = GroupBlock::deconstruct_sequence_key(&self.sequence);
+            cached_sequence(&path, &name, self.start as usize, self.end as usize).unwrap()
+        } else {
+            self.sequence.clone()
+        }
+    }
 }
 
 impl Edge {
@@ -343,45 +387,27 @@ impl Edge {
             if !block_boundaries.is_empty() {
                 let start = 0;
                 let end = block_boundaries[0];
-                let first_block = GroupBlock {
-                    id: block_index,
-                    node_id: *node_id,
-                    sequence: sequence.get_sequence(start, end),
-                    start,
-                    end,
-                };
+                let first_block = GroupBlock::new(block_index, *node_id, sequence, start, end);
                 blocks.push(first_block);
                 block_index += 1;
                 for (start, end) in block_boundaries.clone().into_iter().tuple_windows() {
-                    let block = GroupBlock {
-                        id: block_index,
-                        node_id: *node_id,
-                        sequence: sequence.get_sequence(start, end),
-                        start,
-                        end,
-                    };
+                    let block = GroupBlock::new(block_index, *node_id, sequence, start, end);
                     blocks.push(block);
                     block_index += 1;
                 }
                 let start = block_boundaries[block_boundaries.len() - 1];
                 let end = sequence.length;
-                let last_block = GroupBlock {
-                    id: block_index,
-                    node_id: *node_id,
-                    sequence: sequence.get_sequence(start, end),
-                    start,
-                    end,
-                };
+                let last_block = GroupBlock::new(block_index, *node_id, sequence, start, end);
                 blocks.push(last_block);
                 block_index += 1;
             } else {
-                blocks.push(GroupBlock {
-                    id: block_index,
-                    node_id: *node_id,
-                    sequence: sequence.get_sequence(None, None),
-                    start: 0,
-                    end: sequence.length,
-                });
+                blocks.push(GroupBlock::new(
+                    block_index,
+                    *node_id,
+                    sequence,
+                    0,
+                    sequence.length,
+                ));
                 block_index += 1;
             }
         }
@@ -390,21 +416,21 @@ impl Edge {
         // block group, since different paths in the block group may start or end at different
         // places on sequences.  These two "start sequence" and "end sequence" blocks will serve
         // that role.
-        let start_block = GroupBlock {
-            id: block_index + 1,
-            node_id: PATH_START_NODE_ID,
-            sequence: "".to_string(),
-            start: 0,
-            end: 0,
-        };
+        let start_block = GroupBlock::new(
+            block_index + 1,
+            PATH_START_NODE_ID,
+            &Sequence::new().sequence_type("DNA").sequence("").build(),
+            0,
+            0,
+        );
         blocks.push(start_block);
-        let end_block = GroupBlock {
-            id: block_index + 2,
-            node_id: PATH_END_NODE_ID,
-            sequence: "".to_string(),
-            start: 0,
-            end: 0,
-        };
+        let end_block = GroupBlock::new(
+            block_index + 2,
+            PATH_END_NODE_ID,
+            &Sequence::new().sequence_type("DNA").sequence("").build(),
+            0,
+            0,
+        );
         blocks.push(end_block);
         (blocks, boundary_edges)
     }

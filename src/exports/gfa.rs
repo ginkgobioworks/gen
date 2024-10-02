@@ -62,11 +62,11 @@ fn write_segments(
             continue;
         }
         writer
-            .write_all(&segment_line(&block.sequence, block.id as usize).into_bytes())
+            .write_all(&segment_line(&block.sequence(), block.id as usize).into_bytes())
             .unwrap_or_else(|_| {
                 panic!(
                     "Error writing segment with sequence {} to GFA stream",
-                    block.sequence,
+                    block.sequence(),
                 )
             });
     }

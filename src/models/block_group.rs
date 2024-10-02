@@ -283,14 +283,14 @@ impl BlockGroup {
                 if start_node == *end_node {
                     let block = blocks_by_id.get(&start_node).unwrap();
                     if block.node_id != PATH_START_NODE_ID && block.node_id != PATH_END_NODE_ID {
-                        sequences.insert(block.sequence.clone());
+                        sequences.insert(block.sequence());
                     }
                 } else {
                     for path in all_simple_paths(&graph, start_node, *end_node) {
                         let mut current_sequence = "".to_string();
                         for node in path {
                             let block = blocks_by_id.get(&node).unwrap();
-                            let block_sequence = block.sequence.clone();
+                            let block_sequence = block.sequence();
                             current_sequence.push_str(&block_sequence);
                         }
                         sequences.insert(current_sequence);
