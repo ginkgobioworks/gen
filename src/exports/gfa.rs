@@ -185,7 +185,7 @@ fn write_paths(
             }
         }
 
-        let full_path_name = if sample_name.is_some() {
+        let full_path_name = if sample_name.is_some() && sample_name.clone().unwrap() != "" {
             format!("{}.{}", path.name, sample_name.unwrap()).to_string()
         } else {
             path.name
