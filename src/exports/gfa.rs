@@ -7,6 +7,7 @@ use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
 use crate::models::{
+    block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
     collection::Collection,
     edge::{Edge, GroupBlock},
@@ -165,6 +166,9 @@ fn write_paths(
         .collect::<HashMap<(i64, i64), GroupBlock>>();
 
     for path in paths {
+        let block_group = BlockGroup::get_by_id(conn, path.block_group_id);
+        let sample_name = block_group.sample_name;
+
         let edges_for_path = edges_by_path_id.get(&path.id).unwrap();
         let mut graph_node_ids = vec![];
         let mut node_strands = vec![];
@@ -181,9 +185,14 @@ fn write_paths(
             }
         }
 
+        let full_path_name = if sample_name.is_some() && sample_name.clone().unwrap() != "" {
+            format!("{}.{}", path.name, sample_name.unwrap()).to_string()
+        } else {
+            path.name
+        };
         writer
-            .write_all(&path_line(&path.name, &graph_node_ids, &node_strands).into_bytes())
-            .unwrap_or_else(|_| panic!("Error writing path {} to GFA stream", path.name));
+            .write_all(&path_line(&full_path_name, &graph_node_ids, &node_strands).into_bytes())
+            .unwrap_or_else(|_| panic!("Error writing path {} to GFA stream", full_path_name));
     }
 }
 
@@ -194,7 +203,7 @@ fn path_line(path_name: &str, node_ids: &[i64], node_strands: &[Strand]) -> Stri
         .map(|(node_id, node_strand)| format!("{}{}", *node_id + 1, node_strand))
         .collect::<Vec<String>>()
         .join(",");
-    format!("P\t{}\t{}\n", path_name, nodes)
+    format!("P\t{}\t{}\t*\n", path_name, nodes)
 }
 
 #[cfg(test)]

@@ -365,10 +365,10 @@ impl Edge {
                     id: -1,
                     source_node_id: *node_id,
                     source_coordinate: *block_boundary,
-                    source_strand: Strand::Unknown,
+                    source_strand: Strand::Forward,
                     target_node_id: *node_id,
                     target_coordinate: *block_boundary,
-                    target_strand: Strand::Unknown,
+                    target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
                 });

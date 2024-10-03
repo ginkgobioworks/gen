@@ -159,6 +159,25 @@ impl BlockGroup {
         objs
     }
 
+    pub fn get_by_id(conn: &Connection, id: i64) -> BlockGroup {
+        let query = "SELECT * FROM block_group WHERE id = ?1";
+        let mut stmt = conn.prepare(query).unwrap();
+        match stmt.query_row(params_from_iter(vec![SQLValue::from(id)]), |row| {
+            Ok(BlockGroup {
+                id: row.get(0)?,
+                collection_name: row.get(1)?,
+                sample_name: row.get(2)?,
+                name: row.get(3)?,
+            })
+        }) {
+            Ok(res) => res,
+            Err(rusqlite::Error::QueryReturnedNoRows) => panic!("No block group with id {}", id),
+            Err(_) => {
+                panic!("something bad happened querying the database")
+            }
+        }
+    }
+
     pub fn clone(conn: &Connection, source_block_group_id: i64, target_block_group_id: i64) {
         let existing_paths = Path::get_paths(
             conn,
