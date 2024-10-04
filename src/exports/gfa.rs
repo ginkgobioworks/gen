@@ -11,7 +11,7 @@ use crate::models::{
     block_group_edge::BlockGroupEdge,
     collection::Collection,
     edge::{Edge, GroupBlock},
-    node::{PATH_END_NODE_ID, PATH_START_NODE_ID},
+    node::Node,
     path::Path,
     path_edge::PathEdge,
     strand::Strand,
@@ -35,35 +35,20 @@ pub fn export_gfa(conn: &Connection, collection_name: &str, filename: &PathBuf) 
     let file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(file);
 
-    let mut terminal_block_ids = HashSet::new();
-    for block in &blocks {
-        if block.node_id == PATH_START_NODE_ID || block.node_id == PATH_END_NODE_ID {
-            terminal_block_ids.insert(block.id);
-            continue;
-        }
-    }
-
-    write_segments(&mut writer, &blocks, &terminal_block_ids);
-    write_links(
-        &mut writer,
-        &graph,
-        &edges_by_node_pair,
-        &terminal_block_ids,
-    );
+    write_segments(&mut writer, &blocks);
+    write_links(&mut writer, &graph, &edges_by_node_pair);
     write_paths(&mut writer, conn, collection_name, &blocks);
 }
 
-fn write_segments(
-    writer: &mut BufWriter<File>,
-    blocks: &Vec<GroupBlock>,
-    terminal_block_ids: &HashSet<i64>,
-) {
+fn write_segments(writer: &mut BufWriter<File>, blocks: &Vec<GroupBlock>) {
     for block in blocks {
-        if terminal_block_ids.contains(&block.id) {
+        if Node::is_terminal(block.node_id) {
             continue;
         }
         writer
-            .write_all(&segment_line(&block.sequence(), block.id as usize).into_bytes())
+            .write_all(
+                &segment_line(block.id, &block.sequence(), block.node_id, block.start).into_bytes(),
+            )
             .unwrap_or_else(|_| {
                 panic!(
                     "Error writing segment with sequence {} to GFA stream",
@@ -73,21 +58,29 @@ fn write_segments(
     }
 }
 
-fn segment_line(sequence: &str, index: usize) -> String {
-    format!("S\t{}\t{}\t{}\n", index + 1, sequence, "*")
+fn segment_line(index: i64, sequence: &str, node_id: i64, sequence_start: i64) -> String {
+    // NOTE: SN is "reference sequence ID" (node ID in the gen db) and SO is the start coordinate of
+    // this segment against the sequence referenced by that node.
+    // https://github.com/lh3/gfatools/blob/master/doc/rGFA.md#the-graph-alignment-format-gaf
+    format!(
+        "S\t{}\t{}\t*\tSN:{}\tSO:{}\n",
+        index + 1,
+        sequence,
+        node_id,
+        sequence_start
+    )
 }
 
 fn write_links(
     writer: &mut BufWriter<File>,
     graph: &DiGraphMap<i64, ()>,
     edges_by_node_pair: &HashMap<(i64, i64), Edge>,
-    terminal_block_ids: &HashSet<i64>,
 ) {
     for (source, target, ()) in graph.all_edges() {
-        if terminal_block_ids.contains(&source) || terminal_block_ids.contains(&target) {
+        let edge = edges_by_node_pair.get(&(source, target)).unwrap();
+        if Node::is_terminal(edge.source_node_id) || Node::is_terminal(edge.target_node_id) {
             continue;
         }
-        let edge = edges_by_node_pair.get(&(source, target)).unwrap();
         writer
             .write_all(
                 &link_line(source, edge.source_strand, target, edge.target_strand).into_bytes(),
@@ -213,7 +206,10 @@ mod tests {
 
     use crate::imports::gfa::import_gfa;
     use crate::models::{
-        block_group::BlockGroup, collection::Collection, node::Node, sequence::Sequence,
+        block_group::BlockGroup,
+        collection::Collection,
+        node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
+        sequence::Sequence,
     };
 
     use crate::test_helpers::{get_connection, setup_gen_dir};
