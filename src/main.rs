@@ -120,6 +120,9 @@ enum Commands {
         /// The name of the GFA file to export to
         #[arg(short, long)]
         gfa: String,
+        /// An optional sample name
+        #[arg(short, long)]
+        sample: Option<String>,
     },
     Defaults {
         /// The default database to use
@@ -343,13 +346,13 @@ fn main() {
         Some(Commands::Reset { id }) => {
             operation_management::reset(&conn, &operation_conn, &db_uuid, *id);
         }
-        Some(Commands::Export { name, gfa }) => {
+        Some(Commands::Export { name, gfa, sample }) => {
             let name = &name.clone().unwrap_or_else(|| {
                 get_default_collection(&operation_conn)
                     .expect("No collection specified and default not setup.")
             });
             conn.execute("BEGIN TRANSACTION", []).unwrap();
-            export_gfa(&conn, name, &PathBuf::from(gfa));
+            export_gfa(&conn, name, &PathBuf::from(gfa), sample.clone());
             conn.execute("END TRANSACTION", []).unwrap();
         }
         None => {}

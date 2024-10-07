@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use petgraph::prelude::DiGraphMap;
-use rusqlite::Connection;
+use rusqlite::{types::Value as SQLValue, Connection};
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -17,16 +17,43 @@ use crate::models::{
     strand::Strand,
 };
 
-pub fn export_gfa(conn: &Connection, collection_name: &str, filename: &PathBuf) {
+pub fn export_gfa(
+    conn: &Connection,
+    collection_name: &str,
+    filename: &PathBuf,
+    sample_name: Option<String>,
+) {
     // General note about how we encode segment IDs.  The node ID and the start coordinate in the
     // sequence are all that's needed, because the end coordinate can be inferred from the length of
-    // the segment's sequence.  So the segment ID is of the form <node ID>.<start coordinate>.
+    // the segment's sequence.  So the segment ID is of the form <node ID>.<start coordinate>
     let block_groups = Collection::get_block_groups(conn, collection_name);
 
     let mut edge_set = HashSet::new();
-    for block_group in block_groups {
-        let block_group_edges = BlockGroupEdge::edges_for_block_group(conn, block_group.id);
-        edge_set.extend(block_group_edges.into_iter());
+    if sample_name.is_some() {
+        let block_groups = BlockGroup::query(
+            conn,
+            "select * from block_group where collection_name = ?1 AND sample_name = ?2;",
+            vec![
+                SQLValue::from(collection_name.to_string()),
+                SQLValue::from(sample_name.clone().unwrap()),
+            ],
+        );
+        if block_groups.is_empty() {
+            panic!(
+                "No block groups found for collection {} and sample {}",
+                collection_name,
+                sample_name.unwrap()
+            );
+        }
+
+        let block_group_id = block_groups[0].id;
+        let block_group_edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
+        edge_set.extend(block_group_edges);
+    } else {
+        for block_group in block_groups {
+            let block_group_edges = BlockGroupEdge::edges_for_block_group(conn, block_group.id);
+            edge_set.extend(block_group_edges);
+        }
     }
 
     let mut edges = edge_set.into_iter().collect();
@@ -338,7 +365,7 @@ mod tests {
         let mut gfa_path = PathBuf::from(temp_dir.path());
         gfa_path.push("intermediate.gfa");
 
-        export_gfa(&conn, collection_name, &gfa_path);
+        export_gfa(&conn, collection_name, &gfa_path, None);
         // NOTE: Not directly checking file contents because segments are written in random order
         import_gfa(&gfa_path, "test collection 2", &conn);
 
@@ -370,7 +397,7 @@ mod tests {
         let mut gfa_path = PathBuf::from(temp_dir.path());
         gfa_path.push("intermediate.gfa");
 
-        export_gfa(conn, &collection_name, &gfa_path);
+        export_gfa(conn, &collection_name, &gfa_path, None);
         import_gfa(&gfa_path, "test collection 2", conn);
 
         let block_group2 = Collection::get_block_groups(conn, "test collection 2")
@@ -397,7 +424,7 @@ mod tests {
         let mut gfa_path = PathBuf::from(temp_dir.path());
         gfa_path.push("intermediate.gfa");
 
-        export_gfa(conn, &collection_name, &gfa_path);
+        export_gfa(conn, &collection_name, &gfa_path, None);
         import_gfa(&gfa_path, "anderson promoters 2", conn);
 
         let block_group2 = Collection::get_block_groups(conn, "anderson promoters 2")
@@ -424,7 +451,7 @@ mod tests {
         let mut gfa_path = PathBuf::from(temp_dir.path());
         gfa_path.push("intermediate.gfa");
 
-        export_gfa(conn, &collection_name, &gfa_path);
+        export_gfa(conn, &collection_name, &gfa_path, None);
         import_gfa(&gfa_path, "test collection 2", conn);
 
         let block_group2 = Collection::get_block_groups(conn, "test collection 2")
