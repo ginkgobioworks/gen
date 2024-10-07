@@ -18,6 +18,9 @@ use crate::models::{
 };
 
 pub fn export_gfa(conn: &Connection, collection_name: &str, filename: &PathBuf) {
+    // General note about how we encode segment IDs.  The node ID and the start coordinate in the
+    // sequence are all that's needed, because the end coordinate can be inferred from the length of
+    // the segment's sequence.  So the segment ID is of the form <node ID>.<start coordinate>.
     let block_groups = Collection::get_block_groups(conn, collection_name);
 
     let mut edge_set = HashSet::new();
@@ -35,8 +38,18 @@ pub fn export_gfa(conn: &Connection, collection_name: &str, filename: &PathBuf) 
     let file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(file);
 
+    let start_segments_by_end_segment = blocks
+        .iter()
+        .filter(|block| !Node::is_terminal(block.node_id))
+        .map(|block| ((block.node_id, block.end), block.start))
+        .collect::<HashMap<(i64, i64), i64>>();
     write_segments(&mut writer, &blocks);
-    write_links(&mut writer, &graph, &edges_by_node_pair);
+    write_links(
+        &mut writer,
+        &graph,
+        &edges_by_node_pair,
+        start_segments_by_end_segment,
+    );
     write_paths(&mut writer, conn, collection_name, &blocks);
 }
 
@@ -46,9 +59,7 @@ fn write_segments(writer: &mut BufWriter<File>, blocks: &Vec<GroupBlock>) {
             continue;
         }
         writer
-            .write_all(
-                &segment_line(block.id, &block.sequence(), block.node_id, block.start).into_bytes(),
-            )
+            .write_all(&segment_line(&block.sequence(), block.node_id, block.start).into_bytes())
             .unwrap_or_else(|_| {
                 panic!(
                     "Error writing segment with sequence {} to GFA stream",
@@ -58,32 +69,36 @@ fn write_segments(writer: &mut BufWriter<File>, blocks: &Vec<GroupBlock>) {
     }
 }
 
-fn segment_line(index: i64, sequence: &str, node_id: i64, sequence_start: i64) -> String {
-    // NOTE: SN is "reference sequence ID" (node ID in the gen db) and SO is the start coordinate of
-    // this segment against the sequence referenced by that node.
-    // https://github.com/lh3/gfatools/blob/master/doc/rGFA.md#the-graph-alignment-format-gaf
-    format!(
-        "S\t{}\t{}\t*\tSN:{}\tSO:{}\n",
-        index + 1,
-        sequence,
-        node_id,
-        sequence_start
-    )
+fn segment_line(sequence: &str, node_id: i64, sequence_start: i64) -> String {
+    // NOTE: We encode the node ID and start coordinate in the segment ID
+    format!("S\t{}.{}\t{}\t*\n", node_id, sequence_start, sequence,)
 }
 
 fn write_links(
     writer: &mut BufWriter<File>,
     graph: &DiGraphMap<i64, ()>,
     edges_by_node_pair: &HashMap<(i64, i64), Edge>,
+    start_segments_by_end_segment: HashMap<(i64, i64), i64>,
 ) {
     for (source, target, ()) in graph.all_edges() {
         let edge = edges_by_node_pair.get(&(source, target)).unwrap();
         if Node::is_terminal(edge.source_node_id) || Node::is_terminal(edge.target_node_id) {
             continue;
         }
+        let segment_start = start_segments_by_end_segment
+            .get(&(edge.source_node_id, edge.source_coordinate))
+            .unwrap();
         writer
             .write_all(
-                &link_line(source, edge.source_strand, target, edge.target_strand).into_bytes(),
+                &link_line(
+                    edge.source_node_id,
+                    *segment_start,
+                    edge.source_strand,
+                    edge.target_node_id,
+                    edge.target_coordinate,
+                    edge.target_strand,
+                )
+                .into_bytes(),
             )
             .unwrap_or_else(|_| {
                 panic!(
@@ -95,16 +110,20 @@ fn write_links(
 }
 
 fn link_line(
-    source_index: i64,
+    source_node_id: i64,
+    source_coordinate: i64,
     source_strand: Strand,
-    target_index: i64,
+    target_node_id: i64,
+    target_coordinate: i64,
     target_strand: Strand,
 ) -> String {
     format!(
-        "L\t{}\t{}\t{}\t{}\t0M\n",
-        source_index + 1,
+        "L\t{}.{}\t{}\t{}.{}\t{}\t0M\n",
+        source_node_id,
+        source_coordinate,
         source_strand,
-        target_index + 1,
+        target_node_id,
+        target_coordinate,
         target_strand
     )
 }
@@ -114,12 +133,12 @@ fn link_line(
 // on a sequence that are in between those of a consecutive pair of edges in a path.  This function
 // handles that case by collecting all the nodes between the target of one edge and the source of
 // the next.
-fn nodes_for_edges(
+fn segments_for_edges(
     edge1: &Edge,
     edge2: &Edge,
     blocks_by_node_and_start: &HashMap<(i64, i64), GroupBlock>,
     blocks_by_node_and_end: &HashMap<(i64, i64), GroupBlock>,
-) -> Vec<i64> {
+) -> Vec<String> {
     let mut current_block = blocks_by_node_and_start
         .get(&(edge1.target_node_id, edge1.target_coordinate))
         .unwrap();
@@ -129,12 +148,12 @@ fn nodes_for_edges(
     let mut node_ids = vec![];
     #[allow(clippy::while_immutable_condition)]
     while current_block.id != end_block.id {
-        node_ids.push(current_block.id);
+        node_ids.push(format!("{}.{}", current_block.node_id, current_block.start));
         current_block = blocks_by_node_and_start
             .get(&(current_block.node_id, current_block.end))
             .unwrap();
     }
-    node_ids.push(end_block.id);
+    node_ids.push(format!("{}.{}", end_block.node_id, end_block.start));
 
     node_ids
 }
@@ -163,17 +182,17 @@ fn write_paths(
         let sample_name = block_group.sample_name;
 
         let edges_for_path = edges_by_path_id.get(&path.id).unwrap();
-        let mut graph_node_ids = vec![];
+        let mut graph_segment_ids = vec![];
         let mut node_strands = vec![];
         for (edge1, edge2) in edges_for_path.iter().tuple_windows() {
-            let current_node_ids = nodes_for_edges(
+            let segment_ids = segments_for_edges(
                 edge1,
                 edge2,
                 &blocks_by_node_and_start,
                 &blocks_by_node_and_end,
             );
-            for node_id in &current_node_ids {
-                graph_node_ids.push(*node_id);
+            for segment_id in &segment_ids {
+                graph_segment_ids.push(segment_id.clone());
                 node_strands.push(edge1.target_strand);
             }
         }
@@ -184,19 +203,19 @@ fn write_paths(
             path.name
         };
         writer
-            .write_all(&path_line(&full_path_name, &graph_node_ids, &node_strands).into_bytes())
+            .write_all(&path_line(&full_path_name, &graph_segment_ids, &node_strands).into_bytes())
             .unwrap_or_else(|_| panic!("Error writing path {} to GFA stream", full_path_name));
     }
 }
 
-fn path_line(path_name: &str, node_ids: &[i64], node_strands: &[Strand]) -> String {
-    let nodes = node_ids
+fn path_line(path_name: &str, segment_ids: &[String], node_strands: &[Strand]) -> String {
+    let segments = segment_ids
         .iter()
         .zip(node_strands.iter())
-        .map(|(node_id, node_strand)| format!("{}{}", *node_id + 1, node_strand))
+        .map(|(segment_id, node_strand)| format!("{}{}", segment_id, node_strand))
         .collect::<Vec<String>>()
         .join(",");
-    format!("P\t{}\t{}\t*\n", path_name, nodes)
+    format!("P\t{}\t{}\t*\n", path_name, segments)
 }
 
 #[cfg(test)]

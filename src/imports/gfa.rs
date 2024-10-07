@@ -1,8 +1,8 @@
-use gfa_reader::Gfa;
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
 use std::path::Path as FilePath;
 
+use crate::gfa_reader::Gfa;
 use crate::models::{
     block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
@@ -25,9 +25,9 @@ fn bool_to_strand(direction: bool) -> Strand {
 pub fn import_gfa(gfa_path: &FilePath, collection_name: &str, conn: &Connection) {
     Collection::create(conn, collection_name);
     let block_group = BlockGroup::create(conn, collection_name, None, "");
-    let gfa: Gfa<u64, (), ()> = Gfa::parse_gfa_file(gfa_path.to_str().unwrap());
-    let mut sequences_by_segment_id: HashMap<u64, Sequence> = HashMap::new();
-    let mut node_ids_by_segment_id: HashMap<u64, i64> = HashMap::new();
+    let gfa: Gfa<String, (), ()> = Gfa::parse_gfa_file(gfa_path.to_str().unwrap());
+    let mut sequences_by_segment_id: HashMap<String, Sequence> = HashMap::new();
+    let mut node_ids_by_segment_id: HashMap<String, i64> = HashMap::new();
 
     for segment in &gfa.segments {
         let input_sequence = segment.sequence.get_string(&gfa.sequence);
@@ -35,9 +35,9 @@ pub fn import_gfa(gfa_path: &FilePath, collection_name: &str, conn: &Connection)
             .sequence_type("DNA")
             .sequence(input_sequence)
             .save(conn);
-        sequences_by_segment_id.insert(segment.id, sequence.clone());
+        sequences_by_segment_id.insert(segment.id.clone(), sequence.clone());
         let node_id = Node::create(conn, &sequence.hash);
-        node_ids_by_segment_id.insert(segment.id, node_id);
+        node_ids_by_segment_id.insert(segment.id.clone(), node_id);
     }
 
     let mut edges = HashSet::new();
