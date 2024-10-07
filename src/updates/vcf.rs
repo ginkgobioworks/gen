@@ -258,17 +258,18 @@ pub fn update_with_vcf(
                                     Phasing::Phased => 1,
                                     Phasing::Unphased => 0,
                                 };
-                                let allele = allele.unwrap();
-                                if allele != 0 {
-                                    let alt_seq = alt_alleles[allele - 1];
-                                    vcf_entries.push(VcfEntry {
-                                        block_group_id: sample_bg_id,
-                                        path: sample_path.clone(),
-                                        sample_name: sample_names[sample_index].clone(),
-                                        alt_seq,
-                                        chromosome_index: chromosome_index as i64,
-                                        phased,
-                                    });
+                                if let Some(allele) = allele {
+                                    if allele != 0 {
+                                        let alt_seq = alt_alleles[allele - 1];
+                                        vcf_entries.push(VcfEntry {
+                                            block_group_id: sample_bg_id,
+                                            path: sample_path.clone(),
+                                            sample_name: sample_names[sample_index].clone(),
+                                            alt_seq,
+                                            chromosome_index: chromosome_index as i64,
+                                            phased,
+                                        });
+                                    }
                                 }
                             }
                         }
@@ -428,6 +429,49 @@ mod tests {
                     "ATCATCGATAGAGATCGATCGGGAACACACAGAGA",
                     "ATCGATCGATCGATCGATCGGGAACACACAGAGA",
                     "ATCATCGATCGATCGATCGGGAACACACAGAGA"
+                ]
+                .iter()
+                .map(|v| v.to_string())
+            )
+        );
+    }
+
+    #[test]
+    fn test_handles_missing_allele() {
+        setup_gen_dir();
+        let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        vcf_path.push("fixtures/simple_missing_allele.vcf");
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let collection = "test".to_string();
+        let db_uuid = metadata::get_db_uuid(conn);
+        setup_db(op_conn, &db_uuid);
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+        );
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, 2),
+            HashSet::from_iter(
+                [
+                    "ATCGATCGATCGATCGATCGGGAACACACAGAGA",
+                    "ATCGATCGATAGAGATCGATCGGGAACACACAGAGA",
                 ]
                 .iter()
                 .map(|v| v.to_string())
