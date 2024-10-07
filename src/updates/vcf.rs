@@ -145,6 +145,7 @@ fn prepare_change(
     }
 }
 
+#[derive(Debug)]
 struct VcfEntry<'a> {
     block_group_id: i64,
     sample_name: String,
@@ -279,6 +280,10 @@ pub fn update_with_vcf(
         }
 
         for vcf_entry in vcf_entries {
+            // * indicates this allele is removed by another deletion in the sample
+            if vcf_entry.alt_seq == "*" {
+                continue;
+            }
             let sequence =
                 SequenceCache::lookup(&mut sequence_cache, "DNA", vcf_entry.alt_seq.to_string());
             let sequence_string = sequence.get_sequence(None, None);
@@ -472,6 +477,49 @@ mod tests {
                 [
                     "ATCGATCGATCGATCGATCGGGAACACACAGAGA",
                     "ATCGATCGATAGAGATCGATCGGGAACACACAGAGA",
+                ]
+                .iter()
+                .map(|v| v.to_string())
+            )
+        );
+    }
+
+    #[test]
+    fn test_handles_overlap_allele() {
+        setup_gen_dir();
+        let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        vcf_path.push("fixtures/simple_overlap.vcf");
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let collection = "test".to_string();
+        let db_uuid = metadata::get_db_uuid(conn);
+        setup_db(op_conn, &db_uuid);
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+        );
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, 2),
+            HashSet::from_iter(
+                [
+                    "ATCGATCGATCGATCGATCGGGAACACACAGAGA",
+                    "ATCATCGATCGATCGATCGGGAACACACAGAGA",
                 ]
                 .iter()
                 .map(|v| v.to_string())
