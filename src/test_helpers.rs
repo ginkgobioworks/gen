@@ -63,22 +63,22 @@ pub fn setup_block_group(conn: &Connection) -> (i64, Path) {
         .sequence_type("DNA")
         .sequence("AAAAAAAAAA")
         .save(conn);
-    let a_node_id = Node::create(conn, a_seq.hash.as_str());
+    let a_node_id = Node::create(conn, a_seq.hash.as_str(), None);
     let t_seq = Sequence::new()
         .sequence_type("DNA")
         .sequence("TTTTTTTTTT")
         .save(conn);
-    let t_node_id = Node::create(conn, t_seq.hash.as_str());
+    let t_node_id = Node::create(conn, t_seq.hash.as_str(), None);
     let c_seq = Sequence::new()
         .sequence_type("DNA")
         .sequence("CCCCCCCCCC")
         .save(conn);
-    let c_node_id = Node::create(conn, c_seq.hash.as_str());
+    let c_node_id = Node::create(conn, c_seq.hash.as_str(), None);
     let g_seq = Sequence::new()
         .sequence_type("DNA")
         .sequence("GGGGGGGGGG")
         .save(conn);
-    let g_node_id = Node::create(conn, g_seq.hash.as_str());
+    let g_node_id = Node::create(conn, g_seq.hash.as_str(), None);
     let _collection = Collection::create(conn, "test");
     let block_group = BlockGroup::create(conn, "test", None, "hg19");
     let edge0 = Edge::create(

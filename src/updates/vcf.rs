@@ -13,7 +13,7 @@ use crate::models::{
     sequence::Sequence,
     strand::Strand,
 };
-use crate::{operation_management, parse_genotype};
+use crate::{calculate_hash, operation_management, parse_genotype};
 use noodles::vcf;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use noodles::vcf::variant::record::samples::series::Value;
@@ -287,7 +287,16 @@ pub fn update_with_vcf(
             let sequence =
                 SequenceCache::lookup(&mut sequence_cache, "DNA", vcf_entry.alt_seq.to_string());
             let sequence_string = sequence.get_sequence(None, None);
-            let node_id = Node::create(conn, sequence.hash.as_str());
+            let node_id = Node::create(
+                conn,
+                sequence.hash.as_str(),
+                calculate_hash(&format!(
+                    "{bg_id}.{path_id}:{ref_start}-{ref_end}->{sequence_hash}",
+                    bg_id = vcf_entry.block_group_id,
+                    path_id = vcf_entry.path.id,
+                    sequence_hash = sequence.hash
+                )),
+            );
             let change = prepare_change(
                 vcf_entry.block_group_id,
                 &vcf_entry.path,
@@ -332,6 +341,7 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use crate::imports::fasta::import_fasta;
+    use crate::models::node::Node;
     use crate::models::operations::setup_db;
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use std::collections::HashSet;
@@ -348,9 +358,8 @@ mod tests {
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, &db_uuid);
+
         let collection = "test".to_string();
-        let db_uuid = metadata::get_db_uuid(conn);
-        setup_db(op_conn, &db_uuid);
 
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
@@ -525,5 +534,51 @@ mod tests {
                 .map(|v| v.to_string())
             )
         );
+    }
+
+    #[test]
+    fn test_deduplicates_nodes() {
+        setup_gen_dir();
+        let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        vcf_path.push("fixtures/simple.vcf");
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let conn = &get_connection("test.db");
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+        );
+
+        let nodes = Node::query(conn, "select * from nodes;", vec![]);
+        assert_eq!(nodes.len(), 6);
+
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+        );
+        let nodes = Node::query(conn, "select * from nodes;", vec![]);
+        assert_eq!(nodes.len(), 6);
     }
 }

@@ -113,7 +113,7 @@ impl Edge {
         phased: i64,
     ) -> Edge {
         let query = "INSERT INTO edges (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) RETURNING *";
-        let id_query = "select id from edges where and source_node_id = ?1 and source_coordinate = ?2 and source_strand = ?3 and target_node_id = ?4 and target_coordinate = ?5 and target_strand = ?6 and chromosome_index = ?7 and phased = ?8";
+        let id_query = "select id from edges where source_node_id = ?1 and source_coordinate = ?2 and source_strand = ?3 and target_node_id = ?4 and target_coordinate = ?5 and target_strand = ?6 and chromosome_index = ?7 and phased = ?8;";
         let placeholders: Vec<Value> = vec![
             source_node_id.into(),
             source_coordinate.into(),
@@ -143,6 +143,7 @@ impl Edge {
             Err(rusqlite::Error::SqliteFailure(err, details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
                     println!("{err:?} {details:?}");
+                    println!("{id_query} {placeholders:?}");
                     Edge {
                         id: conn
                             .query_row(id_query, params_from_iter(&placeholders), |row| row.get(0))
@@ -500,7 +501,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
-        let node1_id = Node::create(conn, sequence1.hash.as_str());
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
         let edge1 = EdgeData {
             source_node_id: PATH_START_NODE_ID,
             source_coordinate: -1,
@@ -515,7 +516,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
-        let node2_id = Node::create(conn, sequence2.hash.as_str());
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
         let edge2 = EdgeData {
             source_node_id: node1_id,
             source_coordinate: 2,
@@ -569,7 +570,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
-        let node1_id = Node::create(conn, sequence1.hash.as_str());
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
         let edge1 = EdgeData {
             source_node_id: PATH_START_NODE_ID,
             source_coordinate: -1,
@@ -584,7 +585,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
-        let node2_id = Node::create(conn, sequence2.hash.as_str());
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
         let edge2 = EdgeData {
             source_node_id: node1_id,
             source_coordinate: 2,
@@ -644,7 +645,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
-        let node1_id = Node::create(conn, sequence1.hash.as_str());
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
         // NOTE: Create one edge ahead of time to confirm an existing row ID gets returned in the bulk create
         let existing_edge = Edge::create(
             conn,
@@ -676,7 +677,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
-        let node2_id = Node::create(conn, sequence2.hash.as_str());
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
         let edge2 = EdgeData {
             source_node_id: node1_id,
             source_coordinate: 2,

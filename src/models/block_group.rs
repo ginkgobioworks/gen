@@ -487,7 +487,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str());
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -523,7 +523,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
-        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str());
+        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None);
         let deletion = PathBlock {
             id: 0,
             node_id: deletion_node_id,
@@ -567,7 +567,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str());
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -608,7 +608,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str());
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -649,7 +649,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str());
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -690,7 +690,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str());
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -731,7 +731,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str());
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -772,7 +772,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str());
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -813,7 +813,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str());
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -854,7 +854,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str());
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -895,7 +895,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
-        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str());
+        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None);
         let deletion = PathBlock {
             id: 0,
             node_id: deletion_node_id,
@@ -938,7 +938,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str());
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -991,7 +991,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str());
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1033,7 +1033,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str());
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1074,7 +1074,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str());
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1115,7 +1115,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str());
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1156,7 +1156,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
-        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str());
+        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None);
         let deletion = PathBlock {
             id: 0,
             node_id: deletion_node_id,
@@ -1197,7 +1197,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
-        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str());
+        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None);
         let deletion = PathBlock {
             id: 0,
             node_id: deletion_node_id,
@@ -1238,7 +1238,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
-        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str());
+        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None);
         let deletion = PathBlock {
             id: 0,
             node_id: deletion_node_id,
@@ -1279,7 +1279,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
-        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str());
+        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None);
         let deletion = PathBlock {
             id: 0,
             node_id: deletion_node_id,

@@ -22,8 +22,10 @@ CREATE TABLE sequence (
 CREATE TABLE nodes (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
   sequence_hash TEXT NOT NULL,
+  hash TEXT,
   FOREIGN KEY(sequence_hash) REFERENCES sequence(hash)
 ) STRICT;
+CREATE UNIQUE INDEX nodes_uidx ON nodes(hash);
 
 CREATE TABLE block_group (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,

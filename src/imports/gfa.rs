@@ -36,7 +36,7 @@ pub fn import_gfa(gfa_path: &FilePath, collection_name: &str, conn: &Connection)
             .sequence(input_sequence)
             .save(conn);
         sequences_by_segment_id.insert(segment.id, sequence.clone());
-        let node_id = Node::create(conn, &sequence.hash);
+        let node_id = Node::create(conn, &sequence.hash, None);
         node_ids_by_segment_id.insert(segment.id, node_id);
     }
 

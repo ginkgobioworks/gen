@@ -14,7 +14,7 @@ use crate::models::{
     sequence::Sequence,
     strand::Strand,
 };
-use crate::operation_management;
+use crate::{calculate_hash, operation_management};
 use noodles::fasta;
 use rusqlite::{session, Connection};
 
@@ -70,7 +70,15 @@ pub fn import_fasta(
                 .sequence(&sequence)
                 .save(conn)
         };
-        let node_id = Node::create(conn, &seq.hash);
+        let node_id = Node::create(
+            conn,
+            &seq.hash,
+            calculate_hash(&format!(
+                "{collection}.{name}:{hash}",
+                collection = collection.name,
+                hash = seq.hash
+            )),
+        );
         let block_group = BlockGroup::create(conn, &collection.name, None, &name);
         let edge_into = Edge::create(
             conn,
@@ -175,5 +183,37 @@ mod tests {
             Path::sequence(&conn, path),
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()
         );
+    }
+
+    #[test]
+    fn test_deduplicates_nodes() {
+        setup_gen_dir();
+        let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        vcf_path.push("fixtures/simple.vcf");
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let conn = &get_connection("test.db");
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+        assert_eq!(Node::query(conn, "select * from nodes;", vec![]).len(), 3);
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+        assert_eq!(Node::query(conn, "select * from nodes;", vec![]).len(), 3);
     }
 }
