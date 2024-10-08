@@ -346,6 +346,7 @@ mod tests {
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use std::collections::HashSet;
     use std::path::PathBuf;
+    use std::time;
 
     #[test]
     fn test_update_fasta_with_vcf() {
@@ -543,7 +544,7 @@ mod tests {
         vcf_path.push("fixtures/simple.vcf");
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
-        let conn = &get_connection("test.db");
+        let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, &db_uuid);
@@ -580,5 +581,39 @@ mod tests {
         );
         let nodes = Node::query(conn, "select * from nodes;", vec![]);
         assert_eq!(nodes.len(), 6);
+    }
+
+    #[test]
+    fn test_vcf_import_benchmark() {
+        setup_gen_dir();
+        let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        vcf_path.push("fixtures/chr22_100k_no_samples.vcf.gz");
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/chr22.fa.gz");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+
+        let s = time::Instant::now();
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "0|1".to_string(),
+            "test".to_string(),
+            conn,
+            op_conn,
+        );
+        assert!(s.elapsed().as_secs() < 20);
     }
 }
