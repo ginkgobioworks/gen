@@ -8,7 +8,7 @@ use rusqlite::{params_from_iter, Connection};
 use std::collections::HashSet;
 use std::string::ToString;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Operation {
     pub id: i64,
     pub db_uuid: String,
@@ -77,6 +77,7 @@ impl Operation {
         let operation = rows.next().unwrap().unwrap();
         // TODO: error condition here where we can write to disk but transaction fails
         OperationState::set_operation(conn, &operation.db_uuid, operation.id);
+        Branch::set_start_operation(conn, current_branch_id, operation.id);
         operation
     }
 
@@ -392,6 +393,14 @@ impl Branch {
         .unwrap();
     }
 
+    pub fn set_start_operation(conn: &Connection, branch_id: i64, operation_id: i64) {
+        conn.execute(
+            "UPDATE branch set start_operation_id = ?2 where id = ?1 and start_operation_id is null",
+            (branch_id, operation_id),
+        )
+        .unwrap();
+    }
+
     pub fn get_operations(conn: &Connection, branch_id: i64) -> Vec<Operation> {
         let branch = Branch::get_by_id(conn, branch_id)
             .unwrap_or_else(|| panic!("No branch with id {branch_id}."));
@@ -402,43 +411,43 @@ impl Branch {
             graph.remove_node(*op);
         }
 
-        let creation_id = branch.start_operation_id.unwrap_or(1);
+        if let Some(creation_id) = branch.start_operation_id {
+            let rev_graph = Reversed(&graph);
+            let mut dfs = Dfs::new(rev_graph, creation_id);
 
-        let rev_graph = Reversed(&graph);
-        let mut dfs = Dfs::new(rev_graph, creation_id);
-
-        while let Some(ancestor) = dfs.next(rev_graph) {
-            operations.insert(0, Operation::get_by_id(conn, ancestor));
-        }
-
-        let mut branch_operations: HashSet<i64> = HashSet::from_iter(
-            Operation::query(
-                conn,
-                "select * from operation where branch_id = ?1;",
-                vec![Value::from(branch_id)],
-            )
-            .iter()
-            .map(|op| op.id)
-            .collect::<Vec<i64>>(),
-        );
-        branch_operations.extend(operations.iter().map(|op| op.id).collect::<Vec<i64>>());
-
-        // remove all nodes not in our branch operations. We do this here because upstream operations
-        // may be created in a different branch_id but shared with this branch.
-        for node in graph.clone().nodes() {
-            if !branch_operations.contains(&node) {
-                graph.remove_node(node);
+            while let Some(ancestor) = dfs.next(rev_graph) {
+                operations.insert(0, Operation::get_by_id(conn, ancestor));
             }
-        }
 
-        // Now traverse down from our starting point, we should only have 1 valid path that is not
-        // cutoff and in our branch operations
-        let mut dfs = Dfs::new(&graph, creation_id);
-        // get rid of the first node which is creation_id
-        dfs.next(&graph);
+            let mut branch_operations: HashSet<i64> = HashSet::from_iter(
+                Operation::query(
+                    conn,
+                    "select * from operation where branch_id = ?1;",
+                    vec![Value::from(branch_id)],
+                )
+                .iter()
+                .map(|op| op.id)
+                .collect::<Vec<i64>>(),
+            );
+            branch_operations.extend(operations.iter().map(|op| op.id).collect::<Vec<i64>>());
 
-        while let Some(child) = dfs.next(&graph) {
-            operations.push(Operation::get_by_id(conn, child));
+            // remove all nodes not in our branch operations. We do this here because upstream operations
+            // may be created in a different branch_id but shared with this branch.
+            for node in graph.clone().nodes() {
+                if !branch_operations.contains(&node) {
+                    graph.remove_node(node);
+                }
+            }
+
+            // Now traverse down from our starting point, we should only have 1 valid path that is not
+            // cutoff and in our branch operations
+            let mut dfs = Dfs::new(&graph, creation_id);
+            // get rid of the first node which is creation_id
+            dfs.next(&graph);
+
+            while let Some(child) = dfs.next(&graph) {
+                operations.push(Operation::get_by_id(conn, child));
+            }
         }
 
         operations
@@ -1104,6 +1113,54 @@ mod tests {
             .map(|op| op.id)
             .collect::<Vec<i64>>(),
             vec![1, 2, 5]
+        );
+    }
+
+    #[test]
+    fn test_sets_start_operation_id_on_first_change() {
+        setup_gen_dir();
+        let db_uuid = "something";
+        let op_conn = &get_operation_connection("t3.db");
+        setup_db(op_conn, db_uuid);
+
+        let db_uuid2 = "another-thing";
+        setup_db(op_conn, db_uuid2);
+
+        let db1_main = Branch::get_by_name(op_conn, db_uuid, "main").unwrap().id;
+        let db2_main = Branch::get_by_name(op_conn, db_uuid2, "main").unwrap().id;
+
+        let change = FileAddition::create(op_conn, "foo", FileTypes::Fasta);
+        Operation::create(
+            op_conn,
+            db_uuid,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+
+        assert_eq!(Branch::get_operations(op_conn, db2_main), vec![]);
+
+        Operation::create(
+            op_conn,
+            db_uuid2,
+            "foo".to_string(),
+            "vcf_addition",
+            change.id,
+        );
+
+        assert_eq!(
+            Branch::get_operations(op_conn, db1_main)
+                .iter()
+                .map(|op| op.id)
+                .collect::<Vec<i64>>(),
+            vec![1]
+        );
+        assert_eq!(
+            Branch::get_operations(op_conn, db2_main)
+                .iter()
+                .map(|op| op.id)
+                .collect::<Vec<i64>>(),
+            vec![2]
         );
     }
 }
