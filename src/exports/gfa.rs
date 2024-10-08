@@ -58,17 +58,17 @@ pub fn export_gfa(
     let mut edges = edge_set.into_iter().collect();
 
     let blocks = Edge::blocks_from_edges(conn, &edges);
-    let sequence_blocks_by_hash: HashMap<String, Vec<GroupBlock>> = blocks
-        .clone()
-        .into_iter()
-        .fold(HashMap::new(), |mut acc, block| {
-            acc.entry(block.sequence_hash.clone())
-                .and_modify(|blocks| blocks.push(block.clone()))
-                .or_insert_with(|| vec![block.clone()]);
-            acc
-        });
-
-    let boundary_edges = Edge::boundary_edges_from_sequences(&sequence_blocks_by_hash);
+    let node_blocks_by_id: HashMap<i64, Vec<GroupBlock>> =
+        blocks
+            .clone()
+            .into_iter()
+            .fold(HashMap::new(), |mut acc, block| {
+                acc.entry(block.node_id)
+                    .and_modify(|blocks| blocks.push(block.clone()))
+                    .or_insert_with(|| vec![block.clone()]);
+                acc
+            });
+    let boundary_edges = Edge::boundary_edges_from_sequences(&node_blocks_by_id);
     edges.extend(boundary_edges.clone());
 
     let (graph, edges_by_node_pair) = Edge::build_graph(&edges, &blocks);
