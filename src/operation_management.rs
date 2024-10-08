@@ -782,11 +782,11 @@ mod tests {
         // * 4 edges to and from nodes representing the second alt sequence.  (One sample uses the
         // reference part instead of the alt sequence in this case.)
         assert_eq!(edge_count, 14);
-        // NOTE: The node count is 9:
+        // NOTE: The node count is 6:
         // * 2 source and sink nodes
         // * 1 node created by the initial fasta import
-        // * 6 nodes created by the VCF update.  See above explanation of edge count for more details.
-        assert_eq!(node_count, 9);
+        // * 3 nodes created by the VCF update.  See above explanation of edge count for more details.
+        assert_eq!(node_count, 6);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
 
@@ -820,7 +820,7 @@ mod tests {
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 14);
-        assert_eq!(node_count, 9);
+        assert_eq!(node_count, 6);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
     }
@@ -1003,7 +1003,7 @@ mod tests {
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 14);
-        assert_eq!(node_count, 9);
+        assert_eq!(node_count, 6);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
 
@@ -1045,7 +1045,7 @@ mod tests {
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 6);
-        assert_eq!(node_count, 5);
+        assert_eq!(node_count, 4);
         assert_eq!(sample_count, 1);
         assert_eq!(op_count, 3);
 
@@ -1067,7 +1067,7 @@ mod tests {
         let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 14);
-        assert_eq!(node_count, 9);
+        assert_eq!(node_count, 6);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 3);
     }
