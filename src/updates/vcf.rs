@@ -584,6 +584,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "benchmark")]
     fn test_vcf_import_benchmark() {
         setup_gen_dir();
         let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
