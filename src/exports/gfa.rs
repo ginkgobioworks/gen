@@ -29,20 +29,19 @@ pub fn export_gfa(
     let block_groups = Collection::get_block_groups(conn, collection_name);
 
     let mut edge_set = HashSet::new();
-    if sample_name.is_some() {
+    if let Some(sample) = sample_name {
         let block_groups = BlockGroup::query(
             conn,
             "select * from block_group where collection_name = ?1 AND sample_name = ?2;",
             vec![
                 SQLValue::from(collection_name.to_string()),
-                SQLValue::from(sample_name.clone().unwrap()),
+                SQLValue::from(sample.clone()),
             ],
         );
         if block_groups.is_empty() {
             panic!(
                 "No block groups found for collection {} and sample {}",
-                collection_name,
-                sample_name.unwrap()
+                collection_name, sample
             );
         }
 
@@ -65,7 +64,7 @@ pub fn export_gfa(
     let file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(file);
 
-    let start_segments_by_end_segment = blocks
+    let node_sequence_starts_by_end_coordinate = blocks
         .iter()
         .filter(|block| !Node::is_terminal(block.node_id))
         .map(|block| ((block.node_id, block.end), block.start))
@@ -75,7 +74,7 @@ pub fn export_gfa(
         &mut writer,
         &graph,
         &edges_by_node_pair,
-        start_segments_by_end_segment,
+        node_sequence_starts_by_end_coordinate,
     );
     write_paths(&mut writer, conn, collection_name, &blocks);
 }
@@ -105,21 +104,25 @@ fn write_links(
     writer: &mut BufWriter<File>,
     graph: &DiGraphMap<i64, ()>,
     edges_by_node_pair: &HashMap<(i64, i64), Edge>,
-    start_segments_by_end_segment: HashMap<(i64, i64), i64>,
+    node_sequence_starts_by_end_coordinate: HashMap<(i64, i64), i64>,
 ) {
     for (source, target, ()) in graph.all_edges() {
         let edge = edges_by_node_pair.get(&(source, target)).unwrap();
         if Node::is_terminal(edge.source_node_id) || Node::is_terminal(edge.target_node_id) {
             continue;
         }
-        let segment_start = start_segments_by_end_segment
+        // Since we're encoding a segment ID as node ID + sequence start coordinate, we need to do
+        // one step of translation to get that for an edge's source.  The edge's source is the node
+        // ID + sequence end coordinate, so the following line converts that to the sequence start
+        // coordinate.
+        let sequence_start = node_sequence_starts_by_end_coordinate
             .get(&(edge.source_node_id, edge.source_coordinate))
             .unwrap();
         writer
             .write_all(
                 &link_line(
                     edge.source_node_id,
-                    *segment_start,
+                    *sequence_start,
                     edge.source_strand,
                     edge.target_node_id,
                     edge.target_coordinate,
