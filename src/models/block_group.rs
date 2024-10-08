@@ -273,20 +273,20 @@ impl BlockGroup {
     pub fn get_all_sequences(conn: &Connection, block_group_id: i64) -> HashSet<String> {
         let mut edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
         let blocks = Edge::blocks_from_edges(conn, &edges);
-        let sequence_blocks_by_hash: HashMap<String, Vec<GroupBlock>> = blocks
-            .clone()
-            .into_iter()
-            .fold(HashMap::new(), |mut acc, block| {
-                acc.entry(block.sequence_hash.clone())
-                    .and_modify(|blocks| blocks.push(block.clone()))
-                    .or_insert_with(|| vec![block.clone()]);
-                acc
-            });
-        let boundary_edges = Edge::boundary_edges_from_sequences(&sequence_blocks_by_hash);
+        let node_blocks_by_id: HashMap<i64, Vec<GroupBlock>> =
+            blocks
+                .clone()
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, block| {
+                    acc.entry(block.node_id)
+                        .and_modify(|blocks| blocks.push(block.clone()))
+                        .or_insert_with(|| vec![block.clone()]);
+                    acc
+                });
+        let boundary_edges = Edge::boundary_edges_from_sequences(&node_blocks_by_id);
         edges.extend(boundary_edges.clone());
 
-        let completion_edges =
-            Edge::get_completion_edges(edges.clone(), sequence_blocks_by_hash.clone());
+        let completion_edges = Edge::get_completion_edges(edges.clone(), node_blocks_by_id.clone());
         edges.extend(completion_edges.clone());
         let (graph, _) = Edge::build_graph(&edges, &blocks);
 
@@ -1329,56 +1329,60 @@ mod tests {
     fn makes_a_pool() {
         let conn = get_connection(None);
         let (block_group_id, path) = setup_block_group(&conn);
-        let promoter_1 = Sequence::new()
+        let promoter1 = Sequence::new()
             .sequence_type("DNA")
             .sequence("pro1")
             .save(&conn);
-        let promoter_2 = Sequence::new()
+        let promoter1_node_id = Node::create(&conn, promoter1.hash.as_str());
+        let promoter2 = Sequence::new()
             .sequence_type("DNA")
             .sequence("pro2")
             .save(&conn);
-        let gene_1 = Sequence::new()
+        let promoter2_node_id = Node::create(&conn, promoter2.hash.as_str());
+        let gene1 = Sequence::new()
             .sequence_type("DNA")
             .sequence("gen1")
             .save(&conn);
-        let gene_2 = Sequence::new()
+        let gene1_node_id = Node::create(&conn, gene1.hash.as_str());
+        let gene2 = Sequence::new()
             .sequence_type("DNA")
             .sequence("gen2")
             .save(&conn);
-        let promoter_1_block = NewBlock {
+        let gene2_node_id = Node::create(&conn, gene2.hash.as_str());
+        let promoter1_block = PathBlock {
             id: 0,
-            sequence: promoter_1.clone(),
-            block_sequence: promoter_1.get_sequence(0, 4).to_string(),
+            node_id: promoter1_node_id,
+            block_sequence: promoter1.get_sequence(0, 4).to_string(),
             sequence_start: 0,
             sequence_end: 4,
             path_start: 7,
             path_end: 15,
             strand: Strand::Forward,
         };
-        let promoter_2_block = NewBlock {
+        let promoter2_block = PathBlock {
             id: 0,
-            sequence: promoter_2.clone(),
-            block_sequence: promoter_2.get_sequence(0, 4).to_string(),
+            node_id: promoter2_node_id,
+            block_sequence: promoter2.get_sequence(0, 4).to_string(),
             sequence_start: 0,
             sequence_end: 4,
             path_start: 7,
             path_end: 15,
             strand: Strand::Forward,
         };
-        let gene_1_block = NewBlock {
+        let gene1_block = PathBlock {
             id: 0,
-            sequence: gene_1.clone(),
-            block_sequence: gene_1.get_sequence(0, 4).to_string(),
+            node_id: gene1_node_id,
+            block_sequence: gene1.get_sequence(0, 4).to_string(),
             sequence_start: 0,
             sequence_end: 4,
             path_start: 15,
             path_end: 20,
             strand: Strand::Forward,
         };
-        let gene_2_block = NewBlock {
+        let gene2_block = PathBlock {
             id: 0,
-            sequence: gene_2.clone(),
-            block_sequence: gene_2.get_sequence(0, 4).to_string(),
+            node_id: gene2_node_id,
+            block_sequence: gene2.get_sequence(0, 4).to_string(),
             sequence_start: 0,
             sequence_end: 4,
             path_start: 15,
@@ -1391,7 +1395,7 @@ mod tests {
                 path: path.clone(),
                 start: 7,
                 end: 15,
-                block: promoter_1_block,
+                block: promoter1_block,
                 chromosome_index: 1,
                 phased: 0,
             },
@@ -1400,7 +1404,7 @@ mod tests {
                 path: path.clone(),
                 start: 7,
                 end: 15,
-                block: promoter_2_block,
+                block: promoter2_block,
                 chromosome_index: 1,
                 phased: 0,
             },
@@ -1409,7 +1413,7 @@ mod tests {
                 path: path.clone(),
                 start: 15,
                 end: 20,
-                block: gene_1_block,
+                block: gene1_block,
                 chromosome_index: 1,
                 phased: 0,
             },
@@ -1418,7 +1422,7 @@ mod tests {
                 path: path.clone(),
                 start: 15,
                 end: 20,
-                block: gene_2_block,
+                block: gene2_block,
                 chromosome_index: 1,
                 phased: 0,
             },

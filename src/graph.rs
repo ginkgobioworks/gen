@@ -49,7 +49,7 @@ mod tests {
 
     #[test]
     fn test_path_graph() {
-        let mut graph: DiGraphMap<i32, ()> = DiGraphMap::new();
+        let mut graph: DiGraphMap<i64, ()> = DiGraphMap::new();
         graph.add_node(1);
         graph.add_node(2);
         graph.add_node(3);
@@ -57,7 +57,7 @@ mod tests {
         graph.add_edge(1, 2, ());
         graph.add_edge(2, 3, ());
 
-        let paths = all_simple_paths(&graph, 1, 3).collect::<Vec<Vec<i32>>>();
+        let paths = all_simple_paths(&graph, 1, 3).collect::<Vec<Vec<i64>>>();
         assert_eq!(paths.len(), 1);
         let path = paths.first().unwrap().clone();
         assert_eq!(path, vec![1, 2, 3]);
@@ -65,7 +65,7 @@ mod tests {
 
     #[test]
     fn test_two_path_graph() {
-        let mut graph: DiGraphMap<i32, ()> = DiGraphMap::new();
+        let mut graph: DiGraphMap<i64, ()> = DiGraphMap::new();
         graph.add_node(1);
         graph.add_node(2);
         graph.add_node(3);
@@ -76,17 +76,17 @@ mod tests {
         graph.add_edge(2, 4, ());
         graph.add_edge(3, 4, ());
 
-        let paths = all_simple_paths(&graph, 1, 4).collect::<Vec<Vec<i32>>>();
+        let paths = all_simple_paths(&graph, 1, 4).collect::<Vec<Vec<i64>>>();
         assert_eq!(paths.len(), 2);
         assert_eq!(
-            HashSet::<Vec<i32>>::from_iter::<Vec<Vec<i32>>>(paths),
+            HashSet::<Vec<i64>>::from_iter::<Vec<Vec<i64>>>(paths),
             HashSet::from_iter(vec![vec![1, 2, 4], vec![1, 3, 4]])
         );
     }
 
     #[test]
     fn test_two_by_two_combinatorial_graph() {
-        let mut graph: DiGraphMap<i32, ()> = DiGraphMap::new();
+        let mut graph: DiGraphMap<i64, ()> = DiGraphMap::new();
         graph.add_node(1);
         graph.add_node(2);
         graph.add_node(3);
@@ -104,10 +104,10 @@ mod tests {
         graph.add_edge(5, 7, ());
         graph.add_edge(6, 7, ());
 
-        let paths = all_simple_paths(&graph, 1, 7).collect::<Vec<Vec<i32>>>();
+        let paths = all_simple_paths(&graph, 1, 7).collect::<Vec<Vec<i64>>>();
         assert_eq!(paths.len(), 4);
         assert_eq!(
-            HashSet::<Vec<i32>>::from_iter::<Vec<Vec<i32>>>(paths),
+            HashSet::<Vec<i64>>::from_iter::<Vec<Vec<i64>>>(paths),
             HashSet::from_iter(vec![
                 vec![1, 2, 4, 5, 7],
                 vec![1, 3, 4, 5, 7],
@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn test_three_by_three_combinatorial_graph() {
-        let mut graph: DiGraphMap<i32, ()> = DiGraphMap::new();
+        let mut graph: DiGraphMap<i64, ()> = DiGraphMap::new();
         graph.add_node(1);
         graph.add_node(2);
         graph.add_node(3);
@@ -143,7 +143,7 @@ mod tests {
         graph.add_edge(7, 9, ());
         graph.add_edge(8, 9, ());
 
-        let paths = all_simple_paths(&graph, 1, 9).collect::<Vec<Vec<i32>>>();
+        let paths = all_simple_paths(&graph, 1, 9).collect::<Vec<Vec<i64>>>();
         assert_eq!(paths.len(), 9);
         let expected_paths = vec![
             vec![1, 2, 5, 6, 9],
@@ -157,7 +157,7 @@ mod tests {
             vec![1, 4, 5, 8, 9],
         ];
         assert_eq!(
-            HashSet::<Vec<i32>>::from_iter::<Vec<Vec<i32>>>(paths),
+            HashSet::<Vec<i64>>::from_iter::<Vec<Vec<i64>>>(paths),
             HashSet::from_iter(expected_paths)
         );
     }
