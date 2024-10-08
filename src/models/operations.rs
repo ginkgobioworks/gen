@@ -8,7 +8,7 @@ use rusqlite::{params_from_iter, Connection};
 use std::collections::HashSet;
 use std::string::ToString;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Operation {
     pub id: i64,
     pub db_uuid: String,
