@@ -629,6 +629,10 @@ mod tests {
         );
         let nodes = Node::query(conn, "select * from nodes;", vec![]);
         assert_eq!(nodes.len(), 9);
+
+        let duplicates = Node::query(conn, "SELECT COUNT(*) FROM nodes JOIN edges ON nodes.id = edges.target_node_id GROUP BY source_node_id, source_coordinate, target_coordinate, sequence_hash HAVING COUNT(*) > 1", vec![]);
+        assert_eq!(duplicates.len(), 0);
+
     }
 
     #[test]
