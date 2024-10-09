@@ -188,8 +188,6 @@ mod tests {
     #[test]
     fn test_deduplicates_nodes() {
         setup_gen_dir();
-        let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        vcf_path.push("fixtures/simple.vcf");
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
         let conn = &get_connection(None);

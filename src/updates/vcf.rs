@@ -290,12 +290,12 @@ pub fn update_with_vcf(
             let node_id = Node::create(
                 conn,
                 sequence.hash.as_str(),
-                calculate_hash(&format!(
+                format!(
                     "{bg_id}.{path_id}:{ref_start}-{ref_end}->{sequence_hash}",
                     bg_id = vcf_entry.block_group_id,
                     path_id = vcf_entry.path.id,
                     sequence_hash = sequence.hash
-                )),
+                ),
             );
             let change = prepare_change(
                 vcf_entry.block_group_id,
@@ -581,6 +581,54 @@ mod tests {
         );
         let nodes = Node::query(conn, "select * from nodes;", vec![]);
         assert_eq!(nodes.len(), 6);
+    }
+
+    #[test]
+    fn test_deduplicates_nodes_multiple_paths() {
+        setup_gen_dir();
+        let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        vcf_path.push("fixtures/multiseq.vcf");
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/multiseq.fa");
+        let conn = &get_connection("test.db");
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+
+        assert_eq!(Node::query(conn, "select * from nodes;", vec![]).len(), 5);
+
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+        );
+
+        let nodes = Node::query(conn, "select * from nodes;", vec![]);
+        assert_eq!(nodes.len(), 9);
+
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+        );
+        let nodes = Node::query(conn, "select * from nodes;", vec![]);
+        assert_eq!(nodes.len(), 9);
     }
 
     #[test]
