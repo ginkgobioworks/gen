@@ -286,8 +286,6 @@ impl BlockGroup {
         let boundary_edges = Edge::boundary_edges_from_sequences(&node_blocks_by_id);
         edges.extend(boundary_edges.clone());
 
-        let completion_edges = Edge::get_completion_edges(edges.clone(), node_blocks_by_id.clone());
-        edges.extend(completion_edges.clone());
         let (graph, _) = Edge::build_graph(&edges, &blocks);
 
         let mut start_nodes = vec![];
@@ -1321,130 +1319,6 @@ mod tests {
             HashSet::from_iter(vec![
                 "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
                 "AAAAAAAAAATTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
-            ])
-        );
-    }
-
-    #[test]
-    fn makes_a_pool() {
-        let conn = get_connection(None);
-        let (block_group_id, path) = setup_block_group(&conn);
-        let promoter1 = Sequence::new()
-            .sequence_type("DNA")
-            .sequence("pro1")
-            .save(&conn);
-        let promoter1_node_id = Node::create(&conn, promoter1.hash.as_str());
-        let promoter2 = Sequence::new()
-            .sequence_type("DNA")
-            .sequence("pro2")
-            .save(&conn);
-        let promoter2_node_id = Node::create(&conn, promoter2.hash.as_str());
-        let gene1 = Sequence::new()
-            .sequence_type("DNA")
-            .sequence("gen1")
-            .save(&conn);
-        let gene1_node_id = Node::create(&conn, gene1.hash.as_str());
-        let gene2 = Sequence::new()
-            .sequence_type("DNA")
-            .sequence("gen2")
-            .save(&conn);
-        let gene2_node_id = Node::create(&conn, gene2.hash.as_str());
-        let promoter1_block = PathBlock {
-            id: 0,
-            node_id: promoter1_node_id,
-            block_sequence: promoter1.get_sequence(0, 4).to_string(),
-            sequence_start: 0,
-            sequence_end: 4,
-            path_start: 7,
-            path_end: 15,
-            strand: Strand::Forward,
-        };
-        let promoter2_block = PathBlock {
-            id: 0,
-            node_id: promoter2_node_id,
-            block_sequence: promoter2.get_sequence(0, 4).to_string(),
-            sequence_start: 0,
-            sequence_end: 4,
-            path_start: 7,
-            path_end: 15,
-            strand: Strand::Forward,
-        };
-        let gene1_block = PathBlock {
-            id: 0,
-            node_id: gene1_node_id,
-            block_sequence: gene1.get_sequence(0, 4).to_string(),
-            sequence_start: 0,
-            sequence_end: 4,
-            path_start: 15,
-            path_end: 20,
-            strand: Strand::Forward,
-        };
-        let gene2_block = PathBlock {
-            id: 0,
-            node_id: gene2_node_id,
-            block_sequence: gene2.get_sequence(0, 4).to_string(),
-            sequence_start: 0,
-            sequence_end: 4,
-            path_start: 15,
-            path_end: 20,
-            strand: Strand::Forward,
-        };
-        let changes = vec![
-            PathChange {
-                block_group_id,
-                path: path.clone(),
-                start: 7,
-                end: 15,
-                block: promoter1_block,
-                chromosome_index: 1,
-                phased: 0,
-            },
-            PathChange {
-                block_group_id,
-                path: path.clone(),
-                start: 7,
-                end: 15,
-                block: promoter2_block,
-                chromosome_index: 1,
-                phased: 0,
-            },
-            PathChange {
-                block_group_id,
-                path: path.clone(),
-                start: 15,
-                end: 20,
-                block: gene1_block,
-                chromosome_index: 1,
-                phased: 0,
-            },
-            PathChange {
-                block_group_id,
-                path: path.clone(),
-                start: 15,
-                end: 20,
-                block: gene2_block,
-                chromosome_index: 1,
-                phased: 0,
-            },
-        ];
-        let tree = Path::intervaltree_for(&conn, &path);
-        for change in changes.iter() {
-            BlockGroup::insert_change(&conn, change, &tree);
-        }
-
-        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
-        assert_eq!(
-            all_sequences,
-            HashSet::from_iter(vec![
-                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
-                "AAAAAAApro1TTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
-                "AAAAAAAAAATTTTTgen1CCCCCCCCCCGGGGGGGGGG".to_string(),
-                "AAAAAAApro1gen1CCCCCCCCCCGGGGGGGGGG".to_string(),
-                "AAAAAAApro2TTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
-                "AAAAAAAAAATTTTTgen2CCCCCCCCCCGGGGGGGGGG".to_string(),
-                "AAAAAAApro1gen2CCCCCCCCCCGGGGGGGGGG".to_string(),
-                "AAAAAAApro2gen1CCCCCCCCCCGGGGGGGGGG".to_string(),
-                "AAAAAAApro2gen2CCCCCCCCCCGGGGGGGGGG".to_string(),
             ])
         );
     }

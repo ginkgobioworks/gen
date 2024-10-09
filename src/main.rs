@@ -10,6 +10,7 @@ use gen::imports::gfa::import_gfa;
 use gen::models::metadata;
 use gen::models::operations::{setup_db, Branch, OperationState};
 use gen::operation_management;
+use gen::updates::library::update_with_library;
 use gen::updates::vcf::update_with_vcf;
 use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
@@ -60,13 +61,28 @@ enum Commands {
         fasta: Option<String>,
         /// A VCF file to incorporate
         #[arg(short, long)]
-        vcf: String,
+        vcf: Option<String>,
         /// If no genotype is provided, enter the genotype to assign variants
         #[arg(short, long)]
         genotype: Option<String>,
         /// If no sample is provided, enter the sample to associate variants to
         #[arg(short, long)]
         sample: Option<String>,
+        /// A CSV with combinatorial library information
+        #[arg(short, long)]
+        library: Option<String>,
+        /// A fasta with the combinatorial library parts
+        #[arg(short, long)]
+        parts: Option<String>,
+        /// The name of the path to add the library to
+        #[arg(short, long)]
+        path_name: Option<String>,
+        /// The start coordinate for the region to add the library to
+        #[arg(short, long)]
+        start: Option<i64>,
+        /// The end coordinate for the region to add the library to
+        #[arg(short, long)]
+        end: Option<i64>,
     },
     /// Initialize a gen repository
     Init {},
@@ -214,22 +230,40 @@ fn main() {
             name,
             fasta,
             vcf,
+            library,
+            parts,
             genotype,
             sample,
+            path_name,
+            start,
+            end,
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             let name = &name.clone().unwrap_or_else(|| {
                 get_default_collection(&operation_conn)
                     .expect("No collection specified and default not setup.")
             });
-            update_with_vcf(
-                vcf,
-                name,
-                genotype.clone().unwrap_or("".to_string()),
-                sample.clone().unwrap_or("".to_string()),
-                &conn,
-                &operation_conn,
-            );
+            if let Some(library_path) = library {
+                update_with_library(
+                    &conn,
+                    &operation_conn,
+                    name,
+                    &path_name.clone().unwrap(),
+                    start.unwrap(),
+                    end.unwrap(),
+                    &parts.clone().unwrap(),
+                    library_path,
+                );
+            } else {
+                update_with_vcf(
+                    &vcf.clone().unwrap(),
+                    name,
+                    genotype.clone().unwrap_or("".to_string()),
+                    sample.clone().unwrap_or("".to_string()),
+                    &conn,
+                    &operation_conn,
+                );
+            }
 
             conn.execute("END TRANSACTION", []).unwrap();
         }
