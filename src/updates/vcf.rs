@@ -300,11 +300,11 @@ pub fn update_with_vcf(
             let node_id = Node::create(
                 conn,
                 sequence.hash.as_str(),
-                format!(
+                calculate_hash(&format!(
                     "{path_id}:{ref_start}-{ref_end}->{sequence_hash}",
                     path_id = parent_path_id,
                     sequence_hash = sequence.hash
-                ),
+                )),
             );
             let change = prepare_change(
                 vcf_entry.block_group_id,
