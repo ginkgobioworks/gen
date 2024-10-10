@@ -355,6 +355,7 @@ mod tests {
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use std::collections::HashSet;
     use std::path::PathBuf;
+    #[allow(unused_imports)]
     use std::time;
 
     #[test]
