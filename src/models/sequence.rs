@@ -464,6 +464,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "benchmark")]
     fn test_cached_sequence_performance() {
         let conn = &mut get_connection(None);
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

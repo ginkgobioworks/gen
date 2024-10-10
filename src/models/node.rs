@@ -14,20 +14,31 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn create(conn: &Connection, sequence_hash: &str) -> i64 {
-        let insert_statement = format!(
-            "INSERT INTO nodes (sequence_hash) VALUES ('{}') RETURNING (id);",
-            sequence_hash
-        );
-        let mut stmt = conn.prepare(&insert_statement).unwrap();
-        let mut rows = stmt.query_map([], |row| row.get(0)).unwrap();
+    pub fn create(
+        conn: &Connection,
+        sequence_hash: &str,
+        node_hash: impl Into<Option<String>>,
+    ) -> i64 {
+        let node_hash = node_hash.into();
+        let insert_statement =
+            "INSERT INTO nodes (sequence_hash, hash) VALUES (?1, ?2) RETURNING (id);";
+        let mut stmt = conn.prepare_cached(insert_statement).unwrap();
+        let mut rows = stmt
+            .query_map(
+                params_from_iter(vec![
+                    SQLValue::from(sequence_hash.to_string()),
+                    SQLValue::from(node_hash.clone()),
+                ]),
+                |row| row.get(0),
+            )
+            .unwrap();
         match rows.next().unwrap() {
             Ok(res) => res,
             Err(rusqlite::Error::SqliteFailure(err, details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
                     println!("{err:?} {details:?}");
-                    let placeholders = vec![sequence_hash];
-                    let query = "SELECT id from nodes where sequence_hash = ?1;";
+                    let placeholders = vec![node_hash.unwrap()];
+                    let query = "SELECT id from nodes where hash = ?1;";
                     conn.query_row(query, params_from_iter(&placeholders), |row| row.get(0))
                         .unwrap()
                 } else {

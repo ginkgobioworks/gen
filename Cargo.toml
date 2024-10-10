@@ -3,6 +3,9 @@ name = "gen"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+benchmark=[]
+
 [dependencies]
 cached = "0.53.1"
 chrono = "0.4.38"
@@ -22,3 +25,6 @@ serde_json = "1.0.128"
 sha2 = "0.10.8"
 tempfile = "3.12.0"
 tempdir = "0.3.7"
+
+[dev-dependencies]
+cargo-llvm-cov = "0.6.13"

@@ -310,7 +310,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
-        let node1_id = Node::create(conn, sequence1.hash.as_str());
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
         let edge1 = Edge::create(
             conn,
             PATH_START_NODE_ID,
@@ -326,7 +326,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
-        let node2_id = Node::create(conn, sequence2.hash.as_str());
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
         let edge2 = Edge::create(
             conn,
             node1_id,
@@ -342,7 +342,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("CCCCCCCC")
             .save(conn);
-        let node3_id = Node::create(conn, sequence3.hash.as_str());
+        let node3_id = Node::create(conn, sequence3.hash.as_str(), None);
         let edge3 = Edge::create(
             conn,
             node2_id,
@@ -358,7 +358,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("GGGGGGGG")
             .save(conn);
-        let node4_id = Node::create(conn, sequence4.hash.as_str());
+        let node4_id = Node::create(conn, sequence4.hash.as_str(), None);
         let edge4 = Edge::create(
             conn,
             node3_id,
@@ -400,7 +400,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
-        let node1_id = Node::create(conn, sequence1.hash.as_str());
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
         let edge5 = Edge::create(
             conn,
             node1_id,
@@ -416,7 +416,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
-        let node2_id = Node::create(conn, sequence2.hash.as_str());
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
         let edge4 = Edge::create(
             conn,
             node2_id,
@@ -432,7 +432,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("CCCCCCCC")
             .save(conn);
-        let node3_id = Node::create(conn, sequence3.hash.as_str());
+        let node3_id = Node::create(conn, sequence3.hash.as_str(), None);
         let edge3 = Edge::create(
             conn,
             node3_id,
@@ -448,7 +448,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("GGGGGGGG")
             .save(conn);
-        let node4_id = Node::create(conn, sequence4.hash.as_str());
+        let node4_id = Node::create(conn, sequence4.hash.as_str(), None);
         let edge2 = Edge::create(
             conn,
             node4_id,
@@ -497,7 +497,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
-        let node1_id = Node::create(conn, sequence1.hash.as_str());
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
         let edge1 = Edge::create(
             conn,
             PATH_START_NODE_ID,
@@ -513,7 +513,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
-        let node2_id = Node::create(conn, sequence2.hash.as_str());
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
         let edge2 = Edge::create(
             conn,
             node1_id,
@@ -529,7 +529,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("CCCCCCCC")
             .save(conn);
-        let node3_id = Node::create(conn, sequence3.hash.as_str());
+        let node3_id = Node::create(conn, sequence3.hash.as_str(), None);
         let edge3 = Edge::create(
             conn,
             node2_id,
@@ -545,7 +545,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("GGGGGGGG")
             .save(conn);
-        let node4_id = Node::create(conn, sequence4.hash.as_str());
+        let node4_id = Node::create(conn, sequence4.hash.as_str(), None);
         let edge4 = Edge::create(
             conn,
             node3_id,

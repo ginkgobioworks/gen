@@ -288,10 +288,10 @@ mod tests {
             .sequence_type("DNA")
             .sequence("CCCC")
             .save(&conn);
-        let node1_id = Node::create(&conn, &sequence1.hash);
-        let node2_id = Node::create(&conn, &sequence2.hash);
-        let node3_id = Node::create(&conn, &sequence3.hash);
-        let node4_id = Node::create(&conn, &sequence4.hash);
+        let node1_id = Node::create(&conn, &sequence1.hash, None);
+        let node2_id = Node::create(&conn, &sequence2.hash, None);
+        let node3_id = Node::create(&conn, &sequence3.hash, None);
+        let node4_id = Node::create(&conn, &sequence4.hash, None);
 
         let edge1 = Edge::create(
             &conn,

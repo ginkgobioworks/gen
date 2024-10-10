@@ -16,7 +16,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Run tests
-      run: cargo test --verbose
-      continue-on-error: true
-
+    - uses: taiki-e/install-action@cargo-llvm-cov
+    - name: Generate code coverage
+      run: cargo llvm-cov --workspace --html
+    - uses: actions/upload-artifact@v4
+      with:
+        name: coverage
+        path: target/llvm-cov/html/*
+        overwrite: true
