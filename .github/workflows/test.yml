@@ -19,8 +19,6 @@ jobs:
     - uses: taiki-e/install-action@cargo-llvm-cov
     - name: Generate code coverage
       run: cargo llvm-cov --workspace --html
-    - name: debug
-      run: ls -latr
     - uses: actions/upload-artifact@v4
       with:
         name: coverage
