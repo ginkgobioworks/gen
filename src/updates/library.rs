@@ -15,7 +15,7 @@ use crate::models::operations::{FileAddition, Operation, OperationSummary};
 use crate::models::path::Path;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
-use crate::operation_management;
+use crate::{calculate_hash, operation_management};
 
 #[allow(clippy::too_many_arguments)]
 pub fn update_with_library(
@@ -44,6 +44,13 @@ pub fn update_with_library(
 
     let mut parts_reader = fasta::io::reader::Builder.build_from_path(parts_file_path)?;
 
+    let path = Path::get_paths(
+        conn,
+        "select * from path where name = ?1",
+        vec![SQLValue::from(path_name.to_string())],
+    )[0]
+    .clone();
+
     let mut node_ids_by_name = HashMap::new();
     let mut sequence_lengths_by_node_id = HashMap::new();
     for result in parts_reader.records() {
@@ -56,7 +63,18 @@ pub fn update_with_library(
             .sequence_type("DNA")
             .sequence(&sequence)
             .save(conn);
-        let node_id = Node::create(conn, &seq.hash);
+        let node_id = Node::create(
+            conn,
+            &seq.hash,
+            calculate_hash(&format!(
+                "{path_id}:{ref_start}-{ref_end}->{sequence_hash}",
+                path_id = path.id,
+                ref_start = 0,
+                ref_end = seq.length,
+                sequence_hash = seq.hash
+            )),
+        );
+
         node_ids_by_name.insert(name, node_id);
         sequence_lengths_by_node_id.insert(node_id, seq.length);
     }
@@ -78,13 +96,6 @@ pub fn update_with_library(
         parts1.push(part1_id);
         parts2.push(part2_id);
     }
-
-    let path = Path::get_paths(
-        conn,
-        "select * from path where name = ?1",
-        vec![SQLValue::from(path_name.to_string())],
-    )[0]
-    .clone();
 
     let path_intervaltree = Path::intervaltree_for(conn, &path);
     let start_blocks: Vec<_> = path_intervaltree
