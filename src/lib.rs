@@ -2,6 +2,7 @@ use std::str;
 
 pub mod config;
 pub mod exports;
+pub mod gfa_reader;
 pub mod graph;
 pub mod imports;
 pub mod migrations;

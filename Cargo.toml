@@ -11,7 +11,6 @@ cached = "0.53.1"
 chrono = "0.4.38"
 clap = { version = "4.5.8", features = ["derive"] }
 fallible-streaming-iterator = "0.1.9"
-gfa-reader = { git = "https://github.com/MoinSebi/gfa-reader", rev = "9db57c80e34eb137c1d641eabe513101e0de5955" }
 include_dir = "0.7.4"
 intervaltree = "0.2.7"
 itertools = "0.13.0"
