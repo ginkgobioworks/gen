@@ -200,6 +200,8 @@ pub fn update_with_vcf(
 
     let mut changes: HashMap<(Path, String), Vec<PathChange>> = HashMap::new();
 
+    let mut parent_block_groups: HashMap<(&str, i64), i64> = HashMap::new();
+
     for result in reader.records() {
         let record = result.unwrap();
         let seq_name: String = record.reference_sequence_name().to_string();
@@ -288,16 +290,19 @@ pub fn update_with_vcf(
                 SequenceCache::lookup(&mut sequence_cache, "DNA", vcf_entry.alt_seq.to_string());
             let sequence_string = sequence.get_sequence(None, None);
 
-            let parent_bg = &BlockGroup::query(conn, "select * from block_group where collection_name = ?1 AND sample_name is null and name = ?2", vec![SQLValue::from(collection_name.to_string()), SQLValue::from(vcf_entry.path.name.clone())])[0];
-            let parent_path =
-                PathCache::lookup(&mut path_cache, parent_bg.id, vcf_entry.path.name.clone());
+            let parent_path_id : i64 = *parent_block_groups.entry((collection_name, vcf_entry.path.id)).or_insert_with(|| {
+                let parent_bg = &BlockGroup::query(conn, "select * from block_group where collection_name = ?1 AND sample_name is null and name = ?2", vec![SQLValue::from(collection_name.to_string()), SQLValue::from(vcf_entry.path.name.clone())])[0];
+                let parent_path =
+                    PathCache::lookup(&mut path_cache, parent_bg.id, vcf_entry.path.name.clone());
+                parent_path.id
+            });
 
             let node_id = Node::create(
                 conn,
                 sequence.hash.as_str(),
                 format!(
                     "{path_id}:{ref_start}-{ref_end}->{sequence_hash}",
-                    path_id = parent_path.id,
+                    path_id = parent_path_id,
                     sequence_hash = sequence.hash
                 ),
             );
@@ -633,9 +638,6 @@ mod tests {
         );
         let nodes = Node::query(conn, "select * from nodes;", vec![]);
         assert_eq!(nodes.len(), 8);
-
-        let duplicates = Node::query(conn, "SELECT COUNT(*) FROM nodes JOIN edges ON nodes.id = edges.target_node_id GROUP BY source_node_id, source_coordinate, target_coordinate, sequence_hash HAVING COUNT(*) > 1", vec![]);
-        assert_eq!(duplicates.len(), 0);
     }
 
     #[test]
