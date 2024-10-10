@@ -18,12 +18,19 @@ jobs:
     - uses: actions/checkout@v4
     - name: Setup
       run: cargo install cargo-llvm-cov
-    - name: Run tests
-      run: cargo llvm-cov --html --no-fail-fast
-      continue-on-error: true
-
-    - uses: actions/upload-artifact@v4
+    - name: Generate code coverage
+      run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
       with:
-        name: coverage
-        path: target/llvm-cov/html/*
-        overwrite: true
+        files: lcov.info
+        fail_ci_if_error: true
+#    - name: Run tests
+#      run: cargo llvm-cov --html --no-fail-fast
+#      continue-on-error: true
+#
+#    - uses: actions/upload-artifact@v4
+#      with:
+#        name: coverage
+#        path: target/llvm-cov/html/*
+#        overwrite: true
