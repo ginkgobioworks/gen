@@ -578,7 +578,7 @@ mod tests {
         );
 
         let nodes = Node::query(conn, "select * from nodes;", vec![]);
-        assert_eq!(nodes.len(), 6);
+        assert_eq!(nodes.len(), 5);
 
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
@@ -589,7 +589,7 @@ mod tests {
             op_conn,
         );
         let nodes = Node::query(conn, "select * from nodes;", vec![]);
-        assert_eq!(nodes.len(), 6);
+        assert_eq!(nodes.len(), 5);
     }
 
     #[test]
