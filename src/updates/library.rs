@@ -145,11 +145,11 @@ pub fn update_with_library(
         new_edges.insert(edge);
     }
 
-    for part1 in parts1 {
+    for part1 in &parts1 {
         for part2 in &parts2 {
             let part1_source_coordinate = sequence_lengths_by_node_id.get(part1).unwrap();
             let edge = EdgeData {
-                source_node_id: *part1,
+                source_node_id: **part1,
                 source_coordinate: *part1_source_coordinate,
                 source_strand: Strand::Forward,
                 target_node_id: **part2,
@@ -165,8 +165,10 @@ pub fn update_with_library(
     let new_edge_ids = Edge::bulk_create(conn, new_edges.iter().cloned().collect());
     BlockGroupEdge::bulk_create(conn, path.block_group_id, &new_edge_ids);
 
-    // TODO: Get this working
-    //    OperationSummary::create(operation_conn, operation.id, &summary_str);
+    let path_changes_count = parts1.len() * parts2.len();
+    let summary_str = format!("{path_name}: {path_changes_count} changes.\n");
+    OperationSummary::create(operation_conn, operation.id, &summary_str);
+
     println!("Updated with library file: {}", library_file_path);
     let mut output = Vec::new();
     session.changeset_strm(&mut output).unwrap();
