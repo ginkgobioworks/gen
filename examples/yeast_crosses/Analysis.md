@@ -41,19 +41,24 @@ bvh@mbp:~$ gen import --fasta S288C_reference_genome_R64-1-1_20110203\/S288C_ref
 Created it
 ```
 
-The variant calls themselves are stored in a large Genomic VCF (GVCF) file that includes variants from all samples in the dataset. We download a compressed version of this file from the the 1002 Yeast Genomes project, and then use bcftools to extract the two samples we are interested in.
+The variant calls themselves are stored in a large Genomic VCF (GVCF) file that includes variants from all samples in
+the dataset. We download a compressed version of this file from the the 1002 Yeast Genomes project, and then use
+bcftools to extract the two samples we are interested in.
 
 ```console
 bvh@mbp:~$ wget http://1002genomes.u-strasbg.fr/files/1011Matrix.gvcf.gz
 ```
 
-We then use the bcftools application to extract just the samples we want. To do this, we must first create a text file that contains the sample identifiers separated by a line break.
+We then use the bcftools application to extract just the samples we want. To do this, we must first create a text file
+that contains the sample identifiers separated by a line break.
 ```console
-bvh@mbp:~$ bcftools view -s BRQ -o BRQ.vcf.gz 1011Matrix.gvcf.gz 
-bvh@mbp:~$ bcftools view -s CFD -o CFD.vcf.gz 1011Matrix.gvcf.gz 
+bvh@mbp:~$ bcftools view -s BRQ -o BRQ.vcf 1011Matrix.gvcf.gz 
+bvh@mbp:~$ bcftools view -s CFD -o CFD.vcf 1011Matrix.gvcf.gz 
 ```
 
-Unfortunately these variant call files refer to the chromosomes by their number, whereas the reference sequence listed them by their accession identifier. We rename them in the VCF file using bcftools with a text file called mapping.txt that has the following contents:
+Unfortunately these variant call files refer to the chromosomes by their number, whereas the reference sequence listed
+them by their accession identifier. We rename them in the VCF file using bcftools with a text file called
+contig_mapping.txt that has the following contents:
 ```
 chromosome1 ref|NC_001133|
 chromosome2 ref|NC_001134|
@@ -75,8 +80,35 @@ chromosome17 ref|NC_001224|
 ```
 
 ```console
-bvh@mbp:~$ bcftools annotate --rename-chrs mapping.txt BRQ.gvcf.gz -o BRQ.gvcf.gz
-bvh@mbp:~$ bcftools annotate --rename-chrs mapping.txt CFD.gvcf.gz -o CFD.gvcf.gz
+bvh@mbp:~$ bcftools annotate --rename-chrs contig_mapping.txt BRQ.vcf -o BRQ_2.vcf
+bvh@mbp:~$ bcftools annotate --rename-chrs contig_mapping.txt CFD.vcf -o CFD_2.vcf
+```
+
+Because Gen also uses the sample names from the VCF file to create new block groups, or find an existing block group to
+update, we need to rename the samples as well so that the variants will be loaded into one sample called F1. We again
+use bcftools to do this, using a text file sample_mapping.txt with the following contents:
+```
+BRQ F1
+CFD F1
+```
+
+```console
+bvh@mbp:~$ bcftools reheader -s sample_mapping.txt -o BRQ3.vcf BRQ2.vcf
+bvh@mbp:~$ bcftools reheader -s sample_mapping.txt -o CFD3.vcf CFD2.vcf
+```
+
+We can now import the individual VCF files into gen, which will then use the chromosome/contig and sample names in the
+VCF file to find the appropriate block groups to update or create.
+
+```console
+bvh@mbp:~$ gen update --vcf BRQ3.vcf
+bvh@mbp:~$ gen update --vcf CFD3.vcf
+```
+
+Lastly, we export the F1 sample to a GFA file that can be used by graph-aware sequence aligners.
+
+```console
+bvh@mbp:~$ gen export --gfa cross.gfa
 ```
 
 ## Starting from assembled genomes
@@ -112,7 +144,7 @@ bvh@mbp:~$ cactus-pangenome ./js file_list.txt --outDir ./cactus_output --outNam
 After this completes (approximately 10 minutes), we can load it back into gen by running:
 
 ```console
-bvh@mbp:~$ gen --db main import --gfa cactus_output/cross.gfa --name my_collection
+bvh@mbp:~$ gen import --gfa cactus_output/cross.gfa
 ```
 
 ## References
