@@ -330,14 +330,14 @@ impl Edge {
                 edges_by_source_node_id
                     .entry(edge.source_node_id)
                     .and_modify(|edges| edges.push(edge))
-                    .or_default();
+                    .or_insert(vec![edge]);
             }
             if edge.target_node_id != PATH_END_NODE_ID {
                 node_ids.insert(edge.target_node_id);
                 edges_by_target_node_id
                     .entry(edge.target_node_id)
                     .and_modify(|edges| edges.push(edge))
-                    .or_default();
+                    .or_insert(vec![edge]);
             }
         }
 
