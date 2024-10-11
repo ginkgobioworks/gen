@@ -489,8 +489,14 @@ impl Edge {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-    use crate::models::{collection::Collection, sequence::Sequence};
-    use crate::test_helpers::get_connection;
+    use crate::models::{
+        block_group::{BlockGroup, PathChange},
+        block_group_edge::BlockGroupEdge,
+        collection::Collection,
+        path::{Path, PathBlock},
+        sequence::Sequence,
+    };
+    use crate::test_helpers::{get_connection, setup_block_group};
 
     #[test]
     fn test_bulk_create() {
@@ -723,5 +729,101 @@ mod tests {
         assert_eq!(edge_result3.source_coordinate, 4);
         assert_eq!(edge_result3.target_node_id, PATH_END_NODE_ID);
         assert_eq!(edge_result3.target_coordinate, -1);
+    }
+
+    #[test]
+    fn test_blocks_from_edges() {
+        let conn = get_connection(None);
+        let (block_group_id, path) = setup_block_group(&conn);
+
+        let edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
+        let (blocks, boundary_edges) = Edge::blocks_from_edges(&conn, &edges);
+        // 4 actual sequences: 10-length ones of all A, all T, all C, all G
+        // 2 terminal node blocks (start/end)
+        // 6 total
+        assert_eq!(blocks.len(), 6);
+        assert_eq!(boundary_edges.len(), 0);
+
+        let insert_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
+        let insert = PathBlock {
+            id: 0,
+            node_id: insert_node_id,
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 7,
+            path_end: 15,
+            strand: Strand::Forward,
+        };
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            start: 7,
+            end: 15,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
+        let edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
+
+        let (blocks, boundary_edges) = Edge::blocks_from_edges(&conn, &edges);
+        // 2 10-length sequences of all C, all G
+        // 1 inserted NNNN sequence
+        // 4 split blocks (A and T sequences were split) resulting from the inserted sequence
+        // 2 terminal node blocks (start/end)
+        // 9 total
+        assert_eq!(blocks.len(), 9);
+        assert_eq!(boundary_edges.len(), 2);
+    }
+
+    #[test]
+    fn test_get_block_boundaries() {
+        let conn = get_connection(None);
+        // 1. Create one sequence
+        // 2. Create a second sequence, source and target into the first sequence
+        // 3. Call get_block_boundaries with the edges for the first sequence and the sequence length
+        let template_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAAAA")
+            .save(&conn);
+        let template_node_id = Node::create(&conn, template_sequence.hash.as_str(), None);
+
+        let insert_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
+
+        let edge1 = Edge::create(
+            &conn,
+            template_node_id,
+            2,
+            Strand::Forward,
+            insert_node_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            &conn,
+            insert_node_id,
+            4,
+            Strand::Forward,
+            template_node_id,
+            8,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let boundaries = Edge::get_block_boundaries(Some(&vec![&edge1]), Some(&vec![&edge2]), 10);
+        assert_eq!(boundaries, vec![2, 8]);
     }
 }
