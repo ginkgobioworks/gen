@@ -412,6 +412,41 @@ mod tests {
     }
 
     #[test]
+    fn test_diff_graph() {
+        setup_gen_dir();
+        let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        vcf_path.push("fixtures/simple.vcf");
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+        );
+        let bg1 = BlockGroup::get_graph(conn, 1);
+        let bg2 = BlockGroup::get_graph(conn, 2);
+        println!("1 {bg1:?}");
+        println!("2 {bg2:?}");
+    }
+
+    #[test]
     fn test_update_fasta_with_vcf_custom_genotype() {
         setup_gen_dir();
         let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
