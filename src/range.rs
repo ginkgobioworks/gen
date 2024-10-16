@@ -157,6 +157,37 @@ impl Range {
 
         sorted_overlaps
     }
+
+    pub fn contains(&self, index: i64) -> bool {
+        if self.is_wraparound() {
+            index >= self.start || index <= self.end
+        } else {
+            index >= self.start && index <= self.end
+        }
+    }
+
+    pub fn circular_mod(index: i64, sequence_length: i64, is_circular_contig: bool) -> i64 {
+        if is_circular_contig {
+            index % sequence_length
+        } else {
+            index
+        }
+    }
+
+    pub fn translate_index(
+        &self,
+        index: i64,
+        range2: &Range,
+        sequence_length: i64,
+        is_circular_contig: bool,
+    ) -> i64 {
+        if !self.contains(index) {
+            panic!("Index {} is not contained in range {:?}", index, self);
+        }
+
+        let offset = index - self.start;
+        Range::circular_mod(range2.start + offset, sequence_length, is_circular_contig)
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

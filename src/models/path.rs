@@ -1,3 +1,4 @@
+use core::ops::Range as RustRange;
 use std::collections::{HashMap, HashSet};
 
 use intervaltree::IntervalTree;
@@ -71,6 +72,13 @@ pub struct PathBlock {
     pub path_start: i64,
     pub path_end: i64,
     pub strand: Strand,
+}
+
+#[derive(Clone, Debug)]
+pub struct Annotation {
+    pub name: String,
+    pub start: i64,
+    pub end: i64,
 }
 
 impl Path {
@@ -166,8 +174,8 @@ impl Path {
         Path::get_paths(conn, query, vec![Value::from(collection_name.to_string())])
     }
 
-    pub fn sequence(conn: &Connection, path: Path) -> String {
-        let blocks = Path::blocks_for(conn, &path);
+    pub fn sequence(&self, conn: &Connection) -> String {
+        let blocks = self.blocks(conn);
         blocks
             .into_iter()
             .map(|block| block.block_sequence)
@@ -176,8 +184,8 @@ impl Path {
     }
 
     pub fn edge_pairs_to_block(
+        &self,
         block_id: i64,
-        path: &Path,
         into: Edge,
         out_of: Edge,
         sequences_by_node_id: &HashMap<i64, Sequence>,
@@ -186,7 +194,7 @@ impl Path {
         if into.target_node_id != out_of.source_node_id {
             panic!(
                 "Consecutive edges in path {0} don't share the same sequence",
-                path.id
+                self.id
             );
         }
 
@@ -203,7 +211,7 @@ impl Path {
         } else {
             panic!(
                 "Edge pair with target_strand/source_strand mismatch for path {}",
-                path.id
+                self.id
             );
         }
 
@@ -225,8 +233,8 @@ impl Path {
         }
     }
 
-    pub fn blocks_for(conn: &Connection, path: &Path) -> Vec<PathBlock> {
-        let edges = PathEdge::edges_for_path(conn, path.id);
+    pub fn blocks(&self, conn: &Connection) -> Vec<PathBlock> {
+        let edges = PathEdge::edges_for_path(conn, self.id);
         let mut sequence_node_ids = HashSet::new();
         for edge in &edges {
             if edge.source_node_id != PATH_START_NODE_ID {
@@ -259,9 +267,8 @@ impl Path {
         });
 
         for (index, (into, out_of)) in edges.into_iter().tuple_windows().enumerate() {
-            let block = Path::edge_pairs_to_block(
+            let block = self.edge_pairs_to_block(
                 index as i64,
-                path,
                 into,
                 out_of,
                 &sequences_by_node_id,
@@ -288,8 +295,8 @@ impl Path {
         blocks
     }
 
-    pub fn intervaltree_for(conn: &Connection, path: &Path) -> IntervalTree<i64, PathBlock> {
-        let blocks = Path::blocks_for(conn, path);
+    pub fn intervaltree(&self, conn: &Connection) -> IntervalTree<i64, PathBlock> {
+        let blocks = self.blocks(conn);
         let tree: IntervalTree<i64, PathBlock> = blocks
             .into_iter()
             .map(|block| (block.path_start..block.path_end, block))
@@ -297,15 +304,11 @@ impl Path {
         tree
     }
 
-    pub fn find_block_mappings(
-        conn: &Connection,
-        our_path: &Path,
-        other_path: &Path,
-    ) -> Vec<RangeMapping> {
+    pub fn find_block_mappings(&self, conn: &Connection, other_path: &Path) -> Vec<RangeMapping> {
         // Given two paths, find the overlapping parts of common nodes/blocks and return a list af
         // mappings from subranges of one path to corresponding shared subranges of the other path
-        let our_blocks = Path::blocks_for(conn, our_path);
-        let their_blocks = Path::blocks_for(conn, other_path);
+        let our_blocks = self.blocks(conn);
+        let their_blocks = other_path.blocks(conn);
 
         let our_node_ids = our_blocks
             .iter()
@@ -423,6 +426,85 @@ impl Path {
             .sorted_by(|a, b| a.source_range.start.cmp(&b.source_range.start))
             .collect::<Vec<RangeMapping>>()
     }
+
+    fn propagate_annotation(
+        annotation: Annotation,
+        mapping_tree: &IntervalTree<i64, RangeMapping>,
+        sequence_length: i64,
+    ) -> Option<Annotation> {
+        // TODO: Add support for different propagation strategies
+        // TODO: Handle circular contigs
+        let start = annotation.start;
+        let end = annotation.end;
+        let mappings: Vec<RangeMapping> = mapping_tree
+            .query(RustRange { start, end })
+            .map(|x| x.value.clone())
+            .collect();
+        if mappings.is_empty() {
+            return None;
+        }
+
+        let sorted_mappings: Vec<RangeMapping> = mappings
+            .into_iter()
+            .sorted_by(|a, b| a.source_range.start.cmp(&b.source_range.start))
+            .collect();
+        let first_mapping = sorted_mappings.first().unwrap();
+        let last_mapping = sorted_mappings.last().unwrap();
+        let translated_start = if first_mapping.source_range.contains(start) {
+            first_mapping.source_range.translate_index(
+                start,
+                &first_mapping.target_range,
+                sequence_length,
+                false,
+            )
+        } else {
+            first_mapping.target_range.start
+        };
+
+        let translated_end = if last_mapping.source_range.contains(end) {
+            last_mapping.source_range.translate_index(
+                end,
+                &last_mapping.target_range,
+                sequence_length,
+                false,
+            )
+        } else {
+            last_mapping.target_range.end
+        };
+
+        Some(Annotation {
+            name: annotation.name,
+            start: translated_start,
+            end: translated_end,
+        })
+    }
+
+    pub fn propagate_annotations_to_path(
+        &self,
+        conn: &Connection,
+        path: &Path,
+        annotations: Vec<Annotation>,
+    ) -> Vec<Annotation> {
+        let mappings = self.find_block_mappings(conn, path);
+        let sequence_length = path.sequence(conn).len();
+        let mapping_tree: IntervalTree<i64, RangeMapping> = mappings
+            .into_iter()
+            .map(|mapping| {
+                (
+                    mapping.source_range.start..mapping.source_range.end,
+                    mapping,
+                )
+            })
+            .collect();
+
+        annotations
+            .into_iter()
+            .filter_map(|annotation| {
+                Path::propagate_annotation(annotation, &mapping_tree, sequence_length as i64)
+            })
+            .clone()
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -520,7 +602,7 @@ mod tests {
             block_group.id,
             &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
         );
-        assert_eq!(Path::sequence(conn, path), "ATCGATCGAAAAAAACCCCCCCGGGGGGG");
+        assert_eq!(path.sequence(conn), "ATCGATCGAAAAAAACCCCCCCGGGGGGG");
     }
 
     #[test]
@@ -610,7 +692,7 @@ mod tests {
             block_group.id,
             &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
         );
-        assert_eq!(Path::sequence(conn, path), "CCCCCCCGGGGGGGTTTTTTTCGATCGAT");
+        assert_eq!(path.sequence(conn), "CCCCCCCGGGGGGGTTTTTTTCGATCGAT");
     }
 
     #[test]
@@ -707,7 +789,7 @@ mod tests {
             block_group.id,
             &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
         );
-        let tree = Path::intervaltree_for(conn, &path);
+        let tree = path.intervaltree(conn);
         let blocks1: Vec<PathBlock> = tree.query_point(2).map(|x| x.value.clone()).collect();
         assert_eq!(blocks1.len(), 1);
         let block1 = &blocks1[0];
@@ -781,7 +863,7 @@ mod tests {
 
         let path = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
 
-        let mappings = Path::find_block_mappings(conn, &path, &path);
+        let mappings = path.find_block_mappings(conn, &path);
         assert_eq!(mappings.len(), 1);
         let mapping = &mappings[0];
         assert_eq!(mapping.source_range, mapping.target_range);
@@ -865,7 +947,7 @@ mod tests {
 
         let path2 = Path::create(conn, "chr2", block_group.id, &[edge3.id, edge4.id]);
 
-        let mappings = Path::find_block_mappings(conn, &path1, &path2);
+        let mappings = path1.find_block_mappings(conn, &path2);
         assert_eq!(mappings.len(), 0);
     }
 
@@ -963,9 +1045,9 @@ mod tests {
             &[edge3.id, edge4.id, edge5.id],
         );
 
-        assert_eq!(Path::sequence(conn, path2.clone()), "ATCGTTTTTTTT");
+        assert_eq!(path2.sequence(conn), "ATCGTTTTTTTT");
 
-        let mappings = Path::find_block_mappings(conn, &path1, &path2);
+        let mappings = path1.find_block_mappings(conn, &path2);
         assert_eq!(mappings.len(), 1);
         let mapping = &mappings[0];
         assert_eq!(mapping.source_range, mapping.target_range);
@@ -1058,9 +1140,9 @@ mod tests {
             &[edge1.id, edge4.id, edge5.id, edge2.id],
         );
 
-        assert_eq!(Path::sequence(conn, path2.clone()), "ATCGTTTTTTTTATCG");
+        assert_eq!(path2.sequence(conn), "ATCGTTTTTTTTATCG");
 
-        let mappings = Path::find_block_mappings(conn, &path1, &path2);
+        let mappings = path1.find_block_mappings(conn, &path2);
         assert_eq!(mappings.len(), 2);
         let mapping1 = &mappings[0];
         assert_eq!(mapping1.source_range, mapping1.target_range);
@@ -1159,9 +1241,9 @@ mod tests {
             &[edge1.id, edge4.id, edge5.id, edge2.id],
         );
 
-        assert_eq!(Path::sequence(conn, path2.clone()), "ATTTTTTTTTCG");
+        assert_eq!(path2.sequence(conn), "ATTTTTTTTTCG");
 
-        let mappings = Path::find_block_mappings(conn, &path1, &path2);
+        let mappings = path1.find_block_mappings(conn, &path2);
         assert_eq!(mappings.len(), 2);
         let mapping1 = &mappings[0];
         assert_eq!(mapping1.source_range, mapping1.target_range);
@@ -1243,9 +1325,9 @@ mod tests {
             &[edge1.id, edge4.id, edge2.id],
         );
 
-        assert_eq!(Path::sequence(conn, path2.clone()), "ATCG");
+        assert_eq!(path2.sequence(conn), "ATCG");
 
-        let mappings = Path::find_block_mappings(conn, &path1, &path2);
+        let mappings = path1.find_block_mappings(conn, &path2);
         assert_eq!(mappings.len(), 2);
         let mapping1 = &mappings[0];
         assert_eq!(mapping1.source_range, mapping1.target_range);
@@ -1366,12 +1448,9 @@ mod tests {
             &[edge1.id, edge4.id, edge5.id, edge3.id],
         );
 
-        assert_eq!(
-            Path::sequence(conn, path2.clone()),
-            "ATCGATCGAAAAAAAATTTTTTTT"
-        );
+        assert_eq!(path2.sequence(conn), "ATCGATCGAAAAAAAATTTTTTTT");
 
-        let mappings = Path::find_block_mappings(conn, &path1, &path2);
+        let mappings = path1.find_block_mappings(conn, &path2);
         assert_eq!(mappings.len(), 2);
         let mapping1 = &mappings[0];
         assert_eq!(mapping1.source_range, mapping1.target_range);
@@ -1492,9 +1571,9 @@ mod tests {
             &[edge1.id, edge4.id, edge5.id, edge3.id],
         );
 
-        assert_eq!(Path::sequence(conn, path2.clone()), "ATCGAAAAAAAATTTT");
+        assert_eq!(path2.sequence(conn), "ATCGAAAAAAAATTTT");
 
-        let mappings = Path::find_block_mappings(conn, &path1, &path2);
+        let mappings = path1.find_block_mappings(conn, &path2);
         assert_eq!(mappings.len(), 2);
         let mapping1 = &mappings[0];
         assert_eq!(mapping1.source_range, mapping1.target_range);
@@ -1598,9 +1677,9 @@ mod tests {
             &[edge1.id, edge4.id, edge3.id],
         );
 
-        assert_eq!(Path::sequence(conn, path2.clone()), "ATCGTTTT");
+        assert_eq!(path2.sequence(conn), "ATCGTTTT");
 
-        let mappings = Path::find_block_mappings(conn, &path1, &path2);
+        let mappings = path1.find_block_mappings(conn, &path2);
         assert_eq!(mappings.len(), 2);
         let mapping1 = &mappings[0];
         assert_eq!(mapping1.source_range, mapping1.target_range);

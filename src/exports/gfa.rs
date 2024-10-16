@@ -361,7 +361,7 @@ mod tests {
 
         let paths = Path::get_paths_for_collection(&conn, "test collection 2");
         assert_eq!(paths.len(), 1);
-        assert_eq!(Path::sequence(&conn, paths[0].clone()), "AAAATTTTGGGGCCCC");
+        assert_eq!(paths[0].sequence(&conn), "AAAATTTTGGGGCCCC");
     }
 
     #[test]
