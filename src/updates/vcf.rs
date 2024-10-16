@@ -332,10 +332,15 @@ pub fn update_with_vcf(
             println!("with {vcf_entry:?}");
 
             let parent_path_id : i64 = *parent_block_groups.entry((collection_name, vcf_entry.path.id)).or_insert_with(|| {
-                let parent_bg = &Path::query(conn, "select * from path p left join block_group bg on (p.block_group_id = bg.id) where bg.collection_name = ?1 AND sample_name is null and name = ?2", vec![SQLValue::from(collection_name.to_string()), SQLValue::from(vcf_entry.path.name.clone())])[0];
-                let parent_path =
-                    PathCache::lookup(&mut path_cache, parent_bg.id, vcf_entry.path.name.clone());
-                parent_path.id
+                let parent_bg = BlockGroup::query(conn, "select * from block_group where collection_name = ?1 AND sample_name is null and name = ?2", vec![SQLValue::from(collection_name.to_string()), SQLValue::from(vcf_entry.path.name.clone())]);
+                if parent_bg.is_empty() {
+                    vcf_entry.path.id
+                } else {
+                    // let parent_bg = &Path::query(conn, "select * from path p left join block_group bg on (p.block_group_id = bg.id) where bg.collection_name = ?1 AND sample_name is null and name = ?2", vec![SQLValue::from(collection_name.to_string()), SQLValue::from(vcf_entry.path.name.clone())])[0];
+                    let parent_path =
+                        PathCache::lookup(&mut path_cache, parent_bg.first().unwrap().id, vcf_entry.path.name.clone());
+                    parent_path.id
+                }
             });
 
             let node_id = Node::create(
@@ -761,6 +766,62 @@ mod tests {
 
         let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         vcf_path.push("fixtures/accession_2.vcf");
+
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Path already exists")]
+    fn test_disallows_creating_accession_paths_that_exist() {
+        setup_gen_dir();
+        let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        vcf_path.push("fixtures/accession.vcf");
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+        );
+
+        assert_eq!(
+            Path::get_paths(
+                conn,
+                "select * from path where name = ?1",
+                vec![SQLValue::from("del1".to_string())]
+            )
+            .len(),
+            1
+        );
+
+        let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        // This is invalid because ins1 already exists from accession.vcf
+        vcf_path.push("fixtures/accession_2_invalid.vcf");
 
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),

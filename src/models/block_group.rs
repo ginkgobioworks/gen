@@ -357,6 +357,16 @@ impl BlockGroup {
         }
 
         for (path, path_edges) in new_accession_edges {
+            assert_eq!(
+                PathEdge::query(
+                    conn,
+                    "select * from path_edges where path_id = ?1 limit 1;",
+                    vec![SQLValue::from(path.id)]
+                )
+                .len(),
+                0,
+                "Path already exists."
+            );
             PathEdge::bulk_create(
                 conn,
                 path.id,
