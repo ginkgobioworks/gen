@@ -156,6 +156,10 @@ impl Path {
         paths
     }
 
+    pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Path> {
+        Path::get_paths(conn, query, placeholders)
+    }
+
     pub fn get_paths_for_collection(conn: &Connection, collection_name: &str) -> Vec<Path> {
         let query = "SELECT * FROM path JOIN block_group ON path.block_group_id = block_group.id WHERE block_group.collection_name = ?1";
         Path::get_paths(conn, query, vec![Value::from(collection_name.to_string())])
