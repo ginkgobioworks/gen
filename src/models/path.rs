@@ -742,7 +742,7 @@ mod tests {
     #[test]
     fn test_full_block_mapping() {
         /*
-        |--------| path: 1 sequence, (0, 8)
+            |--------| path: 1 sequence, (0, 8)
             |ATCGATCG|
             |--------| Same path: 1 sequence, (0, 8)
 
@@ -794,7 +794,7 @@ mod tests {
     #[test]
     fn test_no_block_mapping_overlap() {
         /*
-        |--------| -> path 1 (one node)
+            |--------| -> path 1 (one node)
             |ATCGATCG| -> sequence
 
             |--------| -> path 2 (one node, totally different sequence)
@@ -872,14 +872,14 @@ mod tests {
     #[test]
     fn test_partial_overlap_block_mapping() {
         /*
-        path 1 (one node/sequence):
-        |--------|
+            path 1 (one node/sequence):
+            |--------|
             |ATCGATCG| -> sequence (0, 8)
 
-        path 2:
-        |----| -> (0, 4)
+            path 2:
+            |----| -> (0, 4)
                 |--------| -> (4, 12)
-        |ATCG| -> shared with path 1
+            |ATCG| -> shared with path 1
                 |TTTTTTTT| -> unrelated sequence
 
             Mapping: (0, 4) -> (0, 4)
@@ -978,17 +978,17 @@ mod tests {
     #[test]
     fn test_insertion_block_mapping() {
         /*
-        path 1 (one node/sequence):
+            path 1 (one node/sequence):
             |ATCGATCG| -> sequence (0, 8)
 
-        path 2:	Mimics a pure insertion
-        |ATCG| -> (0, 4) shared with first half of path 1
+            path 2:	Mimics a pure insertion
+            |ATCG| -> (0, 4) shared with first half of path 1
                 |TTTTTTTT| -> (4, 12) unrelated sequence
-                    |ATCG| -> (12, 16) shared with second half of path 1
+                        |ATCG| -> (12, 16) shared with second half of path 1
 
             Mappings:
-        (0, 4) -> (0, 4)
-        (4, 8) -> (12, 16)
+            (0, 4) -> (0, 4)
+            (4, 8) -> (12, 16)
         */
         let conn = &mut get_connection(None);
         Collection::create(conn, "test collection");
@@ -1079,17 +1079,17 @@ mod tests {
     #[test]
     fn test_replacement_block_mapping() {
         /*
-        path 1 (one node/sequence):
+            path 1 (one node/sequence):
             |ATCGATCG| -> sequence (0, 8)
 
-        path 2:	Mimics a replacement
-        |AT| -> (0, 2) shared with first two bp of path 1
+            path 2:	Mimics a replacement
+            |AT| -> (0, 2) shared with first two bp of path 1
               |TTTTTTTT| -> (2, 10) unrelated sequence
-                  |CG| -> (10, 12) shared with last 2 bp of path 1
+                      |CG| -> (10, 12) shared with last 2 bp of path 1
 
             Mappings:
-        (0, 2) -> (0, 2)
-        (6, 8) -> (10, 12)
+            (0, 2) -> (0, 2)
+            (6, 8) -> (10, 12)
         */
         let conn = &mut get_connection(None);
         Collection::create(conn, "test collection");
@@ -1180,16 +1180,16 @@ mod tests {
     #[test]
     fn test_deletion_block_mapping() {
         /*
-        path 1 (one node/sequence):
+            path 1 (one node/sequence):
             |ATCGATCG| -> sequence (0, 8)
 
-        path 2:	Mimics a pure deletion
-        |AT| -> (0, 2) shared with first two bp of path 1
-          |CG| -> (2, 4) shared with last 2 bp of path 1
+            path 2: Mimics a pure deletion
+            |AT| -> (0, 2) shared with first two bp of path 1
+              |CG| -> (2, 4) shared with last 2 bp of path 1
 
             Mappings:
-        (0, 2) -> (0, 2)
-        (6, 8) -> (2, 4)
+            (0, 2) -> (0, 2)
+            (6, 8) -> (2, 4)
         */
         let conn = &mut get_connection(None);
         Collection::create(conn, "test collection");
@@ -1264,18 +1264,18 @@ mod tests {
     #[test]
     fn test_two_block_insertion_mapping() {
         /*
-        path 1 (two nodes/sequences):
+            path 1 (two nodes/sequences):
             |ATCGATCG| -> sequence (0, 8)
                     |TTTTTTTT| -> sequence (8, 16)
 
-        path 2:	Mimics a pure insertion in the middle of the two blocks
+            path 2: Mimics a pure insertion in the middle of the two blocks
             |ATCGATCG| -> sequence (0, 8)
                     |AAAAAAAA| -> sequence (8, 16)
                             |TTTTTTTT| -> sequence (16, 24)
 
             Mappings:
-        (0, 8) -> (0, 8)
-        (8, 16) -> (16, 24)
+            (0, 8) -> (0, 8)
+            (8, 16) -> (16, 24)
         */
         let conn = &mut get_connection(None);
         Collection::create(conn, "test collection");
@@ -1390,18 +1390,18 @@ mod tests {
     #[test]
     fn test_two_block_replacement_mapping() {
         /*
-        path 1 (two nodes/sequences):
+            path 1 (two nodes/sequences):
             |ATCGATCG| -> sequence (0, 8)
                     |TTTTTTTT| -> sequence (8, 16)
 
-        path 2:	Mimics a replacement across the two blocks
+            path 2: Mimics a replacement across the two blocks
             |ATCG| -> sequence (0, 4)
                 |AAAAAAAA| -> sequence (4, 12)
                         |TTTT| -> sequence (12, 16)
 
             Mappings:
-        (0, 4) -> (0, 4)
-        (12, 16) -> (12, 16)
+            (0, 4) -> (0, 4)
+            (12, 16) -> (12, 16)
         */
         let conn = &mut get_connection(None);
         Collection::create(conn, "test collection");
@@ -1513,17 +1513,17 @@ mod tests {
     #[test]
     fn test_two_block_deletion_mapping() {
         /*
-        path 1 (two nodes/sequences):
+            path 1 (two nodes/sequences):
             |ATCGATCG| -> sequence (0, 8)
                     |TTTTTTTT| -> sequence (8, 16)
 
-        path 2:	Mimics a deletion across the two blocks
+            path 2: Mimics a deletion across the two blocks
             |ATCG| -> sequence (0, 4)
                 |TTTT| -> sequence (4, 8)
 
             Mappings:
-        (0, 4) -> (0, 4)
-        (12, 16) -> (4, 8)
+            (0, 4) -> (0, 4)
+            (12, 16) -> (4, 8)
         */
         let conn = &mut get_connection(None);
         Collection::create(conn, "test collection");
