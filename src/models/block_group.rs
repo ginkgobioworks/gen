@@ -178,6 +178,16 @@ impl BlockGroup {
         children
     }
 
+    pub fn get_parents(conn: &Connection, block_group_id: i64) -> Vec<i64> {
+        let query = "select parent_id from block_group_tree where child_id = ?1;";
+        let mut stmt = conn.prepare(query).unwrap();
+        let mut ids = vec![];
+        for row in stmt.query_map((block_group_id,), |row| row.get(0)).unwrap() {
+            ids.push(row.unwrap());
+        }
+        ids
+    }
+
     pub fn get_ancestors(conn: &Connection, block_group_id: i64) -> Vec<Vec<i64>> {
         let query = "WITH RECURSIVE ancestors(parent_id, child_id, depth) AS ( \
         VALUES(?1, NULL, 0) UNION  \
@@ -1397,11 +1407,15 @@ mod tests {
             BlockGroup::get_children(conn, block_group_id),
             vec![new_bg_id]
         );
+        assert_eq!(
+            BlockGroup::get_parents(conn, new_bg_id),
+            vec![block_group_id]
+        );
     }
 
     #[test]
     fn test_finds_all_ancestors() {
-        let conn = &get_connection("rec.db");
+        let conn = &get_connection(None);
         let collection = Collection::create(conn, "test");
         let bg1 = BlockGroup::create(conn, "test", None, "test1");
         let bg2 = BlockGroup::create(conn, "test", None, "test2");
