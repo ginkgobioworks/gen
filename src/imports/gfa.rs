@@ -110,7 +110,7 @@ pub fn import_gfa(gfa_path: &FilePath, collection_name: &str, conn: &Connection)
         ));
     }
 
-    let edge_ids = Edge::bulk_create(conn, edges.into_iter().collect::<Vec<EdgeData>>());
+    let edge_ids = Edge::bulk_create(conn, &edges.into_iter().collect::<Vec<EdgeData>>());
     BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
     let saved_edges = Edge::bulk_load(conn, &edge_ids);

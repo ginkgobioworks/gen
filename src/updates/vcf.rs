@@ -115,6 +115,7 @@ impl<'a> SequenceCache<'_> {
 fn prepare_change(
     sample_bg_id: i64,
     sample_path: &Path,
+    ids: String,
     ref_start: i64,
     ref_end: i64,
     chromosome_index: i64,
@@ -137,6 +138,7 @@ fn prepare_change(
     PathChange {
         block_group_id: sample_bg_id,
         path: sample_path.clone(),
+        path_accession: ids,
         start: ref_start,
         end: ref_end,
         block: new_block,
@@ -150,6 +152,7 @@ struct VcfEntry<'a> {
     block_group_id: i64,
     sample_name: String,
     path: Path,
+    ids: String,
     alt_seq: &'a str,
     chromosome_index: i64,
     phased: i64,
@@ -230,6 +233,7 @@ pub fn update_with_vcf(
                             Phasing::Unphased => 0,
                         };
                         vcf_entries.push(VcfEntry {
+                            ids: record.ids().as_ref().to_string(),
                             block_group_id: sample_bg_id,
                             path: sample_path.clone(),
                             sample_name: fixed_sample.clone(),
@@ -265,6 +269,7 @@ pub fn update_with_vcf(
                                     if allele != 0 {
                                         let alt_seq = alt_alleles[allele - 1];
                                         vcf_entries.push(VcfEntry {
+                                            ids: record.ids().as_ref().to_string(),
                                             block_group_id: sample_bg_id,
                                             path: sample_path.clone(),
                                             sample_name: sample_names[sample_index].clone(),
@@ -309,6 +314,7 @@ pub fn update_with_vcf(
             let change = prepare_change(
                 vcf_entry.block_group_id,
                 &vcf_entry.path,
+                vcf_entry.ids,
                 ref_start as i64,
                 ref_end as i64,
                 vcf_entry.chromosome_index,
@@ -325,7 +331,7 @@ pub fn update_with_vcf(
     }
     let mut summary: HashMap<String, HashMap<String, i64>> = HashMap::new();
     for ((path, sample_name), path_changes) in changes {
-        BlockGroup::insert_changes(conn, &path_changes, &path_cache);
+        BlockGroup::insert_changes(conn, &path_changes, &mut path_cache);
         summary
             .entry(sample_name)
             .or_default()
@@ -674,5 +680,47 @@ mod tests {
             op_conn,
         );
         assert!(s.elapsed().as_secs() < 20);
+    }
+
+    #[test]
+    fn test_creates_accession_paths() {
+        setup_gen_dir();
+        let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        vcf_path.push("fixtures/accession.vcf");
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+        );
+
+        assert_eq!(
+            Path::get_paths(
+                conn,
+                "select * from path where name = ?1",
+                vec![SQLValue::from("del1".to_string())]
+            )
+            .len(),
+            1
+        );
     }
 }
