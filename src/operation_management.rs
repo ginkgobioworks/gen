@@ -241,7 +241,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
     let mut dep_edge_map = HashMap::new();
     let new_edges = Edge::bulk_create(
         conn,
-        dependencies.edges.iter().map(EdgeData::from).collect(),
+        &dependencies.edges.iter().map(EdgeData::from).collect(),
     );
     for (index, edge_id) in new_edges.iter().enumerate() {
         dep_edge_map.insert(&dependencies.edges[index].id, *edge_id);
@@ -440,7 +440,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
         .collect::<Vec<i64>>();
     let created_edges = Edge::bulk_create(
         conn,
-        sorted_edge_ids
+        &sorted_edge_ids
             .iter()
             .map(|id| updated_edge_map[id].clone())
             .collect::<Vec<EdgeData>>(),
