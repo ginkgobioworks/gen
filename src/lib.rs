@@ -8,6 +8,7 @@ pub mod imports;
 pub mod migrations;
 pub mod models;
 pub mod operation_management;
+pub mod range;
 pub mod test_helpers;
 pub mod updates;
 
