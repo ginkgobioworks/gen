@@ -39,14 +39,43 @@ id|block_group_id|name
 sqlite> .quit
 ```
 
-We see that both the path and the block group are called M77789.2, is accession ID for the pUC19 plasmid, which was extracted from the fasta header. Next, we will prepare a _gen update_ operation to insert the insulin operon variants into the vector. We need two files to specify the design: a _parts_ file that contains the sequences of all of the genetic parts that go into the design, and a _library_ file that describes how the parts should be arranged. For the parts file we use
+We see that both the path and the block group are called M77789.2, is accession ID for the pUC19 plasmid, which was extracted from the fasta header. Next, we will prepare a _gen update_ operation to insert the insulin operon variants into the vector. We need two files to specify the design: a _parts_ file that contains the sequences of all of the genetic parts that go into the design, and a _library_ file that describes how the parts should be arranged. The library file is a simple CSV table without headers, where each column represents a 'slot' in the construct, and the rows represent the possible parts to include in each slot. Gen will create a combinatorial design where all options for each slot are combined with all options for the other slots. In the example below we have 3 slots, with respectively 5, 2, and 1 part options, this results in 10 possible outcomes (5x2x1).
+
+
+`design.csv :`
+```
+BBa_J23100,BBa_B0030,proinsulin
+BBa_J23101,BBa_B0032,
+BBa_J23102,BBa_B0034,
+BBa_J23103,,
+BBa_J23104,,
+```
+
+Note: this doesn't work yet. 
 
 ```console
-gen update --path-name M77789.2 --start 2 --end 4 --library design.csv ```
+gen update --path-name M77789.2 --start 2 --end 4 --library design.csv --parts parts.fa
+```
+
+But this does:
+```console
+gen update --path-name M77789.2 --start 2 --end 4 --library design.csv --parts parts.fa
+```
+
+For comparison:
+```console
+cargo run --release -- --db combo.db import --fasta fixtures/simple.fa --name combo
+
+cargo run --release -- --db combo.db update --path-name m123 --start 2 --end 4 --library fixtures/combinatorial_design.csv --name combo --parts fixtures/parts.fa
+
+cargo run --release -- --db combo.db export --gfa combo.gfa -n combo
+```
+
+## Visualizing the library
+
 
 docker run -v $PWD:/data -it quay.io/vgteam/vg:v1.60.0
 
 
 vg convert --gfa-in --gfa-trans FILE   
 vg view --gfa-in combo.gfa --dot  --color --simple-dot | dot -Tsvg -o x.svg
-
