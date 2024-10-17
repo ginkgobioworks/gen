@@ -15,6 +15,7 @@ impl Range {
         }
     }
 
+    // Returns true if this range is left-adjacent to the other range
     pub fn left_adjoins(&self, other: &Range, modulus: Option<i64>) -> bool {
         let mut other_start = other.start;
         let mut self_end = self.end;
@@ -139,6 +140,7 @@ impl Range {
         overlaps
     }
 
+    // Consolidate the first and last overlaps if they lie on either side of the origin.
     fn consolidate_overlaps_about_the_origin(overlaps: Vec<Range>) -> Vec<Range> {
         let mut sorted_overlaps = overlaps
             .clone()
@@ -197,7 +199,7 @@ pub struct RangeMapping {
 }
 
 impl RangeMapping {
-    pub fn merge_continuous_mappings(mappings: Vec<RangeMapping>) -> Vec<RangeMapping> {
+    pub fn merge_contiguous_mappings(mappings: Vec<RangeMapping>) -> Vec<RangeMapping> {
         let mut grouped_mappings = vec![];
         let mut current_group = vec![];
 
@@ -266,7 +268,18 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_continuous_ranges() {
+    fn test_overlap() {
+        let range1 = Range { start: 0, end: 12 };
+        let range2 = Range { start: 4, end: 8 };
+        let range3 = Range { start: 10, end: 16 };
+
+        assert_eq!(range1.overlap(&range2), vec![Range { start: 4, end: 8 }]);
+        assert_eq!(range1.overlap(&range3), vec![Range { start: 10, end: 12 }]);
+        assert_eq!(range2.overlap(&range3), vec![]);
+    }
+
+    #[test]
+    fn test_merge_contiguous_ranges() {
         let mappings = vec![
             RangeMapping {
                 source_range: Range { start: 0, end: 2 },
@@ -282,7 +295,7 @@ mod tests {
             },
         ];
 
-        let merged_mappings = RangeMapping::merge_continuous_mappings(mappings);
+        let merged_mappings = RangeMapping::merge_contiguous_mappings(mappings);
         assert_eq!(merged_mappings.len(), 2);
         assert_eq!(
             merged_mappings,

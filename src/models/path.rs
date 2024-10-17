@@ -432,6 +432,21 @@ impl Path {
         mapping_tree: &IntervalTree<i64, RangeMapping>,
         sequence_length: i64,
     ) -> Option<Annotation> {
+        /*
+        This method contains the core logic for propagating an annotation from one path to another.
+        The core rules are:
+
+        1. If the annotation can be fully propagated to a matching subregion of the other path,
+            we propagate it
+
+        2. If only part of the annotation can be propagated to a partial subregion of the other
+            path, we propagate just that part and truncate the rest
+
+        3. If the first and last parts of the annotation can be propagated to subregions of the
+            other path (but not one or more parts of the middle of the annotation), we propagate the
+            entire annotation, including across the parts that don't match those of this path
+         */
+
         // TODO: Add support for different propagation strategies
         // TODO: Handle circular contigs
         let start = annotation.start;
