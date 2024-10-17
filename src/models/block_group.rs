@@ -71,7 +71,7 @@ impl PathCache<'_> {
             .clone();
 
             path_cache.cache.insert(path_key, new_path.clone());
-            let tree = Path::intervaltree_for(path_cache.conn, &new_path);
+            let tree = new_path.intervaltree(path_cache.conn);
             path_cache.intervaltree_cache.insert(new_path.clone(), tree);
             new_path
         }
@@ -507,7 +507,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -545,7 +545,7 @@ mod tests {
             phased: 0,
         };
         // take out an entire block.
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -587,7 +587,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -628,7 +628,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -669,7 +669,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -710,7 +710,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -751,7 +751,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -792,7 +792,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -833,7 +833,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -874,7 +874,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -918,7 +918,7 @@ mod tests {
         };
 
         // take out an entire block.
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
         assert_eq!(
@@ -958,7 +958,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -970,7 +970,7 @@ mod tests {
             ])
         );
 
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -1011,7 +1011,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -1053,7 +1053,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -1094,7 +1094,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -1135,7 +1135,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -1176,7 +1176,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -1217,7 +1217,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -1258,7 +1258,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);
@@ -1299,7 +1299,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id);

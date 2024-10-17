@@ -151,7 +151,7 @@ mod tests {
 
         let path = Path::get(&conn, 1);
         assert_eq!(
-            Path::sequence(&conn, path),
+            path.sequence(&conn),
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()
         );
     }
@@ -180,7 +180,7 @@ mod tests {
 
         let path = Path::get(&conn, 1);
         assert_eq!(
-            Path::sequence(&conn, path),
+            path.sequence(&conn),
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()
         );
     }
