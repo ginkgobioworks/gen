@@ -38,12 +38,12 @@ CREATE TABLE block_group (
 CREATE UNIQUE INDEX block_group_uidx ON block_group(collection_name, sample_name, name) WHERE sample_name is not null;
 CREATE UNIQUE INDEX block_group_null_sample_uidx ON block_group(collection_name, name) WHERE sample_name is null;
 
-CREATE TABLE block_group_tree (
+CREATE TABLE block_group_lineage (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
   parent_id INTEGER NOT NULL,
   child_id INTEGER NOT NULL
 ) STRICT;
-CREATE UNIQUE INDEX block_group_tree_uidx ON block_group_tree(parent_id, child_id);
+CREATE UNIQUE INDEX block_group_lineage_uidx ON block_group_lineage(parent_id, child_id);
 
 CREATE TABLE path (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,

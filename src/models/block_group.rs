@@ -162,14 +162,15 @@ impl BlockGroup {
     }
 
     pub fn add_relation(conn: &Connection, source_block_group_id: i64, target_block_group_id: i64) {
-        let query = "INSERT OR IGNORE INTO block_group_tree (parent_id, child_id) values (?1, ?2)";
+        let query =
+            "INSERT OR IGNORE INTO block_group_lineage (parent_id, child_id) values (?1, ?2)";
         let mut stmt = conn.prepare(query).unwrap();
         stmt.execute((source_block_group_id, target_block_group_id))
             .unwrap();
     }
 
     pub fn get_children(conn: &Connection, block_group_id: i64) -> Vec<i64> {
-        let query = "select child_id from block_group_tree where parent_id = ?1;";
+        let query = "select child_id from block_group_lineage where parent_id = ?1;";
         let mut stmt = conn.prepare(query).unwrap();
         let mut children = vec![];
         for row in stmt.query_map((block_group_id,), |row| row.get(0)).unwrap() {
@@ -179,7 +180,7 @@ impl BlockGroup {
     }
 
     pub fn get_parents(conn: &Connection, block_group_id: i64) -> Vec<i64> {
-        let query = "select parent_id from block_group_tree where child_id = ?1;";
+        let query = "select parent_id from block_group_lineage where child_id = ?1;";
         let mut stmt = conn.prepare(query).unwrap();
         let mut ids = vec![];
         for row in stmt.query_map((block_group_id,), |row| row.get(0)).unwrap() {
@@ -191,7 +192,7 @@ impl BlockGroup {
     pub fn get_ancestors(conn: &Connection, block_group_id: i64) -> Vec<Vec<i64>> {
         let query = "WITH RECURSIVE ancestors(parent_id, child_id, depth) AS ( \
         VALUES(?1, NULL, 0) UNION  \
-        select bgt.parent_id, bgt.child_id, ancestors.depth+1 from block_group_tree bgt join ancestors ON bgt.child_id=ancestors.parent_id \
+        select bgt.parent_id, bgt.child_id, ancestors.depth+1 from block_group_lineage bgt join ancestors ON bgt.child_id=ancestors.parent_id \
         ) SELECT parent_id, child_id, depth from ancestors where child_id is not null ORDER BY depth, parent_id DESC;";
         let mut stmt = conn.prepare(query).unwrap();
 
