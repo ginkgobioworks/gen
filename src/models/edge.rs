@@ -320,7 +320,7 @@ impl Edge {
             .collect::<Vec<i64>>()
     }
 
-    pub fn blocks_from_edges(conn: &Connection, edges: &Vec<Edge>) -> (Vec<GroupBlock>, Vec<Edge>) {
+    pub fn blocks_from_edges(conn: &Connection, edges: &Vec<Edge>) -> Vec<GroupBlock> {
         let mut node_ids = HashSet::new();
         let mut edges_by_source_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
         let mut edges_by_target_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
@@ -346,7 +346,6 @@ impl Edge {
 
         let mut blocks = vec![];
         let mut block_index = 0;
-        let mut boundary_edges = vec![];
         // we sort by keys to exploit the external sequence cache which keeps the most recently used
         // external sequence in memory.
         for (node_id, sequence) in sequences_by_node_id
@@ -358,21 +357,6 @@ impl Edge {
                 edges_by_target_node_id.get(node_id),
                 sequence.length,
             );
-            for block_boundary in &block_boundaries {
-                // NOTE: Most of this data is bogus, the Edge struct is just a convenient wrapper
-                // for the data we need to set up boundary edges in the block group graph
-                boundary_edges.push(Edge {
-                    id: -1,
-                    source_node_id: *node_id,
-                    source_coordinate: *block_boundary,
-                    source_strand: Strand::Forward,
-                    target_node_id: *node_id,
-                    target_coordinate: *block_boundary,
-                    target_strand: Strand::Forward,
-                    chromosome_index: 0,
-                    phased: 0,
-                });
-            }
 
             if !block_boundaries.is_empty() {
                 let start = 0;
@@ -422,7 +406,7 @@ impl Edge {
             0,
         );
         blocks.push(end_block);
-        (blocks, boundary_edges)
+        blocks
     }
 
     pub fn build_graph(
@@ -482,6 +466,30 @@ impl Edge {
         }
 
         (graph, edges_by_node_pair)
+    }
+
+    pub fn boundary_edges_from_sequences(
+        node_blocks_by_id: &HashMap<i64, Vec<GroupBlock>>,
+    ) -> Vec<Edge> {
+        let mut boundary_edges = vec![];
+        for node_blocks in node_blocks_by_id.values() {
+            for (previous_block, next_block) in node_blocks.iter().tuple_windows() {
+                // NOTE: Most of this data is bogus, the Edge struct is just a convenient wrapper
+                // for the data we need to set up boundary edges in the block group graph
+                boundary_edges.push(Edge {
+                    id: -1,
+                    source_node_id: previous_block.node_id,
+                    source_coordinate: previous_block.end,
+                    source_strand: Strand::Forward,
+                    target_node_id: next_block.node_id,
+                    target_coordinate: next_block.start,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                });
+            }
+        }
+        boundary_edges
     }
 }
 
