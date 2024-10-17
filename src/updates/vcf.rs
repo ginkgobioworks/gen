@@ -41,7 +41,7 @@ impl<'a> BlockGroupCache<'_> {
         collection_name: &'a str,
         sample_name: &'a str,
         name: String,
-    ) -> i64 {
+    ) -> Result<i64, &'static str> {
         let block_group_key = BlockGroupData {
             collection_name,
             sample_name: Some(sample_name),
@@ -49,7 +49,7 @@ impl<'a> BlockGroupCache<'_> {
         };
         let block_group_lookup = block_group_cache.cache.get(&block_group_key);
         if let Some(block_group_id) = block_group_lookup {
-            *block_group_id
+            Ok(*block_group_id)
         } else {
             // see if a path exists already referencing this blockgroup. Reason is accessions
             let mut placeholders: Vec<SQLValue> = vec![];
@@ -70,17 +70,20 @@ impl<'a> BlockGroupCache<'_> {
             if paths.len() == 1 {
                 new_block_group_id = paths.first().unwrap().block_group_id;
             } else {
-                new_block_group_id = BlockGroup::get_or_create_sample_block_group(
+                match BlockGroup::get_or_create_sample_block_group(
                     block_group_cache.conn,
                     collection_name,
                     sample_name,
                     &name,
-                );
+                ) {
+                    Ok(v) => new_block_group_id = v,
+                    Err(e) => return Err(e),
+                }
             }
             block_group_cache
                 .cache
                 .insert(block_group_key, new_block_group_id);
-            new_block_group_id
+            Ok(new_block_group_id)
         }
     }
 }
@@ -236,8 +239,16 @@ pub fn update_with_vcf(
         let mut vcf_entries = vec![];
 
         if !fixed_sample.is_empty() && !genotype.is_empty() {
-            let mut sample_bg_id: Option<i64> = None;
-            let mut sample_path: Option<Path> = None;
+            let sample_bg_id = BlockGroupCache::lookup(
+                &mut block_group_cache,
+                collection_name,
+                &fixed_sample,
+                seq_name.clone(),
+            );
+            if sample_bg_id.is_err() {
+                continue;
+            }
+            let sample_bg_id = sample_bg_id.unwrap();
 
             for (chromosome_index, genotype) in genotype.iter().enumerate() {
                 if let Some(gt) = genotype {
@@ -247,23 +258,12 @@ pub fn update_with_vcf(
                             Phasing::Phased => 1,
                             Phasing::Unphased => 0,
                         };
-                        if sample_bg_id.is_none() {
-                            sample_bg_id = Some(BlockGroupCache::lookup(
-                                &mut block_group_cache,
-                                collection_name,
-                                &fixed_sample,
-                                seq_name.clone(),
-                            ));
-                            sample_path = Some(PathCache::lookup(
-                                &mut path_cache,
-                                sample_bg_id.unwrap(),
-                                seq_name.clone(),
-                            ));
-                        }
+                        let sample_path =
+                            PathCache::lookup(&mut path_cache, sample_bg_id, seq_name.clone());
                         vcf_entries.push(VcfEntry {
                             ids: record.ids().as_ref().to_string(),
-                            block_group_id: sample_bg_id.unwrap(),
-                            path: sample_path.clone().unwrap(),
+                            block_group_id: sample_bg_id,
+                            path: sample_path.clone(),
                             sample_name: fixed_sample.clone(),
                             alt_seq,
                             chromosome_index: chromosome_index as i64,
@@ -274,8 +274,16 @@ pub fn update_with_vcf(
             }
         } else {
             for (sample_index, sample) in record.samples().iter().enumerate() {
-                let mut sample_bg_id: Option<i64> = None;
-                let mut sample_path: Option<Path> = None;
+                let sample_bg_id = BlockGroupCache::lookup(
+                    &mut block_group_cache,
+                    collection_name,
+                    &sample_names[sample_index],
+                    seq_name.clone(),
+                );
+                if sample_bg_id.is_err() {
+                    continue;
+                }
+                let sample_bg_id = sample_bg_id.unwrap();
                 let genotype = sample.get(&header, "GT");
                 if genotype.is_some() {
                     if let Value::Genotype(genotypes) = genotype.unwrap().unwrap().unwrap() {
@@ -287,25 +295,17 @@ pub fn update_with_vcf(
                                     Phasing::Unphased => 0,
                                 };
                                 if let Some(allele) = allele {
-                                    if sample_bg_id.is_none() {
-                                        sample_bg_id = Some(BlockGroupCache::lookup(
-                                            &mut block_group_cache,
-                                            collection_name,
-                                            &sample_names[sample_index],
-                                            seq_name.clone(),
-                                        ));
-                                        sample_path = Some(PathCache::lookup(
-                                            &mut path_cache,
-                                            sample_bg_id.unwrap(),
-                                            seq_name.clone(),
-                                        ));
-                                    }
                                     if allele != 0 {
                                         let alt_seq = alt_alleles[allele - 1];
+                                        let sample_path = PathCache::lookup(
+                                            &mut path_cache,
+                                            sample_bg_id,
+                                            seq_name.clone(),
+                                        );
                                         vcf_entries.push(VcfEntry {
                                             ids: record.ids().as_ref().to_string(),
-                                            block_group_id: sample_bg_id.unwrap(),
-                                            path: sample_path.clone().unwrap(),
+                                            block_group_id: sample_bg_id,
+                                            path: sample_path.clone(),
                                             sample_name: sample_names[sample_index].clone(),
                                             alt_seq,
                                             chromosome_index: chromosome_index as i64,
@@ -445,8 +445,13 @@ mod tests {
         //     HashSet::from_iter(vec!["ATCATCGATAGAGATCGATCGGGAACACACAGAGA".to_string()])
         // );
         // Blockgroup 3 belongs to the `G1` genotype and has no changes
+        let test_bg = BlockGroup::query(
+            conn,
+            "select * from block_group where sample_name = ?1",
+            vec![SQLValue::from("G1".to_string())],
+        );
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 3),
+            BlockGroup::get_all_sequences(conn, test_bg[0].id),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
         // This individual is homozygous for the first variant and does not contain the second
@@ -538,8 +543,15 @@ mod tests {
             conn,
             op_conn,
         );
+
+        let missing_allele_bg = BlockGroup::query(
+            conn,
+            "select * from block_group where sample_name = ?1",
+            vec![SQLValue::from("unknown".to_string())],
+        );
+
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 2),
+            BlockGroup::get_all_sequences(conn, missing_allele_bg[0].id),
             HashSet::from_iter(
                 [
                     "ATCGATCGATCGATCGATCGGGAACACACAGAGA",
@@ -774,6 +786,16 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+        );
+
+        assert_eq!(
+            Path::get_paths(
+                conn,
+                "select * from path where name = ?1",
+                vec![SQLValue::from("ins2".to_string())]
+            )
+            .len(),
+            1
         );
     }
 

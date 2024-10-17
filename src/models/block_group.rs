@@ -201,7 +201,7 @@ impl BlockGroup {
         collection_name: &str,
         sample_name: &str,
         group_name: &str,
-    ) -> i64 {
+    ) -> Result<i64, &'static str> {
         let mut bg_id : i64 = match conn.query_row(
             "select id from block_group where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
             (collection_name, sample_name, group_name),
@@ -214,7 +214,7 @@ impl BlockGroup {
             }
         };
         if bg_id != 0 {
-            return bg_id;
+            return Ok(bg_id);
         } else {
             // use the base reference group if it exists
             bg_id = match conn.query_row(
@@ -223,18 +223,21 @@ impl BlockGroup {
             |row| row.get(0),
             ) {
                 Ok(res) => res,
-                Err(rusqlite::Error::QueryReturnedNoRows) => panic!("No base path exists"),
+                Err(rusqlite::Error::QueryReturnedNoRows) => 0,
                 Err(_e) => {
                     panic!("something bad happened querying the database")
                 }
             }
+        }
+        if bg_id == 0 {
+            return Err("No base path exists");
         }
         let new_bg_id = BlockGroup::create(conn, collection_name, Some(sample_name), group_name);
 
         // clone parent blocks/edges/path
         BlockGroup::clone(conn, bg_id, new_bg_id.id);
 
-        new_bg_id.id
+        Ok(new_bg_id.id)
     }
 
     pub fn get_id(
@@ -512,7 +515,8 @@ mod tests {
         assert_eq!(bg1.collection_name, "test");
         assert_eq!(bg1.name, "hg19");
         Sample::create(conn, "sample");
-        let bg2 = BlockGroup::get_or_create_sample_block_group(conn, "test", "sample", "hg19");
+        let bg2 =
+            BlockGroup::get_or_create_sample_block_group(conn, "test", "sample", "hg19").unwrap();
         assert_eq!(
             BlockGroupEdge::edges_for_block_group(conn, bg1.id),
             BlockGroupEdge::edges_for_block_group(conn, bg2)
