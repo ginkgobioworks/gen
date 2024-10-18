@@ -272,8 +272,20 @@ impl BlockGroup {
 
     pub fn get_all_sequences(conn: &Connection, block_group_id: i64) -> HashSet<String> {
         let mut edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
-        let (blocks, boundary_edges) = Edge::blocks_from_edges(conn, &edges);
+        let blocks = Edge::blocks_from_edges(conn, &edges);
+        let node_blocks_by_id: HashMap<i64, Vec<GroupBlock>> =
+            blocks
+                .clone()
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, block| {
+                    acc.entry(block.node_id)
+                        .and_modify(|blocks| blocks.push(block.clone()))
+                        .or_insert_with(|| vec![block.clone()]);
+                    acc
+                });
+        let boundary_edges = Edge::boundary_edges_from_sequences(&node_blocks_by_id);
         edges.extend(boundary_edges.clone());
+
         let (graph, _) = Edge::build_graph(&edges, &blocks);
 
         let mut start_nodes = vec![];
@@ -288,7 +300,6 @@ impl BlockGroup {
                 end_nodes.push(node);
             }
         }
-
         let blocks_by_id = blocks
             .clone()
             .into_iter()
