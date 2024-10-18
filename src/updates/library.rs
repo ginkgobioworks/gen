@@ -1,4 +1,5 @@
 use csv;
+use itertools::Itertools;
 use noodles::fasta;
 use rusqlite::{session, types::Value as SQLValue, Connection};
 use std::collections::{HashMap, HashSet};
@@ -82,19 +83,27 @@ pub fn update_with_library(
     let library_file = File::open(library_file_path)?;
     let library_reader = BufReader::new(library_file);
 
-    let mut parts1 = vec![];
-    let mut parts2 = vec![];
+    let mut parts_by_index = HashMap::new();
     let mut library_csv_reader = csv::ReaderBuilder::new()
         .has_headers(false)
         .from_reader(library_reader);
+    let mut max_index = 0;
     for result in library_csv_reader.records() {
         let record = result?;
-        let part1_name = record.get(0).unwrap();
-        let part2_name = record.get(1).unwrap();
-        let part1_id = node_ids_by_name.get(part1_name).unwrap();
-        let part2_id = node_ids_by_name.get(part2_name).unwrap();
-        parts1.push(part1_id);
-        parts2.push(part2_id);
+        for (index, part) in record.iter().enumerate() {
+            if !part.is_empty() {
+                let part_id = node_ids_by_name.get(part).unwrap();
+                parts_by_index.entry(index).or_insert(vec![]).push(part_id);
+                if index >= max_index {
+                    max_index = index + 1;
+                }
+            }
+        }
+    }
+
+    let mut parts_list = vec![];
+    for index in 0..max_index {
+        parts_list.push(parts_by_index.get(&index).unwrap());
     }
 
     let path_intervaltree = Path::intervaltree_for(conn, &path);
@@ -116,12 +125,13 @@ pub fn update_with_library(
     let node_end_coordinate = end_coordinate - end_block.path_start + end_block.sequence_start;
 
     let mut new_edges = HashSet::new();
-    for part1 in &parts1 {
+    let start_parts = parts_list.first().unwrap();
+    for start_part in *start_parts {
         let edge = EdgeData {
             source_node_id: start_block.node_id,
             source_coordinate: node_start_coordinate,
             source_strand: Strand::Forward,
-            target_node_id: **part1,
+            target_node_id: **start_part,
             target_coordinate: 0,
             target_strand: Strand::Forward,
             chromosome_index: 0,
@@ -130,11 +140,12 @@ pub fn update_with_library(
         new_edges.insert(edge);
     }
 
-    for part2 in &parts2 {
-        let part2_source_coordinate = sequence_lengths_by_node_id.get(part2).unwrap();
+    let end_parts = parts_list.last().unwrap();
+    for end_part in *end_parts {
+        let end_part_source_coordinate = sequence_lengths_by_node_id.get(end_part).unwrap();
         let edge = EdgeData {
-            source_node_id: **part2,
-            source_coordinate: *part2_source_coordinate,
+            source_node_id: **end_part,
+            source_coordinate: *end_part_source_coordinate,
             source_strand: Strand::Forward,
             target_node_id: end_block.node_id,
             target_coordinate: node_end_coordinate,
@@ -145,27 +156,32 @@ pub fn update_with_library(
         new_edges.insert(edge);
     }
 
-    for part1 in &parts1 {
-        for part2 in &parts2 {
-            let part1_source_coordinate = sequence_lengths_by_node_id.get(part1).unwrap();
-            let edge = EdgeData {
-                source_node_id: **part1,
-                source_coordinate: *part1_source_coordinate,
-                source_strand: Strand::Forward,
-                target_node_id: **part2,
-                target_coordinate: 0,
-                target_strand: Strand::Forward,
-                chromosome_index: 0,
-                phased: 0,
-            };
-            new_edges.insert(edge);
+    let mut path_changes_count = 1;
+    for (parts1, parts2) in parts_list.iter().tuple_windows() {
+        path_changes_count *= parts1.len();
+        for part1 in *parts1 {
+            for part2 in *parts2 {
+                let part1_source_coordinate = sequence_lengths_by_node_id.get(part1).unwrap();
+                let edge = EdgeData {
+                    source_node_id: **part1,
+                    source_coordinate: *part1_source_coordinate,
+                    source_strand: Strand::Forward,
+                    target_node_id: **part2,
+                    target_coordinate: 0,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                };
+                new_edges.insert(edge);
+            }
         }
     }
+
+    path_changes_count *= end_parts.len();
 
     let new_edge_ids = Edge::bulk_create(conn, new_edges.iter().cloned().collect());
     BlockGroupEdge::bulk_create(conn, path.block_group_id, &new_edge_ids);
 
-    let path_changes_count = parts1.len() * parts2.len();
     let summary_str = format!("{path_name}: {path_changes_count} changes.\n");
     OperationSummary::create(operation_conn, operation.id, &summary_str);
 

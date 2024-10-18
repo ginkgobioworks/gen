@@ -745,7 +745,19 @@ mod tests {
         let (block_group_id, path) = setup_block_group(&conn);
 
         let edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
-        let (blocks, boundary_edges) = Edge::blocks_from_edges(&conn, &edges);
+        let blocks = Edge::blocks_from_edges(&conn, &edges);
+        let node_blocks_by_id: HashMap<i64, Vec<GroupBlock>> =
+            blocks
+                .clone()
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, block| {
+                    acc.entry(block.node_id)
+                        .and_modify(|blocks| blocks.push(block.clone()))
+                        .or_insert_with(|| vec![block.clone()]);
+                    acc
+                });
+        let boundary_edges = Edge::boundary_edges_from_sequences(&node_blocks_by_id);
+
         // 4 actual sequences: 10-length ones of all A, all T, all C, all G
         // 2 terminal node blocks (start/end)
         // 6 total
@@ -780,7 +792,19 @@ mod tests {
         BlockGroup::insert_change(&conn, &change, &tree);
         let mut edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
 
-        let (blocks, boundary_edges) = Edge::blocks_from_edges(&conn, &edges);
+        let blocks = Edge::blocks_from_edges(&conn, &edges);
+        let node_blocks_by_id: HashMap<i64, Vec<GroupBlock>> =
+            blocks
+                .clone()
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, block| {
+                    acc.entry(block.node_id)
+                        .and_modify(|blocks| blocks.push(block.clone()))
+                        .or_insert_with(|| vec![block.clone()]);
+                    acc
+                });
+        let boundary_edges = Edge::boundary_edges_from_sequences(&node_blocks_by_id);
+
         // 2 10-length sequences of all C, all G
         // 1 inserted NNNN sequence
         // 4 split blocks (A and T sequences were split) resulting from the inserted sequence
@@ -791,7 +815,19 @@ mod tests {
 
         // Confirm that ordering doesn't matter
         edges.reverse();
-        let (blocks, boundary_edges) = Edge::blocks_from_edges(&conn, &edges);
+        let blocks = Edge::blocks_from_edges(&conn, &edges);
+        let node_blocks_by_id: HashMap<i64, Vec<GroupBlock>> =
+            blocks
+                .clone()
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, block| {
+                    acc.entry(block.node_id)
+                        .and_modify(|blocks| blocks.push(block.clone()))
+                        .or_insert_with(|| vec![block.clone()]);
+                    acc
+                });
+        let boundary_edges = Edge::boundary_edges_from_sequences(&node_blocks_by_id);
+
         // 2 10-length sequences of all C, all G
         // 1 inserted NNNN sequence
         // 4 split blocks (A and T sequences were split) resulting from the inserted sequence
