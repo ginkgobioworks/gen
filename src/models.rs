@@ -1,3 +1,4 @@
+mod accessions;
 pub mod block_group;
 pub mod block_group_edge;
 pub mod collection;
@@ -11,3 +12,4 @@ pub mod path_edge;
 pub mod sample;
 pub mod sequence;
 pub mod strand;
+mod traits;

@@ -15,6 +15,7 @@ use crate::models::{
 };
 use crate::{calculate_hash, operation_management, parse_genotype};
 use noodles::vcf;
+use noodles::vcf::variant::record::info::field::Value as InfoValue;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use noodles::vcf::variant::record::samples::series::Value;
 use noodles::vcf::variant::record::samples::Sample as NoodlesSample;
@@ -51,39 +52,20 @@ impl<'a> BlockGroupCache<'_> {
         if let Some(block_group_id) = block_group_lookup {
             Ok(*block_group_id)
         } else {
-            // see if a path exists already referencing this blockgroup. Reason is accessions
-            let mut placeholders: Vec<SQLValue> = vec![];
-            placeholders.push(name.clone().into());
-            placeholders.push(collection_name.to_string().into());
-            let mut bg_query = "bg.collection_name = ?2".to_string();
-            if sample_name.is_empty() {
-                bg_query.push_str(" AND bg.sample_name is null");
-            } else {
-                bg_query.push_str(" AND bg.sample_name = ?3");
-                placeholders.push(sample_name.to_string().into());
-            }
+            // This function can be called from the vcf update code path, where the name passed
+            // can be an accession and not the name of a block group. So we have 2 code paths
+            // to follow.
+            let new_block_group_id = BlockGroup::get_or_create_sample_block_group(
+                block_group_cache.conn,
+                collection_name,
+                sample_name,
+                &name,
+            );
 
-            let mut new_block_group_id;
-
-            let paths = Path::query(block_group_cache.conn, &format!("select p.* from path p left join block_group bg on (p.block_group_id = bg.id) where p.name = ?1 AND {bg_query}"), placeholders.clone());
-            println!("p is {paths:?} {bg_query} {placeholders:?}");
-            if paths.len() == 1 {
-                new_block_group_id = paths.first().unwrap().block_group_id;
-            } else {
-                match BlockGroup::get_or_create_sample_block_group(
-                    block_group_cache.conn,
-                    collection_name,
-                    sample_name,
-                    &name,
-                ) {
-                    Ok(v) => new_block_group_id = v,
-                    Err(e) => return Err(e),
-                }
-            }
             block_group_cache
                 .cache
-                .insert(block_group_key, new_block_group_id);
-            Ok(new_block_group_id)
+                .insert(block_group_key, new_block_group_id?);
+            new_block_group_id
         }
     }
 }
@@ -138,7 +120,7 @@ impl<'a> SequenceCache<'_> {
 fn prepare_change(
     sample_bg_id: i64,
     sample_path: &Path,
-    ids: String,
+    ids: Option<String>,
     ref_start: i64,
     ref_end: i64,
     chromosome_index: i64,
@@ -175,7 +157,7 @@ struct VcfEntry<'a> {
     block_group_id: i64,
     sample_name: String,
     path: Path,
-    ids: String,
+    ids: Option<String>,
     alt_seq: &'a str,
     chromosome_index: i64,
     phased: i64,
@@ -223,6 +205,7 @@ pub fn update_with_vcf(
     let mut block_group_cache = BlockGroupCache::new(conn);
     let mut path_cache = PathCache::new(conn);
     let mut sequence_cache = SequenceCache::new(conn);
+    let mut accession_cache: HashMap<String, (i64, i64, i64)> = HashMap::new();
 
     let mut changes: HashMap<(Path, String), Vec<PathChange>> = HashMap::new();
 
@@ -232,20 +215,53 @@ pub fn update_with_vcf(
         let record = result.unwrap();
         let seq_name: String = record.reference_sequence_name().to_string();
         // this converts the coordinates to be zero based, start inclusive, end exclusive
-        let ref_start = record.variant_start().unwrap().unwrap().get() - 1;
-        let ref_end = record.variant_end(&header).unwrap().get();
+        let mut ref_start = (record.variant_start().unwrap().unwrap().get() - 1) as i64;
+        let mut ref_end = record.variant_end(&header).unwrap().get() as i64;
         let alt_bases = record.alternate_bases();
         let alt_alleles: Vec<_> = alt_bases.iter().collect::<io::Result<_>>().unwrap();
         let mut vcf_entries = vec![];
+        let accession_name: Option<String> = match record.info().get(&header, "GAN") {
+            Some(v) => match v.unwrap().unwrap() {
+                InfoValue::String(v) => Some(v.to_string()),
+                _ => None,
+            },
+            _ => None,
+        };
+        let accession_allele: i32 = match record.info().get(&header, "GAA") {
+            Some(v) => match v.unwrap().unwrap() {
+                InfoValue::Integer(v) => v,
+                _ => 0,
+            },
+            _ => 0,
+        };
+        let mut accession_path_id: Option<i64> = None;
 
         if !fixed_sample.is_empty() && !genotype.is_empty() {
-            let sample_bg_id = BlockGroupCache::lookup(
+            let mut sample_bg_id = BlockGroupCache::lookup(
                 &mut block_group_cache,
                 collection_name,
                 &fixed_sample,
                 seq_name.clone(),
             );
             if sample_bg_id.is_err() {
+                // we can't find the blockgroup, check if the seq name is actually an accession
+                // let mut stmt = conn.prepare_cached("select bg.id, pa.path_id, pa.start from path_accession pa left join path p on (p.id = pa.path_id) left join block_group bg on (p.block_group_id = bg.id) where pa.name = ?1 AND  bg.collection_name = ?2 AND bg.sample_name = ?3").unwrap();
+                // let rows = stmt.query_map((SQLValue::from(seq_name.clone()), SQLValue::from(collection_name.to_string()), SQLValue::from(fixed_sample.clone())),
+                //     |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                // ).unwrap();
+                // for (index, result) in rows.enumerate() {
+                //     if index != 0 {
+                //         panic!("too many results, give user feedback to identify correct accession,");
+                //     }
+                //     let (bg_id, pa_id, pa_start) : (i64, i64, i64) = result.unwrap();
+                //     sample_bg_id = Ok(bg_id);
+                //     accession_path_id = Some(pa_id);
+                //     ref_start += pa_start;
+                //     ref_end += pa_start;
+                // }
+            }
+            if sample_bg_id.is_err() {
+                println!("can't find sample bg....check this out more");
                 continue;
             }
             let sample_bg_id = sample_bg_id.unwrap();
@@ -261,7 +277,7 @@ pub fn update_with_vcf(
                         let sample_path =
                             PathCache::lookup(&mut path_cache, sample_bg_id, seq_name.clone());
                         vcf_entries.push(VcfEntry {
-                            ids: record.ids().as_ref().to_string(),
+                            ids: accession_name.clone(),
                             block_group_id: sample_bg_id,
                             path: sample_path.clone(),
                             sample_name: fixed_sample.clone(),
@@ -274,15 +290,35 @@ pub fn update_with_vcf(
             }
         } else {
             for (sample_index, sample) in record.samples().iter().enumerate() {
-                let sample_bg_id = BlockGroupCache::lookup(
+                let mut sample_bg_id = BlockGroupCache::lookup(
                     &mut block_group_cache,
                     collection_name,
                     &sample_names[sample_index],
                     seq_name.clone(),
                 );
+
+                // if sample_bg_id.is_err() {
+                //     // we can't find the blockgroup, check if the seq name is actually an accession
+                //     let mut stmt = conn.prepare_cached("select bg.id, pa.path_id, pa.start from path_accession pa left join path p on (p.id = pa.path_id) left join block_group bg on (p.block_group_id = bg.id) where pa.name = ?1 AND  bg.collection_name = ?2 AND bg.sample_name = ?3").unwrap();
+                //     let rows = stmt.query_map((SQLValue::from(seq_name.clone()), SQLValue::from(collection_name.to_string()), SQLValue::from(fixed_sample.clone())),
+                //         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                //     ).unwrap();
+                //     for (index, result) in rows.enumerate() {
+                //         if index != 0 {
+                //             panic!("too many results, give user feedback to identify correct accession,");
+                //         }
+                //         let (bg_id, pa_id, pa_start) : (i64, i64, i64) = result.unwrap();
+                //         sample_bg_id = Ok(bg_id);
+                //         accession_path_id = Some(pa_id);
+                //         ref_start += pa_start;
+                //         ref_end += pa_start;
+                //     }
+                // }
                 if sample_bg_id.is_err() {
+                    println!("can't find sample bg....check this out more");
                     continue;
                 }
+
                 let sample_bg_id = sample_bg_id.unwrap();
                 let genotype = sample.get(&header, "GT");
                 if genotype.is_some() {
@@ -294,6 +330,7 @@ pub fn update_with_vcf(
                                     Phasing::Phased => 1,
                                     Phasing::Unphased => 0,
                                 };
+                                println!("{allele:?}");
                                 if let Some(allele) = allele {
                                     if allele != 0 {
                                         let alt_seq = alt_alleles[allele - 1];
@@ -302,8 +339,14 @@ pub fn update_with_vcf(
                                             sample_bg_id,
                                             seq_name.clone(),
                                         );
+                                        let accession_name = accession_name
+                                            .clone()
+                                            .filter(|name| allele as i32 == accession_allele);
+                                        println!(
+                                            "{sample_path:?} {accession_name:?} {accession_allele}"
+                                        );
                                         vcf_entries.push(VcfEntry {
-                                            ids: record.ids().as_ref().to_string(),
+                                            ids: accession_name,
                                             block_group_id: sample_bg_id,
                                             path: sample_path.clone(),
                                             sample_name: sample_names[sample_index].clone(),
@@ -336,7 +379,6 @@ pub fn update_with_vcf(
                 if parent_bg.is_empty() {
                     vcf_entry.path.id
                 } else {
-                    // let parent_bg = &Path::query(conn, "select * from path p left join block_group bg on (p.block_group_id = bg.id) where bg.collection_name = ?1 AND sample_name is null and name = ?2", vec![SQLValue::from(collection_name.to_string()), SQLValue::from(vcf_entry.path.name.clone())])[0];
                     let parent_path =
                         PathCache::lookup(&mut path_cache, parent_bg.first().unwrap().id, vcf_entry.path.name.clone());
                     parent_path.id
@@ -356,8 +398,8 @@ pub fn update_with_vcf(
                 vcf_entry.block_group_id,
                 &vcf_entry.path,
                 vcf_entry.ids,
-                ref_start as i64,
-                ref_end as i64,
+                ref_start,
+                ref_end,
                 vcf_entry.chromosome_index,
                 vcf_entry.phased,
                 sequence_string.clone(),
@@ -769,8 +811,18 @@ mod tests {
         assert_eq!(
             Path::get_paths(
                 conn,
-                "select * from path where name = ?1",
+                "select * from path_accession where name = ?1",
                 vec![SQLValue::from("del1".to_string())]
+            )
+            .len(),
+            1
+        );
+
+        assert_eq!(
+            Path::get_paths(
+                conn,
+                "select * from path_accession where name = ?1",
+                vec![SQLValue::from("lp1".to_string())]
             )
             .len(),
             1
@@ -796,6 +848,17 @@ mod tests {
             )
             .len(),
             1
+        );
+
+        let test_bg = BlockGroup::query(
+            conn,
+            "select * from block_group where sample_name = ?1",
+            vec![SQLValue::from("foo".to_string())],
+        );
+
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, test_bg[0].id),
+            HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
     }
 

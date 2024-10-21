@@ -6,6 +6,7 @@ use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::graph::all_simple_paths;
+use crate::models::accessions::{Accession, AccessionEdge, AccessionPath};
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData, GroupBlock};
 use crate::models::node::{PATH_END_NODE_ID, PATH_START_NODE_ID};
@@ -32,7 +33,7 @@ pub struct BlockGroupData<'a> {
 pub struct PathChange {
     pub block_group_id: i64,
     pub path: Path,
-    pub path_accession: String,
+    pub path_accession: Option<String>,
     pub start: i64,
     pub end: i64,
     pub block: PathBlock,
@@ -180,6 +181,7 @@ impl BlockGroup {
             "SELECT * from path where block_group_id = ?1",
             vec![SQLValue::from(source_block_group_id)],
         );
+        // TODO: clone path accessions
 
         let edge_ids = BlockGroupEdge::edges_for_block_group(conn, source_block_group_id)
             .iter()
@@ -331,21 +333,14 @@ impl BlockGroup {
                 .entry(change.block_group_id)
                 .and_modify(|new_edge_data| new_edge_data.extend(new_edges.clone()))
                 .or_insert_with(|| new_edges.clone());
-            if !change.path_accession.is_empty() {
-                for accession in change
-                    .path_accession
-                    .split(";")
-                    .filter(|i| !i.is_empty() && *i != ".")
-                {
-                    let path =
-                        PathCache::lookup(cache, change.block_group_id, accession.to_string());
-                    new_accession_edges
-                        .entry(path)
-                        .and_modify(|new_edge_data: &mut Vec<EdgeData>| {
-                            new_edge_data.extend(new_edges.clone())
-                        })
-                        .or_insert_with(|| new_edges.clone());
-                }
+            if let Some(accession) = &change.path_accession {
+                let path = PathCache::lookup(cache, change.block_group_id, accession.to_string());
+                new_accession_edges
+                    .entry((path, accession))
+                    .and_modify(|new_edge_data: &mut Vec<EdgeData>| {
+                        new_edge_data.extend(new_edges.clone())
+                    })
+                    .or_insert_with(|| new_edges.clone());
             }
         }
 
@@ -359,25 +354,29 @@ impl BlockGroup {
             BlockGroupEdge::bulk_create(conn, block_group_id, &edge_ids);
         }
 
-        for (path, path_edges) in new_accession_edges {
-            assert_eq!(
-                PathEdge::query(
-                    conn,
-                    "select * from path_edges where path_id = ?1 limit 1;",
-                    vec![SQLValue::from(path.id)]
-                )
-                .len(),
-                0,
-                "Path already exists."
-            );
-            PathEdge::bulk_create(
-                conn,
-                path.id,
-                &path_edges
-                    .iter()
-                    .map(|ed| edge_data_map[ed])
-                    .collect::<Vec<i64>>(),
-            );
+        for ((path, accession_name), path_edges) in new_accession_edges {
+            let acc_edges = AccessionEdge::bulk_create(conn, &path_edges);
+            let acc = Accession::create(conn, accession_name, path.id, None, 0, 0);
+            println!("making with {acc_edges:?}");
+            AccessionPath::bulk_create(conn, acc.id, acc_edges);
+            // assert_eq!(
+            //     PathEdge::query(
+            //         conn,
+            //         "select * from path_edges where path_id = ?1 limit 1;",
+            //         vec![SQLValue::from(path.id)]
+            //     )
+            //     .len(),
+            //     0,
+            //     "Path already exists."
+            // );
+            // PathEdge::bulk_create(
+            //     conn,
+            //     path.id,
+            //     &path_edges
+            //         .iter()
+            //         .map(|ed| edge_data_map[ed])
+            //         .collect::<Vec<i64>>(),
+            // );
         }
     }
 
@@ -545,7 +544,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 7,
             end: 15,
             block: insert,
@@ -583,7 +582,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 19,
             end: 31,
             block: deletion,
@@ -627,7 +626,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 7,
             end: 15,
             block: insert,
@@ -669,7 +668,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 15,
             end: 15,
             block: insert,
@@ -711,7 +710,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 12,
             end: 17,
             block: insert,
@@ -753,7 +752,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 10,
             end: 10,
             block: insert,
@@ -795,7 +794,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 9,
             end: 9,
             block: insert,
@@ -837,7 +836,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 10,
             end: 20,
             block: insert,
@@ -879,7 +878,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 15,
             end: 25,
             block: insert,
@@ -921,7 +920,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 5,
             end: 35,
             block: insert,
@@ -964,7 +963,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 19,
             end: 31,
             block: deletion,
@@ -1007,7 +1006,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 7,
             end: 15,
             block: insert,
@@ -1061,7 +1060,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 0,
             end: 0,
             block: insert,
@@ -1104,7 +1103,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 40,
             end: 40,
             block: insert,
@@ -1146,7 +1145,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 10,
             end: 11,
             block: insert,
@@ -1188,7 +1187,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 19,
             end: 20,
             block: insert,
@@ -1230,7 +1229,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 0,
             end: 1,
             block: deletion,
@@ -1272,7 +1271,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 35,
             end: 40,
             block: deletion,
@@ -1314,7 +1313,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 10,
             end: 12,
             block: deletion,
@@ -1356,7 +1355,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
-            path_accession: "".to_string(),
+            path_accession: None,
             start: 18,
             end: 20,
             block: deletion,
