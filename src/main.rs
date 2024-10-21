@@ -72,13 +72,13 @@ enum Commands {
         #[arg(short, long)]
         library: Option<String>,
         /// A fasta with the combinatorial library parts
-        #[arg(short, long)]
+        #[arg(long)]
         parts: Option<String>,
         /// The name of the path to add the library to
         #[arg(short, long)]
         path_name: Option<String>,
         /// The start coordinate for the region to add the library to
-        #[arg(short, long)]
+        #[arg(long)]
         start: Option<i64>,
         /// The end coordinate for the region to add the library to
         #[arg(short, long)]
