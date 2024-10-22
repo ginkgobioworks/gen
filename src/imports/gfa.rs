@@ -238,13 +238,13 @@ mod tests {
             "select * from path where block_group_id = ?1 AND name = ?2",
             vec![
                 SQLValue::from(block_group_id),
-                SQLValue::from("124".to_string()),
+                SQLValue::from("m123".to_string()),
             ],
         )[0]
         .clone();
 
         let result = Path::sequence(conn, path);
-        assert_eq!(result, "ATGGCATATTCGCAGCT");
+        assert_eq!(result, "ATCGATCGATCGATCGATCGGGAACACACAGAGA");
 
         let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i64;
         assert_eq!(node_count, 6);
