@@ -1,12 +1,13 @@
 use std::collections::{HashMap, HashSet};
 
 use intervaltree::IntervalTree;
+use itertools::Itertools;
 use petgraph::Direction;
 use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::graph::all_simple_paths;
-use crate::models::accessions::{Accession, AccessionEdge, AccessionPath};
+use crate::models::accessions::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData, GroupBlock};
 use crate::models::node::{PATH_END_NODE_ID, PATH_START_NODE_ID};
@@ -323,6 +324,82 @@ impl BlockGroup {
         sequences
     }
 
+    pub fn add_accession(
+        conn: &Connection,
+        path: &Path,
+        name: &str,
+        start: i64,
+        end: i64,
+        chromosome_index: i64,
+        cache: &mut PathCache,
+    ) {
+        let tree = PathCache::get_intervaltree(cache, path).unwrap();
+        let start_blocks: Vec<&PathBlock> = tree.query_point(start).map(|x| &x.value).collect();
+        assert_eq!(start_blocks.len(), 1);
+        let start_block = start_blocks[0];
+        let end_blocks: Vec<&PathBlock> = tree.query_point(end).map(|x| &x.value).collect();
+        assert_eq!(end_blocks.len(), 1);
+        let end_block = end_blocks[0];
+        // we make a start/end edge for the accession start/end, then fill in the middle
+        // with any existing edges
+        let start_edge = AccessionEdgeData {
+            source_node_id: PATH_START_NODE_ID,
+            source_coordinate: -1,
+            source_strand: Strand::Forward,
+            target_node_id: start_block.node_id,
+            target_coordinate: start - start_block.path_start + start_block.sequence_start,
+            target_strand: Strand::Forward,
+            chromosome_index,
+        };
+        let end_edge = AccessionEdgeData {
+            source_node_id: end_block.node_id,
+            source_coordinate: end - end_block.path_start + end_block.sequence_start,
+            source_strand: Strand::Forward,
+            target_node_id: PATH_END_NODE_ID,
+            target_coordinate: -1,
+            target_strand: Strand::Forward,
+            chromosome_index,
+        };
+        let accession = Accession::create(conn, name, path.id, None, 0, 0);
+        let mut path_edges = vec![start_edge];
+        if start_block == end_block {
+            path_edges.push(end_edge);
+        } else {
+            let mut in_range = false;
+            let path_blocks: Vec<&PathBlock> = tree
+                .iter_sorted()
+                .map(|x| &x.value)
+                .filter(|block| {
+                    if block.id == start_block.id {
+                        in_range = true;
+                    } else if block.id == end_block.id {
+                        in_range = false;
+                        return true;
+                    }
+                    in_range
+                })
+                .collect::<Vec<_>>();
+            // if start and end block are not the same, we will always have at least 2 elements in path_blocks
+            for (block, next_block) in path_blocks.iter().zip(path_blocks[1..].iter()) {
+                path_edges.push(AccessionEdgeData {
+                    source_node_id: block.node_id,
+                    source_coordinate: block.sequence_end,
+                    source_strand: block.strand,
+                    target_node_id: next_block.node_id,
+                    target_coordinate: next_block.sequence_start,
+                    target_strand: next_block.strand,
+                    chromosome_index,
+                })
+            }
+            path_edges.push(end_edge);
+        }
+        AccessionPath::create(
+            conn,
+            accession.id,
+            AccessionEdge::bulk_create(conn, &path_edges),
+        );
+    }
+
     pub fn insert_changes(conn: &Connection, changes: &Vec<PathChange>, cache: &mut PathCache) {
         let mut new_edges_by_block_group = HashMap::<i64, Vec<EdgeData>>::new();
         let mut new_accession_edges = HashMap::new();
@@ -355,10 +432,12 @@ impl BlockGroup {
         }
 
         for ((path, accession_name), path_edges) in new_accession_edges {
-            let acc_edges = AccessionEdge::bulk_create(conn, &path_edges);
+            let acc_edges = AccessionEdge::bulk_create(
+                conn,
+                &path_edges.iter().map(AccessionEdgeData::from).collect(),
+            );
             let acc = Accession::create(conn, accession_name, path.id, None, 0, 0);
-            println!("making with {acc_edges:?}");
-            AccessionPath::bulk_create(conn, acc.id, acc_edges);
+            AccessionPath::create(conn, acc.id, acc_edges);
             // assert_eq!(
             //     PathEdge::query(
             //         conn,

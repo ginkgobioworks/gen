@@ -2,7 +2,8 @@ use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection, Row};
 
 pub trait Query {
-    fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Box<Self>> {
+    type Model;
+    fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Self::Model> {
         let mut stmt = conn.prepare(query).unwrap();
         let rows = stmt
             .query_map(params_from_iter(placeholders), |row| {
@@ -16,7 +17,7 @@ pub trait Query {
         objs
     }
 
-    fn get(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Box<Self> {
+    fn get(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Self::Model {
         let mut stmt = conn.prepare(query).unwrap();
         stmt.query_row(params_from_iter(placeholders), |row| {
             Ok(Self::process_row(row))
@@ -24,5 +25,5 @@ pub trait Query {
         .unwrap()
     }
 
-    fn process_row(row: &Row) -> Box<Self>;
+    fn process_row(row: &Row) -> Self::Model;
 }

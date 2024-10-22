@@ -68,12 +68,10 @@ CREATE TABLE accession_edge (
   target_coordinate INTEGER NOT NULL,
   target_strand TEXT NOT NULL,
   chromosome_index INTEGER NOT NULL,
-  phased INTEGER NOT NULL,
   FOREIGN KEY(source_node_id) REFERENCES nodes(id),
-  FOREIGN KEY(target_node_id) REFERENCES nodes(id),
-  constraint chk_phased check (phased in (0, 1))
+  FOREIGN KEY(target_node_id) REFERENCES nodes(id)
 ) STRICT;
-CREATE UNIQUE INDEX accession_edge_uidx ON accession_edge(source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased);
+CREATE UNIQUE INDEX accession_edge_uidx ON accession_edge(source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index);
 
 CREATE TABLE accession_path (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,

@@ -63,5 +63,5 @@
 ##FORMAT=<ID=MIN_DP,Number=1,Type=Integer,Description="Minimum depth in gVCF output block.">
 #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	foo
 m123	3	.	CGA	CA	1611.92	.	GAN=del1;GAA=1	GT	0/1
-m123	5	.	ATCGAT	.	1611.92	.	GAN=lp1	GT	0/0
+m123	2	.	TCGATCGATCGATCGAT	.	1611.92	.	GAN=lp1	GT	0/0
 m123	10	.	TC	TAGA	2216.6	.	GAN=ins1;GAA=1	GT	0/1

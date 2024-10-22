@@ -60,7 +60,7 @@ pub fn revcomp(seq: &str) -> String {
     .unwrap()
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PathBlock {
     pub id: i64,
     pub node_id: i64,
