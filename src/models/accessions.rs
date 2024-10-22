@@ -176,6 +176,7 @@ impl AccessionEdge {
             chromosome_index: edge.chromosome_index,
         }
     }
+
     pub fn bulk_create(conn: &Connection, edges: &Vec<AccessionEdgeData>) -> Vec<i64> {
         let mut edge_rows = vec![];
         let mut edge_map: HashMap<AccessionEdgeData, i64> = HashMap::new();

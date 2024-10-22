@@ -14,6 +14,7 @@ use crate::models::node::{PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::path::{Path, PathBlock, PathData};
 use crate::models::path_edge::PathEdge;
 use crate::models::strand::Strand;
+use crate::models::traits::*;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BlockGroup {
@@ -66,7 +67,12 @@ impl PathCache<'_> {
         if let Some(path) = path_lookup {
             path.clone()
         } else {
-            let new_path = Path::create(path_cache.conn, &name, block_group_id, &[]);
+            let new_path = Path::get_paths(
+                path_cache.conn,
+                "select * from path where block_group_id = ?1 AND name = ?2",
+                vec![SQLValue::from(block_group_id), SQLValue::from(name)],
+            )[0]
+            .clone();
 
             path_cache.cache.insert(path_key, new_path.clone());
             let tree = Path::intervaltree_for(path_cache.conn, &new_path);
@@ -182,7 +188,6 @@ impl BlockGroup {
             "SELECT * from path where block_group_id = ?1",
             vec![SQLValue::from(source_block_group_id)],
         );
-        // TODO: clone path accessions
 
         let edge_ids = BlockGroupEdge::edges_for_block_group(conn, source_block_group_id)
             .iter()
@@ -190,12 +195,34 @@ impl BlockGroup {
             .collect::<Vec<i64>>();
         BlockGroupEdge::bulk_create(conn, target_block_group_id, &edge_ids);
 
-        for path in existing_paths {
+        let mut path_map = HashMap::new();
+
+        for path in existing_paths.iter() {
             let edge_ids = PathEdge::edges_for_path(conn, path.id)
                 .into_iter()
                 .map(|edge| edge.id)
                 .collect::<Vec<i64>>();
-            Path::create(conn, &path.name, target_block_group_id, &edge_ids);
+            let new_path = Path::create(conn, &path.name, target_block_group_id, &edge_ids);
+            path_map.insert(path.id, new_path.id);
+        }
+
+        for accession in Accession::query(
+            conn,
+            &format!(
+                "select * from accession where path_id IN ({path_ids});",
+                path_ids = existing_paths.iter().map(|path| path.id).join(",")
+            ),
+            vec![],
+        ) {
+            let edges = AccessionPath::query(
+                conn,
+                "Select * from accession_path where accession_id = ?1 order by index_in_path ASC;",
+                vec![SQLValue::from(accession.id)],
+            );
+            let new_path_id = path_map[&accession.path_id];
+            let obj = Accession::create(conn, &accession.name, new_path_id, accession.accession_id)
+                .expect("Unable to create accession in clone.");
+            AccessionPath::create(conn, obj.id, edges.iter().map(|ap| ap.edge_id).collect());
         }
     }
 
@@ -332,8 +359,7 @@ impl BlockGroup {
         end: i64,
         chromosome_index: i64,
         cache: &mut PathCache,
-    ) {
-        println!("making {name} on {path:?}");
+    ) -> Accession {
         let tree = PathCache::get_intervaltree(cache, path).unwrap();
         let start_blocks: Vec<&PathBlock> = tree.query_point(start).map(|x| &x.value).collect();
         assert_eq!(start_blocks.len(), 1);
@@ -400,6 +426,7 @@ impl BlockGroup {
             accession.id,
             AccessionEdge::bulk_create(conn, &path_edges),
         );
+        accession
     }
 
     pub fn insert_changes(conn: &Connection, changes: &Vec<PathChange>, cache: &mut PathCache) {
@@ -413,9 +440,8 @@ impl BlockGroup {
                 .and_modify(|new_edge_data| new_edge_data.extend(new_edges.clone()))
                 .or_insert_with(|| new_edges.clone());
             if let Some(accession) = &change.path_accession {
-                let path = PathCache::lookup(cache, change.block_group_id, accession.to_string());
                 new_accession_edges
-                    .entry((path, accession))
+                    .entry((&change.path, accession))
                     .and_modify(|new_edge_data: &mut Vec<EdgeData>| {
                         new_edge_data.extend(new_edges.clone())
                     })
@@ -583,6 +609,53 @@ mod tests {
         assert_eq!(
             BlockGroupEdge::edges_for_block_group(conn, bg1.id),
             BlockGroupEdge::edges_for_block_group(conn, bg2)
+        );
+    }
+
+    #[test]
+    fn test_blockgroup_clone_passes_accessions() {
+        let conn = &get_connection(None);
+        let (bg_1, path) = setup_block_group(conn);
+        let mut path_cache = PathCache::new(conn);
+        PathCache::lookup(&mut path_cache, bg_1, path.name.clone());
+        let acc_1 = BlockGroup::add_accession(conn, &path, "test", 3, 7, 0, &mut path_cache);
+        assert_eq!(
+            Accession::query(
+                conn,
+                "select * from accession where name = ?1",
+                vec![SQLValue::from("test".to_string())]
+            ),
+            vec![Accession {
+                id: acc_1.id,
+                name: "test".to_string(),
+                path_id: path.id,
+                accession_id: None,
+            }]
+        );
+
+        Sample::create(conn, "sample2");
+        let bg2 =
+            BlockGroup::get_or_create_sample_block_group(conn, "test", "sample2", "hg19").unwrap();
+        assert_eq!(
+            Accession::query(
+                conn,
+                "select * from accession where name = ?1",
+                vec![SQLValue::from("test".to_string())]
+            ),
+            vec![
+                Accession {
+                    id: acc_1.id,
+                    name: "test".to_string(),
+                    path_id: path.id,
+                    accession_id: None,
+                },
+                Accession {
+                    id: acc_1.id + 1,
+                    name: "test".to_string(),
+                    path_id: path.id + 1,
+                    accession_id: None,
+                }
+            ]
         );
     }
 
