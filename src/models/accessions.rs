@@ -1,8 +1,9 @@
+use crate::models::block_group::BlockGroup;
 use crate::models::edge::EdgeData;
 use crate::models::strand::Strand;
 use crate::models::traits::Query;
 use rusqlite::types::Value;
-use rusqlite::{params_from_iter, Connection, Row};
+use rusqlite::{params_from_iter, Connection, Result as SQLResult, Row};
 use std::collections::{HashMap, HashSet};
 use std::hash::RandomState;
 
@@ -12,8 +13,6 @@ pub struct Accession {
     pub name: String,
     pub path_id: i64,
     pub accession_id: Option<i64>,
-    pub start: i64,
-    pub end: i64,
 }
 
 #[derive(Debug)]
@@ -80,31 +79,48 @@ impl Accession {
         name: &str,
         path_id: i64,
         accession_id: Option<i64>,
-        start: i64,
-        end: i64,
-    ) -> Accession {
-        let query = "INSERT INTO accession (name, path_id, accession_id, start, end) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING (id)";
+    ) -> SQLResult<Accession> {
+        let query = "INSERT INTO accession (name, path_id, accession_id) VALUES (?1, ?2, ?3) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
 
-        let mut rows = stmt
-            .query_map((name, path_id, accession_id, start, end), |row| {
-                Ok(Accession {
-                    id: row.get(0)?,
-                    name: name.to_string(),
-                    path_id,
-                    accession_id,
-                    start,
-                    end,
-                })
+        stmt.query_row((name, path_id, accession_id), |row| {
+            Ok(Accession {
+                id: row.get(0)?,
+                name: name.to_string(),
+                path_id,
+                accession_id,
             })
-            .unwrap();
-        match rows.next().unwrap() {
-            Ok(res) => res,
-            Err(rusqlite::Error::SqliteFailure(err, _details)) => {
-                panic!("handle it");
+        })
+    }
+
+    pub fn get_or_create(
+        conn: &Connection,
+        name: &str,
+        path_id: i64,
+        accession_id: Option<i64>,
+    ) -> Accession {
+        match Accession::create(conn, name, path_id, accession_id) {
+            Ok(accession) => accession,
+            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+                if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                    let mut existing_id: i64;
+                    if let Some(id) = accession_id {
+                        existing_id = conn.query_row("select id from accession where name = ?1 and path_id = ?2 and accession_id = ?3;", params_from_iter(vec![Value::from(name.to_string()), Value::from(path_id), Value::from(id)]), |row| row.get(0)).unwrap();
+                    } else {
+                        existing_id = conn.query_row("select id from accession where name = ?1 and path_id = ?2 and accession_id is null;", params_from_iter(vec![Value::from(name.to_string()), Value::from(path_id)]), |row| row.get(0)).unwrap();
+                    }
+                    Accession {
+                        id: existing_id,
+                        name: name.to_string(),
+                        path_id,
+                        accession_id,
+                    }
+                } else {
+                    panic!("something bad happened querying the database")
+                }
             }
             Err(_) => {
-                panic!("something bad happened querying the database")
+                panic!("something bad happened.")
             }
         }
     }
@@ -118,8 +134,6 @@ impl Query for Accession {
             name: row.get(1).unwrap(),
             path_id: row.get(2).unwrap(),
             accession_id: row.get(3).unwrap(),
-            start: row.get(4).unwrap(),
-            end: row.get(5).unwrap(),
         }
     }
 }
@@ -312,8 +326,8 @@ mod tests {
     fn test_accession_create_query() {
         let conn = &get_connection(None);
         let (bg, path) = setup_block_group(conn);
-        let accession = Accession::create(conn, "test", path.id, None, 3, 5);
-        let accession_2 = Accession::create(conn, "test2", path.id, None, 3, 7);
+        let accession = Accession::create(conn, "test", path.id, None).unwrap();
+        let accession_2 = Accession::create(conn, "test2", path.id, None).unwrap();
         assert_eq!(
             Accession::query(
                 conn,
@@ -325,8 +339,6 @@ mod tests {
                 name: "test".to_string(),
                 path_id: path.id,
                 accession_id: None,
-                start: 3,
-                end: 5
             }]
         )
     }

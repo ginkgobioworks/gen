@@ -52,12 +52,11 @@ CREATE TABLE accession (
 --  path accessions can reference other path accessions
   path_id INTEGER NOT NULL,
   accession_id INTEGER,
-  start INTEGER NOT NULL,
-  end INTEGER NOT NULL,
   FOREIGN KEY(path_id) REFERENCES path(id),
   FOREIGN KEY(accession_id) REFERENCES accession(id)
 ) STRICT;
-CREATE UNIQUE INDEX accession_uidx ON accession(path_id, accession_id, name, start, end);
+CREATE UNIQUE INDEX accession_uidx ON accession(path_id, accession_id, name) WHERE accession_id is not null;
+CREATE UNIQUE INDEX accession_null_aid_uidx ON accession(path_id, name) WHERE accession_id is null;
 
 CREATE TABLE accession_edge (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,

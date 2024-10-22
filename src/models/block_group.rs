@@ -333,6 +333,7 @@ impl BlockGroup {
         chromosome_index: i64,
         cache: &mut PathCache,
     ) {
+        println!("making {name} on {path:?}");
         let tree = PathCache::get_intervaltree(cache, path).unwrap();
         let start_blocks: Vec<&PathBlock> = tree.query_point(start).map(|x| &x.value).collect();
         assert_eq!(start_blocks.len(), 1);
@@ -360,7 +361,8 @@ impl BlockGroup {
             target_strand: Strand::Forward,
             chromosome_index,
         };
-        let accession = Accession::create(conn, name, path.id, None, 0, 0);
+        let accession =
+            Accession::create(conn, name, path.id, None).expect("Unable to create accession.");
         let mut path_edges = vec![start_edge];
         if start_block == end_block {
             path_edges.push(end_edge);
@@ -436,26 +438,9 @@ impl BlockGroup {
                 conn,
                 &path_edges.iter().map(AccessionEdgeData::from).collect(),
             );
-            let acc = Accession::create(conn, accession_name, path.id, None, 0, 0);
+            let acc = Accession::create(conn, accession_name, path.id, None)
+                .expect("Accession could not be created.");
             AccessionPath::create(conn, acc.id, acc_edges);
-            // assert_eq!(
-            //     PathEdge::query(
-            //         conn,
-            //         "select * from path_edges where path_id = ?1 limit 1;",
-            //         vec![SQLValue::from(path.id)]
-            //     )
-            //     .len(),
-            //     0,
-            //     "Path already exists."
-            // );
-            // PathEdge::bulk_create(
-            //     conn,
-            //     path.id,
-            //     &path_edges
-            //         .iter()
-            //         .map(|ed| edge_data_map[ed])
-            //         .collect::<Vec<i64>>(),
-            // );
         }
     }
 

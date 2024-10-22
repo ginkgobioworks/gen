@@ -231,7 +231,6 @@ pub fn update_with_vcf(
             },
             _ => 0,
         };
-        let mut accession_path_id: Option<i64> = None;
 
         if !fixed_sample.is_empty() && !genotype.is_empty() {
             let mut sample_bg_id = BlockGroupCache::lookup(
@@ -240,23 +239,6 @@ pub fn update_with_vcf(
                 &fixed_sample,
                 seq_name.clone(),
             );
-            if sample_bg_id.is_err() {
-                // we can't find the blockgroup, check if the seq name is actually an accession
-                // let mut stmt = conn.prepare_cached("select bg.id, pa.path_id, pa.start from path_accession pa left join path p on (p.id = pa.path_id) left join block_group bg on (p.block_group_id = bg.id) where pa.name = ?1 AND  bg.collection_name = ?2 AND bg.sample_name = ?3").unwrap();
-                // let rows = stmt.query_map((SQLValue::from(seq_name.clone()), SQLValue::from(collection_name.to_string()), SQLValue::from(fixed_sample.clone())),
-                //     |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-                // ).unwrap();
-                // for (index, result) in rows.enumerate() {
-                //     if index != 0 {
-                //         panic!("too many results, give user feedback to identify correct accession,");
-                //     }
-                //     let (bg_id, pa_id, pa_start) : (i64, i64, i64) = result.unwrap();
-                //     sample_bg_id = Ok(bg_id);
-                //     accession_path_id = Some(pa_id);
-                //     ref_start += pa_start;
-                //     ref_end += pa_start;
-                // }
-            }
             if sample_bg_id.is_err() {
                 println!("can't find sample bg....check this out more");
                 continue;
@@ -310,7 +292,6 @@ pub fn update_with_vcf(
                                     Phasing::Phased => 1,
                                     Phasing::Unphased => 0,
                                 };
-                                println!("{allele:?}");
                                 if let Some(allele) = allele {
                                     let accession_name = accession_name
                                         .clone()
@@ -323,9 +304,6 @@ pub fn update_with_vcf(
                                             seq_name.clone(),
                                         );
 
-                                        println!(
-                                            "{sample_path:?} {accession_name:?} {accession_allele}"
-                                        );
                                         vcf_entries.push(VcfEntry {
                                             ids: accession_name,
                                             block_group_id: sample_bg_id,
@@ -368,8 +346,6 @@ pub fn update_with_vcf(
             let sequence =
                 SequenceCache::lookup(&mut sequence_cache, "DNA", vcf_entry.alt_seq.to_string());
             let sequence_string = sequence.get_sequence(None, None);
-
-            println!("with {vcf_entry:?}");
 
             let parent_path_id : i64 = *parent_block_groups.entry((collection_name, vcf_entry.path.id)).or_insert_with(|| {
                 let parent_bg = BlockGroup::query(conn, "select * from block_group where collection_name = ?1 AND sample_name is null and name = ?2", vec![SQLValue::from(collection_name.to_string()), SQLValue::from(vcf_entry.path.name.clone())]);
@@ -837,45 +813,10 @@ mod tests {
             .len(),
             1
         );
-
-        // TODO: not supported at the moment to update based on accession.
-
-        // let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        // vcf_path.push("fixtures/accession_2.vcf");
-        //
-        // update_with_vcf(
-        //     &vcf_path.to_str().unwrap().to_string(),
-        //     &collection,
-        //     "".to_string(),
-        //     "".to_string(),
-        //     conn,
-        //     op_conn,
-        // );
-        //
-        // assert_eq!(
-        //     Path::get_paths(
-        //         conn,
-        //         "select * from path where name = ?1",
-        //         vec![SQLValue::from("ins2".to_string())]
-        //     )
-        //     .len(),
-        //     1
-        // );
-        //
-        // let test_bg = BlockGroup::query(
-        //     conn,
-        //     "select * from block_group where sample_name = ?1",
-        //     vec![SQLValue::from("foo".to_string())],
-        // );
-        //
-        // assert_eq!(
-        //     BlockGroup::get_all_sequences(conn, test_bg[0].id),
-        //     HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
-        // );
     }
 
     #[test]
-    #[should_panic(expected = "Path already exists")]
+    #[should_panic(expected = "Unable to create accession")]
     fn test_disallows_creating_accession_paths_that_exist() {
         setup_gen_dir();
         let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -907,17 +848,17 @@ mod tests {
         );
 
         assert_eq!(
-            Path::get_paths(
+            Accession::query(
                 conn,
-                "select * from path where name = ?1",
-                vec![SQLValue::from("del1".to_string())]
+                "select * from accession where name = ?1",
+                vec![SQLValue::from("lp1".to_string())]
             )
             .len(),
             1
         );
 
         let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        // This is invalid because ins1 already exists from accession.vcf
+        // This is invalid because lp1 already exists from accession.vcf
         vcf_path.push("fixtures/accession_2_invalid.vcf");
 
         update_with_vcf(
