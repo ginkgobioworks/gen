@@ -11,6 +11,7 @@ use rusqlite::{session, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::config::get_changeset_path;
+use crate::models::accessions::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group::BlockGroup;
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::collection::Collection;
@@ -24,6 +25,7 @@ use crate::models::path::Path;
 use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
+use crate::models::traits::*;
 
 /* General information
 
@@ -45,6 +47,8 @@ struct DependencyModels {
     nodes: Vec<Node>,
     edges: Vec<Edge>,
     paths: Vec<Path>,
+    accessions: Vec<Accession>,
+    accession_edges: Vec<AccessionEdge>,
 }
 
 pub fn get_file(path: &PathBuf, mode: FileMode) -> fs::File {
@@ -73,10 +77,14 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
     let mut previous_block_groups = HashSet::new();
     let mut previous_edges = HashSet::new();
     let mut previous_paths = HashSet::new();
+    let mut previous_accessions = HashSet::new();
     let mut previous_sequences = HashSet::new();
+    let mut previous_accession_edges = HashSet::new();
     let mut created_block_groups = HashSet::new();
     let mut created_paths = HashSet::new();
+    let mut created_accessions = HashSet::new();
     let mut created_edges = HashSet::new();
+    let mut created_accession_edges = HashSet::new();
     let mut created_nodes = HashSet::new();
     let mut created_sequences: HashSet<String> = HashSet::new();
     while let Some(item) = iter.next().unwrap() {
@@ -153,6 +161,40 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                         previous_block_groups.insert(bg_id);
                     }
                 }
+                "accession" => {
+                    created_accessions.insert(item.new_value(pk_column).unwrap().as_i64().unwrap());
+                    let path_id = item.new_value(2).unwrap().as_i64().unwrap();
+                    let accession_id = item.new_value(3).unwrap().as_i64().unwrap();
+                    if !created_paths.contains(&path_id) {
+                        previous_paths.insert(path_id);
+                    }
+                    if !created_accessions.contains(&accession_id) {
+                        previous_accessions.insert(accession_id);
+                    }
+                }
+                "accession_edge" => {
+                    let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
+                    let source_node_id = item.new_value(1).unwrap().as_i64().unwrap();
+                    let target_node_id = item.new_value(4).unwrap().as_i64().unwrap();
+                    created_accession_edges.insert(edge_pk);
+                    let nodes = Node::get_nodes(conn, vec![source_node_id, target_node_id]);
+                    if !created_nodes.contains(&source_node_id) {
+                        previous_sequences.insert(nodes[0].sequence_hash.clone());
+                    }
+                    if !created_nodes.contains(&target_node_id) {
+                        previous_sequences.insert(nodes[1].sequence_hash.clone());
+                    }
+                }
+                "accession_path" => {
+                    let accession_id = item.new_value(1).unwrap().as_i64().unwrap();
+                    let edge_id = item.new_value(3).unwrap().as_i64().unwrap();
+                    if !created_accessions.contains(&accession_id) {
+                        previous_accessions.insert(accession_id);
+                    }
+                    if !created_accession_edges.contains(&edge_id) {
+                        previous_accession_edges.insert(edge_id);
+                    }
+                }
                 _ => {}
             }
         }
@@ -188,6 +230,22 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
             &format!(
                 "select * from path where id in ({ids})",
                 ids = previous_paths.iter().join(",")
+            ),
+            vec![],
+        ),
+        accessions: Accession::query(
+            conn,
+            &format!(
+                "select * from accession where id in ({ids})",
+                ids = previous_accessions.iter().join(",")
+            ),
+            vec![],
+        ),
+        accession_edges: AccessionEdge::query(
+            conn,
+            &format!(
+                "select * from accession_edge where id in ({ids})",
+                ids = previous_accession_edges.iter().join(",")
             ),
             vec![],
         ),
@@ -260,6 +318,43 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
         dep_path_map.insert(path.id, new_path.id);
     }
 
+    let mut dep_accession_edge_map = HashMap::new();
+    let new_accession_edges = AccessionEdge::bulk_create(
+        conn,
+        &dependencies
+            .accession_edges
+            .iter()
+            .map(AccessionEdgeData::from)
+            .collect(),
+    );
+    for (index, edge_id) in new_accession_edges.iter().enumerate() {
+        dep_accession_edge_map.insert(&dependencies.accession_edges[index].id, *edge_id);
+    }
+
+    let mut dep_accession_map: HashMap<i64, i64> = HashMap::new();
+    for accession in dependencies.accessions.iter() {
+        let new_accession = if let Some(acc_id) = accession.accession_id {
+            Accession::get_or_create(
+                conn,
+                &accession.name,
+                *dep_path_map
+                    .get(&accession.path_id)
+                    .unwrap_or(&accession.path_id),
+                Some(*dep_accession_map.get(&acc_id).unwrap_or(&acc_id)),
+            )
+        } else {
+            Accession::get_or_create(
+                conn,
+                &accession.name,
+                *dep_path_map
+                    .get(&accession.path_id)
+                    .unwrap_or(&accession.path_id),
+                None,
+            )
+        };
+        dep_accession_map.insert(accession.id, new_accession.id);
+    }
+
     let change_path =
         get_changeset_path(operation).join(format!("{op_id}.cs", op_id = operation.id));
     let mut file = fs::File::open(change_path).unwrap();
@@ -275,7 +370,11 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
     let mut node_map: HashMap<i64, String> = HashMap::new();
     let mut path_edges: HashMap<i64, Vec<(i64, i64)>> = HashMap::new();
     let mut insert_paths = vec![];
+    let mut insert_accessions = vec![];
     let mut insert_block_group_edges = vec![];
+
+    let mut accession_edge_map: HashMap<i64, AccessionEdgeData> = HashMap::new();
+    let mut accession_path_edges: HashMap<i64, Vec<(i64, i64)>> = HashMap::new();
 
     while let Some(item) = iter.next().unwrap() {
         let op = item.op().unwrap();
@@ -393,6 +492,44 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                             .unwrap(),
                     );
                 }
+                "accession" => {
+                    // we defer accession creation until edges and paths are made
+                    insert_accessions.push(Accession {
+                        id: item.new_value(pk_column).unwrap().as_i64().unwrap(),
+                        name: str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
+                            .unwrap()
+                            .to_string(),
+                        path_id: item.new_value(2).unwrap().as_i64().unwrap(),
+                        accession_id: item.new_value(2).unwrap().as_i64_or_null().unwrap(),
+                    });
+                }
+                "accession_edge" => {
+                    let pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
+                    accession_edge_map.insert(
+                        pk,
+                        AccessionEdgeData {
+                            source_node_id: item.new_value(1).unwrap().as_i64().unwrap(),
+                            source_coordinate: item.new_value(2).unwrap().as_i64().unwrap(),
+                            source_strand: Strand::column_result(item.new_value(3).unwrap())
+                                .unwrap(),
+                            target_node_id: item.new_value(4).unwrap().as_i64().unwrap(),
+                            target_coordinate: item.new_value(5).unwrap().as_i64().unwrap(),
+                            target_strand: Strand::column_result(item.new_value(6).unwrap())
+                                .unwrap(),
+                            chromosome_index: item.new_value(7).unwrap().as_i64().unwrap(),
+                        },
+                    );
+                }
+                "accession_path" => {
+                    let accession_id = item.new_value(1).unwrap().as_i64().unwrap();
+                    let index = item.new_value(2).unwrap().as_i64().unwrap();
+                    // the edge_id here may not be valid and in this database may have a different pk
+                    let accession_edge_id = item.new_value(3).unwrap().as_i64().unwrap();
+                    accession_path_edges
+                        .entry(accession_id)
+                        .or_default()
+                        .push((index, accession_edge_id));
+                }
                 _ => {
                     panic!("unhandled table is {v}", v = op.table_name());
                 }
@@ -481,6 +618,71 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
     }
     for (bg_id, edges) in block_group_edges.iter() {
         BlockGroupEdge::bulk_create(conn, *bg_id, edges);
+    }
+
+    let mut updated_accession_edge_map = HashMap::new();
+    for (edge_id, edge) in accession_edge_map {
+        let updated_source_node_id = dep_node_map.get(&edge.source_node_id).unwrap_or(
+            node_id_map
+                .get(&edge.source_node_id)
+                .unwrap_or(&edge.source_node_id),
+        );
+        let updated_target_node_id = dep_node_map.get(&edge.target_node_id).unwrap_or(
+            node_id_map
+                .get(&edge.target_node_id)
+                .unwrap_or(&edge.target_node_id),
+        );
+        updated_accession_edge_map.insert(
+            edge_id,
+            AccessionEdgeData {
+                source_node_id: *updated_source_node_id,
+                source_coordinate: edge.source_coordinate,
+                source_strand: edge.source_strand,
+                target_node_id: *updated_target_node_id,
+                target_coordinate: edge.target_coordinate,
+                target_strand: edge.target_strand,
+                chromosome_index: edge.chromosome_index,
+            },
+        );
+    }
+
+    let sorted_edge_ids = updated_accession_edge_map
+        .keys()
+        .copied()
+        .sorted()
+        .collect::<Vec<i64>>();
+    let created_edges = AccessionEdge::bulk_create(
+        conn,
+        &sorted_edge_ids
+            .iter()
+            .map(|id| updated_accession_edge_map[id].clone())
+            .collect::<Vec<AccessionEdgeData>>(),
+    );
+    let mut edge_id_map: HashMap<i64, i64> = HashMap::new();
+    for (index, edge_id) in created_edges.iter().enumerate() {
+        edge_id_map.insert(sorted_edge_ids[index], *edge_id);
+    }
+
+    for accession in insert_accessions {
+        let mut sorted_edges = vec![];
+        for (_, edge_id) in accession_path_edges
+            .get(&accession.id)
+            .unwrap()
+            .iter()
+            .sorted_by(|(c1, _), (c2, _)| Ord::cmp(&c1, &c2))
+        {
+            let new_edge_id = dep_accession_edge_map
+                .get(edge_id)
+                .unwrap_or(edge_id_map.get(edge_id).unwrap_or(edge_id));
+            sorted_edges.push(*new_edge_id);
+        }
+        let accession_obj = Accession::get_or_create(
+            conn,
+            &accession.name,
+            accession.path_id,
+            accession.accession_id,
+        );
+        AccessionPath::create(conn, accession_obj.id, &sorted_edges);
     }
 
     conn.pragma_update(None, "foreign_keys", "1").unwrap();
@@ -608,6 +810,9 @@ pub fn attach_session(session: &mut session::Session) {
         "edges",
         "path_edges",
         "block_group_edges",
+        "accession",
+        "accession_edge",
+        "accession_path",
     ] {
         session.attach(Some(table)).unwrap();
     }

@@ -222,7 +222,11 @@ impl BlockGroup {
             let new_path_id = path_map[&accession.path_id];
             let obj = Accession::create(conn, &accession.name, new_path_id, accession.accession_id)
                 .expect("Unable to create accession in clone.");
-            AccessionPath::create(conn, obj.id, edges.iter().map(|ap| ap.edge_id).collect());
+            AccessionPath::create(
+                conn,
+                obj.id,
+                &edges.iter().map(|ap| ap.edge_id).collect::<Vec<i64>>(),
+            );
         }
     }
 
@@ -424,7 +428,7 @@ impl BlockGroup {
         AccessionPath::create(
             conn,
             accession.id,
-            AccessionEdge::bulk_create(conn, &path_edges),
+            &AccessionEdge::bulk_create(conn, &path_edges),
         );
         accession
     }
@@ -466,7 +470,7 @@ impl BlockGroup {
             );
             let acc = Accession::create(conn, accession_name, path.id, None)
                 .expect("Accession could not be created.");
-            AccessionPath::create(conn, acc.id, acc_edges);
+            AccessionPath::create(conn, acc.id, &acc_edges);
         }
     }
 

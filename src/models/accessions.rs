@@ -4,10 +4,11 @@ use crate::models::strand::Strand;
 use crate::models::traits::Query;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection, Result as SQLResult, Row};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::hash::RandomState;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Eq, PartialEq)]
 pub struct Accession {
     pub id: i64,
     pub name: String,
@@ -15,7 +16,7 @@ pub struct Accession {
     pub accession_id: Option<i64>,
 }
 
-#[derive(Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct AccessionEdge {
     pub id: i64,
     pub source_node_id: i64,
@@ -27,6 +28,7 @@ pub struct AccessionEdge {
     pub chromosome_index: i64,
 }
 
+#[derive(Deserialize, Serialize, Debug)]
 pub struct AccessionPath {
     pub id: i64,
     pub accession_id: i64,
@@ -281,7 +283,7 @@ impl Query for AccessionEdge {
 }
 
 impl AccessionPath {
-    pub fn create(conn: &Connection, accession_id: i64, edge_ids: Vec<i64>) {
+    pub fn create(conn: &Connection, accession_id: i64, edge_ids: &[i64]) {
         for (index1, chunk) in edge_ids.chunks(100000).enumerate() {
             let mut rows_to_insert = vec![];
             for (index2, edge_id) in chunk.iter().enumerate() {
