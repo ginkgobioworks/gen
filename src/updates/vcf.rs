@@ -247,6 +247,9 @@ pub fn update_with_vcf(
 
             for (chromosome_index, genotype) in genotype.iter().enumerate() {
                 if let Some(gt) = genotype {
+                    let allele_accession = accession_name
+                        .clone()
+                        .filter(|name| gt.allele as i32 == accession_allele);
                     if gt.allele != 0 {
                         let alt_seq = alt_alleles[chromosome_index - 1];
                         let phased = match gt.phasing {
@@ -256,13 +259,26 @@ pub fn update_with_vcf(
                         let sample_path =
                             PathCache::lookup(&mut path_cache, sample_bg_id, seq_name.clone());
                         vcf_entries.push(VcfEntry {
-                            ids: accession_name.clone(),
+                            ids: allele_accession,
                             block_group_id: sample_bg_id,
                             path: sample_path.clone(),
                             sample_name: fixed_sample.clone(),
                             alt_seq,
                             chromosome_index: chromosome_index as i64,
                             phased,
+                        });
+                    } else if let Some(ref_accession) = allele_accession {
+                        let sample_path =
+                            PathCache::lookup(&mut path_cache, sample_bg_id, seq_name.clone());
+
+                        let key = (sample_path, ref_accession.clone());
+
+                        accession_cache.entry(key).or_insert_with(|| {
+                            (
+                                ref_start,
+                                ref_start + record.reference_bases().len() as i64,
+                                chromosome_index,
+                            )
                         });
                     }
                 }
@@ -293,7 +309,7 @@ pub fn update_with_vcf(
                                     Phasing::Unphased => 0,
                                 };
                                 if let Some(allele) = allele {
-                                    let accession_name = accession_name
+                                    let allele_accession = accession_name
                                         .clone()
                                         .filter(|name| allele as i32 == accession_allele);
                                     if allele != 0 {
@@ -305,7 +321,7 @@ pub fn update_with_vcf(
                                         );
 
                                         vcf_entries.push(VcfEntry {
-                                            ids: accession_name,
+                                            ids: allele_accession,
                                             block_group_id: sample_bg_id,
                                             path: sample_path.clone(),
                                             sample_name: sample_names[sample_index].clone(),
@@ -313,7 +329,7 @@ pub fn update_with_vcf(
                                             chromosome_index: chromosome_index as i64,
                                             phased,
                                         });
-                                    } else if let Some(ref_accession) = accession_name {
+                                    } else if let Some(ref_accession) = allele_accession {
                                         let sample_path = PathCache::lookup(
                                             &mut path_cache,
                                             sample_bg_id,

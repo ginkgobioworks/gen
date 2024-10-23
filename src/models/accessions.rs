@@ -300,7 +300,6 @@ impl AccessionPath {
                 "INSERT OR IGNORE INTO accession_path (accession_id, edge_id, index_in_path) VALUES {0};",
                 formatted_rows_to_insert
             );
-            println!("is {insert_statement}");
             let _ = conn.execute(&insert_statement, ());
         }
     }
