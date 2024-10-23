@@ -777,6 +777,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 7,
             end: 15,
             block: insert,
