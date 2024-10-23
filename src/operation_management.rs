@@ -164,12 +164,14 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                 "accession" => {
                     created_accessions.insert(item.new_value(pk_column).unwrap().as_i64().unwrap());
                     let path_id = item.new_value(2).unwrap().as_i64().unwrap();
-                    let accession_id = item.new_value(3).unwrap().as_i64().unwrap();
+                    let accession_id = item.new_value(3).unwrap().as_i64_or_null().unwrap();
                     if !created_paths.contains(&path_id) {
                         previous_paths.insert(path_id);
                     }
-                    if !created_accessions.contains(&accession_id) {
-                        previous_accessions.insert(accession_id);
+                    if let Some(id) = accession_id {
+                        if !created_accessions.contains(&id) {
+                            previous_accessions.insert(id);
+                        }
                     }
                 }
                 "accession_edge" => {

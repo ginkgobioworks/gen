@@ -464,13 +464,27 @@ impl BlockGroup {
         }
 
         for ((path, accession_name), path_edges) in new_accession_edges {
-            let acc_edges = AccessionEdge::bulk_create(
+            match Accession::get(
                 conn,
-                &path_edges.iter().map(AccessionEdgeData::from).collect(),
-            );
-            let acc = Accession::create(conn, accession_name, path.id, None)
-                .expect("Accession could not be created.");
-            AccessionPath::create(conn, acc.id, &acc_edges);
+                "select * from accession where name = ?1 AND path_id = ?2",
+                vec![
+                    SQLValue::from(accession_name.clone()),
+                    SQLValue::from(path.id),
+                ],
+            ) {
+                Ok(_) => {
+                    println!("accession already exists, consider a better matching algorithm to determine if this is an error.");
+                }
+                Err(_) => {
+                    let acc_edges = AccessionEdge::bulk_create(
+                        conn,
+                        &path_edges.iter().map(AccessionEdgeData::from).collect(),
+                    );
+                    let acc = Accession::create(conn, accession_name, path.id, None)
+                        .expect("Accession could not be created.");
+                    AccessionPath::create(conn, acc.id, &acc_edges);
+                }
+            }
         }
     }
 
