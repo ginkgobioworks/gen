@@ -239,11 +239,7 @@ pub fn update_with_vcf(
                 &fixed_sample,
                 seq_name.clone(),
             );
-            if sample_bg_id.is_err() {
-                println!("can't find sample bg....check this out more");
-                continue;
-            }
-            let sample_bg_id = sample_bg_id.unwrap();
+            let sample_bg_id = sample_bg_id.expect("can't find sample bg....check this out more");
 
             for (chromosome_index, genotype) in genotype.iter().enumerate() {
                 if let Some(gt) = genotype {
@@ -292,12 +288,8 @@ pub fn update_with_vcf(
                     seq_name.clone(),
                 );
 
-                if sample_bg_id.is_err() {
-                    println!("can't find sample bg....check this out more");
-                    continue;
-                }
-
-                let sample_bg_id = sample_bg_id.unwrap();
+                let sample_bg_id =
+                    sample_bg_id.expect("can't find sample bg....check this out more");
                 let genotype = sample.get(&header, "GT");
                 if genotype.is_some() {
                     if let Value::Genotype(genotypes) = genotype.unwrap().unwrap().unwrap() {
@@ -440,7 +432,7 @@ mod tests {
     use super::*;
     use crate::imports::fasta::import_fasta;
     use crate::imports::gfa::import_gfa;
-    use crate::models::accessions::Accession;
+    use crate::models::accession::Accession;
     use crate::models::node::Node;
     use crate::models::operations::setup_db;
     use crate::models::traits::Query;

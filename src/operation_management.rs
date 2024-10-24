@@ -11,7 +11,7 @@ use rusqlite::{session, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::config::get_changeset_path;
-use crate::models::accessions::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
+use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group::BlockGroup;
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::collection::Collection;

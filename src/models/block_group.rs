@@ -7,7 +7,7 @@ use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::graph::all_simple_paths;
-use crate::models::accessions::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
+use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData, GroupBlock};
 use crate::models::node::{PATH_END_NODE_ID, PATH_START_NODE_ID};

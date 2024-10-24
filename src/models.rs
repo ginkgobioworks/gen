@@ -1,4 +1,4 @@
-pub mod accessions;
+pub mod accession;
 pub mod block_group;
 pub mod block_group_edge;
 pub mod collection;
