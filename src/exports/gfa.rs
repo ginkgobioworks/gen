@@ -56,8 +56,9 @@ pub fn export_gfa(
     }
 
     let mut edges = edge_set.into_iter().collect();
-    let (blocks, boundary_edges) = Edge::blocks_from_edges(conn, &edges);
 
+    let blocks = Edge::blocks_from_edges(conn, &edges);
+    let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
     edges.extend(boundary_edges.clone());
 
     let (graph, edges_by_node_pair) = Edge::build_graph(&edges, &blocks);

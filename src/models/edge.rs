@@ -320,7 +320,7 @@ impl Edge {
             .collect::<Vec<i64>>()
     }
 
-    pub fn blocks_from_edges(conn: &Connection, edges: &Vec<Edge>) -> (Vec<GroupBlock>, Vec<Edge>) {
+    pub fn blocks_from_edges(conn: &Connection, edges: &Vec<Edge>) -> Vec<GroupBlock> {
         let mut node_ids = HashSet::new();
         let mut edges_by_source_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
         let mut edges_by_target_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
@@ -346,7 +346,6 @@ impl Edge {
 
         let mut blocks = vec![];
         let mut block_index = 0;
-        let mut boundary_edges = vec![];
         // we sort by keys to exploit the external sequence cache which keeps the most recently used
         // external sequence in memory.
         for (node_id, sequence) in sequences_by_node_id
@@ -358,21 +357,6 @@ impl Edge {
                 edges_by_target_node_id.get(node_id),
                 sequence.length,
             );
-            for block_boundary in &block_boundaries {
-                // NOTE: Most of this data is bogus, the Edge struct is just a convenient wrapper
-                // for the data we need to set up boundary edges in the block group graph
-                boundary_edges.push(Edge {
-                    id: -1,
-                    source_node_id: *node_id,
-                    source_coordinate: *block_boundary,
-                    source_strand: Strand::Forward,
-                    target_node_id: *node_id,
-                    target_coordinate: *block_boundary,
-                    target_strand: Strand::Forward,
-                    chromosome_index: 0,
-                    phased: 0,
-                });
-            }
 
             if !block_boundaries.is_empty() {
                 let start = 0;
@@ -422,7 +406,7 @@ impl Edge {
             0,
         );
         blocks.push(end_block);
-        (blocks, boundary_edges)
+        blocks
     }
 
     pub fn build_graph(
@@ -482,6 +466,35 @@ impl Edge {
         }
 
         (graph, edges_by_node_pair)
+    }
+
+    pub fn boundary_edges_from_sequences(blocks: &[GroupBlock]) -> Vec<Edge> {
+        let node_blocks_by_id: HashMap<i64, Vec<&GroupBlock>> =
+            blocks.iter().fold(HashMap::new(), |mut acc, block| {
+                acc.entry(block.node_id)
+                    .and_modify(|blocks| blocks.push(block))
+                    .or_insert_with(|| vec![&block]);
+                acc
+            });
+        let mut boundary_edges = vec![];
+        for node_blocks in node_blocks_by_id.values() {
+            for (previous_block, next_block) in node_blocks.iter().tuple_windows() {
+                // NOTE: Most of this data is bogus, the Edge struct is just a convenient wrapper
+                // for the data we need to set up boundary edges in the block group graph
+                boundary_edges.push(Edge {
+                    id: -1,
+                    source_node_id: previous_block.node_id,
+                    source_coordinate: previous_block.end,
+                    source_strand: Strand::Forward,
+                    target_node_id: next_block.node_id,
+                    target_coordinate: next_block.start,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                });
+            }
+        }
+        boundary_edges
     }
 }
 
@@ -737,7 +750,9 @@ mod tests {
         let (block_group_id, path) = setup_block_group(&conn);
 
         let edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
-        let (blocks, boundary_edges) = Edge::blocks_from_edges(&conn, &edges);
+        let blocks = Edge::blocks_from_edges(&conn, &edges);
+        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
+
         // 4 actual sequences: 10-length ones of all A, all T, all C, all G
         // 2 terminal node blocks (start/end)
         // 6 total
@@ -772,7 +787,9 @@ mod tests {
         BlockGroup::insert_change(&conn, &change, &tree);
         let mut edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
 
-        let (blocks, boundary_edges) = Edge::blocks_from_edges(&conn, &edges);
+        let blocks = Edge::blocks_from_edges(&conn, &edges);
+        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
+
         // 2 10-length sequences of all C, all G
         // 1 inserted NNNN sequence
         // 4 split blocks (A and T sequences were split) resulting from the inserted sequence
@@ -783,7 +800,9 @@ mod tests {
 
         // Confirm that ordering doesn't matter
         edges.reverse();
-        let (blocks, boundary_edges) = Edge::blocks_from_edges(&conn, &edges);
+        let blocks = Edge::blocks_from_edges(&conn, &edges);
+        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
+
         // 2 10-length sequences of all C, all G
         // 1 inserted NNNN sequence
         // 4 split blocks (A and T sequences were split) resulting from the inserted sequence

@@ -367,6 +367,7 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use crate::test_helpers::get_connection;
+    #[allow(unused_imports)]
     use std::time;
 
     #[test]
