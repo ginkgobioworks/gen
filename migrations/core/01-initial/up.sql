@@ -51,12 +51,12 @@ CREATE TABLE accession (
   name TEXT NOT NULL,
 --  path accessions can reference other path accessions
   path_id INTEGER NOT NULL,
-  accession_id INTEGER,
+  parent_accession_id INTEGER,
   FOREIGN KEY(path_id) REFERENCES path(id),
-  FOREIGN KEY(accession_id) REFERENCES accession(id)
+  FOREIGN KEY(parent_accession_id) REFERENCES accession(id)
 ) STRICT;
-CREATE UNIQUE INDEX accession_uidx ON accession(path_id, accession_id, name) WHERE accession_id is not null;
-CREATE UNIQUE INDEX accession_null_aid_uidx ON accession(path_id, name) WHERE accession_id is null;
+CREATE UNIQUE INDEX accession_uidx ON accession(path_id, parent_accession_id, name) WHERE parent_accession_id is not null;
+CREATE UNIQUE INDEX accession_null_aid_uidx ON accession(path_id, name) WHERE parent_accession_id is null;
 
 CREATE TABLE accession_edge (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,

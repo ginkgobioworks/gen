@@ -164,11 +164,11 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                 "accession" => {
                     created_accessions.insert(item.new_value(pk_column).unwrap().as_i64().unwrap());
                     let path_id = item.new_value(2).unwrap().as_i64().unwrap();
-                    let accession_id = item.new_value(3).unwrap().as_i64_or_null().unwrap();
+                    let parent_accession_id = item.new_value(3).unwrap().as_i64_or_null().unwrap();
                     if !created_paths.contains(&path_id) {
                         previous_paths.insert(path_id);
                     }
-                    if let Some(id) = accession_id {
+                    if let Some(id) = parent_accession_id {
                         if !created_accessions.contains(&id) {
                             previous_accessions.insert(id);
                         }
@@ -335,7 +335,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
 
     let mut dep_accession_map: HashMap<i64, i64> = HashMap::new();
     for accession in dependencies.accessions.iter() {
-        let new_accession = if let Some(acc_id) = accession.accession_id {
+        let new_accession = if let Some(acc_id) = accession.parent_accession_id {
             Accession::get_or_create(
                 conn,
                 &accession.name,
@@ -502,7 +502,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                             .unwrap()
                             .to_string(),
                         path_id: item.new_value(2).unwrap().as_i64().unwrap(),
-                        accession_id: item.new_value(2).unwrap().as_i64_or_null().unwrap(),
+                        parent_accession_id: item.new_value(2).unwrap().as_i64_or_null().unwrap(),
                     });
                 }
                 "accession_edge" => {
@@ -682,7 +682,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
             conn,
             &accession.name,
             accession.path_id,
-            accession.accession_id,
+            accession.parent_accession_id,
         );
         AccessionPath::create(conn, accession_obj.id, &sorted_edges);
     }

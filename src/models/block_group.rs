@@ -220,8 +220,13 @@ impl BlockGroup {
                 vec![SQLValue::from(accession.id)],
             );
             let new_path_id = path_map[&accession.path_id];
-            let obj = Accession::create(conn, &accession.name, new_path_id, accession.accession_id)
-                .expect("Unable to create accession in clone.");
+            let obj = Accession::create(
+                conn,
+                &accession.name,
+                new_path_id,
+                accession.parent_accession_id,
+            )
+            .expect("Unable to create accession in clone.");
             AccessionPath::create(
                 conn,
                 obj.id,
@@ -647,7 +652,7 @@ mod tests {
                 id: acc_1.id,
                 name: "test".to_string(),
                 path_id: path.id,
-                accession_id: None,
+                parent_accession_id: None,
             }]
         );
 
@@ -665,13 +670,13 @@ mod tests {
                     id: acc_1.id,
                     name: "test".to_string(),
                     path_id: path.id,
-                    accession_id: None,
+                    parent_accession_id: None,
                 },
                 Accession {
                     id: acc_1.id + 1,
                     name: "test".to_string(),
                     path_id: path.id + 1,
-                    accession_id: None,
+                    parent_accession_id: None,
                 }
             ]
         );

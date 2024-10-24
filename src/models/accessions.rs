@@ -13,7 +13,7 @@ pub struct Accession {
     pub id: i64,
     pub name: String,
     pub path_id: i64,
-    pub accession_id: Option<i64>,
+    pub parent_accession_id: Option<i64>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -80,17 +80,17 @@ impl Accession {
         conn: &Connection,
         name: &str,
         path_id: i64,
-        accession_id: Option<i64>,
+        parent_accession_id: Option<i64>,
     ) -> SQLResult<Accession> {
-        let query = "INSERT INTO accession (name, path_id, accession_id) VALUES (?1, ?2, ?3) RETURNING (id)";
+        let query = "INSERT INTO accession (name, path_id, parent_accession_id) VALUES (?1, ?2, ?3) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
 
-        stmt.query_row((name, path_id, accession_id), |row| {
+        stmt.query_row((name, path_id, parent_accession_id), |row| {
             Ok(Accession {
                 id: row.get(0)?,
                 name: name.to_string(),
                 path_id,
-                accession_id,
+                parent_accession_id,
             })
         })
     }
@@ -99,23 +99,23 @@ impl Accession {
         conn: &Connection,
         name: &str,
         path_id: i64,
-        accession_id: Option<i64>,
+        parent_accession_id: Option<i64>,
     ) -> Accession {
-        match Accession::create(conn, name, path_id, accession_id) {
+        match Accession::create(conn, name, path_id, parent_accession_id) {
             Ok(accession) => accession,
             Err(rusqlite::Error::SqliteFailure(err, details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
                     let mut existing_id: i64;
-                    if let Some(id) = accession_id {
-                        existing_id = conn.query_row("select id from accession where name = ?1 and path_id = ?2 and accession_id = ?3;", params_from_iter(vec![Value::from(name.to_string()), Value::from(path_id), Value::from(id)]), |row| row.get(0)).unwrap();
+                    if let Some(id) = parent_accession_id {
+                        existing_id = conn.query_row("select id from accession where name = ?1 and path_id = ?2 and parent_accession_id = ?3;", params_from_iter(vec![Value::from(name.to_string()), Value::from(path_id), Value::from(id)]), |row| row.get(0)).unwrap();
                     } else {
-                        existing_id = conn.query_row("select id from accession where name = ?1 and path_id = ?2 and accession_id is null;", params_from_iter(vec![Value::from(name.to_string()), Value::from(path_id)]), |row| row.get(0)).unwrap();
+                        existing_id = conn.query_row("select id from accession where name = ?1 and path_id = ?2 and parent_accession_id is null;", params_from_iter(vec![Value::from(name.to_string()), Value::from(path_id)]), |row| row.get(0)).unwrap();
                     }
                     Accession {
                         id: existing_id,
                         name: name.to_string(),
                         path_id,
-                        accession_id,
+                        parent_accession_id,
                     }
                 } else {
                     panic!("something bad happened querying the database")
@@ -135,7 +135,7 @@ impl Query for Accession {
             id: row.get(0).unwrap(),
             name: row.get(1).unwrap(),
             path_id: row.get(2).unwrap(),
-            accession_id: row.get(3).unwrap(),
+            parent_accession_id: row.get(3).unwrap(),
         }
     }
 }
@@ -340,7 +340,7 @@ mod tests {
                 id: accession.id,
                 name: "test".to_string(),
                 path_id: path.id,
-                accession_id: None,
+                parent_accession_id: None,
             }]
         )
     }
