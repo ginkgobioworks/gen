@@ -202,10 +202,10 @@ impl Edge {
         edges
     }
 
-    pub fn bulk_create(conn: &Connection, edges: Vec<EdgeData>) -> Vec<i64> {
+    pub fn bulk_create(conn: &Connection, edges: &Vec<EdgeData>) -> Vec<i64> {
         let mut edge_rows = vec![];
         let mut edge_map: HashMap<EdgeData, i64> = HashMap::new();
-        for edge in &edges {
+        for edge in edges {
             let source_strand = format!("\"{0}\"", edge.source_strand);
             let target_strand = format!("\"{0}\"", edge.target_strand);
             let edge_row = format!(
@@ -233,7 +233,7 @@ impl Edge {
             existing_edges.into_iter().map(Edge::to_data),
         );
         let mut edges_to_insert = HashSet::new();
-        for edge in &edges {
+        for edge in edges {
             if !existing_edge_set.contains(edge) {
                 edges_to_insert.insert(edge);
             }
@@ -556,7 +556,7 @@ mod tests {
             phased: 0,
         };
 
-        let edge_ids = Edge::bulk_create(conn, vec![edge1, edge2, edge3]);
+        let edge_ids = Edge::bulk_create(conn, &vec![edge1, edge2, edge3]);
         assert_eq!(edge_ids.len(), 3);
         let edges = Edge::bulk_load(conn, &edge_ids);
         assert_eq!(edges.len(), 3);
@@ -626,7 +626,7 @@ mod tests {
         };
 
         let edges = vec![edge2.clone(), edge3.clone()];
-        let edge_ids1 = Edge::bulk_create(conn, edges.clone());
+        let edge_ids1 = Edge::bulk_create(conn, &edges);
         assert_eq!(edge_ids1.len(), 2);
         for (index, id) in edge_ids1.iter().enumerate() {
             let binding = Edge::query(
@@ -639,7 +639,7 @@ mod tests {
         }
 
         let edges = vec![edge1.clone(), edge2.clone(), edge3.clone()];
-        let edge_ids2 = Edge::bulk_create(conn, edges.clone());
+        let edge_ids2 = Edge::bulk_create(conn, &edges);
         assert_eq!(edge_ids2[1], edge_ids1[0]);
         assert_eq!(edge_ids2[2], edge_ids1[1]);
         assert_eq!(edge_ids2.len(), 3);
@@ -717,7 +717,7 @@ mod tests {
             phased: 0,
         };
 
-        let edge_ids = Edge::bulk_create(conn, vec![edge1, edge2, edge3]);
+        let edge_ids = Edge::bulk_create(conn, &vec![edge1, edge2, edge3]);
         assert_eq!(edge_ids.len(), 3);
         let edges = Edge::bulk_load(conn, &edge_ids);
         assert_eq!(edges.len(), 3);
@@ -777,6 +777,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 7,
             end: 15,
             block: insert,

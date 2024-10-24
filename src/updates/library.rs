@@ -179,7 +179,7 @@ pub fn update_with_library(
 
     path_changes_count *= end_parts.len();
 
-    let new_edge_ids = Edge::bulk_create(conn, new_edges.iter().cloned().collect());
+    let new_edge_ids = Edge::bulk_create(conn, &new_edges.iter().cloned().collect());
     BlockGroupEdge::bulk_create(conn, path.block_group_id, &new_edge_ids);
 
     let summary_str = format!("{path_name}: {path_changes_count} changes.\n");
