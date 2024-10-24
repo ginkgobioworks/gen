@@ -254,7 +254,7 @@ fn main() {
                     &parts.clone().unwrap(),
                     library_path,
                 );
-            } else {
+            } else if let Some(vcf_path) = vcf {
                 update_with_vcf(
                     &vcf.clone().unwrap(),
                     name,
@@ -263,6 +263,8 @@ fn main() {
                     &conn,
                     &operation_conn,
                 );
+            } else {
+                panic!("Unknown file type provided for update.");
             }
 
             conn.execute("END TRANSACTION", []).unwrap();

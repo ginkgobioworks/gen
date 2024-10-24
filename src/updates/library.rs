@@ -39,7 +39,7 @@ pub fn update_with_library(
         operation_conn,
         &db_uuid,
         name.to_string(),
-        "csv_update",
+        "library_csv_update",
         change.id,
     );
 
