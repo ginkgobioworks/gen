@@ -1,0 +1,330 @@
+LOCUS       U00004                  5818 bp    DNA     linear   BCT 15-NOV-2023
+DEFINITION  Escherichia coli transposon Tn5, complete sequence.
+ACCESSION   U00004
+VERSION     U00004.1
+KEYWORDS    .
+SOURCE      Escherichia coli
+  ORGANISM  Escherichia coli
+            Bacteria; Pseudomonadota; Gammaproteobacteria; Enterobacterales;
+            Enterobacteriaceae; Escherichia.
+REFERENCE   1  (bases 1 to 1400; 4219 to 5818)
+  AUTHORS   Auerswald,E.A., Ludwig,G. and Schaller,H.
+  TITLE     Structural analysis of Tn5
+  JOURNAL   Cold Spring Harb. Symp. Quant. Biol. 45 (PT 1), 107-113 (1981)
+   PUBMED   6271452
+REFERENCE   2  (bases 1401 to 2300)
+  AUTHORS   Beck,E., Ludwig,G., Auerswald,E.A., Reiss,B. and Schaller,H.
+  TITLE     Nucleotide sequence and exact localization of the neomycin
+            phosphotransferase gene from transposon Tn5
+  JOURNAL   Gene 19 (3), 327-336 (1982)
+   PUBMED   6295884
+REFERENCE   3  (bases 2301 to 4218)
+  AUTHORS   Mazodier,P., Cossart,P., Giraud,E. and Gasser,F.
+  TITLE     Completion of the nucleotide sequence of the central region of Tn5
+            confirms the presence of three resistance genes
+  JOURNAL   Nucleic Acids Res. 13 (1), 195-205 (1985)
+   PUBMED   3889831
+REFERENCE   4  (sites)
+  AUTHORS   Johnson,R.C., Yin,J.C. and Reznikoff,W.S.
+  TITLE     Control of Tn5 transposition in Escherichia coli is mediated by
+            protein from the right repeat
+  JOURNAL   Cell 30 (3), 873-882 (1982)
+   PUBMED   6291786
+REFERENCE   5  (sites)
+  AUTHORS   Rothstein,S.J., Jorgensen,R.A., Yin,J.C., Yong-di,Z., Johnson,R.C.
+            and Reznikoff,W.S.
+  TITLE     Genetic organization of Tn5
+  JOURNAL   Cold Spring Harb. Symp. Quant. Biol. 45 (PT 1), 99-105 (1981)
+   PUBMED   6271497
+REFERENCE   6  (sites)
+  AUTHORS   Rothstein,S.J. and Reznikoff,W.S.
+  TITLE     The functional differences in the inverted repeats of Tn5 are
+            caused by a single base pair nonhomology
+  JOURNAL   Cell 23 (1), 191-199 (1981)
+   PUBMED   6260374
+REFERENCE   7  (sites)
+  AUTHORS   Johnson,R.C. and Reznikoff,W.S.
+  TITLE     DNA sequences at the ends of transposon Tn5 required for
+            transposition
+  JOURNAL   Nature 304 (5923), 280-282 (1983)
+   PUBMED   6306482
+REFERENCE   8  (sites)
+  AUTHORS   Berg,D.E.
+  TITLE     Transposon Tn5
+  JOURNAL   (in) Berg,D.E. and Howe,M. (Eds.);
+            MOBILE DNA: 185-210;
+            American Society for Microbiology Press, Washington, D.C. (1989)
+REFERENCE   9  (bases 1 to 5818)
+  AUTHORS   Bradbury,A.R.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (04-OCT-1993) International School for Advanced Studies
+            (SISSA), Via Beirut 2-4, Trieste 34013, Italy
+REFERENCE   10 (bases 1 to 5818)
+  AUTHORS   Hengen,P.N.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (04-OCT-1993) Laboratory of Mathematical Biology,
+            National Cancer Institute, Frederick Cancer Research and
+            Development Center, P.O. Box B, Frederick, MD 21702-1201, USA
+COMMENT     On May 17, 1994 this sequence version replaced gi:310980.
+FEATURES             Location/Qualifiers
+     source          1..5818
+                     /organism="Escherichia coli"
+                     /mol_type="genomic DNA"
+                     /db_xref="taxon:562"
+     mobile_element  1..5818
+                     /mobile_element_type="transposon:transposon Tn5"
+     repeat_region   order(1..19,5800..5818)
+                     /experiment="experimental evidence, no additional details
+                     recorded"
+                     /note="minimum length required for transposition; outside
+                     end"
+                     /rpt_type=inverted
+     mobile_element  1..1534
+                     /experiment="experimental evidence, no additional details
+                     recorded"
+                     /note="non-functional due to mutation"
+                     /mobile_element_type="insertion sequence:IS50L"
+     misc_feature    8..16
+                     /note="putative DnaA box"
+     CDS             92..1444
+                     /experiment="experimental evidence, no additional details
+                     recorded"
+                     /note="A Thymidine at position 1442 causes an ochre stop
+                     codon which prematurely terminates the protein at this
+                     point. Ochre suppressing strains allow readthrough and
+                     express a functional product identical to the
+                     transposase."
+                     /codon_start=1
+                     /transl_table=11
+                     /product="hypothetical protein"
+                     /protein_id="AAA73388.1"
+                     /translation="MITSALHRAADWAKSVFSSAALGDPRRTARLVNVAAQLAKYSGK
+                     SITISSEGSEAMQEGAYRFYRNPNVSAEAIRKAGAMQTVKLAQEFPELLAIEDTTSLS
+                     YRHQVAEELGKLGSIQDKSRGWWVHSVLLLEATTFRTVGLLHQEWWMRPDDPADADEK
+                     ESGKWLAAAATSRLRMGSMMSNVIAVCDREADIHAYLQDRLAHNERFVVRSKHPRKDV
+                     ESGLYLIDHLKNQPELGGYQISIPQKGVVDKRGKRKNRPARKASLSLRSGRITLKQGN
+                     ITLNAVLAEEINPPKGETPLKWLLLTGEPVESLAQALRVIDIYTHRWRIEEFHKAWKT
+                     GAGAERQRMEEPDNLERMVSILSFVAVRLLQLRESFTLPQALRAQGLLKEAEHVESQS
+                     AETVLTPDECQLLGYLDKGKRKRKEKAGSLQWAYMAIARLGGFMDSKRTGIASWGALW
+                     "
+     CDS             257..1444
+                     /experiment="experimental evidence, no additional details
+                     recorded"
+                     /note="A Thymidine at position 1442 causes an ochre stop
+                     codon which prematurely terminates the protein at this
+                     point. Ochre suppressing strains allow readthrough and
+                     express a functional product identical to the
+                     transposition inhibitor; non-functional"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="hypothetical protein"
+                     /protein_id="AAA73389.1"
+                     /translation="MQEGAYRFYRNPNVSAEAIRKAGAMQTVKLAQEFPELLAIEDTT
+                     SLSYRHQVAEELGKLGSIQDKSRGWWVHSVLLLEATTFRTVGLLHQEWWMRPDDPADA
+                     DEKESGKWLAAAATSRLRMGSMMSNVIAVCDREADIHAYLQDRLAHNERFVVRSKHPR
+                     KDVESGLYLIDHLKNQPELGGYQISIPQKGVVDKRGKRKNRPARKASLSLRSGRITLK
+                     QGNITLNAVLAEEINPPKGETPLKWLLLTGEPVESLAQALRVIDIYTHRWRIEEFHKA
+                     WKTGAGAERQRMEEPDNLERMVSILSFVAVRLLQLRESFTLPQALRAQGLLKEAEHVE
+                     SQSAETVLTPDECQLLGYLDKGKRKRKEKAGSLQWAYMAIARLGGFMDSKRTGIASWG
+                     ALW"
+     regulatory      1413..1462
+                     /regulatory_class="promoter"
+                     /experiment="experimental evidence, no additional details
+                     recorded"
+                     /note="aminoglycoside phosphotransferase promoter region"
+     variation       1442
+                     /note="renders IS50L inactive by prematurely terminating
+                     the transposase"
+                     /replace="g"
+     misc_feature    1510..1533
+                     /note="putative IHF binding site"
+     repeat_region   order(1515..1533,4286..4304)
+                     /experiment="experimental evidence, no additional details
+                     recorded"
+                     /note="minimum length required for transposition; inside
+                     end"
+                     /rpt_type=inverted
+     CDS             1551..2345
+                     /function="neomycin/kanamycin resistance"
+                     /experiment="experimental evidence, no additional details
+                     recorded"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="aminoglycoside-3'-O-phosphotransferase"
+                     /protein_id="AAA73390.1"
+                     /translation="MIEQDGLHAGSPAAWVERLFGYDWAQQTIGCSDAAVFRLSAQGR
+                     PVLFVKTDLSGALNELQDEAARLSWLATTGVPCAAVLDVVTEAGRDWLLLGEVPGQDL
+                     LSSHLAPAEKVSIMADAMRRLHTLDPATCPFDHQAKHRIERARTRMEAGLVDQDDLDE
+                     EHQGLAPAELFARLKARMPDGEDLVVTHGDACLPNIMVENGRFSGFIDCGRLGVADRY
+                     QDIALATRDIAEELGGEWADRFLVLYGIAAPDSQRIAFYRLLDEFF"
+     misc_feature    1684
+                     /note="A missing 'C' in the sequence published by
+                     Auerswald et al.(1981) is corrected within that published
+                     by Beck et al. (1982)."
+     CDS             2366..2746
+                     /function="bleomycin resistance"
+                     /experiment="experimental evidence, no additional details
+                     recorded"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="bleomycin resistance"
+                     /protein_id="AAA73391.1"
+                     /translation="MTDQATPNLPSRDFDSTAAFYERLGFGIVFRDAGWMILQRGDLM
+                     LEFFAHPGLDPLASWFSCCLRLDDLAEFYRQCKSVGIQETSSGYPRIHAPELQEWGGT
+                     MAALVDPDGTLLRLIQNELLAGIS"
+     CDS             2785..3585
+                     /function="streptomycin resistance"
+                     /experiment="experimental evidence, no additional details
+                     recorded"
+                     /note="confers streptomycin resistance in some species of
+                     Gram-negative bacteria, but is cryptic in Escherichia
+                     coli."
+                     /codon_start=1
+                     /transl_table=11
+                     /product="streptomycin phosphotransferase"
+                     /protein_id="AAA73392.1"
+                     /translation="MERWRLLRDGELLTTHSSWILPVRQGDMPAMLKVARIPDEEAGY
+                     RLLTWWDGQGAARVFASAAGALLMERASGAGDLAQIAWSGQDDEACRILCDTAARLHA
+                     PRSGPPPDLHPLQEWFQPLFRLAAEHAALAPAASVARQLLAAPREVCPLHGDLHHENV
+                     LDFGDRGWLAIDPHGLLGERTFDYANIFTNPDLSDPGRPLAILPGRLEARLSIVVATT
+                     GFEPERLLRWIIAWTGLSAAWFIGDGDGEGEGAAIDLAVNAMARRLLD"
+     mobile_element  4285..5818
+                     /experiment="experimental evidence, no additional details
+                     recorded"
+                     /note="functional in transposition"
+                     /mobile_element_type="insertion sequence:IS50R"
+     misc_feature    4286..4309
+                     /note="putative IHF binding site"
+     CDS             complement(4297..5727)
+                     /experiment="experimental evidence, no additional details
+                     recorded"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="transposase"
+                     /protein_id="AAA73393.1"
+                     /translation="MITSALHRAADWAKSVFSSAALGDPRRTARLVNVAAQLAKYSGK
+                     SITISSEGSEAMQEGAYRFYRNPNVSAEAIRKAGAMQTVKLAQEFPELLAIEDTTSLS
+                     YRHQVAEELGKLGSIQDKSRGWWVHSVLLLEATTFRTVGLLHQEWWMRPDDPADADEK
+                     ESGKWLAAAATSRLRMGSMMSNVIAVCDREADIHAYLQDRLAHNERFVVRSKHPRKDV
+                     ESGLYLIDHLKNQPELGGYQISIPQKGVVDKRGKRKNRPARKASLSLRSGRITLKQGN
+                     ITLNAVLAEEINPPKGETPLKWLLLTGEPVESLAQALRVIDIYTHRWRIEEFHKAWKT
+                     GAGAERQRMEEPDNLERMVSILSFVAVRLLQLRESFTLPQALRAQGLLKEAEHVESQS
+                     AETVLTPDECQLLGYLDKGKRKRKEKAGSLQWAYMAIARLGGFMDSKRTGIASWGALW
+                     EGWEALQSKLDGFLAAKDLMAQGIKI"
+     CDS             complement(4297..5562)
+                     /experiment="experimental evidence, no additional details
+                     recorded"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="transposition inhibitor"
+                     /protein_id="AAA73394.1"
+                     /translation="MQEGAYRFYRNPNVSAEAIRKAGAMQTVKLAQEFPELLAIEDTT
+                     SLSYRHQVAEELGKLGSIQDKSRGWWVHSVLLLEATTFRTVGLLHQEWWMRPDDPADA
+                     DEKESGKWLAAAATSRLRMGSMMSNVIAVCDREADIHAYLQDRLAHNERFVVRSKHPR
+                     KDVESGLYLIDHLKNQPELGGYQISIPQKGVVDKRGKRKNRPARKASLSLRSGRITLK
+                     QGNITLNAVLAEEINPPKGETPLKWLLLTGEPVESLAQALRVIDIYTHRWRIEEFHKA
+                     WKTGAGAERQRMEEPDNLERMVSILSFVAVRLLQLRESFTLPQALRAQGLLKEAEHVE
+                     SQSAETVLTPDECQLLGYLDKGKRKRKEKAGSLQWAYMAIARLGGFMDSKRTGIASWG
+                     ALWEGWEALQSKLDGFLAAKDLMAQGIKI"
+     misc_feature    5803..5811
+                     /note="putative DnaA box"
+ORIGIN      
+        1 ctgactctta tacacaagta gcgtcctgaa cggaaccttt cccgttttcc aggatctgac
+       61 ttccatgtga cctcctaaca tggtaacgtt catgataact tctgctcttc atcgtgcggc
+      121 cgactgggct aaatctgtgt tctcttcggc ggcgctgggt gatcctcgcc gtactgcccg
+      181 cttggttaac gtcgccgccc aattggcaaa atattctggt aaatcaataa ccatctcatc
+      241 agagggtagt gaagccatgc aggaaggcgc ttaccgattt taccgcaatc ccaacgtttc
+      301 tgccgaggcg atcagaaagg ctggcgccat gcaaacagtc aagttggctc aggagtttcc
+      361 cgaactgctg gccattgagg acaccacctc tttgagttat cgccaccagg tcgccgaaga
+      421 gcttggcaag ctgggctcta ttcaggataa atcccgcgga tggtgggttc actccgttct
+      481 cttgctcgag gccaccacat tccgcaccgt aggattactg catcaggagt ggtggatgcg
+      541 cccggatgac cctgccgatg cggatgaaaa ggagagtggc aaatggctgg cagcggccgc
+      601 aactagccgg ttacgcatgg gcagcatgat gagcaacgtg attgcggtct gtgaccgcga
+      661 agccgatatt catgcttatc tgcaggacag gctggcgcat aacgagcgct tcgtggtgcg
+      721 ctccaagcac ccacgcaagg acgtagagtc tgggttgtat ctgatcgacc atctgaagaa
+      781 ccaaccggag ttgggtggct atcagatcag cattccgcaa aagggcgtgg tggataaacg
+      841 cggtaaacgt aaaaatcgac cagcccgcaa ggcgagcttg agcctgcgca gtgggcgcat
+      901 cacgctaaaa caggggaata tcacgctcaa cgcggtgctg gccgaggaga ttaacccgcc
+      961 caagggtgag accccgttga aatggttgtt gctgaccggc gaaccggtcg agtcgctagc
+     1021 ccaagccttg cgcgtcatcg acatttatac ccatcgctgg cggatcgagg agttccataa
+     1081 ggcatggaaa accggagcag gagccgagag gcaacgcatg gaggagccgg ataatctgga
+     1141 gcggatggtc tcgatcctct cgtttgttgc ggtcaggctg ttacagctca gagaaagctt
+     1201 cacgctgccg caagcactca gggcgcaagg gctgctaaag gaagcggaac acgtagaaag
+     1261 ccagtccgca gaaacggtgc tgaccccgga tgaatgtcag ctactgggct atctggacaa
+     1321 gggaaaacgc aagcgcaaag agaaagcagg tagcttgcag tgggcttaca tggcgatagc
+     1381 tagactgggc ggttttatgg acagcaagcg aaccggaatt gccagctggg gcgccctctg
+     1441 gtaaggttgg gaagccctgc aaagtaaact ggatggcttt cttgccgcca aggatctgat
+     1501 ggcgcagggg atcaagatct gatcaagaga caggatgagg atcgtttcgc atgattgaac
+     1561 aagatggatt gcacgcaggt tctccggccg cttgggtgga gaggctattc ggctatgact
+     1621 gggcacaaca gacaatcggc tgctctgatg ccgccgtgtt ccggctgtca gcgcaggggc
+     1681 gcccggttct ttttgtcaag accgacctgt ccggtgccct gaatgaactg caggacgagg
+     1741 cagcgcggct atcgtggctg gccacgacgg gcgttccttg cgcagctgtg ctcgacgttg
+     1801 tcactgaagc gggaagggac tggctgctat tgggcgaagt gccggggcag gatctcctgt
+     1861 catctcacct tgctcctgcc gagaaagtat ccatcatggc tgatgcaatg cggcggctgc
+     1921 atacgcttga tccggctacc tgcccattcg accaccaagc gaaacatcgc atcgagcgag
+     1981 cacgtactcg gatggaagcc ggtcttgtcg atcaggatga tctggacgaa gagcatcagg
+     2041 ggctcgcgcc agccgaactg ttcgccaggc tcaaggcgcg catgcccgac ggcgaggatc
+     2101 tcgtcgtgac ccatggcgat gcctgcttgc cgaatatcat ggtggaaaat ggccgctttt
+     2161 ctggattcat cgactgtggc cggctgggtg tggcggaccg ctatcaggac atagcgttgg
+     2221 ctacccgtga tattgctgaa gagcttggcg gcgaatgggc tgaccgcttc ctcgtgcttt
+     2281 acggtatcgc cgctcccgat tcgcagcgca tcgccttcta tcgccttctt gacgagttct
+     2341 tctgagcggg actctggggt tcgaaatgac cgaccaagcg acgcccaacc tgccatcacg
+     2401 agatttcgat tccaccgccg ccttctatga aaggttgggc ttcggaatcg ttttccggga
+     2461 cgccggctgg atgatcctcc agcgcgggga tctcatgctg gagttcttcg cccaccccgg
+     2521 gctcgatccc ctcgcgagtt ggttcagctg ctgcctgagg ctggacgacc tcgcggagtt
+     2581 ctaccggcag tgcaaatccg tcggcatcca ggaaaccagc agcggctatc cgcgcatcca
+     2641 tgcccccgaa ctgcaggagt ggggaggcac gatggccgct ttggtcgacc cggacgggac
+     2701 gctcctgcgc ctgatacaga acgaattgct tgcaggcatc tcatgagtgt gtcttcccgt
+     2761 tttccgcctg aggtcactgc gtggatggag cgctggcgcc tgctgcgcga cggcgagctg
+     2821 ctcaccaccc actcgagctg gatacttccc gtccgccagg gggacatgcc ggcgatgctg
+     2881 aaggtcgcgc gcattcccga tgaagaggcc ggttaccgcc tgttgacctg gtgggacggg
+     2941 cagggcgccg cccgagtctt cgcctcggcg gcgggcgctc tgctcatgga gcgcgcgtcc
+     3001 ggggccgggg accttgcaca gatagcgtgg tccggccagg acgacgaggc ttgcaggatc
+     3061 ctctgcgaca ccgccgctcg tctgcacgcg ccgcggtccg gaccgccgcc cgatctccat
+     3121 ccgctacagg aatggttcca gccgcttttc cggttggccg ctgagcacgc ggcacttgcg
+     3181 cccgccgcca gcgtagcgcg ccaacttctg gcggcgccgc gcgaggtgtg cccgctccac
+     3241 ggcgacctgc accacgagaa cgtgctcgac ttcggcgacc gcggctggct ggccatcgac
+     3301 ccgcacggac tgctcggcga gcgcaccttc gactatgcca acatcttcac gaatcccgat
+     3361 ctcagcgacc ccggtcgccc gcttgcgatc ctgccgggca ggctggaggc tcgactcagc
+     3421 attgtggtcg cgacgaccgg gtttgagccc gaacggcttc ttcgctggat cattgcatgg
+     3481 acgggcttgt cggcagcctg gttcatcggc gacggcgacg gcgagggcga gggcgctgcg
+     3541 attgatctgg ccgtaaacgc catggcacgc cggttgcttg actagcgcgg tcaccgatct
+     3601 cacctggtcg tcgagctagg tcaggccgtg tcgggcgtga tccgctggaa gtcgttgcgg
+     3661 gccacacccg ccgcctcgaa gccctgcacc aggccggcat cgtggtgtgc gtggccgagg
+     3721 gactatggaa ggtgccggac gatctgcccg agcagggccg ccgctatgac gcccagcgtc
+     3781 ttggtggcgt gacggtggag ctgaaatcgc acctgcccat cgagcggcag gcccgcgtga
+     3841 tcggtgccac ctggcttgac cagcagttga tcgacggtgg ctcgggcttg ggcgacctgg
+     3901 gctttagcag tgaggccaag taggcgatac agcagcgcgc ggacttcctg gccgaacagg
+     3961 gactggccga gcggcgcggg cagcgcgtga tcctcaccgg aatctgctcg gcagcagcgg
+     4021 gctcgggaac tggcgcaggc cgcgaaggac attgccgccg ataccggcct ggagcatcgc
+     4081 cccgtggccg acggccagcg cgttgccggc gtctaccggc gccccgtcat gctcgccagc
+     4141 gggcgaaatg ggatgcttga tgacgccaag gggtccagcc tcgtgcggtg gaagcccatc
+     4201 gaacagcggc ttggggagca gctcgccgcg acggtgcgcg gtggcggcgt gtcttgggag
+     4261 attggacgac agcgtgggcc ggcccctgtc tcttgatcag atcttgatcc cctgcgccat
+     4321 cagatccttg gcggcaagaa agccatccag tttactttgc agggcttccc aaccttccca
+     4381 gagggcgccc cagctggcaa ttccggttcg cttgctgtcc ataaaaccgc ccagtctagc
+     4441 tatcgccatg taagcccact gcaagctacc tgctttctct ttgcgcttgc gttttccctt
+     4501 gtccagatag cccagtagct gacattcatc cggggtcagc accgtttctg cggactggct
+     4561 ttctacgtgt tccgcttcct ttagcagccc ttgcgccctg agtgcttgcg gcagcgtgaa
+     4621 gctttctctg agctgtaaca gcctgaccgc aacaaacgag aggatcgaga ccatccgctc
+     4681 cagattatcc ggctcctcca tgcgttgcct ctcggctcct gctccggttt tccatgcctt
+     4741 atggaactcc tcgatccgcc agcgatgggt ataaatgtcg atgacgcgca aggcttgggc
+     4801 tagcgactcg accggttcgc cggtcagcaa caaccatttc aacggggtct cacccttggg
+     4861 cgggttaatc tcctcggcca gcaccgcgtt gagcgtgata ttcccctgtt ttagcgtgat
+     4921 gcgcccactg cgcaggctca agctcgcctt gcgggctggt cgatttttac gtttaccgcg
+     4981 tttatccacc acgccctttt gcggaatgct gatctgatag ccacccaact ccggttggtt
+     5041 cttcagatgg tcgatcagat acaacccaga ctctacgtcc ttgcgtgggt gcttggagcg
+     5101 caccacgaag cgctcgttat gcgccagcct gtcctgcaga taagcatgaa tatcggcttc
+     5161 gcggtcacag accgcaatca cgttgctcat catgctgccc atgcgtaacc ggctagttgc
+     5221 ggccgctgcc agccatttgc cactctcctt ttcatccgca tcggcagggt catccgggcg
+     5281 catccaccac tcctgatgca gtaatcctac ggtgcggaat gtggtggcct cgagcaagag
+     5341 aacggagtga acccaccatc cgcgggattt atcctgaata gagcccagct tgccaagctc
+     5401 ttcggcgacc tggtggcgat aactcaaaga ggtggtgtcc tcaatggcca gcagttcggg
+     5461 aaactcctga gccaacttga ctgtttgcat ggcgccagcc tttctgatcg cctcggcaga
+     5521 aacgttggga ttgcggtaaa atcggtaagc gccttcctgc atggcttcac taccctctga
+     5581 tgagatggtt attgatttac cagaatattt tgccaattgg gcggcgacgt taaccaagcg
+     5641 ggcagtacgg cgaggatcac ccagcgccgc cgaagagaac acagatttag cccagtcggc
+     5701 cgcacgatga agagcagaag ttatcatgaa cgttaccatg ttaggaggtc acatggaagt
+     5761 cagatcctgg aaaacgggaa aggttccgtt caggacgcta cttgtgtata agagtcag
+//
+
