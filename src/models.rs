@@ -6,6 +6,7 @@ pub mod edge;
 pub mod file_types;
 pub mod metadata;
 pub mod node;
+pub mod operation_path;
 pub mod operations;
 pub mod path;
 pub mod path_edge;
