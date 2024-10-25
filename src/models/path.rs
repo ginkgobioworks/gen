@@ -537,6 +537,61 @@ impl Path {
             })
             .clone()
             .collect()
+
+    pub fn new_path_for(
+        &self,
+        conn: &Connection,
+        path_start: i64,
+        path_end: i64,
+        edge_to_new_node: &Edge,
+        edge_from_new_node: &Edge,
+    ) -> Path {
+        // Creates a new path from the current one by replacing all edges between path_start and
+        // path_end with the input edges that are to and from a new node
+        let tree = Path::intervaltree_for(conn, self);
+        let block_with_start = tree.query_point(path_start).next().unwrap().value.clone();
+        let block_with_end = tree.query_point(path_end).next().unwrap().value.clone();
+
+        let edges = PathEdge::edges_for_path(conn, self.id);
+        let edges_by_source = edges
+            .iter()
+            .map(|edge| ((edge.source_node_id, edge.source_coordinate), edge))
+            .collect::<HashMap<(i64, i64), &Edge>>();
+        let edges_by_target = edges
+            .iter()
+            .map(|edge| ((edge.target_node_id, edge.target_coordinate), edge))
+            .collect::<HashMap<(i64, i64), &Edge>>();
+        let edge_before_new_node = edges_by_target
+            .get(&(block_with_start.node_id, block_with_start.sequence_start))
+            .unwrap();
+        let edge_after_new_node = edges_by_source
+            .get(&(block_with_end.node_id, block_with_end.sequence_end))
+            .unwrap();
+
+        let mut new_edge_ids = vec![];
+        let mut before_new_node = true;
+        let mut after_new_node = false;
+        for edge in &edges {
+            if before_new_node {
+                new_edge_ids.push(edge.id);
+                if edge.id == edge_before_new_node.id {
+                    before_new_node = false;
+                    new_edge_ids.push(edge_to_new_node.id);
+                    new_edge_ids.push(edge_from_new_node.id);
+                }
+            } else if after_new_node {
+                new_edge_ids.push(edge.id);
+            } else if edge.id == edge_after_new_node.id {
+                after_new_node = true;
+                new_edge_ids.push(edge.id);
+            }
+        }
+
+        let new_name = format!(
+            "{}-start-{}-end-{}-node-{}",
+            self.name, path_start, path_end, edge_to_new_node.target_node_id
+        );
+        Path::create(conn, &new_name, self.block_group_id, &new_edge_ids)
     }
 }
 
