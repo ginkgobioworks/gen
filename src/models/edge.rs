@@ -202,10 +202,10 @@ impl Edge {
         edges
     }
 
-    pub fn bulk_create(conn: &Connection, edges: Vec<EdgeData>) -> Vec<i64> {
+    pub fn bulk_create(conn: &Connection, edges: &Vec<EdgeData>) -> Vec<i64> {
         let mut edge_rows = vec![];
         let mut edge_map: HashMap<EdgeData, i64> = HashMap::new();
-        for edge in &edges {
+        for edge in edges {
             let source_strand = format!("\"{0}\"", edge.source_strand);
             let target_strand = format!("\"{0}\"", edge.target_strand);
             let edge_row = format!(
@@ -233,7 +233,7 @@ impl Edge {
             existing_edges.into_iter().map(Edge::to_data),
         );
         let mut edges_to_insert = HashSet::new();
-        for edge in &edges {
+        for edge in edges {
             if !existing_edge_set.contains(edge) {
                 edges_to_insert.insert(edge);
             }
@@ -320,7 +320,7 @@ impl Edge {
             .collect::<Vec<i64>>()
     }
 
-    pub fn blocks_from_edges(conn: &Connection, edges: &Vec<Edge>) -> (Vec<GroupBlock>, Vec<Edge>) {
+    pub fn blocks_from_edges(conn: &Connection, edges: &Vec<Edge>) -> Vec<GroupBlock> {
         let mut node_ids = HashSet::new();
         let mut edges_by_source_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
         let mut edges_by_target_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
@@ -330,14 +330,14 @@ impl Edge {
                 edges_by_source_node_id
                     .entry(edge.source_node_id)
                     .and_modify(|edges| edges.push(edge))
-                    .or_default();
+                    .or_insert(vec![edge]);
             }
             if edge.target_node_id != PATH_END_NODE_ID {
                 node_ids.insert(edge.target_node_id);
                 edges_by_target_node_id
                     .entry(edge.target_node_id)
                     .and_modify(|edges| edges.push(edge))
-                    .or_default();
+                    .or_insert(vec![edge]);
             }
         }
 
@@ -346,7 +346,6 @@ impl Edge {
 
         let mut blocks = vec![];
         let mut block_index = 0;
-        let mut boundary_edges = vec![];
         // we sort by keys to exploit the external sequence cache which keeps the most recently used
         // external sequence in memory.
         for (node_id, sequence) in sequences_by_node_id
@@ -358,21 +357,6 @@ impl Edge {
                 edges_by_target_node_id.get(node_id),
                 sequence.length,
             );
-            for block_boundary in &block_boundaries {
-                // NOTE: Most of this data is bogus, the Edge struct is just a convenient wrapper
-                // for the data we need to set up boundary edges in the block group graph
-                boundary_edges.push(Edge {
-                    id: -1,
-                    source_node_id: *node_id,
-                    source_coordinate: *block_boundary,
-                    source_strand: Strand::Forward,
-                    target_node_id: *node_id,
-                    target_coordinate: *block_boundary,
-                    target_strand: Strand::Forward,
-                    chromosome_index: 0,
-                    phased: 0,
-                });
-            }
 
             if !block_boundaries.is_empty() {
                 let start = 0;
@@ -422,7 +406,7 @@ impl Edge {
             0,
         );
         blocks.push(end_block);
-        (blocks, boundary_edges)
+        blocks
     }
 
     pub fn build_graph(
@@ -483,14 +467,49 @@ impl Edge {
 
         (graph, edges_by_node_pair)
     }
+
+    pub fn boundary_edges_from_sequences(blocks: &[GroupBlock]) -> Vec<Edge> {
+        let node_blocks_by_id: HashMap<i64, Vec<&GroupBlock>> =
+            blocks.iter().fold(HashMap::new(), |mut acc, block| {
+                acc.entry(block.node_id)
+                    .and_modify(|blocks| blocks.push(block))
+                    .or_insert_with(|| vec![&block]);
+                acc
+            });
+        let mut boundary_edges = vec![];
+        for node_blocks in node_blocks_by_id.values() {
+            for (previous_block, next_block) in node_blocks.iter().tuple_windows() {
+                // NOTE: Most of this data is bogus, the Edge struct is just a convenient wrapper
+                // for the data we need to set up boundary edges in the block group graph
+                boundary_edges.push(Edge {
+                    id: -1,
+                    source_node_id: previous_block.node_id,
+                    source_coordinate: previous_block.end,
+                    source_strand: Strand::Forward,
+                    target_node_id: next_block.node_id,
+                    target_coordinate: next_block.start,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                });
+            }
+        }
+        boundary_edges
+    }
 }
 
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-    use crate::models::{collection::Collection, sequence::Sequence};
-    use crate::test_helpers::get_connection;
+    use crate::models::{
+        block_group::{BlockGroup, PathChange},
+        block_group_edge::BlockGroupEdge,
+        collection::Collection,
+        path::{Path, PathBlock},
+        sequence::Sequence,
+    };
+    use crate::test_helpers::{get_connection, setup_block_group};
 
     #[test]
     fn test_bulk_create() {
@@ -537,7 +556,7 @@ mod tests {
             phased: 0,
         };
 
-        let edge_ids = Edge::bulk_create(conn, vec![edge1, edge2, edge3]);
+        let edge_ids = Edge::bulk_create(conn, &vec![edge1, edge2, edge3]);
         assert_eq!(edge_ids.len(), 3);
         let edges = Edge::bulk_load(conn, &edge_ids);
         assert_eq!(edges.len(), 3);
@@ -607,7 +626,7 @@ mod tests {
         };
 
         let edges = vec![edge2.clone(), edge3.clone()];
-        let edge_ids1 = Edge::bulk_create(conn, edges.clone());
+        let edge_ids1 = Edge::bulk_create(conn, &edges);
         assert_eq!(edge_ids1.len(), 2);
         for (index, id) in edge_ids1.iter().enumerate() {
             let binding = Edge::query(
@@ -620,7 +639,7 @@ mod tests {
         }
 
         let edges = vec![edge1.clone(), edge2.clone(), edge3.clone()];
-        let edge_ids2 = Edge::bulk_create(conn, edges.clone());
+        let edge_ids2 = Edge::bulk_create(conn, &edges);
         assert_eq!(edge_ids2[1], edge_ids1[0]);
         assert_eq!(edge_ids2[2], edge_ids1[1]);
         assert_eq!(edge_ids2.len(), 3);
@@ -698,7 +717,7 @@ mod tests {
             phased: 0,
         };
 
-        let edge_ids = Edge::bulk_create(conn, vec![edge1, edge2, edge3]);
+        let edge_ids = Edge::bulk_create(conn, &vec![edge1, edge2, edge3]);
         assert_eq!(edge_ids.len(), 3);
         let edges = Edge::bulk_load(conn, &edge_ids);
         assert_eq!(edges.len(), 3);
@@ -723,5 +742,166 @@ mod tests {
         assert_eq!(edge_result3.source_coordinate, 4);
         assert_eq!(edge_result3.target_node_id, PATH_END_NODE_ID);
         assert_eq!(edge_result3.target_coordinate, -1);
+    }
+
+    #[test]
+    fn test_blocks_from_edges() {
+        let conn = get_connection(None);
+        let (block_group_id, path) = setup_block_group(&conn);
+
+        let edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
+        let blocks = Edge::blocks_from_edges(&conn, &edges);
+        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
+
+        // 4 actual sequences: 10-length ones of all A, all T, all C, all G
+        // 2 terminal node blocks (start/end)
+        // 6 total
+        assert_eq!(blocks.len(), 6);
+        assert_eq!(boundary_edges.len(), 0);
+
+        let insert_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
+        let insert = PathBlock {
+            id: 0,
+            node_id: insert_node_id,
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 7,
+            path_end: 15,
+            strand: Strand::Forward,
+        };
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            path_accession: None,
+            start: 7,
+            end: 15,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
+        let mut edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
+
+        let blocks = Edge::blocks_from_edges(&conn, &edges);
+        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
+
+        // 2 10-length sequences of all C, all G
+        // 1 inserted NNNN sequence
+        // 4 split blocks (A and T sequences were split) resulting from the inserted sequence
+        // 2 terminal node blocks (start/end)
+        // 9 total
+        assert_eq!(blocks.len(), 9);
+        assert_eq!(boundary_edges.len(), 2);
+
+        // Confirm that ordering doesn't matter
+        edges.reverse();
+        let blocks = Edge::blocks_from_edges(&conn, &edges);
+        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
+
+        // 2 10-length sequences of all C, all G
+        // 1 inserted NNNN sequence
+        // 4 split blocks (A and T sequences were split) resulting from the inserted sequence
+        // 2 terminal node blocks (start/end)
+        // 9 total
+        assert_eq!(blocks.len(), 9);
+        assert_eq!(boundary_edges.len(), 2);
+    }
+
+    #[test]
+    fn test_get_block_boundaries() {
+        let conn = get_connection(None);
+        let template_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAAAA")
+            .save(&conn);
+        let template_node_id = Node::create(&conn, template_sequence.hash.as_str(), None);
+
+        let insert_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
+
+        let edge1 = Edge::create(
+            &conn,
+            template_node_id,
+            2,
+            Strand::Forward,
+            insert_node_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            &conn,
+            insert_node_id,
+            4,
+            Strand::Forward,
+            template_node_id,
+            3,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let boundaries = Edge::get_block_boundaries(Some(&vec![&edge1]), Some(&vec![&edge2]), 10);
+        assert_eq!(boundaries, vec![2, 3]);
+    }
+
+    #[test]
+    fn test_get_block_boundaries_with_two_original_sequences() {
+        let conn = get_connection(None);
+        let template_sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAAAA")
+            .save(&conn);
+        let template1_node_id = Node::create(&conn, template_sequence1.hash.as_str(), None);
+
+        let template_sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTTTT")
+            .save(&conn);
+        let template2_node_id = Node::create(&conn, template_sequence2.hash.as_str(), None);
+
+        let insert_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
+
+        let edge1 = Edge::create(
+            &conn,
+            template1_node_id,
+            2,
+            Strand::Forward,
+            insert_node_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            &conn,
+            insert_node_id,
+            4,
+            Strand::Forward,
+            template2_node_id,
+            3,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let outgoing_boundaries = Edge::get_block_boundaries(Some(&vec![&edge1]), None, 10);
+        assert_eq!(outgoing_boundaries, vec![2]);
+        let incoming_boundaries = Edge::get_block_boundaries(None, Some(&vec![&edge2]), 10);
+        assert_eq!(incoming_boundaries, vec![3]);
     }
 }

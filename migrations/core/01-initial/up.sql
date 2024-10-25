@@ -53,6 +53,43 @@ CREATE TABLE path (
 ) STRICT;
 CREATE UNIQUE INDEX path_uidx ON path(block_group_id, name);
 
+CREATE TABLE accession (
+  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  name TEXT NOT NULL,
+--  path accessions can reference other path accessions
+  path_id INTEGER NOT NULL,
+  parent_accession_id INTEGER,
+  FOREIGN KEY(path_id) REFERENCES path(id),
+  FOREIGN KEY(parent_accession_id) REFERENCES accession(id)
+) STRICT;
+CREATE UNIQUE INDEX accession_uidx ON accession(path_id, parent_accession_id, name) WHERE parent_accession_id is not null;
+CREATE UNIQUE INDEX accession_null_aid_uidx ON accession(path_id, name) WHERE parent_accession_id is null;
+
+CREATE TABLE accession_edge (
+  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  source_node_id INTEGER,
+  source_coordinate INTEGER NOT NULL,
+  source_strand TEXT NOT NULL,
+  target_node_id INTEGER,
+  target_coordinate INTEGER NOT NULL,
+  target_strand TEXT NOT NULL,
+  chromosome_index INTEGER NOT NULL,
+  FOREIGN KEY(source_node_id) REFERENCES nodes(id),
+  FOREIGN KEY(target_node_id) REFERENCES nodes(id)
+) STRICT;
+CREATE UNIQUE INDEX accession_edge_uidx ON accession_edge(source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index);
+
+CREATE TABLE accession_path (
+  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  accession_id INTEGER NOT NULL,
+  index_in_path INTEGER NOT NULL,
+  edge_id INTEGER NOT NULL,
+  FOREIGN KEY(edge_id) REFERENCES accession_edge(id),
+  FOREIGN KEY(accession_id) REFERENCES accession(id)
+) STRICT;
+CREATE UNIQUE INDEX accession_path_uidx ON accession_path(accession_id, edge_id, index_in_path);
+
+
 -- an operation from a vcf can impact multiple paths and samples, so operation is not faceted on that
 CREATE TABLE operation (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,

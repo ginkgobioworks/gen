@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use intervaltree::IntervalTree;
+use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::visit::{depth_first_search, Dfs, DfsEvent, IntoEdgesDirected, Reversed};
 use petgraph::Direction;
@@ -8,12 +9,14 @@ use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::graph::all_simple_paths;
+use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData, GroupBlock};
 use crate::models::node::{PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::path::{Path, PathBlock, PathData};
 use crate::models::path_edge::PathEdge;
 use crate::models::strand::Strand;
+use crate::models::traits::*;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BlockGroup {
@@ -34,6 +37,7 @@ pub struct BlockGroupData<'a> {
 pub struct PathChange {
     pub block_group_id: i64,
     pub path: Path,
+    pub path_accession: Option<String>,
     pub start: i64,
     pub end: i64,
     pub block: PathBlock,
@@ -266,12 +270,43 @@ impl BlockGroup {
             .collect::<Vec<i64>>();
         BlockGroupEdge::bulk_create(conn, target_block_group_id, &edge_ids);
 
-        for path in existing_paths {
+        let mut path_map = HashMap::new();
+
+        for path in existing_paths.iter() {
             let edge_ids = PathEdge::edges_for_path(conn, path.id)
                 .into_iter()
                 .map(|edge| edge.id)
                 .collect::<Vec<i64>>();
-            Path::create(conn, &path.name, target_block_group_id, &edge_ids);
+            let new_path = Path::create(conn, &path.name, target_block_group_id, &edge_ids);
+            path_map.insert(path.id, new_path.id);
+        }
+
+        for accession in Accession::query(
+            conn,
+            &format!(
+                "select * from accession where path_id IN ({path_ids});",
+                path_ids = existing_paths.iter().map(|path| path.id).join(",")
+            ),
+            vec![],
+        ) {
+            let edges = AccessionPath::query(
+                conn,
+                "Select * from accession_path where accession_id = ?1 order by index_in_path ASC;",
+                vec![SQLValue::from(accession.id)],
+            );
+            let new_path_id = path_map[&accession.path_id];
+            let obj = Accession::create(
+                conn,
+                &accession.name,
+                new_path_id,
+                accession.parent_accession_id,
+            )
+            .expect("Unable to create accession in clone.");
+            AccessionPath::create(
+                conn,
+                obj.id,
+                &edges.iter().map(|ap| ap.edge_id).collect::<Vec<i64>>(),
+            );
         }
 
         BlockGroup::add_relation(conn, source_block_group_id, target_block_group_id);
@@ -282,7 +317,7 @@ impl BlockGroup {
         collection_name: &str,
         sample_name: &str,
         group_name: &str,
-    ) -> i64 {
+    ) -> Result<i64, &'static str> {
         let mut bg_id : i64 = match conn.query_row(
             "select id from block_group where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
             (collection_name, sample_name, group_name),
@@ -295,7 +330,7 @@ impl BlockGroup {
             }
         };
         if bg_id != 0 {
-            return bg_id;
+            return Ok(bg_id);
         } else {
             // use the base reference group if it exists
             bg_id = match conn.query_row(
@@ -304,18 +339,21 @@ impl BlockGroup {
             |row| row.get(0),
             ) {
                 Ok(res) => res,
-                Err(rusqlite::Error::QueryReturnedNoRows) => panic!("No base path exists"),
+                Err(rusqlite::Error::QueryReturnedNoRows) => 0,
                 Err(_e) => {
                     panic!("something bad happened querying the database")
                 }
             }
+        }
+        if bg_id == 0 {
+            return Err("No base path exists");
         }
         let new_bg_id = BlockGroup::create(conn, collection_name, Some(sample_name), group_name);
 
         // clone parent blocks/edges/path
         BlockGroup::clone(conn, bg_id, new_bg_id.id);
 
-        new_bg_id.id
+        Ok(new_bg_id.id)
     }
 
     pub fn get_id(
@@ -349,16 +387,19 @@ impl BlockGroup {
 
     pub fn get_graph(conn: &Connection, block_group_id: i64) -> DiGraphMap<i64, ()> {
         let mut edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
-        let (blocks, boundary_edges) = Edge::blocks_from_edges(conn, &edges);
-        edges.extend(boundary_edges);
+        let blocks = Edge::blocks_from_edges(conn, &edges);
+        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
+        edges.extend(boundary_edges.clone());
         let (graph, _) = Edge::build_graph(&edges, &blocks);
         graph
     }
 
     pub fn get_all_sequences(conn: &Connection, block_group_id: i64) -> HashSet<String> {
         let mut edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
-        let (blocks, boundary_edges) = Edge::blocks_from_edges(conn, &edges);
+        let blocks = Edge::blocks_from_edges(conn, &edges);
+        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
         edges.extend(boundary_edges.clone());
+
         let (graph, _) = Edge::build_graph(&edges, &blocks);
 
         let mut start_nodes = vec![];
@@ -373,7 +414,6 @@ impl BlockGroup {
                 end_nodes.push(node);
             }
         }
-
         let blocks_by_id = blocks
             .clone()
             .into_iter()
@@ -406,8 +446,87 @@ impl BlockGroup {
         sequences
     }
 
-    pub fn insert_changes(conn: &Connection, changes: &Vec<PathChange>, cache: &PathCache) {
+    pub fn add_accession(
+        conn: &Connection,
+        path: &Path,
+        name: &str,
+        start: i64,
+        end: i64,
+        chromosome_index: i64,
+        cache: &mut PathCache,
+    ) -> Accession {
+        let tree = PathCache::get_intervaltree(cache, path).unwrap();
+        let start_blocks: Vec<&PathBlock> = tree.query_point(start).map(|x| &x.value).collect();
+        assert_eq!(start_blocks.len(), 1);
+        let start_block = start_blocks[0];
+        let end_blocks: Vec<&PathBlock> = tree.query_point(end).map(|x| &x.value).collect();
+        assert_eq!(end_blocks.len(), 1);
+        let end_block = end_blocks[0];
+        // we make a start/end edge for the accession start/end, then fill in the middle
+        // with any existing edges
+        let start_edge = AccessionEdgeData {
+            source_node_id: PATH_START_NODE_ID,
+            source_coordinate: -1,
+            source_strand: Strand::Forward,
+            target_node_id: start_block.node_id,
+            target_coordinate: start - start_block.path_start + start_block.sequence_start,
+            target_strand: Strand::Forward,
+            chromosome_index,
+        };
+        let end_edge = AccessionEdgeData {
+            source_node_id: end_block.node_id,
+            source_coordinate: end - end_block.path_start + end_block.sequence_start,
+            source_strand: Strand::Forward,
+            target_node_id: PATH_END_NODE_ID,
+            target_coordinate: -1,
+            target_strand: Strand::Forward,
+            chromosome_index,
+        };
+        let accession =
+            Accession::create(conn, name, path.id, None).expect("Unable to create accession.");
+        let mut path_edges = vec![start_edge];
+        if start_block == end_block {
+            path_edges.push(end_edge);
+        } else {
+            let mut in_range = false;
+            let path_blocks: Vec<&PathBlock> = tree
+                .iter_sorted()
+                .map(|x| &x.value)
+                .filter(|block| {
+                    if block.id == start_block.id {
+                        in_range = true;
+                    } else if block.id == end_block.id {
+                        in_range = false;
+                        return true;
+                    }
+                    in_range
+                })
+                .collect::<Vec<_>>();
+            // if start and end block are not the same, we will always have at least 2 elements in path_blocks
+            for (block, next_block) in path_blocks.iter().zip(path_blocks[1..].iter()) {
+                path_edges.push(AccessionEdgeData {
+                    source_node_id: block.node_id,
+                    source_coordinate: block.sequence_end,
+                    source_strand: block.strand,
+                    target_node_id: next_block.node_id,
+                    target_coordinate: next_block.sequence_start,
+                    target_strand: next_block.strand,
+                    chromosome_index,
+                })
+            }
+            path_edges.push(end_edge);
+        }
+        AccessionPath::create(
+            conn,
+            accession.id,
+            &AccessionEdge::bulk_create(conn, &path_edges),
+        );
+        accession
+    }
+
+    pub fn insert_changes(conn: &Connection, changes: &Vec<PathChange>, cache: &mut PathCache) {
         let mut new_edges_by_block_group = HashMap::<i64, Vec<EdgeData>>::new();
+        let mut new_accession_edges = HashMap::new();
         for change in changes {
             let tree = PathCache::get_intervaltree(cache, &change.path).unwrap();
             let new_edges = BlockGroup::set_up_new_edges(change, tree);
@@ -415,11 +534,48 @@ impl BlockGroup {
                 .entry(change.block_group_id)
                 .and_modify(|new_edge_data| new_edge_data.extend(new_edges.clone()))
                 .or_insert_with(|| new_edges.clone());
+            if let Some(accession) = &change.path_accession {
+                new_accession_edges
+                    .entry((&change.path, accession))
+                    .and_modify(|new_edge_data: &mut Vec<EdgeData>| {
+                        new_edge_data.extend(new_edges.clone())
+                    })
+                    .or_insert_with(|| new_edges.clone());
+            }
         }
 
+        let mut edge_data_map = HashMap::new();
+
         for (block_group_id, new_edges) in new_edges_by_block_group {
-            let edge_ids = Edge::bulk_create(conn, new_edges);
+            let edge_ids = Edge::bulk_create(conn, &new_edges);
+            for (i, edge_data) in new_edges.iter().enumerate() {
+                edge_data_map.insert(edge_data.clone(), edge_ids[i]);
+            }
             BlockGroupEdge::bulk_create(conn, block_group_id, &edge_ids);
+        }
+
+        for ((path, accession_name), path_edges) in new_accession_edges {
+            match Accession::get(
+                conn,
+                "select * from accession where name = ?1 AND path_id = ?2",
+                vec![
+                    SQLValue::from(accession_name.clone()),
+                    SQLValue::from(path.id),
+                ],
+            ) {
+                Ok(_) => {
+                    println!("accession already exists, consider a better matching algorithm to determine if this is an error.");
+                }
+                Err(_) => {
+                    let acc_edges = AccessionEdge::bulk_create(
+                        conn,
+                        &path_edges.iter().map(AccessionEdgeData::from).collect(),
+                    );
+                    let acc = Accession::create(conn, accession_name, path.id, None)
+                        .expect("Accession could not be created.");
+                    AccessionPath::create(conn, acc.id, &acc_edges);
+                }
+            }
         }
     }
 
@@ -431,7 +587,7 @@ impl BlockGroup {
         tree: &IntervalTree<i64, PathBlock>,
     ) {
         let new_edges = BlockGroup::set_up_new_edges(change, tree);
-        let edge_ids = Edge::bulk_create(conn, new_edges);
+        let edge_ids = Edge::bulk_create(conn, &new_edges);
         BlockGroupEdge::bulk_create(conn, change.block_group_id, &edge_ids);
     }
 
@@ -557,10 +713,58 @@ mod tests {
         assert_eq!(bg1.collection_name, "test");
         assert_eq!(bg1.name, "hg19");
         Sample::create(conn, "sample");
-        let bg2 = BlockGroup::get_or_create_sample_block_group(conn, "test", "sample", "hg19");
+        let bg2 =
+            BlockGroup::get_or_create_sample_block_group(conn, "test", "sample", "hg19").unwrap();
         assert_eq!(
             BlockGroupEdge::edges_for_block_group(conn, bg1.id),
             BlockGroupEdge::edges_for_block_group(conn, bg2)
+        );
+    }
+
+    #[test]
+    fn test_blockgroup_clone_passes_accessions() {
+        let conn = &get_connection(None);
+        let (bg_1, path) = setup_block_group(conn);
+        let mut path_cache = PathCache::new(conn);
+        PathCache::lookup(&mut path_cache, bg_1, path.name.clone());
+        let acc_1 = BlockGroup::add_accession(conn, &path, "test", 3, 7, 0, &mut path_cache);
+        assert_eq!(
+            Accession::query(
+                conn,
+                "select * from accession where name = ?1",
+                vec![SQLValue::from("test".to_string())]
+            ),
+            vec![Accession {
+                id: acc_1.id,
+                name: "test".to_string(),
+                path_id: path.id,
+                parent_accession_id: None,
+            }]
+        );
+
+        Sample::create(conn, "sample2");
+        let bg2 =
+            BlockGroup::get_or_create_sample_block_group(conn, "test", "sample2", "hg19").unwrap();
+        assert_eq!(
+            Accession::query(
+                conn,
+                "select * from accession where name = ?1",
+                vec![SQLValue::from("test".to_string())]
+            ),
+            vec![
+                Accession {
+                    id: acc_1.id,
+                    name: "test".to_string(),
+                    path_id: path.id,
+                    parent_accession_id: None,
+                },
+                Accession {
+                    id: acc_1.id + 1,
+                    name: "test".to_string(),
+                    path_id: path.id + 1,
+                    parent_accession_id: None,
+                }
+            ]
         );
     }
 
@@ -586,6 +790,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 7,
             end: 15,
             block: insert,
@@ -623,6 +828,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 19,
             end: 31,
             block: deletion,
@@ -666,6 +872,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 7,
             end: 15,
             block: insert,
@@ -707,6 +914,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 15,
             end: 15,
             block: insert,
@@ -748,6 +956,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 12,
             end: 17,
             block: insert,
@@ -789,6 +998,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 10,
             end: 10,
             block: insert,
@@ -830,6 +1040,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 9,
             end: 9,
             block: insert,
@@ -871,6 +1082,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 10,
             end: 20,
             block: insert,
@@ -912,6 +1124,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 15,
             end: 25,
             block: insert,
@@ -953,6 +1166,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 5,
             end: 35,
             block: insert,
@@ -995,6 +1209,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 19,
             end: 31,
             block: deletion,
@@ -1037,6 +1252,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 7,
             end: 15,
             block: insert,
@@ -1090,6 +1306,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 0,
             end: 0,
             block: insert,
@@ -1132,6 +1349,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 40,
             end: 40,
             block: insert,
@@ -1173,6 +1391,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 10,
             end: 11,
             block: insert,
@@ -1214,6 +1433,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 19,
             end: 20,
             block: insert,
@@ -1255,6 +1475,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 0,
             end: 1,
             block: deletion,
@@ -1296,6 +1517,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 35,
             end: 40,
             block: deletion,
@@ -1337,6 +1559,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 10,
             end: 12,
             block: deletion,
@@ -1378,6 +1601,7 @@ mod tests {
         let change = PathChange {
             block_group_id,
             path: path.clone(),
+            path_accession: None,
             start: 18,
             end: 20,
             block: deletion,

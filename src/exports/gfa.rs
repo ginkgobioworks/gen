@@ -56,7 +56,9 @@ pub fn export_gfa(
     }
 
     let mut edges = edge_set.into_iter().collect();
-    let (blocks, boundary_edges) = Edge::blocks_from_edges(conn, &edges);
+
+    let blocks = Edge::blocks_from_edges(conn, &edges);
+    let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
     edges.extend(boundary_edges.clone());
 
     let (graph, edges_by_node_pair) = Edge::build_graph(&edges, &blocks);
@@ -255,13 +257,14 @@ mod tests {
 
     use crate::imports::gfa::import_gfa;
     use crate::models::{
-        block_group::BlockGroup,
+        block_group::{BlockGroup, PathChange},
         collection::Collection,
         node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
+        path::PathBlock,
         sequence::Sequence,
     };
 
-    use crate::test_helpers::{get_connection, setup_gen_dir};
+    use crate::test_helpers::{get_connection, setup_block_group, setup_gen_dir};
     use tempfile::tempdir;
 
     #[test]
@@ -463,5 +466,120 @@ mod tests {
         let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id);
 
         assert_eq!(all_sequences, all_sequences2);
+    }
+
+    #[test]
+    fn test_sequence_is_split_into_multiple_segments() {
+        // Confirm that if edges are added to or from a sequence, that results in the sequence being
+        // split into multiple segments in the exported GFA, and that the multiple segments are
+        // re-imported as multiple sequences
+        let conn = get_connection(None);
+        let (block_group_id, path) = setup_block_group(&conn);
+        let insert_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
+        let insert = PathBlock {
+            id: 0,
+            node_id: insert_node_id,
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 7,
+            path_end: 15,
+            strand: Strand::Forward,
+        };
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            path_accession: None,
+            start: 7,
+            end: 15,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = Path::intervaltree_for(&conn, &path);
+        BlockGroup::insert_change(&conn, &change, &tree);
+
+        let edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
+        let mut node_ids = HashSet::new();
+        let mut edge_ids = HashSet::new();
+        for edge in edges {
+            if !Node::is_terminal(edge.source_node_id) {
+                node_ids.insert(edge.source_node_id);
+            }
+            if !Node::is_terminal(edge.target_node_id) {
+                node_ids.insert(edge.target_node_id);
+            }
+            if !Node::is_terminal(edge.source_node_id) && !Node::is_terminal(edge.target_node_id) {
+                edge_ids.insert(edge.id);
+            }
+        }
+
+        // The original 10-length A, T, C, G sequences, plus NNNN
+        assert_eq!(node_ids.len(), 5);
+        // 3 edges from A sequence -> T sequence, T sequence -> C sequence, C sequence -> G sequence
+        // 2 edges to and from NNNN
+        // 5 total
+        assert_eq!(edge_ids.len(), 5);
+
+        let nodes = Node::get_nodes(&conn, node_ids.into_iter().collect::<Vec<i64>>());
+        let mut node_hashes = HashSet::new();
+        for node in nodes {
+            if !Node::is_terminal(node.id) {
+                node_hashes.insert(node.sequence_hash);
+            }
+        }
+
+        // The original 10-length A, T, C, G sequences, plus NNNN
+        assert_eq!(node_hashes.len(), 5);
+
+        let temp_dir = tempdir().expect("Couldn't get handle to temp directory");
+        let mut gfa_path = PathBuf::from(temp_dir.path());
+        gfa_path.push("intermediate.gfa");
+        export_gfa(&conn, "test", &gfa_path, None);
+        import_gfa(&gfa_path, "test collection 2", &conn);
+
+        let block_group2 = Collection::get_block_groups(&conn, "test collection 2")
+            .pop()
+            .unwrap();
+
+        let edges2 = BlockGroupEdge::edges_for_block_group(&conn, block_group2.id);
+        let mut node_ids2 = HashSet::new();
+        let mut edge_ids2 = HashSet::new();
+        for edge in edges2 {
+            if !Node::is_terminal(edge.source_node_id) {
+                node_ids2.insert(edge.source_node_id);
+            }
+            if !Node::is_terminal(edge.target_node_id) {
+                node_ids2.insert(edge.target_node_id);
+            }
+            if !Node::is_terminal(edge.source_node_id) && !Node::is_terminal(edge.target_node_id) {
+                edge_ids2.insert(edge.id);
+            }
+        }
+
+        // The 10-length A and T sequences have now been split in two (showing up as different
+        // segments in the exported GFA), so expect two more nodes
+        assert_eq!(node_ids2.len(), 7);
+        // 3 edges from A sequence -> T sequence, T sequence -> C sequence, C sequence -> G sequence
+        // 2 boundary edges (exported as real links) in A sequence and T sequence
+        // 2 edges to and from NNNN
+        // 7 total
+        assert_eq!(edge_ids2.len(), 7);
+
+        let nodes2 = Node::get_nodes(&conn, node_ids2.into_iter().collect::<Vec<i64>>());
+        let mut node_hashes2 = HashSet::new();
+        for node in nodes2 {
+            if !Node::is_terminal(node.id) {
+                node_hashes2.insert(node.sequence_hash);
+            }
+        }
+
+        // The 10-length A and T sequences have now been split in two, but since the T sequences was
+        // split in half, there's just one new TTTTT sequence shared by 2 nodes
+        assert_eq!(node_hashes2.len(), 6);
     }
 }

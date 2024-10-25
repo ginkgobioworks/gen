@@ -110,7 +110,7 @@ pub fn import_gfa(gfa_path: &FilePath, collection_name: &str, conn: &Connection)
         ));
     }
 
-    let edge_ids = Edge::bulk_create(conn, edges.into_iter().collect::<Vec<EdgeData>>());
+    let edge_ids = Edge::bulk_create(conn, &edges.into_iter().collect::<Vec<EdgeData>>());
     BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
     let saved_edges = Edge::bulk_load(conn, &edge_ids);
@@ -238,13 +238,13 @@ mod tests {
             "select * from path where block_group_id = ?1 AND name = ?2",
             vec![
                 SQLValue::from(block_group_id),
-                SQLValue::from("124".to_string()),
+                SQLValue::from("m123".to_string()),
             ],
         )[0]
         .clone();
 
         let result = Path::sequence(conn, path);
-        assert_eq!(result, "ATGGCATATTCGCAGCT");
+        assert_eq!(result, "ATCGATCGATCGATCGATCGGGAACACACAGAGA");
 
         let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i64;
         assert_eq!(node_count, 6);
