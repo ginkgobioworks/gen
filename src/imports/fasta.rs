@@ -10,6 +10,7 @@ use crate::models::{
     edge::Edge,
     metadata,
     node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
+    operation_path::OperationPath,
     path::Path,
     sequence::Sequence,
     strand::Strand,
@@ -104,6 +105,7 @@ pub fn import_fasta(
         );
         BlockGroupEdge::bulk_create(conn, block_group.id, &[edge_into.id, edge_out_of.id]);
         let path = Path::create(conn, &name, block_group.id, &[edge_into.id, edge_out_of.id]);
+        OperationPath::create(conn, operation.id, path.id);
         summary.entry(path.name).or_insert(sequence_length);
     }
     let mut summary_str = "".to_string();

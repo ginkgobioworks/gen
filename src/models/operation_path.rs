@@ -1,10 +1,22 @@
-use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
+use crate::models::traits::Query;
+use rusqlite::{params_from_iter, types::Value as SQLValue, Connection, Row};
 
 #[derive(Clone, Debug)]
 pub struct OperationPath {
     pub id: i64,
     pub operation_id: i64,
     pub path_id: i64,
+}
+
+impl Query for OperationPath {
+    type Model = OperationPath;
+    fn process_row(row: &Row) -> Self::Model {
+        OperationPath {
+            id: row.get(0).unwrap(),
+            operation_id: row.get(1).unwrap(),
+            path_id: row.get(2).unwrap(),
+        }
+    }
 }
 
 impl OperationPath {
@@ -37,20 +49,11 @@ impl OperationPath {
         }
     }
 
-    // pub fn query(conn: &Connection, query: &str, placeholders: Vec<SQLValue>) -> Vec<OperationPath> {
-    //     let mut stmt = conn.prepare(query).unwrap();
-    //     let mut objs = vec![];
-    //     let rows = stmt
-    //         .query_map(params_from_iter(placeholders), |row| {
-    //             Ok(Node {
-    //                 id: row.get(0)?,
-    //                 sequence_hash: row.get(1)?,
-    //             })
-    //         })
-    //         .unwrap();
-    //     for row in rows {
-    //         objs.push(row.unwrap());
-    //     }
-    //     objs
-    // }
+    pub fn paths_for_operation(conn: &Connection, operation_id: i64) -> Vec<OperationPath> {
+        let select_statement = format!(
+            "SELECT * FROM operation_paths WHERE operation_id = {0};",
+            operation_id
+        );
+        OperationPath::query(conn, &select_statement, vec![])
+    }
 }
