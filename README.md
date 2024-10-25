@@ -30,7 +30,8 @@ common features.
 `<figure 2>`
 
 ## Installing from Source
-Make sure you have a Rust compiler installed on your system. You can install the Rust toolset using the [rustup installer](https://rustup.rs/).
+Make sure you have a Rust compiler installed on your system. You can install the Rust toolset using the [rustup
+installer](https://rustup.rs/).
 
 
 1. Clone the [source](https://github.com/ginkgobioworks/gen) with `git`:
@@ -43,15 +44,25 @@ Make sure you have a Rust compiler installed on your system. You can install the
 2. Compile the gen package and its dependencies:
 
     ```
-    cargo build
+    cargo build --release
     ```
 
-3. You can find the gen executable in ./targets/debug/ or execute it via cargo:
+3. You can find the gen executable in ./target/release/ or execute it via cargo:
 
     ```
     cargo run -- <arguments>
     ```
-    
+
+To cross-compile gen to run on a different architecture, you need to first add a target to the Rust toolchain and
+install a linker. For macOS to Linux this can be done as follows:
+
+    ```
+    rustup target add x86_64-unknown-linux-gnu
+    brew install SergioBenitez/osxct/x86_64-unknown-linux-gnu
+    cargo build --release --target=x86_64-unknown-linux-gnu
+    ```
+
+The executable will be placed in ./target/x86_64-unknown-linux-gnu/release/
 
 ## Usage
 
@@ -70,7 +81,8 @@ Make sure you have a Rust compiler installed on your system. You can install the
 
 ### Recording sequence changes
 <!-- From a VCF file -->
-Sequence variants observed through NGS can be imported into a gen repository via standard VCF file obtained from variant callers like Freebayes, GATK, or DeepVariant. [...]
+Sequence variants observed through NGS can be imported into a gen repository via standard VCF file obtained from variant
+callers like Freebayes, GATK, or DeepVariant. [...]
 <!-- -From a sequence file that was edited externally -->
 
 <!-- -From the gen command line -->
