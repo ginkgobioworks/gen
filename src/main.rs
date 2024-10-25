@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use gen::config;
 use gen::config::get_operation_connection;
 
+use gen::exports::fasta::export_fasta;
 use gen::exports::gfa::export_gfa;
 use gen::get_connection;
 use gen::imports::fasta::import_fasta;
@@ -10,6 +11,7 @@ use gen::imports::gfa::import_gfa;
 use gen::models::metadata;
 use gen::models::operations::{setup_db, Branch, OperationState};
 use gen::operation_management;
+use gen::updates::fasta::update_with_fasta;
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::update_with_vcf;
 use rusqlite::{types::Value, Connection};
@@ -20,7 +22,7 @@ use std::str;
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    /// The path to the database you wish to utilize
+    // The path to the database you wish to utilize
     #[arg(short, long)]
     db: Option<String>,
     #[command(subcommand)]
@@ -36,18 +38,18 @@ fn get_default_collection(conn: &Connection) -> Option<String> {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Import a new sequence collection.
+    // Import a new sequence collection.
     Import {
-        /// Fasta file path
+        // Fasta file path
         #[arg(short, long)]
         fasta: Option<String>,
-        /// GFA file path
+        // GFA file path
         #[arg(short, long)]
         gfa: Option<String>,
-        /// The name of the collection to store the entry under
+        // The name of the collection to store the entry under
         #[arg(short, long)]
         name: Option<String>,
-        /// Don't store the sequence in the database, instead store the filename
+        // Don't store the sequence in the database, instead store the filename
         #[arg(short, long, action)]
         shallow: bool,
     },
@@ -133,15 +135,18 @@ enum Commands {
         id: i64,
     },
     Export {
-        /// The name of the collection to export
+        // The name of the collection to export
         #[arg(short, long)]
         name: Option<String>,
-        /// The name of the GFA file to export to
+        // The name of the GFA file to export to
         #[arg(short, long)]
-        gfa: String,
+        gfa: Option<String>,
         /// An optional sample name
         #[arg(short, long)]
         sample: Option<String>,
+        // The name of the fasta file to export to
+        #[arg(short, long)]
+        fasta: Option<String>,
     },
     Defaults {
         /// The default database to use
@@ -257,6 +262,18 @@ fn main() {
                     end.unwrap(),
                     &parts.clone().unwrap(),
                     library_path,
+                );
+            } else if let Some(fasta_path) = fasta {
+                // NOTE: This has to go after library because the library update also uses a fasta
+                // file
+                update_with_fasta(
+                    &conn,
+                    &operation_conn,
+                    name,
+                    &path_name.clone().unwrap(),
+                    start.unwrap(),
+                    end.unwrap(),
+                    fasta_path,
                 );
             } else if let Some(vcf_path) = vcf {
                 update_with_vcf(
@@ -387,13 +404,25 @@ fn main() {
         Some(Commands::Reset { id }) => {
             operation_management::reset(&conn, &operation_conn, &db_uuid, *id);
         }
-        Some(Commands::Export { name, gfa, sample }) => {
+        Some(Commands::Export {
+            name,
+            gfa,
+            sample,
+            fasta,
+        }) => {
             let name = &name.clone().unwrap_or_else(|| {
                 get_default_collection(&operation_conn)
                     .expect("No collection specified and default not setup.")
             });
             conn.execute("BEGIN TRANSACTION", []).unwrap();
-            export_gfa(&conn, name, &PathBuf::from(gfa), sample.clone());
+            if let Some(gfa_path) = gfa {
+                export_gfa(&conn, name, &PathBuf::from(gfa_path), sample.clone());
+            } else if let Some(fasta_path) = fasta {
+                let current_op = OperationState::get_operation(&operation_conn, &db_uuid).unwrap();
+                export_fasta(&conn, current_op, &PathBuf::from(fasta_path));
+            } else {
+                panic!("No file type specified for export.");
+            }
             conn.execute("END TRANSACTION", []).unwrap();
         }
         None => {}
