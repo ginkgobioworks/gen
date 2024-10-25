@@ -80,6 +80,7 @@ pub fn update_with_fasta(
     let path_change = PathChange {
         block_group_id: path.block_group_id,
         path: path.clone(),
+        path_accession: None,
         start: start_coordinate,
         end: end_coordinate,
         block: path_block,
@@ -87,13 +88,13 @@ pub fn update_with_fasta(
         phased: 0,
     };
 
-    let path_cache = PathCache {
+    let mut path_cache = PathCache {
         cache: HashMap::new(),
         intervaltree_cache: HashMap::new(),
         conn,
     };
 
-    BlockGroup::insert_changes(conn, &vec![path_change], &path_cache);
+    BlockGroup::insert_changes(conn, &vec![path_change], &mut path_cache);
 
     let edge_to_new_node = Edge::query(
         conn,
@@ -115,13 +116,13 @@ pub fn update_with_fasta(
         &edge_from_new_node,
     );
 
-    // let operation_paths = OperationPath::paths_for_operation(conn, operation.id);
-    // for operation_path in operation_paths {
-    // 	if operation_path.path_id != path.id {
-    // 	    OperationPath::create(conn, operation.id, operation_path.path_id);
-    // 	}
-    // }
-    // OperationPath::create(conn, operation.id, new_path.id);
+    let operation_paths = OperationPath::paths_for_operation(conn, operation.id);
+    for operation_path in operation_paths {
+        if operation_path.path_id != path.id {
+            OperationPath::create(conn, operation.id, operation_path.path_id);
+        }
+    }
+    OperationPath::create(conn, operation.id, new_path.id);
 
     let summary_str = format!(" {}: 1 change", new_path.name);
     operation_management::end_operation(
