@@ -5,29 +5,35 @@ where collections of sequences and associated data are stored and tracked over t
 be created to explore different modifications or variations without affecting the main project. These branches can later
 be merged to integrate results from different experiments or collaborators.
 
-The gen client can import standard sequence file formats from sources like NCBI and genetic design tools. Internally,
-sequences are stored as _pangenomic molecules_ that represent not just a single strain, cultivar, or cell line, but also
-any engineered or naturally derived variants for use in laboratory experiments. Gen molecules take the form of a graph
-structure as shown in the figure below. Each molecule is made up out of a network of _nodes_ that represent sequence
-fragments, and _edges_ that define how sequence fragments are connected. Multiple molecules are organized into
-_collections_ that could represent the different chromosomes in a cell or fragments in a reaction mixture. Molecules
-generally start out as a single node that holds a reference sequence, and new edges and nodes are added for every
-sequence variant that is designed or observed. To reconstitute a linear sequence, the client walks from node to node
-along a defined _path_.
+The gen client can import standard sequence file formats from sources like NCBI and genetic design tools. The sequence
+model takes the form of a graph structure as shown in the figure below. Each molecule is made up out of a network of
+_nodes_ that represent sequence fragments, and _edges_ that define how sequence fragments are connected. Multiple
+molecules are organized into _collections_ that could represent the different chromosomes in a reference genome,
+proteins in a proteome, or pieces of DNA in a cloning reaction mixture. Molecules generally start out as a node that
+holds the reference sequence, and new edges and nodes are added for every sequence variant that is designed or observed.
+To reconstitute a linear sequence, the client walks from node to node along a defined _path_. This data model allows the
+representation of a wide range of biological complexity -- from a single molecule to complex cultivars and cell lines,
+including any naturally occurring variation in addition to intended engineering.
 
-`<figure 1>`
+![Figure 1](docs/figures/figure_1.svg)
 
-Imported feature annotations can be propagated from path to path in a sequence-agnostic way that relies on coordinate
-translation. Paths can also be compared to one another to detect features that are common or different between sets of
-paths, which can be used to analyze experimental data. A _sample_ object represents the subset of the possible paths and
-edges that is actually present in an experimental sample. A value between from 0 and 1 is assigned to each edge and path
-to represent the probability that and edge or path is observed. These numbers can be derived from sequencing results, or
-set by the user to represent an isolate or cloning reaction. This allows a user to focus on distinguishing features of a
-molecule by masking out irrelevant edges. The figure below demonstrates how this can be used to represent a polyploid
-genome obtained through cross-breeding. Like paths, samples can be compared to one another to detect differences and
-common features.
+**_Figure 1_**: _Block graph model representation of a sequence variant where two nucleotides AT are replaced by TG;
+the modified sequence (shown in bold) is stored as a path over a list of edges that address specific coordinates._
 
-`<figure 2>`
+The block graph model is designed to be additive: new sequence variants only add to the graph, existing nodes are stable
+and do not have to be split to accomodate the new topology. This is different from the more commonly used segment graph 
+model shown in Figure 2, and gen automatically converts between formats as needed. 
+
+![Figure 2](docs/figures/figure_2.svg)
+
+**_Figure 2_**: _Segment graph model corresponding to the sequence variant in Figure 2. The original sequence was
+split into 3 parts; the modified sequence path is defined by a list of nodes that refer to these segments. Nodes are
+labeled by their parent ID and starting coordinate, new edges internal to the reference are shown as dashed arrows._ 
+
+Individual chromosomes or contigs are stored as _block groups_ that refer to a specific grouping of edges from the main
+graph. Block groups are adressed on three facets: name, sample, and collection. The name is an identifier like
+"chromosome II", and the sample could refer to a real individual or a virtual outcome of an experiment. The meaning of a
+collection is flexible, and for example could refer to the type of data (genomic, protein, ...) or experiment.
 
 ## Installing from Source
 Make sure you have a Rust compiler installed on your system. You can install the Rust toolset using the [rustup
@@ -65,6 +71,11 @@ install a linker. For macOS to Linux this can be done as follows:
 The executable will be placed in ./target/x86_64-unknown-linux-gnu/release/
 
 ## Usage
+Typical workflows are illustrated in these example workflows:
+
+- [Mapping reads to the human genome, taking into account all known variants](examples/human_variation_aware_alignment/Analysis.ipynb)
+- [Design and analysis of a combinatorial plasmid library constructed via one-pot cloning](examples/combinatorial_plasmid_design/combinatorial_design.md)
+- [Modeling a cross between two yeast strains starting from variant calls or genome assemblies](examples/yeast_crosses/Analysis.md)
 
 ### Starting a new repository
 `gen --db <file> init`
