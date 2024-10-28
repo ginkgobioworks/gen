@@ -26,7 +26,7 @@ model shown in Figure 2, and gen automatically converts between formats as neede
 
 ![Figure 2](docs/figures/figure_2.svg)
 
-**_Figure 2_**: _Segment graph model corresponding to the sequence variant in Figure 2. The original sequence was
+**_Figure 2_**: _Segment graph model corresponding to the sequence variant in Figure 1. The original sequence was
 split into 3 parts; the modified sequence path is defined by a list of nodes that refer to these segments. Nodes are
 labeled by their parent ID and starting coordinate, new edges internal to the reference are shown as dashed arrows._ 
 
@@ -71,52 +71,33 @@ install a linker. For macOS to Linux this can be done as follows:
 The executable will be placed in ./target/x86_64-unknown-linux-gnu/release/
 
 ## Usage
+Gen is a command line tool with multiple subcommands that each have their own flags and arguments. The currently
+available commands are listed below and described in more detail [here](docs/commands.md) or built-in help pages (`gen
+[COMMAND] --help`).
+
+```
+Usage: gen [OPTIONS] [COMMAND]
+
+Commands:
+  import      Import a new sequence collection
+  update      Update a sequence collection with new data
+  init        Initialize a gen repository
+  branch      Manage and create branches
+  checkout    Migrate a database to a given operation
+  reset       
+  operations  View operations carried out against a database
+  apply       
+  export      Export a sequence collection
+  defaults    Set a default database and collection to use
+  help        Print this message or the help of the given subcommand(s)
+
+Options:
+  -d, --db <DB>  The path to the database you wish to utilize
+  -h, --help     Print help
+  -V, --version  Print version
+```
 Typical workflows are illustrated in these example workflows:
 
 - [Mapping reads to the human genome, taking into account all known variants](examples/human_variation_aware_alignment/Analysis.ipynb)
 - [Design and analysis of a combinatorial plasmid library constructed via one-pot cloning](examples/combinatorial_plasmid_design/combinatorial_design.md)
 - [Modeling a cross between two yeast strains starting from variant calls or genome assemblies](examples/yeast_crosses/Analysis.md)
-
-### Starting a new repository
-`gen --db <file> init`
-
-<!-- Importing sequence files into a collection -->
-
-`gen --db <file> import --fasta <file> --name <string>`
-
-### Cloning an existing repository
-<!-- -Exporting sequence files and slices -->
-<!-- -Shallow checkout -->
-<!-- -Exploring a repository: listing collections, samples, paths (molecules) -->
-<!-- -Translating coordinates between paths -->
-
-### Recording sequence changes
-<!-- From a VCF file -->
-Sequence variants observed through NGS can be imported into a gen repository via standard VCF file obtained from variant
-callers like Freebayes, GATK, or DeepVariant. [...]
-<!-- -From a sequence file that was edited externally -->
-
-<!-- -From the gen command line -->
-
-<!--
-
-Inserting one or more genetic parts at a specific locus can be done using the `gen update <location> <sequence>` command. The location parameter is given as the combination of a path (molecule) identifier and a numerical coordinate referenced to that path, separated by a colon. If the option `--propagate` is used, all other paths that include the location will be updated as well. By default the molecule itself is changed, but by using the option `--new` new molecules are created and their path IDs are returned to the user. Multiple inserts can be specified using the `--fasta <file>` argument. In this case new path IDs are always returned to the user, but unless the option `--new` is given the original path is removed.
-
-To insert multiple parts successively in the same location, use the option `--combinatorial <file>` with a CSV file where each column represents a slot within the target position, and the rows list which parts can be introduced in that slot, as specified by their identifiers from the fasta file. By default a full factorial design will be generated, but the option `--associations <file>` allows you to restrict the experimental design to the combinations listed as individual rows, with columns still corresponding to the same slots. Columns that are left empty are treated as being full factorial. The option `--anti-associations <file>` provides the inverse functionality: a similar csv file is provided, but each row represents genetic that should not occur together as combinations.
-
--->
-
-### Associating numerical data with paths and edges
-<!-- -From CSV referencing named paths -->
-
-<!-- -From mapped sequencing reads -->
-
-### Commits and merges
-<!-- -Local only for now -->
-
-
-
-
-
-
-
