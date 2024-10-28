@@ -8,17 +8,24 @@ use crate::models::{block_group::BlockGroup, operation_path::OperationPath, path
 
 pub fn export_fasta(conn: &Connection, operation_id: i64, filename: &PathBuf) {
     let operation_paths = OperationPath::paths_for_operation(conn, operation_id);
+    println!("here1");
+
+    let file = File::create(filename).unwrap();
+    let mut writer = fasta::io::Writer::new(file);
+
     for operation_path in operation_paths {
+        println!("here2");
         let path = Path::get(conn, operation_path.path_id);
         let block_group = BlockGroup::get_by_id(conn, path.block_group_id);
 
-        let file = File::create(filename).unwrap();
-        let mut writer = fasta::io::Writer::new(file);
-
         let definition = fasta::record::Definition::new(block_group.name, None);
         let sequence = fasta::record::Sequence::from(Path::sequence(conn, path).into_bytes());
+        println!("sequence length: {}", sequence.len());
+        println!("definition: {}", definition);
         let record = fasta::Record::new(definition, sequence);
 
         let _ = writer.write_record(&record);
     }
+
+    println!("Exported to file {}", filename.display());
 }

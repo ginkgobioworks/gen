@@ -1,6 +1,5 @@
 use noodles::fasta;
 use rusqlite::{types::Value as SQLValue, Connection};
-use std::collections::HashMap;
 use std::{io, str};
 
 use crate::models::{
@@ -88,23 +87,18 @@ pub fn update_with_fasta(
         phased: 0,
     };
 
-    let mut path_cache = PathCache {
-        cache: HashMap::new(),
-        intervaltree_cache: HashMap::new(),
-        conn,
-    };
-
-    BlockGroup::insert_changes(conn, &vec![path_change], &mut path_cache);
+    let interval_tree = Path::intervaltree_for(conn, &path);
+    BlockGroup::insert_change(conn, &path_change, &interval_tree);
 
     let edge_to_new_node = Edge::query(
         conn,
-        "select * from edge where target_node_id = ?1",
+        "select * from edges where target_node_id = ?1",
         vec![SQLValue::from(node_id)],
     )[0]
     .clone();
     let edge_from_new_node = Edge::query(
         conn,
-        "select * from edge where source_node_id = ?1",
+        "select * from edges where source_node_id = ?1",
         vec![SQLValue::from(node_id)],
     )[0]
     .clone();
@@ -116,12 +110,14 @@ pub fn update_with_fasta(
         &edge_from_new_node,
     );
 
-    let operation_paths = OperationPath::paths_for_operation(conn, operation.id);
+    let operation_parent_id = operation.parent_id.unwrap();
+    let operation_paths = OperationPath::paths_for_operation(conn, operation_parent_id);
     for operation_path in operation_paths {
         if operation_path.path_id != path.id {
             OperationPath::create(conn, operation.id, operation_path.path_id);
         }
     }
+
     OperationPath::create(conn, operation.id, new_path.id);
 
     let summary_str = format!(" {}: 1 change", new_path.name);
