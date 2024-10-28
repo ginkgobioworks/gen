@@ -17,7 +17,7 @@ to intended engineering.
 
 ![Figure 1](docs/figures/figure_1.svg)
 
-**_Figure 1_**:_Block graph model representation of a sequence variant where two nucleotides AT are replaced by TG;
+**_Figure 1_**: _Block graph model representation of a sequence variant where two nucleotides AT are replaced by TG;
 the modified sequence (shown in bold) is stored as a path over a list of edges that address specific coordinates._
 
 The block graph model is designed to be additive: new sequence variants only add to the graph, existing nodes are stable
@@ -26,7 +26,7 @@ model shown in Figure 2, and gen automatically converts between formats as neede
 
 ![Figure 2](docs/figures/figure_2.svg)
 
-**_Figure 2_**:_Segment graph model corresponding to the sequence variant in Figure 2. The original sequence was
+**_Figure 2_**: _Segment graph model corresponding to the sequence variant in Figure 2. The original sequence was
 split into 3 parts; the modified sequence path is defined by a list of nodes that refer to these segments. Nodes are
 labeled by their parent ID and starting coordinate, new edges internal to the reference are shown as dashed arrows._ 
 
