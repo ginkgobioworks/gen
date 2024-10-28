@@ -8,12 +8,12 @@ be merged to integrate results from different experiments or collaborators.
 The gen client can import standard sequence file formats from sources like NCBI and genetic design tools. The sequence
 model takes the form of a graph structure as shown in the figure below. Each molecule is made up out of a network of
 _nodes_ that represent sequence fragments, and _edges_ that define how sequence fragments are connected. Multiple
-molecules are organized into _collections_ that could represent the different chromosomes in a cell or DNA in a reaction
-mixture. Molecules generally start out as a node that holds the reference sequence, and new edges and nodes are
-added for every sequence variant that is designed or observed. To reconstitute a linear sequence, the client walks from
-node to node along a defined _path_. This data model allows the representation of a wide range of biological complexity
--- from a single molecule to complex cultivars and cell lines, including any naturally occurring variation in addition
-to intended engineering.
+molecules are organized into _collections_ that could represent the different chromosomes in a reference genome,
+proteins in a proteome, or pieces of DNA in a cloning reaction mixture. Molecules generally start out as a node that
+holds the reference sequence, and new edges and nodes are added for every sequence variant that is designed or observed.
+To reconstitute a linear sequence, the client walks from node to node along a defined _path_. This data model allows the
+representation of a wide range of biological complexity -- from a single molecule to complex cultivars and cell lines,
+including any naturally occurring variation in addition to intended engineering.
 
 ![Figure 1](docs/figures/figure_1.svg)
 
@@ -34,19 +34,6 @@ Individual chromosomes or contigs are stored as _block groups_ that refer to a s
 graph. Block groups are adressed on three facets: name, sample, and collection. The name is an identifier like
 "chromosome II", and the sample could refer to a real individual or a virtual outcome of an experiment. The meaning of a
 collection is flexible, and for example could refer to the type of data (genomic, protein, ...) or experiment.
-
-<!--Rewrite this entirely (center around blockgroups)
-
-Paths can also be compared to one another to detect features that are common or different between sets of paths, which
-can be used to analyze experimental data. Another way to use gen to analyze experiments is through _sample_ objects. A
-gen sample assigns probabilities to edges and paths based on the frequency they are observed in a physical sample. These
-numbers can be derived from sequencing results, or set by the user to represent an isolate or cloning reaction. This
-allows a user to mask out the edges that are not present in a sample and focus on the distinguishing features. The
-figure below demonstrates how this can be used to represent a polyploid genome obtained through cross-breeding. Like
-paths, samples can be compared to one another to detect differences and common features
-
-`<figure 2>`
--->
 
 ## Installing from Source
 Make sure you have a Rust compiler installed on your system. You can install the Rust toolset using the [rustup
@@ -84,6 +71,11 @@ install a linker. For macOS to Linux this can be done as follows:
 The executable will be placed in ./target/x86_64-unknown-linux-gnu/release/
 
 ## Usage
+Typical workflows are illustrated in these example workflows:
+
+- [Mapping reads to the human genome, taking into account all known variants](examples/human_variation_aware_alignment/Analysis.ipynb)
+- [Design and analysis of a combinatorial plasmid library constructed via one-pot cloning](examples/combinatorial_plasmid_design/combinatorial_design.md)
+- [Modeling a cross between two yeast strains starting from variant calls or genome assemblies](examples/yeast_crosses/Analysis.md)
 
 ### Starting a new repository
 `gen --db <file> init`
