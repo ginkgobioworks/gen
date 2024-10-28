@@ -3,7 +3,7 @@ use rusqlite::{types::Value as SQLValue, Connection};
 use std::{io, str};
 
 use crate::models::{
-    block_group::{BlockGroup, PathCache, PathChange},
+    block_group::{BlockGroup, PathChange},
     edge::Edge,
     file_types::FileTypes,
     node::Node,

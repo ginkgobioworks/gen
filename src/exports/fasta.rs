@@ -1,7 +1,6 @@
 use noodles::fasta;
-use rusqlite::{types::Value as SQLValue, Connection};
+use rusqlite::Connection;
 use std::fs::File;
-use std::io;
 use std::path::PathBuf;
 
 use crate::models::{block_group::BlockGroup, operation_path::OperationPath, path::Path};
