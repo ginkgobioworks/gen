@@ -15,8 +15,7 @@ node to node along a defined _path_. This data model allows the representation o
 -- from a single molecule to complex cultivars and cell lines, including any naturally occurring variation in addition
 to intended engineering.
 
-<!-- ![Figure 1](docs/figures/figure_1.svg) -->
-<center><img src="docs/figures/figure_2.svg"></center>
+![Figure 1](docs/figures/figure_1.svg)
 
 **_Figure 1_**:_Block graph model representation of a sequence variant where two nucleotides AT are replaced by TG;
 the modified sequence (shown in bold) is stored as a path over a list of edges that address specific coordinates._
@@ -25,8 +24,7 @@ The block graph model is designed to be additive: new sequence variants only add
 and do not have to be split to accomodate the new topology. This is different from the more commonly used segment graph 
 model shown in Figure 2, and gen automatically converts between formats as needed. 
 
-<!-- ![Figure 2](docs/figures/figure_2.svg) -->
-<center><img src="docs/figures/figure_2.svg"></center>
+![Figure 2](docs/figures/figure_2.svg)
 
 **_Figure 2_**:_Segment graph model corresponding to the sequence variant in Figure 2. The original sequence was
 split into 3 parts; the modified sequence path is defined by a list of nodes that refer to these segments. Nodes are
