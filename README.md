@@ -9,13 +9,33 @@ The gen client can import standard sequence file formats from sources like NCBI 
 model takes the form of a graph structure as shown in the figure below. Each molecule is made up out of a network of
 _nodes_ that represent sequence fragments, and _edges_ that define how sequence fragments are connected. Multiple
 molecules are organized into _collections_ that could represent the different chromosomes in a cell or DNA in a reaction
-mixture. Molecules generally start out as a single node that holds a reference sequence, and new edges and nodes are
+mixture. Molecules generally start out as a node that holds the reference sequence, and new edges and nodes are
 added for every sequence variant that is designed or observed. To reconstitute a linear sequence, the client walks from
 node to node along a defined _path_. This data model allows the representation of a wide range of biological complexity
 -- from a single molecule to complex cultivars and cell lines, including any naturally occurring variation in addition
 to intended engineering.
 
-`<figure 1>`
+<center>
+<img src="docs/figures/figure_1.svg">
+<p><b>Figure 1</b>: Block graph model representation of a sequence variant where two nucleotides AT are replaced by TG;
+the modified sequence (shown in bold) is stored as a path over a list of edges that address specific coordinates.
+</center> 
+
+The block graph model is designed to be additive: new sequence variants only add to the graph, existing nodes are stable
+and do not have to be split to accomodate the new topology. This is different from the more commonly used segment graph 
+model shown in Figure 2, and gen automatically converts between formats as needed. 
+
+<center>
+<img src="docs/figures/figure_2.svg">
+<p><b>Figure 2</b>: Segment graph model corresponding to the sequence variant in Figure 2. The original sequence was
+split into 3 parts; the modified sequence path is defined by a list of nodes that refer to these segments. Nodes are
+labeled by their parent ID and starting coordinate, new edges internal to the reference are shown as dashed arrows. 
+</center>
+
+Individual chromosomes or contigs are stored as _block groups_ that refer to a specific grouping of edges from the main
+graph. Block groups are adressed on three facets: name, sample, and collection. The name is an identifier like
+"chromosome II", and the sample could refer to a real individual or a virtual outcome of an experiment. The meaning of a
+collection is flexible, and for example could refer to the type of data (genomic, protein, ...) or experiment.
 
 <!--Rewrite this entirely (center around blockgroups)
 
