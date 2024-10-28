@@ -15,22 +15,22 @@ node to node along a defined _path_. This data model allows the representation o
 -- from a single molecule to complex cultivars and cell lines, including any naturally occurring variation in addition
 to intended engineering.
 
-<center>
-<img src="docs/figures/figure_1.svg">
-<p><b>Figure 1</b>: Block graph model representation of a sequence variant where two nucleotides AT are replaced by TG;
-the modified sequence (shown in bold) is stored as a path over a list of edges that address specific coordinates.
-</center> 
+<!-- ![Figure 1](docs/figures/figure_1.svg) -->
+<center><img src="docs/figures/figure_2.svg"></center>
+
+**_Figure 1_**:_Block graph model representation of a sequence variant where two nucleotides AT are replaced by TG;
+the modified sequence (shown in bold) is stored as a path over a list of edges that address specific coordinates._
 
 The block graph model is designed to be additive: new sequence variants only add to the graph, existing nodes are stable
 and do not have to be split to accomodate the new topology. This is different from the more commonly used segment graph 
 model shown in Figure 2, and gen automatically converts between formats as needed. 
 
-<center>
-<img src="docs/figures/figure_2.svg">
-<p><b>Figure 2</b>: Segment graph model corresponding to the sequence variant in Figure 2. The original sequence was
+<!-- ![Figure 2](docs/figures/figure_2.svg) -->
+<center><img src="docs/figures/figure_2.svg"></center>
+
+**_Figure 2_**:_Segment graph model corresponding to the sequence variant in Figure 2. The original sequence was
 split into 3 parts; the modified sequence path is defined by a list of nodes that refer to these segments. Nodes are
-labeled by their parent ID and starting coordinate, new edges internal to the reference are shown as dashed arrows. 
-</center>
+labeled by their parent ID and starting coordinate, new edges internal to the reference are shown as dashed arrows._ 
 
 Individual chromosomes or contigs are stored as _block groups_ that refer to a specific grouping of edges from the main
 graph. Block groups are adressed on three facets: name, sample, and collection. The name is an identifier like
