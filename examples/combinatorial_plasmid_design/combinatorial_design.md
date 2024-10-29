@@ -129,9 +129,10 @@ Then we run `vg view` and pipe its output to the `dot` program, which was instal
 root@e97629b542ca:/vg# vg view --gfa-in library.gfa --dot --color --simple-dot | dot -Tsvg -o library.svg
 ```
 
-This results in the following image, in which the new nodes are highlighted in red. Nodes 1, 9, and 3 are the promoters;
-nodes 7, 8 and 2 are ribosome binding sites. The original pUC19 sequence is also visible as the path over nodes [4, 5,
-6]. ![visual representation of the graph](./library.svg)
+This results in the following image, in which the new nodes are highlighted in red. Nodes 1, 4, 5, 11 and 12 are the promoters;
+nodes 2, 9 and 10 are ribosome binding sites. The original pUC19 sequence is also visible as the path over nodes [6, 7, 8]. 
+
+![visual representation of the graph](./library.svg)
 
 Note that VG uses its own numbering for the nodes. To find out which gen nodes these correspond to, run the following
 series of commands instead:
