@@ -1,9 +1,11 @@
-use std::fs;
-
+use petgraph::graphmap::DiGraphMap;
 use rusqlite::Connection;
+use std::fs;
+use std::io::Write;
 use tempdir::TempDir;
 
 use crate::config::{get_or_create_gen_dir, BASE_DIR};
+use crate::graph::{GraphEdge, GraphNode};
 use crate::migrations::{run_migrations, run_operation_migrations};
 use crate::models::block_group::BlockGroup;
 use crate::models::block_group_edge::BlockGroupEdge;
@@ -148,4 +150,25 @@ pub fn setup_block_group(conn: &Connection) -> (i64, Path) {
         &[edge0.id, edge1.id, edge2.id, edge3.id, edge4.id],
     );
     (block_group.id, path)
+}
+
+pub fn save_graph(graph: &DiGraphMap<GraphNode, GraphEdge>, path: &str) {
+    use petgraph::dot::{Config, Dot};
+    use std::fs::File;
+    let mut file = File::create(path).unwrap();
+    file.write_all(
+        format!(
+            "{dot:?}",
+            dot = Dot::with_attr_getters(
+                &graph,
+                &[Config::NodeNoLabel, Config::EdgeNoLabel],
+                &|_, (_, _, edge_weight)| format!("label = \"{}\"", edge_weight.chromosome_index),
+                &|_, (node, weight)| format!(
+                    "label = \"{}[{}-{}]\"",
+                    node.node_id, node.sequence_start, node.sequence_end
+                ),
+            )
+        )
+        .as_bytes(),
+    );
 }

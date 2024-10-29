@@ -1,11 +1,4 @@
-use itertools::Itertools;
-use petgraph::prelude::DiGraphMap;
-use rusqlite::{types::Value as SQLValue, Connection};
-use std::collections::{HashMap, HashSet};
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::path::PathBuf;
-
+use crate::graph::{GraphEdge, GraphNode};
 use crate::models::{
     block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
@@ -16,6 +9,13 @@ use crate::models::{
     path_edge::PathEdge,
     strand::Strand,
 };
+use itertools::Itertools;
+use petgraph::prelude::DiGraphMap;
+use rusqlite::{types::Value as SQLValue, Connection};
+use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::PathBuf;
 
 pub fn export_gfa(
     conn: &Connection,
@@ -104,12 +104,14 @@ fn segment_line(sequence: &str, node_id: i64, sequence_start: i64) -> String {
 
 fn write_links(
     writer: &mut BufWriter<File>,
-    graph: &DiGraphMap<i64, ()>,
+    graph: &DiGraphMap<GraphNode, GraphEdge>,
     edges_by_node_pair: &HashMap<(i64, i64), Edge>,
     node_sequence_starts_by_end_coordinate: HashMap<(i64, i64), i64>,
 ) {
-    for (source, target, ()) in graph.all_edges() {
-        let edge = edges_by_node_pair.get(&(source, target)).unwrap();
+    for (source, target, _edge_weight) in graph.all_edges() {
+        let edge = edges_by_node_pair
+            .get(&(source.block_id, target.block_id))
+            .unwrap();
         if Node::is_terminal(edge.source_node_id) || Node::is_terminal(edge.target_node_id) {
             continue;
         }
@@ -134,7 +136,7 @@ fn write_links(
             )
             .unwrap_or_else(|_| {
                 panic!(
-                    "Error writing link from segment {} to {} to GFA stream",
+                    "Error writing link from segment {:?} to {:?} to GFA stream",
                     source, target,
                 )
             });

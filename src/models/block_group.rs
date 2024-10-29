@@ -2,11 +2,12 @@ use std::collections::{HashMap, HashSet};
 
 use intervaltree::IntervalTree;
 use itertools::Itertools;
+use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
 use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
 use serde::{Deserialize, Serialize};
 
-use crate::graph::all_simple_paths;
+use crate::graph::{all_simple_paths, GraphEdge, GraphNode};
 use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData, GroupBlock};
@@ -308,6 +309,15 @@ impl BlockGroup {
         }
     }
 
+    pub fn get_graph(conn: &Connection, block_group_id: i64) -> DiGraphMap<GraphNode, GraphEdge> {
+        let mut edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
+        let blocks = Edge::blocks_from_edges(conn, &edges);
+        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
+        edges.extend(boundary_edges.clone());
+        let (graph, _) = Edge::build_graph(&edges, &blocks);
+        graph
+    }
+
     pub fn get_all_sequences(conn: &Connection, block_group_id: i64) -> HashSet<String> {
         let mut edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
         let blocks = Edge::blocks_from_edges(conn, &edges);
@@ -339,7 +349,7 @@ impl BlockGroup {
             for end_node in &end_nodes {
                 // TODO: maybe make all_simple_paths return a single path id where start == end
                 if start_node == *end_node {
-                    let block = blocks_by_id.get(&start_node).unwrap();
+                    let block = blocks_by_id.get(&start_node.block_id).unwrap();
                     if block.node_id != PATH_START_NODE_ID && block.node_id != PATH_END_NODE_ID {
                         sequences.insert(block.sequence());
                     }
@@ -347,7 +357,7 @@ impl BlockGroup {
                     for path in all_simple_paths(&graph, start_node, *end_node) {
                         let mut current_sequence = "".to_string();
                         for node in path {
-                            let block = blocks_by_id.get(&node).unwrap();
+                            let block = blocks_by_id.get(&node.block_id).unwrap();
                             let block_sequence = block.sequence();
                             current_sequence.push_str(&block_sequence);
                         }

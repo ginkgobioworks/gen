@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, RandomState};
 
+use crate::graph::{GraphEdge, GraphNode};
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::sequence::{cached_sequence, Sequence};
 use crate::models::strand::Strand;
@@ -412,7 +413,7 @@ impl Edge {
     pub fn build_graph(
         edges: &Vec<Edge>,
         blocks: &Vec<GroupBlock>,
-    ) -> (DiGraphMap<i64, ()>, HashMap<(i64, i64), Edge>) {
+    ) -> (DiGraphMap<GraphNode, GraphEdge>, HashMap<(i64, i64), Edge>) {
         let blocks_by_start = blocks
             .clone()
             .into_iter()
@@ -439,11 +440,21 @@ impl Edge {
                 )
             })
             .collect::<HashMap<BlockKey, i64>>();
+        let block_coordinates = blocks
+            .clone()
+            .into_iter()
+            .map(|block| (block.id, (block.start, block.end)))
+            .collect::<HashMap<i64, (i64, i64)>>();
 
-        let mut graph: DiGraphMap<i64, ()> = DiGraphMap::new();
+        let mut graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
         let mut edges_by_node_pair = HashMap::new();
         for block in blocks {
-            graph.add_node(block.id);
+            graph.add_node(GraphNode {
+                block_id: block.id,
+                node_id: block.node_id,
+                sequence_start: block.start,
+                sequence_end: block.end,
+            });
         }
         for edge in edges {
             let source_key = BlockKey {
@@ -459,7 +470,25 @@ impl Edge {
 
             if let Some(source_id_value) = source_id {
                 if let Some(target_id_value) = target_id {
-                    graph.add_edge(*source_id_value, *target_id_value, ());
+                    graph.add_edge(
+                        GraphNode {
+                            block_id: *source_id_value,
+                            node_id: edge.source_node_id,
+                            sequence_start: block_coordinates[source_id_value].0,
+                            sequence_end: block_coordinates[source_id_value].1,
+                        },
+                        GraphNode {
+                            block_id: *target_id_value,
+                            node_id: edge.target_node_id,
+                            sequence_start: block_coordinates[target_id_value].0,
+                            sequence_end: block_coordinates[target_id_value].1,
+                        },
+                        GraphEdge {
+                            chromosome_index: edge.chromosome_index,
+                            phased: edge.phased,
+                            edge_id: edge.id,
+                        },
+                    );
                     edges_by_node_pair.insert((*source_id_value, *target_id_value), edge.clone());
                 }
             }
