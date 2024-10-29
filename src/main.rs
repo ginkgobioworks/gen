@@ -38,36 +38,36 @@ fn get_default_collection(conn: &Connection) -> Option<String> {
 
 #[derive(Subcommand)]
 enum Commands {
-    // Import a new sequence collection.
+    /// Import a new sequence collection.
     Import {
-        // Fasta file path
+        /// Fasta file path
         #[arg(short, long)]
         fasta: Option<String>,
-        // GFA file path
+        /// GFA file path
         #[arg(short, long)]
         gfa: Option<String>,
-        // The name of the collection to store the entry under
+        /// The name of the collection to store the entry under
         #[arg(short, long)]
         name: Option<String>,
-        // Don't store the sequence in the database, instead store the filename
+        /// Don't store the sequence in the database, instead store the filename
         #[arg(short, long, action)]
         shallow: bool,
     },
-    // Update a sequence collection with new data
+    /// Update a sequence collection with new data
     Update {
-        // The name of the collection to update
+        /// The name of the collection to update
         #[arg(short, long)]
         name: Option<String>,
-        // A fasta file to insert
+        /// A fasta file to insert
         #[arg(short, long)]
         fasta: Option<String>,
-        // A VCF file to incorporate
+        /// A VCF file to incorporate
         #[arg(short, long)]
         vcf: Option<String>,
-        // If no genotype is provided, enter the genotype to assign variants
+        /// If no genotype is provided, enter the genotype to assign variants
         #[arg(short, long)]
         genotype: Option<String>,
-        // If no sample is provided, enter the sample to associate variants to
+        /// If no sample is provided, enter the sample to associate variants to
         #[arg(short, long)]
         sample: Option<String>,
         /// Use the given sample as the parent sample for changes.
@@ -76,86 +76,86 @@ enum Commands {
         /// A CSV with combinatorial library information
         #[arg(short, long)]
         library: Option<String>,
-        // A fasta with the combinatorial library parts
+        /// A fasta with the combinatorial library parts
         #[arg(long)]
         parts: Option<String>,
-        // The name of the path to add the library to
+        /// The name of the path to add the library to
         #[arg(short, long)]
         path_name: Option<String>,
-        // The name of the contig to update
+        /// The name of the contig to update
         #[arg(long)]
         contig_name: Option<String>,
-        // The start coordinate for the region to add the library to
+        /// The start coordinate for the region to add the library to
         #[arg(long)]
         start: Option<i64>,
-        // The end coordinate for the region to add the library to
+        /// The end coordinate for the region to add the library to
         #[arg(short, long)]
         end: Option<i64>,
     },
-    // Initialize a gen repository
+    /// Initialize a gen repository
     Init {},
-    // Manage and create branches
+    /// Manage and create branches
     Branch {
-        // Create a branch with the given name
+        /// Create a branch with the given name
         #[arg(long, action)]
         create: bool,
-        // Delete a given branch
+        /// Delete a given branch
         #[arg(short, long, action)]
         delete: bool,
-        // Checkout a given branch
+        /// Checkout a given branch
         #[arg(long, action)]
         checkout: bool,
-        // List all branches
+        /// List all branches
         #[arg(short, long, action)]
         list: bool,
-        // The branch name
+        /// The branch name
         #[clap(index = 1)]
         branch_name: Option<String>,
     },
-    // Migrate a database to a given operation
+    /// Migrate a database to a given operation
     Checkout {
-        // The branch identifier to migrate to
+        /// The branch identifier to migrate to
         #[arg(short, long)]
         branch: Option<String>,
-        // The operation id to move to
+        /// The operation id to move to
         #[clap(index = 1)]
         id: Option<i64>,
     },
     Reset {
-        // The operation id to reset to
+        /// The operation id to reset to
         #[clap(index = 1)]
         id: i64,
     },
-    // View operations carried out against a database
+    /// View operations carried out against a database
     Operations {
-        // The branch to list operations for
+        /// The branch to list operations for
         #[arg(short, long)]
         branch: Option<String>,
     },
     Apply {
-        // The operation id to apply
+        /// The operation id to apply
         #[clap(index = 1)]
         id: i64,
     },
     Export {
-        // The name of the collection to export
+        /// The name of the collection to export
         #[arg(short, long)]
         name: Option<String>,
-        // The name of the GFA file to export to
+        /// The name of the GFA file to export to
         #[arg(short, long)]
         gfa: Option<String>,
-        // An optional sample name
+        /// An optional sample name
         #[arg(short, long)]
         sample: Option<String>,
-        // The name of the fasta file to export to
+        /// The name of the fasta file to export to
         #[arg(short, long)]
         fasta: Option<String>,
     },
     Defaults {
-        // The default database to use
+        /// The default database to use
         #[arg(short, long)]
         database: Option<String>,
-        // The default collection to use
+        /// The default collection to use
         #[arg(short, long)]
         collection: Option<String>,
     },
