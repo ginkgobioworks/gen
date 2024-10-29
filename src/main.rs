@@ -82,6 +82,9 @@ enum Commands {
         // The name of the path to add the library to
         #[arg(short, long)]
         path_name: Option<String>,
+        // The name of the contig to update
+        #[arg(long)]
+        contig_name: Option<String>,
         // The start coordinate for the region to add the library to
         #[arg(long)]
         start: Option<i64>,
@@ -245,6 +248,7 @@ fn main() {
             genotype,
             sample,
             path_name,
+            contig_name,
             start,
             end,
             coordinate_frame,
@@ -273,7 +277,7 @@ fn main() {
                     &conn,
                     &operation_conn,
                     name,
-                    &path_name.clone().unwrap(),
+                    &contig_name.clone().unwrap(),
                     start.unwrap(),
                     end.unwrap(),
                     fasta_path,

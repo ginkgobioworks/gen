@@ -11,14 +11,15 @@ use crate::models::{
     path::{Path, PathBlock},
     sequence::Sequence,
     strand::Strand,
+    traits::*,
 };
 use crate::{calculate_hash, operation_management};
 
 pub fn update_with_fasta(
     conn: &Connection,
     operation_conn: &Connection,
-    name: &str,
-    path_name: &str,
+    collection_name: &str,
+    contig_name: &str,
     start_coordinate: i64,
     end_coordinate: i64,
     fasta_file_path: &str,
@@ -29,17 +30,38 @@ pub fn update_with_fasta(
         fasta_file_path,
         FileTypes::Fasta,
         "fasta_update",
-        name,
+        collection_name,
     );
 
     let mut fasta_reader = fasta::io::reader::Builder.build_from_path(fasta_file_path)?;
 
-    let path = Path::get_paths(
-        conn,
-        "select * from path where name = ?1",
-        vec![SQLValue::from(path_name.to_string())],
-    )[0]
-    .clone();
+    let block_groups = BlockGroup::query(conn, "select * from block_group where collection_name = ?1 AND sample_name is null and name = ?2;", vec![SQLValue::from(collection_name.to_string()), SQLValue::from(contig_name.to_string())]);
+    if block_groups.is_empty() {
+        panic!("No block group found for contig {}", contig_name);
+    }
+    let block_group_id = block_groups[0].id;
+
+    let operation_parent_id = operation.parent_id.unwrap();
+    let operation_paths = OperationPath::paths_for_operation(conn, operation_parent_id);
+
+    let path_ids = operation_paths
+        .iter()
+        .map(|operation_path| operation_path.path_id.to_string())
+        .collect::<Vec<String>>();
+    let query = format!(
+        "select * from path where block_group_id = {block_group_id} and id in ({path_ids});",
+        path_ids = path_ids.join(", ")
+    );
+    let paths = Path::query(conn, &query, vec![]);
+
+    if paths.len() != 1 {
+        panic!(
+            "Expected one path for block group {} (contig name: {}",
+            block_group_id, contig_name
+        );
+    }
+
+    let path = paths[0].clone();
 
     // Assuming just one entry in the fasta file
     let record = fasta_reader.records().next().ok_or_else(|| {
@@ -77,7 +99,7 @@ pub fn update_with_fasta(
     };
 
     let path_change = PathChange {
-        block_group_id: path.block_group_id,
+        block_group_id,
         path: path.clone(),
         path_accession: None,
         start: start_coordinate,
@@ -110,8 +132,6 @@ pub fn update_with_fasta(
         &edge_from_new_node,
     );
 
-    let operation_parent_id = operation.parent_id.unwrap();
-    let operation_paths = OperationPath::paths_for_operation(conn, operation_parent_id);
     for operation_path in operation_paths {
         if operation_path.path_id != path.id {
             OperationPath::create(conn, operation.id, operation_path.path_id);
@@ -132,4 +152,359 @@ pub fn update_with_fasta(
     println!("Updated with fasta file: {}", fasta_file_path);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+    use crate::imports::fasta::import_fasta;
+    use crate::models::{metadata, operations::setup_db};
+    use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
+    use std::collections::HashSet;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_update_with_fasta() {
+        /*
+        Graph after fasta update:
+        AT ----> CGA ------> TCGATCGATCGATCGGGAACACACAGAGA
+           \-> AAAAAAAA --/
+        */
+        setup_gen_dir();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let mut fasta_update_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_update_path.push("fixtures/aaaaaaaa.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            &collection,
+            "m123",
+            2,
+            5,
+            fasta_update_path.to_str().unwrap(),
+        );
+        let expected_sequences = vec![
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+        ];
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, 1),
+            HashSet::from_iter(expected_sequences),
+        );
+    }
+
+    #[test]
+    fn test_update_within_update() {
+        /*
+        Graph after fasta updates:
+        AT --------------> CGA ----------------> TCGATCGATCGATCGGGAACACACAGAGA
+            \-> AA -----> AA -------> AAAA --/
+                   \--> TTTTTTTT --/
+        */
+        setup_gen_dir();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let mut fasta_update1_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_update1_path.push("fixtures/aaaaaaaa.fa");
+        let mut fasta_update2_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_update2_path.push("fixtures/tttttttt.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            &collection,
+            "m123",
+            2,
+            5,
+            fasta_update1_path.to_str().unwrap(),
+        );
+        // Second fasta update replacing part of the first update sequence
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            &collection,
+            "m123",
+            4,
+            6,
+            fasta_update2_path.to_str().unwrap(),
+        );
+        let expected_sequences = vec![
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATAATTTTTTTTAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+        ];
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, 1),
+            HashSet::from_iter(expected_sequences),
+        );
+    }
+
+    #[test]
+    fn test_update_with_two_fastas_partial_leading_overlap() {
+        /*
+        Graph after fasta updates:
+        A --> T --------------> CGA ----------------> TCGATCGATCGATCGGGAACACACAGAGA
+         \       \-> AAAA -------> AAAA --/
+          \--> TTTTTTTT --/
+        */
+        setup_gen_dir();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let mut fasta_update1_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_update1_path.push("fixtures/aaaaaaaa.fa");
+        let mut fasta_update2_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_update2_path.push("fixtures/tttttttt.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            &collection,
+            "m123",
+            2,
+            5,
+            fasta_update1_path.to_str().unwrap(),
+        );
+        // Second fasta update replacing parts of both the original and first update sequences
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            &collection,
+            "m123",
+            1,
+            6,
+            fasta_update2_path.to_str().unwrap(),
+        );
+        let expected_sequences = vec![
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATTTTTTTTAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+        ];
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, 1),
+            HashSet::from_iter(expected_sequences),
+        );
+    }
+
+    #[test]
+    fn test_update_with_two_fastas_partial_trailing_overlap() {
+        /*
+        Graph after fasta updates:
+        A --> T --------------> CGA ----------------> TC --> GATCGATCGATCGGGAACACACAGAGA
+         \       \-----> AAAAAAAA ---------/             /
+          \-------------> TTTTTTTT ---------------------/
+        */
+        /*
+        Graph after fasta updates:
+        AT --------------> CGA ------------> TC --> GATCGATCGATCGGGAACACACAGAGA
+              \-> AAAA -------> AAAA ----/        /
+                           \--> TTTTTTTT --------/
+        */
+        setup_gen_dir();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let mut fasta_update1_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_update1_path.push("fixtures/aaaaaaaa.fa");
+        let mut fasta_update2_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_update2_path.push("fixtures/tttttttt.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            &collection,
+            "m123",
+            2,
+            5,
+            fasta_update1_path.to_str().unwrap(),
+        );
+        // Second fasta update replacing parts of both the original and first update sequences
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            &collection,
+            "m123",
+            1,
+            12,
+            fasta_update2_path.to_str().unwrap(),
+        );
+        let expected_sequences = vec![
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATTTTTTTTGATCGATCGATCGGGAACACACAGAGA".to_string(),
+        ];
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, 1),
+            HashSet::from_iter(expected_sequences),
+        );
+    }
+
+    #[test]
+    fn test_update_with_two_fastas_second_over_first() {
+        /*
+        Graph after fasta updates:
+        AT --------------> CGA ------------> TC --> GATCGATCGATCGGGAACACACAGAGA
+              \-> AAAA -------> AAAA ----/        /
+                           \--> TTTTTTTT --------/
+        */
+        setup_gen_dir();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let mut fasta_update1_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_update1_path.push("fixtures/aaaaaaaa.fa");
+        let mut fasta_update2_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_update2_path.push("fixtures/tttttttt.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            &collection,
+            "m123",
+            2,
+            5,
+            fasta_update1_path.to_str().unwrap(),
+        );
+        // Second fasta update replacing parts of both the original and first update sequences
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            &collection,
+            "m123",
+            6,
+            12,
+            fasta_update2_path.to_str().unwrap(),
+        );
+        let expected_sequences = vec![
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATAAAATTTTTTTTGATCGATCGATCGGGAACACACAGAGA".to_string(),
+        ];
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, 1),
+            HashSet::from_iter(expected_sequences),
+        );
+    }
+
+    #[test]
+    fn test_update_with_same_fasta_twice() {
+        /*
+        Graph after fasta updates:
+        AT --------------> CGA ----------------> TCGATCGATCGATCGGGAACACACAGAGA
+            \-> AA -----> AA -------> AAAA --/
+                   \--> AAAAAAAA --/
+        */
+        setup_gen_dir();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let mut fasta_update_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_update_path.push("fixtures/aaaaaaaa.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            &collection,
+            "m123",
+            2,
+            5,
+            fasta_update_path.to_str().unwrap(),
+        );
+        // Same fasta second time
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            &collection,
+            "m123",
+            4,
+            6,
+            fasta_update_path.to_str().unwrap(),
+        );
+        let expected_sequences = vec![
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATAAAAAAAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+        ];
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, 1),
+            HashSet::from_iter(expected_sequences),
+        );
+    }
 }
