@@ -5,7 +5,7 @@ use intervaltree::IntervalTree;
 use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
-use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
+use rusqlite::{params_from_iter, types::Value as SQLValue, Connection, Row};
 use serde::{Deserialize, Serialize};
 
 use crate::graph::{
@@ -156,25 +156,6 @@ impl BlockGroup {
                 panic!("something bad happened querying the database")
             }
         }
-    }
-
-    pub fn query(conn: &Connection, query: &str, placeholders: Vec<SQLValue>) -> Vec<BlockGroup> {
-        let mut stmt = conn.prepare(query).unwrap();
-        let rows = stmt
-            .query_map(params_from_iter(placeholders), |row| {
-                Ok(BlockGroup {
-                    id: row.get(0)?,
-                    collection_name: row.get(1)?,
-                    sample_name: row.get(2)?,
-                    name: row.get(3)?,
-                })
-            })
-            .unwrap();
-        let mut objs = vec![];
-        for row in rows {
-            objs.push(row.unwrap());
-        }
-        objs
     }
 
     pub fn get_by_id(conn: &Connection, id: i64) -> BlockGroup {
@@ -818,6 +799,18 @@ impl BlockGroup {
             .map(|block| (block.start..block.end, *block))
             .collect();
         tree
+    }
+}
+
+impl Query for BlockGroup {
+    type Model = BlockGroup;
+    fn process_row(row: &Row) -> Self::Model {
+        BlockGroup {
+            id: row.get(0).unwrap(),
+            collection_name: row.get(1).unwrap(),
+            sample_name: row.get(2).unwrap(),
+            name: row.get(3).unwrap(),
+        }
     }
 }
 

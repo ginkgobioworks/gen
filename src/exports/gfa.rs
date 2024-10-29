@@ -8,6 +8,7 @@ use crate::models::{
     path::Path,
     path_edge::PathEdge,
     strand::Strand,
+    traits::*,
 };
 use itertools::Itertools;
 use petgraph::prelude::DiGraphMap;

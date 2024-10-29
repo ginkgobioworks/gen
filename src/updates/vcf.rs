@@ -12,6 +12,7 @@ use crate::models::{
     sample::Sample,
     sequence::Sequence,
     strand::Strand,
+    traits::*,
 };
 use crate::{calculate_hash, operation_management, parse_genotype};
 use noodles::vcf;
