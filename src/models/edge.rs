@@ -487,6 +487,8 @@ impl Edge {
                             chromosome_index: edge.chromosome_index,
                             phased: edge.phased,
                             edge_id: edge.id,
+                            source_strand: edge.source_strand,
+                            target_strand: edge.target_strand,
                         },
                     );
                     edges_by_node_pair.insert((*source_id_value, *target_id_value), edge.clone());
