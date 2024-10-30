@@ -239,7 +239,7 @@ mod tests {
         let block_groups = Collection::get_block_groups(conn, "test");
         let block_group = &block_groups[0];
 
-        let all_sequences = BlockGroup::get_all_sequences(conn, block_group.id);
+        let all_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
         assert_eq!(
             all_sequences,
             HashSet::from_iter(vec![

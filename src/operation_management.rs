@@ -1076,7 +1076,10 @@ mod tests {
             "ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
         ]);
 
-        assert_eq!(BlockGroup::get_all_sequences(conn, foo_bg_id), patch_1_seqs);
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, foo_bg_id, false),
+            patch_1_seqs
+        );
         assert_eq!(
             BlockGroup::query(conn, "select * from block_groups;", vec![])
                 .iter()
@@ -1111,7 +1114,10 @@ mod tests {
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
             "ATCGATCGATCGACGATCGGGAACACACAGAGA".to_string(),
         ]);
-        assert_eq!(BlockGroup::get_all_sequences(conn, foo_bg_id), patch_2_seqs);
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, foo_bg_id, false),
+            patch_2_seqs
+        );
         assert_ne!(patch_1_seqs, patch_2_seqs);
         assert_eq!(
             BlockGroup::query(conn, "select * from block_groups;", vec![])
@@ -1131,7 +1137,10 @@ mod tests {
             "ATCATCGATCGACGATCGGGAACACACAGAGA".to_string(),
             "ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
         ]);
-        assert_eq!(BlockGroup::get_all_sequences(conn, foo_bg_id), patch_2_seqs);
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, foo_bg_id, false),
+            patch_2_seqs
+        );
         assert_eq!(
             BlockGroup::query(conn, "select * from block_groups;", vec![])
                 .iter()
@@ -1153,7 +1162,7 @@ mod tests {
             "ATCATCGATAGAGATCGATCGGGAACACACAGAGA".to_string(),
         ]);
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, unknown_bg_id),
+            BlockGroup::get_all_sequences(conn, unknown_bg_id, false),
             unknown_seqs
         );
         assert_ne!(unknown_seqs, patch_2_seqs);

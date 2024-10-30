@@ -133,7 +133,7 @@ mod tests {
         setup_gen_dir();
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
-        let conn = get_connection(None);
+        let conn = get_connection("taf.db");
         let db_uuid = metadata::get_db_uuid(&conn);
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, &db_uuid);
@@ -146,7 +146,7 @@ mod tests {
             op_conn,
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(&conn, 1),
+            BlockGroup::get_all_sequences(&conn, 1, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
 
@@ -175,7 +175,7 @@ mod tests {
             op_conn,
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(&conn, 1),
+            BlockGroup::get_all_sequences(&conn, 1, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
 
