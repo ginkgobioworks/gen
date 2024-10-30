@@ -1,8 +1,9 @@
-use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
+use rusqlite::{params_from_iter, types::Value as SQLValue, Connection, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::models::sequence::Sequence;
+use crate::models::traits::*;
 
 pub const PATH_START_NODE_ID: i64 = 1;
 pub const PATH_END_NODE_ID: i64 = 2;
@@ -11,6 +12,16 @@ pub const PATH_END_NODE_ID: i64 = 2;
 pub struct Node {
     pub id: i64,
     pub sequence_hash: String,
+}
+
+impl Query for Node {
+    type Model = Node;
+    fn process_row(row: &Row) -> Self::Model {
+        Node {
+            id: row.get(0).unwrap(),
+            sequence_hash: row.get(1).unwrap(),
+        }
+    }
 }
 
 impl Node {
@@ -49,23 +60,6 @@ impl Node {
                 panic!("something bad happened querying the database")
             }
         }
-    }
-
-    pub fn query(conn: &Connection, query: &str, placeholders: Vec<SQLValue>) -> Vec<Node> {
-        let mut stmt = conn.prepare(query).unwrap();
-        let mut objs = vec![];
-        let rows = stmt
-            .query_map(params_from_iter(placeholders), |row| {
-                Ok(Node {
-                    id: row.get(0)?,
-                    sequence_hash: row.get(1)?,
-                })
-            })
-            .unwrap();
-        for row in rows {
-            objs.push(row.unwrap());
-        }
-        objs
     }
 
     pub fn get_nodes(conn: &Connection, node_ids: Vec<i64>) -> Vec<Node> {

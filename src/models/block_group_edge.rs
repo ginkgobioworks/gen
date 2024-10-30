@@ -1,12 +1,23 @@
 use crate::models::edge::Edge;
-use rusqlite::types::Value;
-use rusqlite::{params_from_iter, Connection};
+use crate::models::traits::*;
+use rusqlite::{Connection, Row};
 
 #[derive(Clone, Debug)]
 pub struct BlockGroupEdge {
     pub id: i64,
     pub block_group_id: i64,
     pub edge_id: i64,
+}
+
+impl Query for BlockGroupEdge {
+    type Model = BlockGroupEdge;
+    fn process_row(row: &Row) -> Self::Model {
+        BlockGroupEdge {
+            id: row.get(0).unwrap(),
+            block_group_id: row.get(1).unwrap(),
+            edge_id: row.get(2).unwrap(),
+        }
+    }
 }
 
 impl BlockGroupEdge {
@@ -39,19 +50,5 @@ impl BlockGroupEdge {
             .map(|block_group_edge| block_group_edge.edge_id)
             .collect::<Vec<i64>>();
         Edge::bulk_load(conn, &edge_ids)
-    }
-
-    pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<BlockGroupEdge> {
-        let mut stmt = conn.prepare(query).unwrap();
-        let rows = stmt
-            .query_map(params_from_iter(placeholders), |row| {
-                Ok(BlockGroupEdge {
-                    id: row.get(0)?,
-                    block_group_id: row.get(1)?,
-                    edge_id: row.get(2)?,
-                })
-            })
-            .unwrap();
-        rows.map(|row| row.unwrap()).collect()
     }
 }

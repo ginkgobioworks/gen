@@ -123,6 +123,7 @@ mod tests {
     use super::*;
     use crate::models::metadata;
     use crate::models::operations::setup_db;
+    use crate::models::traits::*;
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use std::collections::HashSet;
     use std::path::PathBuf;
