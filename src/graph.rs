@@ -1,8 +1,32 @@
 use std::hash::Hash;
 use std::iter::from_fn;
 
+use crate::models::strand::Strand;
 use petgraph::visit::{IntoNeighborsDirected, NodeCount};
 use petgraph::Direction;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct GraphNode {
+    pub block_id: i64,
+    pub node_id: i64,
+    pub sequence_start: i64,
+    pub sequence_end: i64,
+}
+
+impl GraphNode {
+    pub fn length(&self) -> i64 {
+        self.sequence_end - self.sequence_start
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct GraphEdge {
+    pub edge_id: i64,
+    pub chromosome_index: i64,
+    pub phased: i64,
+    pub source_strand: Strand,
+    pub target_strand: Strand,
+}
 
 // hacked from https://docs.rs/petgraph/latest/src/petgraph/algo/simple_paths.rs.html#36-102 to support digraphmap
 
@@ -159,6 +183,48 @@ mod tests {
         assert_eq!(
             HashSet::<Vec<i64>>::from_iter::<Vec<Vec<i64>>>(paths),
             HashSet::from_iter(expected_paths)
+        );
+    }
+
+    #[test]
+    fn test_super_bubble_path() {
+        // This graph looks like this:
+        //              8
+        //            /  \
+        //          6  -> 7
+        //         /        \
+        //    1 -> 2 -> 3 -> 4 -> 5
+        //
+        //  We ensure that we capture all 3 paths from 1 -> 5
+        let mut graph: DiGraphMap<i64, ()> = DiGraphMap::new();
+        graph.add_node(1);
+        graph.add_node(2);
+        graph.add_node(3);
+        graph.add_node(4);
+        graph.add_node(5);
+        graph.add_node(6);
+        graph.add_node(7);
+        graph.add_node(8);
+        graph.add_node(9);
+
+        graph.add_edge(1, 2, ());
+        graph.add_edge(2, 3, ());
+        graph.add_edge(3, 4, ());
+        graph.add_edge(4, 5, ());
+        graph.add_edge(2, 6, ());
+        graph.add_edge(6, 7, ());
+        graph.add_edge(7, 4, ());
+        graph.add_edge(6, 8, ());
+        graph.add_edge(8, 7, ());
+
+        let paths = all_simple_paths(&graph, 1, 5).collect::<Vec<Vec<i64>>>();
+        assert_eq!(
+            HashSet::<Vec<i64>>::from_iter::<Vec<Vec<i64>>>(paths),
+            HashSet::from_iter(vec![
+                vec![1, 2, 3, 4, 5],
+                vec![1, 2, 6, 7, 4, 5],
+                vec![1, 2, 6, 8, 7, 4, 5]
+            ])
         );
     }
 }

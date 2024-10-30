@@ -3,7 +3,7 @@ use rusqlite::ToSql;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
 pub enum Strand {
     Forward,
     Reverse,

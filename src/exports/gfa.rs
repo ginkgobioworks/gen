@@ -1,11 +1,4 @@
-use itertools::Itertools;
-use petgraph::prelude::DiGraphMap;
-use rusqlite::{types::Value as SQLValue, Connection};
-use std::collections::{HashMap, HashSet};
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::path::PathBuf;
-
+use crate::graph::{GraphEdge, GraphNode};
 use crate::models::{
     block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
@@ -16,6 +9,13 @@ use crate::models::{
     path_edge::PathEdge,
     strand::Strand,
 };
+use itertools::Itertools;
+use petgraph::prelude::DiGraphMap;
+use rusqlite::{types::Value as SQLValue, Connection};
+use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::PathBuf;
 
 pub fn export_gfa(
     conn: &Connection,
@@ -66,18 +66,8 @@ pub fn export_gfa(
     let file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(file);
 
-    let node_sequence_starts_by_end_coordinate = blocks
-        .iter()
-        .filter(|block| !Node::is_terminal(block.node_id))
-        .map(|block| ((block.node_id, block.end), block.start))
-        .collect::<HashMap<(i64, i64), i64>>();
     write_segments(&mut writer, &blocks);
-    write_links(
-        &mut writer,
-        &graph,
-        &edges_by_node_pair,
-        node_sequence_starts_by_end_coordinate,
-    );
+    write_links(&mut writer, &graph);
     write_paths(&mut writer, conn, collection_name, &blocks);
 }
 
@@ -102,39 +92,26 @@ fn segment_line(sequence: &str, node_id: i64, sequence_start: i64) -> String {
     format!("S\t{}.{}\t{}\t*\n", node_id, sequence_start, sequence,)
 }
 
-fn write_links(
-    writer: &mut BufWriter<File>,
-    graph: &DiGraphMap<i64, ()>,
-    edges_by_node_pair: &HashMap<(i64, i64), Edge>,
-    node_sequence_starts_by_end_coordinate: HashMap<(i64, i64), i64>,
-) {
-    for (source, target, ()) in graph.all_edges() {
-        let edge = edges_by_node_pair.get(&(source, target)).unwrap();
-        if Node::is_terminal(edge.source_node_id) || Node::is_terminal(edge.target_node_id) {
+fn write_links(writer: &mut BufWriter<File>, graph: &DiGraphMap<GraphNode, GraphEdge>) {
+    for (source, target, edge_info) in graph.all_edges() {
+        if Node::is_terminal(source.node_id) || Node::is_terminal(target.node_id) {
             continue;
         }
-        // Since we're encoding a segment ID as node ID + sequence start coordinate, we need to do
-        // one step of translation to get that for an edge's source.  The edge's source is the node
-        // ID + sequence end coordinate, so the following line converts that to the sequence start
-        // coordinate.
-        let sequence_start = node_sequence_starts_by_end_coordinate
-            .get(&(edge.source_node_id, edge.source_coordinate))
-            .unwrap();
         writer
             .write_all(
                 &link_line(
-                    edge.source_node_id,
-                    *sequence_start,
-                    edge.source_strand,
-                    edge.target_node_id,
-                    edge.target_coordinate,
-                    edge.target_strand,
+                    source.node_id,
+                    source.sequence_start,
+                    edge_info.source_strand,
+                    target.node_id,
+                    target.sequence_start,
+                    edge_info.target_strand,
                 )
                 .into_bytes(),
             )
             .unwrap_or_else(|_| {
                 panic!(
-                    "Error writing link from segment {} to {} to GFA stream",
+                    "Error writing link from segment {:?} to {:?} to GFA stream",
                     source, target,
                 )
             });
