@@ -974,6 +974,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
@@ -1068,6 +1069,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
 
         let foo_bg_id = BlockGroup::get_id(conn, &collection, Some("foo"), "m123");
@@ -1107,6 +1109,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
 
         let foo_bg_id = BlockGroup::get_id(conn, &collection, Some("foo"), "m123");
@@ -1212,6 +1215,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
@@ -1254,6 +1258,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
@@ -1313,6 +1318,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
@@ -1321,6 +1327,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
@@ -1329,6 +1336,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
@@ -1337,6 +1345,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
 
         let branch_id = OperationState::get_current_branch(operation_conn, &db_uuid).unwrap();
@@ -1398,6 +1407,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
 
         let branch_a = Branch::create(operation_conn, &db_uuid, "branch-a");
@@ -1409,6 +1419,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
@@ -1417,6 +1428,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
@@ -1425,6 +1437,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
         OperationState::set_branch(operation_conn, &db_uuid, "main");
         OperationState::set_operation(operation_conn, &db_uuid, 2);
@@ -1435,6 +1448,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
@@ -1443,6 +1457,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
@@ -1451,6 +1466,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
         OperationState::set_branch(operation_conn, &db_uuid, "branch-a");
         OperationState::set_operation(operation_conn, &db_uuid, 5);
@@ -1463,6 +1479,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
         OperationState::set_branch(operation_conn, &db_uuid, "branch-a");
         OperationState::set_operation(operation_conn, &db_uuid, 5);
@@ -1473,6 +1490,7 @@ mod tests {
             "".to_string(),
             conn,
             operation_conn,
+            None,
         );
 
         assert_eq!(
