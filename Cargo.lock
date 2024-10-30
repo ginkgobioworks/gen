@@ -753,6 +753,7 @@ dependencies = [
  "csv",
  "fallible-streaming-iterator",
  "include_dir",
+ "interavl",
  "intervaltree",
  "itertools 0.13.0",
  "lexical-core 1.0.2",
@@ -881,6 +882,12 @@ dependencies = [
  "equivalent",
  "hashbrown",
 ]
+
+[[package]]
+name = "interavl"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "210121ade19b8cd20f90693948b28fcc774f69f9b7ebe9a74a483138a4842bec"
 
 [[package]]
 name = "intervaltree"

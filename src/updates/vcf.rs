@@ -57,6 +57,7 @@ impl<'a> BlockGroupCache<'_> {
                 collection_name,
                 sample_name,
                 &name,
+                None,
             );
 
             block_group_cache
@@ -472,7 +473,7 @@ mod tests {
             op_conn,
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 1),
+            BlockGroup::get_all_sequences(conn, 1, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
         // A homozygous set of variants should only return 1 sequence
@@ -488,12 +489,12 @@ mod tests {
             vec![SQLValue::from("G1".to_string())],
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, test_bg[0].id),
+            BlockGroup::get_all_sequences(conn, test_bg[0].id, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
         // This individual is homozygous for the first variant and does not contain the second
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 4),
+            BlockGroup::get_all_sequences(conn, 4, false),
             HashSet::from_iter(vec![
                 "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
                 "ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
@@ -532,11 +533,11 @@ mod tests {
             op_conn,
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 1),
+            BlockGroup::get_all_sequences(conn, 1, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 2),
+            BlockGroup::get_all_sequences(conn, 2, false),
             HashSet::from_iter(
                 [
                     "ATCGATCGATAGAGATCGATCGGGAACACACAGAGA",
@@ -588,7 +589,7 @@ mod tests {
         );
 
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, missing_allele_bg[0].id),
+            BlockGroup::get_all_sequences(conn, missing_allele_bg[0].id, false),
             HashSet::from_iter(
                 [
                     "ATCGATCGATCGATCGATCGGGAACACACAGAGA",
@@ -631,7 +632,7 @@ mod tests {
             op_conn,
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 2),
+            BlockGroup::get_all_sequences(conn, 2, false),
             HashSet::from_iter(
                 [
                     "ATCGATCGATCGATCGATCGGGAACACACAGAGA",

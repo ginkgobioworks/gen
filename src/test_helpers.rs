@@ -1,7 +1,10 @@
+use intervaltree::IntervalTree;
 use petgraph::graphmap::DiGraphMap;
 use rusqlite::Connection;
+use std::fmt::Debug;
 use std::fs;
 use std::io::Write;
+use std::ops::Add;
 use tempdir::TempDir;
 
 use crate::config::{get_or_create_gen_dir, BASE_DIR};
@@ -82,7 +85,7 @@ pub fn setup_block_group(conn: &Connection) -> (i64, Path) {
         .save(conn);
     let g_node_id = Node::create(conn, g_seq.hash.as_str(), None);
     let _collection = Collection::create(conn, "test");
-    let block_group = BlockGroup::create(conn, "test", None, "hg19");
+    let block_group = BlockGroup::create(conn, "test", None, "chr1");
     let edge0 = Edge::create(
         conn,
         PATH_START_NODE_ID,
@@ -171,4 +174,17 @@ pub fn save_graph(graph: &DiGraphMap<GraphNode, GraphEdge>, path: &str) {
         )
         .as_bytes(),
     );
+}
+
+pub fn interval_tree_verify<K, V>(tree: &IntervalTree<K, V>, i: K, expected: &[V])
+where
+    K: Ord + Add<i64, Output = K> + Copy,
+    V: Copy + Ord + Debug,
+{
+    let mut v1: Vec<_> = tree.query_point(i).map(|x| x.value).collect();
+    v1.sort();
+    let mut v2: Vec<_> = tree.query(i..(i + 1)).map(|x| x.value).collect();
+    v2.sort();
+    assert_eq!(v1, expected);
+    assert_eq!(v2, expected);
 }

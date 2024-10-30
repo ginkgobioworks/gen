@@ -1,8 +1,10 @@
+use std::collections::{HashSet, VecDeque};
+use std::fmt::Debug;
 use std::hash::Hash;
 use std::iter::from_fn;
 
 use crate::models::strand::Strand;
-use petgraph::visit::{IntoNeighborsDirected, NodeCount};
+use petgraph::visit::{GraphRef, IntoNeighbors, IntoNeighborsDirected, NodeCount};
 use petgraph::Direction;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -63,6 +65,28 @@ where
         }
         None
     })
+}
+
+pub fn all_reachable_nodes<G>(graph: G, nodes: &[G::NodeId]) -> HashSet<G::NodeId>
+where
+    G: GraphRef + IntoNeighbors,
+    G::NodeId: Eq + Hash + Debug,
+{
+    let mut stack = VecDeque::new();
+    let mut reachable = HashSet::new();
+    for node in nodes.iter() {
+        stack.push_front(*node);
+        reachable.insert(*node);
+        while let Some(nx) = stack.pop_front() {
+            for succ in graph.neighbors(nx) {
+                if !reachable.contains(&succ) {
+                    reachable.insert(succ);
+                    stack.push_back(succ);
+                }
+            }
+        }
+    }
+    reachable
 }
 
 #[cfg(test)]
@@ -225,6 +249,50 @@ mod tests {
                 vec![1, 2, 6, 7, 4, 5],
                 vec![1, 2, 6, 8, 7, 4, 5]
             ])
+        );
+    }
+
+    #[test]
+    fn test_finds_all_reachable_nodes() {
+        //
+        //   1 -> 2 -> 3 -> 4 -> 5
+        //           /
+        //   6 -> 7
+        //
+        let mut graph: DiGraphMap<i64, ()> = DiGraphMap::new();
+        graph.add_node(1);
+        graph.add_node(2);
+        graph.add_node(3);
+        graph.add_node(4);
+        graph.add_node(5);
+        graph.add_node(6);
+        graph.add_node(7);
+
+        graph.add_edge(1, 2, ());
+        graph.add_edge(2, 3, ());
+        graph.add_edge(3, 4, ());
+        graph.add_edge(4, 5, ());
+        graph.add_edge(6, 7, ());
+        graph.add_edge(7, 3, ());
+
+        assert_eq!(
+            all_reachable_nodes(&graph, &[1]),
+            HashSet::from_iter(vec![1, 2, 3, 4, 5])
+        );
+
+        assert_eq!(
+            all_reachable_nodes(&graph, &[1, 6]),
+            HashSet::from_iter(vec![1, 2, 3, 4, 5, 6, 7])
+        );
+
+        assert_eq!(
+            all_reachable_nodes(&graph, &[3]),
+            HashSet::from_iter(vec![3, 4, 5])
+        );
+
+        assert_eq!(
+            all_reachable_nodes(&graph, &[5]),
+            HashSet::from_iter(vec![5])
         );
     }
 }
