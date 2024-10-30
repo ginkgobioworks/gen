@@ -123,7 +123,7 @@ pub fn update_with_fasta(
         vec![SQLValue::from(node_id)],
     )[0]
     .clone();
-    let new_path = path.new_path_for(
+    let new_path = path.new_path_with(
         conn,
         start_coordinate,
         end_coordinate,
