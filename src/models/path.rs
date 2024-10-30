@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use intervaltree::IntervalTree;
 use itertools::Itertools;
 use rusqlite::types::Value;
+use rusqlite::Params;
 use rusqlite::{params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
 
@@ -145,6 +146,25 @@ impl Path {
             })
             .unwrap();
         rows.next().unwrap().unwrap()
+    }
+
+    pub fn full_query(conn: &Connection, query: &str, params: impl Params) -> Vec<Path> {
+        let mut stmt = conn.prepare(query).unwrap();
+        let rows = stmt
+            .query_map(params, |row| {
+                let path_id = row.get(0).unwrap();
+                Ok(Path {
+                    id: path_id,
+                    block_group_id: row.get(1)?,
+                    name: row.get(2)?,
+                })
+            })
+            .unwrap();
+        let mut paths = vec![];
+        for row in rows {
+            paths.push(row.unwrap());
+        }
+        paths
     }
 
     pub fn get_paths(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Path> {
