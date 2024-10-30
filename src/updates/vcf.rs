@@ -42,6 +42,7 @@ impl<'a> BlockGroupCache<'_> {
         collection_name: &'a str,
         sample_name: &'a str,
         name: String,
+        parent_sample: Option<&'a str>,
     ) -> Result<i64, &'static str> {
         let block_group_key = BlockGroupData {
             collection_name,
@@ -57,7 +58,7 @@ impl<'a> BlockGroupCache<'_> {
                 collection_name,
                 sample_name,
                 &name,
-                None,
+                parent_sample,
             );
 
             block_group_cache
@@ -168,6 +169,7 @@ pub fn update_with_vcf(
     fixed_sample: String,
     conn: &Connection,
     operation_conn: &Connection,
+    parent_sample: Option<&str>,
 ) {
     let db_uuid = metadata::get_db_uuid(conn);
 
@@ -239,6 +241,7 @@ pub fn update_with_vcf(
                 collection_name,
                 &fixed_sample,
                 seq_name.clone(),
+                parent_sample,
             );
             let sample_bg_id = sample_bg_id.expect("can't find sample bg....check this out more");
 
@@ -287,6 +290,7 @@ pub fn update_with_vcf(
                     collection_name,
                     &sample_names[sample_index],
                     seq_name.clone(),
+                    parent_sample,
                 );
 
                 let sample_bg_id =
@@ -396,7 +400,11 @@ pub fn update_with_vcf(
     }
     let mut summary: HashMap<String, HashMap<String, i64>> = HashMap::new();
     for ((path, sample_name), path_changes) in changes {
-        BlockGroup::insert_changes(conn, &path_changes, &mut path_cache);
+        if let Some(parent_sample) = parent_sample {
+            BlockGroup::insert_bg_changes(conn, &path_changes);
+        } else {
+            BlockGroup::insert_changes(conn, &path_changes, &mut path_cache);
+        }
         summary
             .entry(sample_name)
             .or_default()
@@ -471,6 +479,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
         assert_eq!(
             BlockGroup::get_all_sequences(conn, 1, false),
@@ -531,6 +540,7 @@ mod tests {
             "sample 1".to_string(),
             conn,
             op_conn,
+            None,
         );
         assert_eq!(
             BlockGroup::get_all_sequences(conn, 1, false),
@@ -580,6 +590,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
 
         let missing_allele_bg = BlockGroup::query(
@@ -630,6 +641,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
         assert_eq!(
             BlockGroup::get_all_sequences(conn, 2, false),
@@ -673,6 +685,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
 
         let nodes = Node::query(conn, "select * from nodes;", vec![]);
@@ -685,6 +698,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
         let nodes = Node::query(conn, "select * from nodes;", vec![]);
         assert_eq!(nodes.len(), 5);
@@ -721,6 +735,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
 
         let nodes = Node::query(conn, "select * from nodes;", vec![]);
@@ -733,6 +748,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
         let nodes = Node::query(conn, "select * from nodes;", vec![]);
         assert_eq!(nodes.len(), 8);
@@ -769,6 +785,7 @@ mod tests {
             "test".to_string(),
             conn,
             op_conn,
+            None,
         );
         assert!(s.elapsed().as_secs() < 20);
     }
@@ -802,6 +819,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
         assert_eq!(
             Accession::query(
@@ -854,6 +872,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
 
         assert_eq!(
@@ -877,6 +896,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
     }
 }

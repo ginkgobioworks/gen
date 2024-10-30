@@ -690,6 +690,64 @@ impl BlockGroup {
         new_edges
     }
 
+    pub fn insert_bg_changes(conn: &Connection, changes: &Vec<PathChange>) {
+        let mut new_edges_by_block_group = HashMap::<i64, Vec<EdgeData>>::new();
+        let mut new_accession_edges = HashMap::new();
+        let mut tree_map = HashMap::new();
+        for change in changes {
+            let tree = tree_map
+                .entry(change.block_group_id)
+                .or_insert_with(|| BlockGroup::intervaltree_for(conn, change.block_group_id, true));
+            let new_edges = BlockGroup::set_up_new_bg_edges(change, tree);
+            new_edges_by_block_group
+                .entry(change.block_group_id)
+                .and_modify(|new_edge_data| new_edge_data.extend(new_edges.clone()))
+                .or_insert_with(|| new_edges.clone());
+            if let Some(accession) = &change.path_accession {
+                new_accession_edges
+                    .entry((&change.path, accession))
+                    .and_modify(|new_edge_data: &mut Vec<EdgeData>| {
+                        new_edge_data.extend(new_edges.clone())
+                    })
+                    .or_insert_with(|| new_edges.clone());
+            }
+        }
+
+        let mut edge_data_map = HashMap::new();
+
+        for (block_group_id, new_edges) in new_edges_by_block_group {
+            let edge_ids = Edge::bulk_create(conn, &new_edges);
+            for (i, edge_data) in new_edges.iter().enumerate() {
+                edge_data_map.insert(edge_data.clone(), edge_ids[i]);
+            }
+            BlockGroupEdge::bulk_create(conn, block_group_id, &edge_ids);
+        }
+
+        for ((path, accession_name), path_edges) in new_accession_edges {
+            match Accession::get(
+                conn,
+                "select * from accession where name = ?1 AND path_id = ?2",
+                vec![
+                    SQLValue::from(accession_name.clone()),
+                    SQLValue::from(path.id),
+                ],
+            ) {
+                Ok(_) => {
+                    println!("accession already exists, consider a better matching algorithm to determine if this is an error.");
+                }
+                Err(_) => {
+                    let acc_edges = AccessionEdge::bulk_create(
+                        conn,
+                        &path_edges.iter().map(AccessionEdgeData::from).collect(),
+                    );
+                    let acc = Accession::create(conn, accession_name, path.id, None)
+                        .expect("Accession could not be created.");
+                    AccessionPath::create(conn, acc.id, &acc_edges);
+                }
+            }
+        }
+    }
+
     #[allow(clippy::ptr_arg)]
     #[allow(clippy::needless_late_init)]
     pub fn insert_bg_change(

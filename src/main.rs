@@ -68,6 +68,9 @@ enum Commands {
         /// If no sample is provided, enter the sample to associate variants to
         #[arg(short, long)]
         sample: Option<String>,
+        /// Use the given sample as the parent sample for changes.
+        #[arg(long)]
+        parent_sample: Option<String>,
         /// A CSV with combinatorial library information
         #[arg(short, long)]
         library: Option<String>,
@@ -237,6 +240,7 @@ fn main() {
             path_name,
             start,
             end,
+            parent_sample,
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             let name = &name.clone().unwrap_or_else(|| {
@@ -256,12 +260,13 @@ fn main() {
                 );
             } else if let Some(vcf_path) = vcf {
                 update_with_vcf(
-                    &vcf.clone().unwrap(),
+                    vcf_path,
                     name,
                     genotype.clone().unwrap_or("".to_string()),
                     sample.clone().unwrap_or("".to_string()),
                     &conn,
                     &operation_conn,
+                    parent_sample.as_deref(),
                 );
             } else {
                 panic!("Unknown file type provided for update.");
