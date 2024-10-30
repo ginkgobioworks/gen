@@ -1923,7 +1923,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(conn, &path);
+        let tree = path.intervaltree(conn);
         BlockGroup::insert_change(conn, &change, &tree);
 
         let tree = BlockGroup::intervaltree_for(conn, block_group_id, false);
