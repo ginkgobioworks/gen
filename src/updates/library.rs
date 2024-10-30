@@ -106,7 +106,7 @@ pub fn update_with_library(
         parts_list.push(parts_by_index.get(&index).unwrap());
     }
 
-    let path_intervaltree = Path::intervaltree_for(conn, &path);
+    let path_intervaltree = path.intervaltree(conn);
     let start_blocks: Vec<_> = path_intervaltree
         .query_point(start_coordinate)
         .map(|x| &x.value)

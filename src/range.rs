@@ -182,13 +182,17 @@ impl Range {
         range2: &Range,
         sequence_length: i64,
         is_circular_contig: bool,
-    ) -> i64 {
+    ) -> Result<i64, &'static str> {
         if !self.contains(index) {
-            panic!("Index {} is not contained in range {:?}", index, self);
+            return Err("Index is not contained in range");
         }
 
         let offset = index - self.start;
-        Range::circular_mod(range2.start + offset, sequence_length, is_circular_contig)
+        Ok(Range::circular_mod(
+            range2.start + offset,
+            sequence_length,
+            is_circular_contig,
+        ))
     }
 }
 

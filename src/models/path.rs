@@ -473,7 +473,7 @@ impl Path {
                 false,
             )
         } else {
-            first_mapping.target_range.start
+            Ok(first_mapping.target_range.start)
         };
 
         let translated_end = if last_mapping.source_range.contains(end) {
@@ -484,13 +484,17 @@ impl Path {
                 false,
             )
         } else {
-            last_mapping.target_range.end
+            Ok(last_mapping.target_range.end)
         };
+
+        if translated_start.is_err() || translated_end.is_err() {
+            return None;
+        }
 
         Some(Annotation {
             name: annotation.name,
-            start: translated_start,
-            end: translated_end,
+            start: translated_start.expect("Failed to translate start"),
+            end: translated_end.expect("Failed to translate end"),
         })
     }
 

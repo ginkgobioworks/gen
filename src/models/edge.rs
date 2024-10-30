@@ -815,7 +815,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
         let mut edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
 
