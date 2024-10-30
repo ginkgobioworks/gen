@@ -1,3 +1,4 @@
+use core::ops::Range as RustRange;
 use std::collections::{HashMap, HashSet};
 
 use intervaltree::IntervalTree;
@@ -13,6 +14,7 @@ use crate::models::{
     sequence::Sequence,
     strand::Strand,
 };
+use crate::range::{Range, RangeMapping};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub struct Path {
@@ -70,6 +72,13 @@ pub struct PathBlock {
     pub path_start: i64,
     pub path_end: i64,
     pub strand: Strand,
+}
+
+#[derive(Clone, Debug)]
+pub struct Annotation {
+    pub name: String,
+    pub start: i64,
+    pub end: i64,
 }
 
 impl Path {
@@ -165,8 +174,8 @@ impl Path {
         Path::get_paths(conn, query, vec![Value::from(collection_name.to_string())])
     }
 
-    pub fn sequence(conn: &Connection, path: Path) -> String {
-        let blocks = Path::blocks_for(conn, &path);
+    pub fn sequence(&self, conn: &Connection) -> String {
+        let blocks = self.blocks(conn);
         blocks
             .into_iter()
             .map(|block| block.block_sequence)
@@ -175,8 +184,8 @@ impl Path {
     }
 
     pub fn edge_pairs_to_block(
+        &self,
         block_id: i64,
-        path: &Path,
         into: Edge,
         out_of: Edge,
         sequences_by_node_id: &HashMap<i64, Sequence>,
@@ -185,7 +194,7 @@ impl Path {
         if into.target_node_id != out_of.source_node_id {
             panic!(
                 "Consecutive edges in path {0} don't share the same sequence",
-                path.id
+                self.id
             );
         }
 
@@ -202,7 +211,7 @@ impl Path {
         } else {
             panic!(
                 "Edge pair with target_strand/source_strand mismatch for path {}",
-                path.id
+                self.id
             );
         }
 
@@ -224,8 +233,8 @@ impl Path {
         }
     }
 
-    pub fn blocks_for(conn: &Connection, path: &Path) -> Vec<PathBlock> {
-        let edges = PathEdge::edges_for_path(conn, path.id);
+    pub fn blocks(&self, conn: &Connection) -> Vec<PathBlock> {
+        let edges = PathEdge::edges_for_path(conn, self.id);
         let mut sequence_node_ids = HashSet::new();
         for edge in &edges {
             if edge.source_node_id != PATH_START_NODE_ID {
@@ -258,9 +267,8 @@ impl Path {
         });
 
         for (index, (into, out_of)) in edges.into_iter().tuple_windows().enumerate() {
-            let block = Path::edge_pairs_to_block(
+            let block = self.edge_pairs_to_block(
                 index as i64,
-                path,
                 into,
                 out_of,
                 &sequences_by_node_id,
@@ -287,13 +295,234 @@ impl Path {
         blocks
     }
 
-    pub fn intervaltree_for(conn: &Connection, path: &Path) -> IntervalTree<i64, PathBlock> {
-        let blocks = Path::blocks_for(conn, path);
+    pub fn intervaltree(&self, conn: &Connection) -> IntervalTree<i64, PathBlock> {
+        let blocks = self.blocks(conn);
         let tree: IntervalTree<i64, PathBlock> = blocks
             .into_iter()
             .map(|block| (block.path_start..block.path_end, block))
             .collect();
         tree
+    }
+
+    pub fn find_block_mappings(&self, conn: &Connection, other_path: &Path) -> Vec<RangeMapping> {
+        // Given two paths, find the overlapping parts of common nodes/blocks and return a list af
+        // mappings from subranges of one path to corresponding shared subranges of the other path
+        let our_blocks = self.blocks(conn);
+        let their_blocks = other_path.blocks(conn);
+
+        let our_node_ids = our_blocks
+            .iter()
+            .map(|block| block.node_id)
+            .collect::<HashSet<i64>>();
+        let their_node_ids = their_blocks
+            .iter()
+            .map(|block| block.node_id)
+            .collect::<HashSet<i64>>();
+        let common_node_ids = our_node_ids
+            .intersection(&their_node_ids)
+            .copied()
+            .collect::<HashSet<i64>>();
+
+        let mut our_blocks_by_node_id = HashMap::new();
+        for block in our_blocks
+            .iter()
+            .filter(|block| common_node_ids.contains(&block.node_id))
+        {
+            our_blocks_by_node_id
+                .entry(block.node_id)
+                .or_insert(vec![])
+                .push(block);
+        }
+
+        let mut their_blocks_by_node_id = HashMap::new();
+        for block in their_blocks
+            .iter()
+            .filter(|block| common_node_ids.contains(&block.node_id))
+        {
+            their_blocks_by_node_id
+                .entry(block.node_id)
+                .or_insert(vec![])
+                .push(block);
+        }
+
+        let mut mappings = vec![];
+        for node_id in common_node_ids {
+            let our_blocks = our_blocks_by_node_id.get(&node_id).unwrap();
+            let our_sorted_blocks = our_blocks
+                .clone()
+                .into_iter()
+                .sorted_by(|a, b| a.sequence_start.cmp(&b.sequence_start))
+                .collect::<Vec<&PathBlock>>();
+            let their_blocks = their_blocks_by_node_id.get(&node_id).unwrap();
+            let their_sorted_blocks = their_blocks
+                .clone()
+                .into_iter()
+                .sorted_by(|a, b| a.sequence_start.cmp(&b.sequence_start))
+                .collect::<Vec<&PathBlock>>();
+
+            for our_block in our_sorted_blocks {
+                let mut their_block_index = 0;
+
+                while their_block_index < their_sorted_blocks.len() {
+                    let their_block = their_sorted_blocks[their_block_index];
+                    if their_block.sequence_end <= our_block.sequence_start {
+                        // If their block is before ours, move along to the next one
+                        their_block_index += 1;
+                    } else {
+                        let our_range = Range {
+                            start: our_block.sequence_start,
+                            end: our_block.sequence_end,
+                        };
+                        let their_range = Range {
+                            start: their_block.sequence_start,
+                            end: their_block.sequence_end,
+                        };
+
+                        let common_ranges = our_range.overlap(&their_range);
+                        if !common_ranges.is_empty() {
+                            if common_ranges.len() > 1 {
+                                panic!(
+                                    "Found more than one common range for blocks with node {}",
+                                    node_id
+                                );
+                            }
+
+                            let common_range = &common_ranges[0];
+                            let our_start = our_block.path_start
+                                + (common_range.start - our_block.sequence_start);
+                            let our_end = our_block.path_start
+                                + (common_range.end - our_block.sequence_start);
+                            let their_start = their_block.path_start
+                                + (common_range.start - their_block.sequence_start);
+                            let their_end = their_block.path_start
+                                + (common_range.end - their_block.sequence_start);
+
+                            let mapping = RangeMapping {
+                                source_range: Range {
+                                    start: our_start,
+                                    end: our_end,
+                                },
+                                target_range: Range {
+                                    start: their_start,
+                                    end: their_end,
+                                },
+                            };
+                            mappings.push(mapping);
+                        }
+
+                        if their_block.sequence_end < our_block.sequence_end {
+                            // If their block ends before ours, move along to the next one
+                            their_block_index += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        mappings
+            .into_iter()
+            .sorted_by(|a, b| a.source_range.start.cmp(&b.source_range.start))
+            .collect::<Vec<RangeMapping>>()
+    }
+
+    fn propagate_annotation(
+        annotation: Annotation,
+        mapping_tree: &IntervalTree<i64, RangeMapping>,
+        sequence_length: i64,
+    ) -> Option<Annotation> {
+        /*
+        This method contains the core logic for propagating an annotation from one path to another.
+        The core rules are:
+
+        1. If the annotation can be fully propagated to a matching subregion of the other path,
+            we propagate it
+
+        2. If only part of the annotation can be propagated to a partial subregion of the other
+            path, we propagate just that part and truncate the rest
+
+        3. If the first and last parts of the annotation can be propagated to subregions of the
+            other path (but not one or more parts of the middle of the annotation), we propagate the
+            entire annotation, including across the parts that don't match those of this path
+         */
+
+        // TODO: Add support for different propagation strategies
+        // TODO: Handle circular contigs
+        let start = annotation.start;
+        let end = annotation.end;
+        let mappings: Vec<RangeMapping> = mapping_tree
+            .query(RustRange { start, end })
+            .map(|x| x.value.clone())
+            .collect();
+        if mappings.is_empty() {
+            return None;
+        }
+
+        let sorted_mappings: Vec<RangeMapping> = mappings
+            .into_iter()
+            .sorted_by(|a, b| a.source_range.start.cmp(&b.source_range.start))
+            .collect();
+        let first_mapping = sorted_mappings.first().unwrap();
+        let last_mapping = sorted_mappings.last().unwrap();
+        let translated_start = if first_mapping.source_range.contains(start) {
+            first_mapping.source_range.translate_index(
+                start,
+                &first_mapping.target_range,
+                sequence_length,
+                false,
+            )
+        } else {
+            Ok(first_mapping.target_range.start)
+        };
+
+        let translated_end = if last_mapping.source_range.contains(end) {
+            last_mapping.source_range.translate_index(
+                end,
+                &last_mapping.target_range,
+                sequence_length,
+                false,
+            )
+        } else {
+            Ok(last_mapping.target_range.end)
+        };
+
+        if translated_start.is_err() || translated_end.is_err() {
+            return None;
+        }
+
+        Some(Annotation {
+            name: annotation.name,
+            start: translated_start.expect("Failed to translate start"),
+            end: translated_end.expect("Failed to translate end"),
+        })
+    }
+
+    pub fn propagate_annotations(
+        &self,
+        conn: &Connection,
+        path: &Path,
+        annotations: Vec<Annotation>,
+    ) -> Vec<Annotation> {
+        let mappings = self.find_block_mappings(conn, path);
+        let sequence_length = path.sequence(conn).len();
+        let mapping_tree: IntervalTree<i64, RangeMapping> = mappings
+            .into_iter()
+            .map(|mapping| {
+                (
+                    mapping.source_range.start..mapping.source_range.end,
+                    mapping,
+                )
+            })
+            .collect();
+
+        annotations
+            .into_iter()
+            .filter_map(|annotation| {
+                Path::propagate_annotation(annotation, &mapping_tree, sequence_length as i64)
+            })
+            .clone()
+            .collect()
     }
 }
 
@@ -392,7 +621,7 @@ mod tests {
             block_group.id,
             &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
         );
-        assert_eq!(Path::sequence(conn, path), "ATCGATCGAAAAAAACCCCCCCGGGGGGG");
+        assert_eq!(path.sequence(conn), "ATCGATCGAAAAAAACCCCCCCGGGGGGG");
     }
 
     #[test]
@@ -482,7 +711,7 @@ mod tests {
             block_group.id,
             &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
         );
-        assert_eq!(Path::sequence(conn, path), "CCCCCCCGGGGGGGTTTTTTTCGATCGAT");
+        assert_eq!(path.sequence(conn), "CCCCCCCGGGGGGGTTTTTTTCGATCGAT");
     }
 
     #[test]
@@ -579,7 +808,7 @@ mod tests {
             block_group.id,
             &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
         );
-        let tree = Path::intervaltree_for(conn, &path);
+        let tree = path.intervaltree(conn);
         let blocks1: Vec<PathBlock> = tree.query_point(2).map(|x| x.value.clone()).collect();
         assert_eq!(blocks1.len(), 1);
         let block1 = &blocks1[0];
@@ -609,5 +838,1559 @@ mod tests {
         assert_eq!(block4.path_start, 22);
         assert_eq!(block4.path_end, 29);
         assert_eq!(block4.strand, Strand::Forward);
+    }
+
+    #[test]
+    fn test_full_block_mapping() {
+        /*
+            |--------| path: 1 sequence, (0, 8)
+            |ATCGATCG|
+            |--------| Same path: 1 sequence, (0, 8)
+
+            Mapping: (0, 8) -> (0, 8)
+        */
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+
+        let mappings = path.find_block_mappings(conn, &path);
+        assert_eq!(mappings.len(), 1);
+        let mapping = &mappings[0];
+        assert_eq!(mapping.source_range, mapping.target_range);
+        assert_eq!(mapping.source_range.start, 0);
+        assert_eq!(mapping.source_range.end, 8);
+        assert_eq!(mapping.target_range.start, 0);
+        assert_eq!(mapping.target_range.end, 8);
+    }
+
+    #[test]
+    fn test_no_block_mapping_overlap() {
+        /*
+            |--------| -> path 1 (one node)
+            |ATCGATCG| -> sequence
+
+            |--------| -> path 2 (one node, totally different sequence)
+            |TTTTTTTT| -> other sequence
+
+            Mappings: empty
+        */
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTT")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        let edge3 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge4 = Edge::create(
+            conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path2 = Path::create(conn, "chr2", block_group.id, &[edge3.id, edge4.id]);
+
+        let mappings = path1.find_block_mappings(conn, &path2);
+        assert_eq!(mappings.len(), 0);
+    }
+
+    #[test]
+    fn test_partial_overlap_block_mapping() {
+        /*
+            path 1 (one node/sequence):
+            |--------|
+            |ATCGATCG| -> sequence (0, 8)
+
+            path 2:
+            |----| -> (0, 4)
+                |--------| -> (4, 12)
+            |ATCG| -> shared with path 1
+                |TTTTTTTT| -> unrelated sequence
+
+            Mapping: (0, 4) -> (0, 4)
+        */
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTT")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        let edge3 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge4 = Edge::create(
+            conn,
+            node1_id,
+            4,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge5 = Edge::create(
+            conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path2 = Path::create(
+            conn,
+            "chr2",
+            block_group.id,
+            &[edge3.id, edge4.id, edge5.id],
+        );
+
+        assert_eq!(path2.sequence(conn), "ATCGTTTTTTTT");
+
+        let mappings = path1.find_block_mappings(conn, &path2);
+        assert_eq!(mappings.len(), 1);
+        let mapping = &mappings[0];
+        assert_eq!(mapping.source_range, mapping.target_range);
+        assert_eq!(mapping.source_range.start, 0);
+        assert_eq!(mapping.source_range.end, 4);
+        assert_eq!(mapping.target_range.start, 0);
+        assert_eq!(mapping.target_range.end, 4);
+    }
+
+    #[test]
+    fn test_insertion_block_mapping() {
+        /*
+            path 1 (one node/sequence):
+            |ATCGATCG| -> sequence (0, 8)
+
+            path 2:	Mimics a pure insertion
+            |ATCG| -> (0, 4) shared with first half of path 1
+                |TTTTTTTT| -> (4, 12) unrelated sequence
+                        |ATCG| -> (12, 16) shared with second half of path 1
+
+            Mappings:
+            (0, 4) -> (0, 4)
+            (4, 8) -> (12, 16)
+        */
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTT")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        let edge4 = Edge::create(
+            conn,
+            node1_id,
+            4,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge5 = Edge::create(
+            conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            node1_id,
+            4,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path2 = Path::create(
+            conn,
+            "chr2",
+            block_group.id,
+            &[edge1.id, edge4.id, edge5.id, edge2.id],
+        );
+
+        assert_eq!(path2.sequence(conn), "ATCGTTTTTTTTATCG");
+
+        let mappings = path1.find_block_mappings(conn, &path2);
+        assert_eq!(mappings.len(), 2);
+        let mapping1 = &mappings[0];
+        assert_eq!(mapping1.source_range, mapping1.target_range);
+        assert_eq!(mapping1.source_range.start, 0);
+        assert_eq!(mapping1.source_range.end, 4);
+        assert_eq!(mapping1.target_range.start, 0);
+        assert_eq!(mapping1.target_range.end, 4);
+
+        let mapping2 = &mappings[1];
+        assert_eq!(mapping2.source_range.start, 4);
+        assert_eq!(mapping2.source_range.end, 8);
+        assert_eq!(mapping2.target_range.start, 12);
+        assert_eq!(mapping2.target_range.end, 16);
+    }
+
+    #[test]
+    fn test_replacement_block_mapping() {
+        /*
+            path 1 (one node/sequence):
+            |ATCGATCG| -> sequence (0, 8)
+
+            path 2:	Mimics a replacement
+            |AT| -> (0, 2) shared with first two bp of path 1
+              |TTTTTTTT| -> (2, 10) unrelated sequence
+                      |CG| -> (10, 12) shared with last 2 bp of path 1
+
+            Mappings:
+            (0, 2) -> (0, 2)
+            (6, 8) -> (10, 12)
+        */
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTT")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        let edge4 = Edge::create(
+            conn,
+            node1_id,
+            2,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge5 = Edge::create(
+            conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            node1_id,
+            6,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path2 = Path::create(
+            conn,
+            "chr2",
+            block_group.id,
+            &[edge1.id, edge4.id, edge5.id, edge2.id],
+        );
+
+        assert_eq!(path2.sequence(conn), "ATTTTTTTTTCG");
+
+        let mappings = path1.find_block_mappings(conn, &path2);
+        assert_eq!(mappings.len(), 2);
+        let mapping1 = &mappings[0];
+        assert_eq!(mapping1.source_range, mapping1.target_range);
+        assert_eq!(mapping1.source_range.start, 0);
+        assert_eq!(mapping1.source_range.end, 2);
+        assert_eq!(mapping1.target_range.start, 0);
+        assert_eq!(mapping1.target_range.end, 2);
+
+        let mapping2 = &mappings[1];
+        assert_eq!(mapping2.source_range.start, 6);
+        assert_eq!(mapping2.source_range.end, 8);
+        assert_eq!(mapping2.target_range.start, 10);
+        assert_eq!(mapping2.target_range.end, 12);
+    }
+
+    #[test]
+    fn test_deletion_block_mapping() {
+        /*
+            path 1 (one node/sequence):
+            |ATCGATCG| -> sequence (0, 8)
+
+            path 2: Mimics a pure deletion
+            |AT| -> (0, 2) shared with first two bp of path 1
+              |CG| -> (2, 4) shared with last 2 bp of path 1
+
+            Mappings:
+            (0, 2) -> (0, 2)
+            (6, 8) -> (2, 4)
+        */
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+
+        let edge4 = Edge::create(
+            conn,
+            node1_id,
+            2,
+            Strand::Forward,
+            node1_id,
+            6,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path2 = Path::create(
+            conn,
+            "chr2",
+            block_group.id,
+            &[edge1.id, edge4.id, edge2.id],
+        );
+
+        assert_eq!(path2.sequence(conn), "ATCG");
+
+        let mappings = path1.find_block_mappings(conn, &path2);
+        assert_eq!(mappings.len(), 2);
+        let mapping1 = &mappings[0];
+        assert_eq!(mapping1.source_range, mapping1.target_range);
+        assert_eq!(mapping1.source_range.start, 0);
+        assert_eq!(mapping1.source_range.end, 2);
+        assert_eq!(mapping1.target_range.start, 0);
+        assert_eq!(mapping1.target_range.end, 2);
+
+        let mapping2 = &mappings[1];
+        assert_eq!(mapping2.source_range.start, 6);
+        assert_eq!(mapping2.source_range.end, 8);
+        assert_eq!(mapping2.target_range.start, 2);
+        assert_eq!(mapping2.target_range.end, 4);
+    }
+
+    #[test]
+    fn test_two_block_insertion_mapping() {
+        /*
+            path 1 (two nodes/sequences):
+            |ATCGATCG| -> sequence (0, 8)
+                    |TTTTTTTT| -> sequence (8, 16)
+
+            path 2: Mimics a pure insertion in the middle of the two blocks
+            |ATCGATCG| -> sequence (0, 8)
+                    |AAAAAAAA| -> sequence (8, 16)
+                            |TTTTTTTT| -> sequence (16, 24)
+
+            Mappings:
+            (0, 8) -> (0, 8)
+            (8, 16) -> (16, 24)
+        */
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTT")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge3 = Edge::create(
+            conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path1 = Path::create(
+            conn,
+            "chr1",
+            block_group.id,
+            &[edge1.id, edge2.id, edge3.id],
+        );
+
+        let sequence3 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(conn);
+        let node3_id = Node::create(conn, sequence3.hash.as_str(), None);
+        let edge4 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            node3_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge5 = Edge::create(
+            conn,
+            node3_id,
+            8,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path2 = Path::create(
+            conn,
+            "chr2",
+            block_group.id,
+            &[edge1.id, edge4.id, edge5.id, edge3.id],
+        );
+
+        assert_eq!(path2.sequence(conn), "ATCGATCGAAAAAAAATTTTTTTT");
+
+        let mappings = path1.find_block_mappings(conn, &path2);
+        assert_eq!(mappings.len(), 2);
+        let mapping1 = &mappings[0];
+        assert_eq!(mapping1.source_range, mapping1.target_range);
+        assert_eq!(mapping1.source_range.start, 0);
+        assert_eq!(mapping1.source_range.end, 8);
+        assert_eq!(mapping1.target_range.start, 0);
+        assert_eq!(mapping1.target_range.end, 8);
+
+        let mapping2 = &mappings[1];
+        assert_eq!(mapping2.source_range.start, 8);
+        assert_eq!(mapping2.source_range.end, 16);
+        assert_eq!(mapping2.target_range.start, 16);
+        assert_eq!(mapping2.target_range.end, 24);
+    }
+
+    #[test]
+    fn test_two_block_replacement_mapping() {
+        /*
+            path 1 (two nodes/sequences):
+            |ATCGATCG| -> sequence (0, 8)
+                    |TTTTTTTT| -> sequence (8, 16)
+
+            path 2: Mimics a replacement across the two blocks
+            |ATCG| -> sequence (0, 4)
+                |AAAAAAAA| -> sequence (4, 12)
+                        |TTTT| -> sequence (12, 16)
+
+            Mappings:
+            (0, 4) -> (0, 4)
+            (12, 16) -> (12, 16)
+        */
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTT")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge3 = Edge::create(
+            conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path1 = Path::create(
+            conn,
+            "chr1",
+            block_group.id,
+            &[edge1.id, edge2.id, edge3.id],
+        );
+
+        let sequence3 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(conn);
+        let node3_id = Node::create(conn, sequence3.hash.as_str(), None);
+        let edge4 = Edge::create(
+            conn,
+            node1_id,
+            4,
+            Strand::Forward,
+            node3_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge5 = Edge::create(
+            conn,
+            node3_id,
+            8,
+            Strand::Forward,
+            node2_id,
+            4,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path2 = Path::create(
+            conn,
+            "chr2",
+            block_group.id,
+            &[edge1.id, edge4.id, edge5.id, edge3.id],
+        );
+
+        assert_eq!(path2.sequence(conn), "ATCGAAAAAAAATTTT");
+
+        let mappings = path1.find_block_mappings(conn, &path2);
+        assert_eq!(mappings.len(), 2);
+        let mapping1 = &mappings[0];
+        assert_eq!(mapping1.source_range, mapping1.target_range);
+        assert_eq!(mapping1.source_range.start, 0);
+        assert_eq!(mapping1.source_range.end, 4);
+        assert_eq!(mapping1.target_range.start, 0);
+        assert_eq!(mapping1.target_range.end, 4);
+
+        let mapping2 = &mappings[1];
+        assert_eq!(mapping2.source_range.start, 12);
+        assert_eq!(mapping2.source_range.end, 16);
+        assert_eq!(mapping2.target_range.start, 12);
+        assert_eq!(mapping2.target_range.end, 16);
+    }
+
+    #[test]
+    fn test_two_block_deletion_mapping() {
+        /*
+            path 1 (two nodes/sequences):
+            |ATCGATCG| -> sequence (0, 8)
+                    |TTTTTTTT| -> sequence (8, 16)
+
+            path 2: Mimics a deletion across the two blocks
+            |ATCG| -> sequence (0, 4)
+                |TTTT| -> sequence (4, 8)
+
+            Mappings:
+            (0, 4) -> (0, 4)
+            (12, 16) -> (4, 8)
+        */
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTT")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge3 = Edge::create(
+            conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path1 = Path::create(
+            conn,
+            "chr1",
+            block_group.id,
+            &[edge1.id, edge2.id, edge3.id],
+        );
+
+        let edge4 = Edge::create(
+            conn,
+            node1_id,
+            4,
+            Strand::Forward,
+            node2_id,
+            4,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path2 = Path::create(
+            conn,
+            "chr2",
+            block_group.id,
+            &[edge1.id, edge4.id, edge3.id],
+        );
+
+        assert_eq!(path2.sequence(conn), "ATCGTTTT");
+
+        let mappings = path1.find_block_mappings(conn, &path2);
+        assert_eq!(mappings.len(), 2);
+        let mapping1 = &mappings[0];
+        assert_eq!(mapping1.source_range, mapping1.target_range);
+        assert_eq!(mapping1.source_range.start, 0);
+        assert_eq!(mapping1.source_range.end, 4);
+        assert_eq!(mapping1.target_range.start, 0);
+        assert_eq!(mapping1.target_range.end, 4);
+
+        let mapping2 = &mappings[1];
+        assert_eq!(mapping2.source_range.start, 12);
+        assert_eq!(mapping2.source_range.end, 16);
+        assert_eq!(mapping2.target_range.start, 4);
+        assert_eq!(mapping2.target_range.end, 8);
+    }
+
+    #[test]
+    fn test_annotation_propagation_full_overlap() {
+        /*
+            |--------| path: 1 sequence, (0, 8)
+            |ATCGATCG|
+            |--------| Same path: 1 sequence, (0, 8)
+
+            Mapping: (0, 8) -> (0, 8)
+        */
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+
+        let annotation = Annotation {
+            name: "foo".to_string(),
+            start: 0,
+            end: 8,
+        };
+        let annotations = path.propagate_annotations(conn, &path, vec![annotation]);
+        assert_eq!(annotations.len(), 1);
+        let result_annotation = &annotations[0];
+        assert_eq!(result_annotation.name, "foo");
+        assert_eq!(result_annotation.start, 0);
+        assert_eq!(result_annotation.end, 8);
+    }
+
+    #[test]
+    fn test_propagate_annotations_no_overlap() {
+        /*
+            |--------| -> path 1 (one node)
+            |ATCGATCG| -> sequence
+
+            |--------| -> path 2 (one node, totally different sequence)
+            |TTTTTTTT| -> other sequence
+
+            Mappings: empty
+        */
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTT")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        let edge3 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge4 = Edge::create(
+            conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path2 = Path::create(conn, "chr2", block_group.id, &[edge3.id, edge4.id]);
+
+        let annotation = Annotation {
+            name: "foo".to_string(),
+            start: 0,
+            end: 8,
+        };
+        let annotations = path1.propagate_annotations(conn, &path2, vec![annotation]);
+        assert_eq!(annotations.len(), 0);
+    }
+
+    #[test]
+    fn test_propagate_annotations_partial_overlap() {
+        /*
+            path 1 (one node/sequence):
+            |--------|
+            |ATCGATCG| -> sequence (0, 8)
+
+            path 2:
+            |----| -> (0, 4)
+                |--------| -> (4, 12)
+            |ATCG| -> shared with path 1
+                |TTTTTTTT| -> unrelated sequence
+
+            Mapping: (0, 4) -> (0, 4)
+        */
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTT")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        let edge3 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge4 = Edge::create(
+            conn,
+            node1_id,
+            4,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge5 = Edge::create(
+            conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path2 = Path::create(
+            conn,
+            "chr2",
+            block_group.id,
+            &[edge3.id, edge4.id, edge5.id],
+        );
+
+        assert_eq!(path2.sequence(conn), "ATCGTTTTTTTT");
+
+        let annotation = Annotation {
+            name: "foo".to_string(),
+            start: 0,
+            end: 8,
+        };
+        let annotations = path1.propagate_annotations(conn, &path2, vec![annotation]);
+        assert_eq!(annotations.len(), 1);
+        let result_annotation = &annotations[0];
+        assert_eq!(result_annotation.name, "foo");
+        assert_eq!(result_annotation.start, 0);
+        assert_eq!(result_annotation.end, 4);
+    }
+
+    #[test]
+    fn test_propagate_annotations_with_insertion() {
+        /*
+            path 1 (one node/sequence):
+            |ATCGATCG| -> sequence (0, 8)
+
+            path 2:	Mimics a pure insertion
+            |ATCG| -> (0, 4) shared with first half of path 1
+                |TTTTTTTT| -> (4, 12) unrelated sequence
+                        |ATCG| -> (12, 16) shared with second half of path 1
+
+            Mappings:
+            (0, 4) -> (0, 4)
+            (4, 8) -> (12, 16)
+        */
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTT")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        let edge4 = Edge::create(
+            conn,
+            node1_id,
+            4,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge5 = Edge::create(
+            conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            node1_id,
+            4,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path2 = Path::create(
+            conn,
+            "chr2",
+            block_group.id,
+            &[edge1.id, edge4.id, edge5.id, edge2.id],
+        );
+
+        assert_eq!(path2.sequence(conn), "ATCGTTTTTTTTATCG");
+
+        let annotation = Annotation {
+            name: "foo".to_string(),
+            start: 0,
+            end: 8,
+        };
+
+        let annotations = path1.propagate_annotations(conn, &path2, vec![annotation]);
+        assert_eq!(annotations.len(), 1);
+
+        // Under the default propagation strategy, the annotation is expanded to cover anything in
+        // between parts it covers
+        let result_annotation = &annotations[0];
+        assert_eq!(result_annotation.name, "foo");
+        assert_eq!(result_annotation.start, 0);
+        assert_eq!(result_annotation.end, 16);
+    }
+
+    #[test]
+    fn test_propagate_annotations_with_replacement() {
+        /*
+            path 1 (one node/sequence):
+            |ATCGATCG| -> sequence (0, 8)
+
+            path 2:	Mimics a replacement
+            |AT| -> (0, 2) shared with first two bp of path 1
+              |TTTTTTTT| -> (2, 10) unrelated sequence
+                      |CG| -> (10, 12) shared with last 2 bp of path 1
+
+            Mappings:
+            (0, 2) -> (0, 2)
+            (6, 8) -> (10, 12)
+        */
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTT")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        let edge4 = Edge::create(
+            conn,
+            node1_id,
+            2,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge5 = Edge::create(
+            conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            node1_id,
+            6,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path2 = Path::create(
+            conn,
+            "chr2",
+            block_group.id,
+            &[edge1.id, edge4.id, edge5.id, edge2.id],
+        );
+
+        assert_eq!(path2.sequence(conn), "ATTTTTTTTTCG");
+
+        let annotation = Annotation {
+            name: "foo".to_string(),
+            start: 0,
+            end: 4,
+        };
+
+        let annotations = path1.propagate_annotations(conn, &path2, vec![annotation]);
+        assert_eq!(annotations.len(), 1);
+
+        // Under the default propagation strategy, the annotation is truncated
+        let result_annotation = &annotations[0];
+        assert_eq!(result_annotation.name, "foo");
+        assert_eq!(result_annotation.start, 0);
+        assert_eq!(result_annotation.end, 2);
+    }
+
+    #[test]
+    fn test_propagate_annotations_with_insertion_across_two_blocks() {
+        /*
+            path 1 (two nodes/sequences):
+            |ATCGATCG| -> sequence (0, 8)
+                    |TTTTTTTT| -> sequence (8, 16)
+
+            path 2: Mimics a pure insertion in the middle of the two blocks
+            |ATCGATCG| -> sequence (0, 8)
+                    |AAAAAAAA| -> sequence (8, 16)
+                            |TTTTTTTT| -> sequence (16, 24)
+
+            Mappings:
+            (0, 8) -> (0, 8)
+            (8, 16) -> (16, 24)
+        */
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTT")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge3 = Edge::create(
+            conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path1 = Path::create(
+            conn,
+            "chr1",
+            block_group.id,
+            &[edge1.id, edge2.id, edge3.id],
+        );
+
+        let sequence3 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(conn);
+        let node3_id = Node::create(conn, sequence3.hash.as_str(), None);
+        let edge4 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            node3_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge5 = Edge::create(
+            conn,
+            node3_id,
+            8,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path2 = Path::create(
+            conn,
+            "chr2",
+            block_group.id,
+            &[edge1.id, edge4.id, edge5.id, edge3.id],
+        );
+
+        assert_eq!(path2.sequence(conn), "ATCGATCGAAAAAAAATTTTTTTT");
+
+        let annotation = Annotation {
+            name: "foo".to_string(),
+            start: 0,
+            end: 16,
+        };
+
+        let annotations = path1.propagate_annotations(conn, &path2, vec![annotation]);
+        assert_eq!(annotations.len(), 1);
+
+        // Under the default propagation strategy, the annotation is extended across the inserted
+        // region
+        let result_annotation = &annotations[0];
+        assert_eq!(result_annotation.name, "foo");
+        assert_eq!(result_annotation.start, 0);
+        assert_eq!(result_annotation.end, 24);
+    }
+
+    #[test]
+    fn test_propagate_annotations_with_deletion_across_two_blocks() {
+        /*
+            path 1 (two nodes/sequences):
+            |ATCGATCG| -> sequence (0, 8)
+                    |TTTTTTTT| -> sequence (8, 16)
+
+            path 2: Mimics a deletion across the two blocks
+            |ATCG| -> sequence (0, 4)
+                |TTTT| -> sequence (4, 8)
+
+            Mappings:
+            (0, 4) -> (0, 4)
+            (12, 16) -> (4, 8)
+        */
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTT")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge3 = Edge::create(
+            conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path1 = Path::create(
+            conn,
+            "chr1",
+            block_group.id,
+            &[edge1.id, edge2.id, edge3.id],
+        );
+
+        let edge4 = Edge::create(
+            conn,
+            node1_id,
+            4,
+            Strand::Forward,
+            node2_id,
+            4,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path2 = Path::create(
+            conn,
+            "chr2",
+            block_group.id,
+            &[edge1.id, edge4.id, edge3.id],
+        );
+
+        assert_eq!(path2.sequence(conn), "ATCGTTTT");
+
+        let annotation = Annotation {
+            name: "foo".to_string(),
+            start: 0,
+            end: 12,
+        };
+
+        let annotations = path1.propagate_annotations(conn, &path2, vec![annotation]);
+        assert_eq!(annotations.len(), 1);
+
+        // Under the default propagation strategy, the annotation is truncated
+        let result_annotation = &annotations[0];
+        assert_eq!(result_annotation.name, "foo");
+        assert_eq!(result_annotation.start, 0);
+        assert_eq!(result_annotation.end, 4);
     }
 }

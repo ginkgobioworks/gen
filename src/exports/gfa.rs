@@ -361,7 +361,7 @@ mod tests {
 
         let paths = Path::get_paths_for_collection(&conn, "test collection 2");
         assert_eq!(paths.len(), 1);
-        assert_eq!(Path::sequence(&conn, paths[0].clone()), "AAAATTTTGGGGCCCC");
+        assert_eq!(paths[0].sequence(&conn), "AAAATTTTGGGGCCCC");
     }
 
     #[test]
@@ -477,7 +477,7 @@ mod tests {
             chromosome_index: 1,
             phased: 0,
         };
-        let tree = Path::intervaltree_for(&conn, &path);
+        let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
         let edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
