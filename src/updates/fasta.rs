@@ -1,6 +1,7 @@
 use noodles::fasta;
+use rusqlite;
 use rusqlite::{types::Value as SQLValue, Connection};
-use std::{io, str};
+use std::{io, rc::Rc, str};
 
 use crate::models::{
     block_group::{BlockGroup, PathChange},
@@ -46,17 +47,15 @@ pub fn update_with_fasta(
 
     let path_ids = operation_paths
         .iter()
-        .map(|operation_path| operation_path.path_id.to_string())
-        .collect::<Vec<String>>();
-    let query = format!(
-        "select * from path where block_group_id = {block_group_id} and id in ({path_ids});",
-        path_ids = path_ids.join(", ")
-    );
-    let paths = Path::query(conn, &query, vec![]);
+        .map(|operation_path| SQLValue::from(operation_path.path_id))
+        .collect::<Vec<SQLValue>>();
+    let query = "select * from path where block_group_id = ?1 and id in rarray(?2);";
+    let params = rusqlite::params!(SQLValue::from(block_group_id), Rc::new(path_ids));
+    let paths = Path::full_query(conn, query, params);
 
     if paths.len() != 1 {
         panic!(
-            "Expected one path for block group {} (contig name: {}",
+            "Expected one path for block group {} (contig name: {})",
             block_group_id, contig_name
         );
     }
