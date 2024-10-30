@@ -557,6 +557,7 @@ impl Path {
             })
             .clone()
             .collect()
+    }
 
     pub fn new_path_for(
         &self,
@@ -568,7 +569,7 @@ impl Path {
     ) -> Path {
         // Creates a new path from the current one by replacing all edges between path_start and
         // path_end with the input edges that are to and from a new node
-        let tree = Path::intervaltree_for(conn, self);
+        let tree = self.intervaltree(conn);
         let block_with_start = tree.query_point(path_start).next().unwrap().value.clone();
         let block_with_end = tree.query_point(path_end).next().unwrap().value.clone();
 
@@ -2481,5 +2482,120 @@ mod tests {
         assert_eq!(result_annotation.name, "foo");
         assert_eq!(result_annotation.start, 0);
         assert_eq!(result_annotation.end, 4);
+    }
+
+    #[test]
+    fn test_new_path_for() {
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -123,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge3 = Edge::create(
+            conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path1 = Path::create(
+            conn,
+            "chr1",
+            block_group.id,
+            &[edge1.id, edge2.id, edge3.id],
+        );
+        assert_eq!(path1.sequence(conn), "ATCGATCGAAAAAAAA");
+
+        let sequence3 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("CCCCCCCC")
+            .save(conn);
+        let node3_id = Node::create(conn, sequence3.hash.as_str(), None);
+        let edge4 = Edge::create(
+            conn,
+            node1_id,
+            4,
+            Strand::Forward,
+            node3_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge5 = Edge::create(
+            conn,
+            node3_id,
+            8,
+            Strand::Forward,
+            node2_id,
+            3,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path2 = path1.new_path_for(conn, 4, 11, &edge4, &edge5);
+        assert_eq!(path2.sequence(conn), "ATCGCCCCCCCCAAAAA");
+
+        let edge6 = Edge::create(
+            conn,
+            node1_id,
+            4,
+            Strand::Forward,
+            node3_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge7 = Edge::create(
+            conn,
+            node3_id,
+            8,
+            Strand::Forward,
+            node1_id,
+            7,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let path3 = path1.new_path_for(conn, 4, 7, &edge6, &edge7);
+        assert_eq!(path3.sequence(conn), "ATCGCCCCCCCCGAAAAAAAA");
     }
 }

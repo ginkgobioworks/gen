@@ -16,7 +16,7 @@ pub fn export_fasta(conn: &Connection, operation_id: i64, filename: &PathBuf) {
         let block_group = BlockGroup::get_by_id(conn, path.block_group_id);
 
         let definition = fasta::record::Definition::new(block_group.name, None);
-        let sequence = fasta::record::Sequence::from(Path::sequence(conn, path).into_bytes());
+        let sequence = fasta::record::Sequence::from(path.sequence(conn).into_bytes());
         let record = fasta::Record::new(definition, sequence);
 
         let _ = writer.write_record(&record);
