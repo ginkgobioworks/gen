@@ -108,7 +108,7 @@ pub fn update_with_fasta(
         phased: 0,
     };
 
-    let interval_tree = Path::intervaltree_for(conn, &path);
+    let interval_tree = path.intervaltree(conn);
     BlockGroup::insert_change(conn, &path_change, &interval_tree);
 
     let edge_to_new_node = Edge::query(
