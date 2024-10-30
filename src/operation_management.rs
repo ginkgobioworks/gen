@@ -100,17 +100,17 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                 .unwrap()
                 .0;
             match table {
-                "sequence" => {
+                "sequences" => {
                     let hash =
                         str::from_utf8(item.new_value(pk_column).unwrap().as_bytes().unwrap())
                             .unwrap();
                     created_sequences.insert(hash.to_string());
                 }
-                "block_group" => {
+                "block_groups" => {
                     let bg_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     created_block_groups.insert(bg_pk);
                 }
-                "path" => {
+                "paths" => {
                     created_paths.insert(item.new_value(pk_column).unwrap().as_i64().unwrap());
                     let bg_id = item.new_value(1).unwrap().as_i64().unwrap();
                     if !created_block_groups.contains(&bg_id) {
@@ -161,7 +161,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                         previous_block_groups.insert(bg_id);
                     }
                 }
-                "accession" => {
+                "accessions" => {
                     created_accessions.insert(item.new_value(pk_column).unwrap().as_i64().unwrap());
                     let path_id = item.new_value(2).unwrap().as_i64().unwrap();
                     let parent_accession_id = item.new_value(3).unwrap().as_i64_or_null().unwrap();
@@ -174,7 +174,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                         }
                     }
                 }
-                "accession_edge" => {
+                "accession_edges" => {
                     let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     let source_node_id = item.new_value(1).unwrap().as_i64().unwrap();
                     let target_node_id = item.new_value(4).unwrap().as_i64().unwrap();
@@ -187,7 +187,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                         previous_sequences.insert(nodes[1].sequence_hash.clone());
                     }
                 }
-                "accession_path" => {
+                "accession_paths" => {
                     let accession_id = item.new_value(1).unwrap().as_i64().unwrap();
                     let edge_id = item.new_value(3).unwrap().as_i64().unwrap();
                     if !created_accessions.contains(&accession_id) {
@@ -391,14 +391,14 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                 .unwrap()
                 .0;
             match table {
-                "sample" => {
+                "samples" => {
                     Sample::create(
                         conn,
                         str::from_utf8(item.new_value(pk_column).unwrap().as_bytes().unwrap())
                             .unwrap(),
                     );
                 }
-                "sequence" => {
+                "sequences" => {
                     Sequence::new()
                         .sequence_type(
                             str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap()).unwrap(),
@@ -415,7 +415,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                         .length(item.new_value(5).unwrap().as_i64().unwrap())
                         .save(conn);
                 }
-                "block_group" => {
+                "block_groups" => {
                     let bg_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     if let Some(v) = dep_bg_map.get(&bg_pk) {
                         blockgroup_map.insert(bg_pk, *v);
@@ -434,7 +434,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                         blockgroup_map.insert(bg_pk, new_bg.id);
                     };
                 }
-                "path" => {
+                "paths" => {
                     // defer path creation until edges are made
                     insert_paths.push(Path {
                         id: item.new_value(pk_column).unwrap().as_i64().unwrap(),
@@ -487,14 +487,14 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                     let edge_id = item.new_value(2).unwrap().as_i64().unwrap();
                     insert_block_group_edges.push((bg_id, edge_id));
                 }
-                "collection" => {
+                "collections" => {
                     Collection::create(
                         conn,
                         str::from_utf8(item.new_value(pk_column).unwrap().as_bytes().unwrap())
                             .unwrap(),
                     );
                 }
-                "accession" => {
+                "accessions" => {
                     // we defer accession creation until edges and paths are made
                     insert_accessions.push(Accession {
                         id: item.new_value(pk_column).unwrap().as_i64().unwrap(),
@@ -505,7 +505,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                         parent_accession_id: item.new_value(2).unwrap().as_i64_or_null().unwrap(),
                     });
                 }
-                "accession_edge" => {
+                "accession_edges" => {
                     let pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     accession_edge_map.insert(
                         pk,
@@ -522,7 +522,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                         },
                     );
                 }
-                "accession_path" => {
+                "accession_paths" => {
                     let accession_id = item.new_value(1).unwrap().as_i64().unwrap();
                     let index = item.new_value(2).unwrap().as_i64().unwrap();
                     // the edge_id here may not be valid and in this database may have a different pk
@@ -803,18 +803,18 @@ pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Opera
 
 pub fn attach_session(session: &mut session::Session) {
     for table in [
-        "collection",
-        "sample",
-        "sequence",
-        "block_group",
-        "path",
+        "collections",
+        "samples",
+        "sequences",
+        "block_groups",
+        "paths",
         "nodes",
         "edges",
         "path_edges",
         "block_group_edges",
-        "accession",
-        "accession_edge",
-        "accession_path",
+        "accessions",
+        "accession_edges",
+        "accession_paths",
     ] {
         session.attach(Some(table)).unwrap();
     }

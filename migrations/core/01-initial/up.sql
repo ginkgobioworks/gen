@@ -84,26 +84,26 @@ CREATE UNIQUE INDEX accession_path_uidx ON accession_paths(accession_id, edge_id
 
 
 -- an operation from a vcf can impact multiple paths and samples, so operation is not faceted on that
-CREATE TABLE operations (
+CREATE TABLE operation (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
   parent_id INTEGER,
   collection_name TEXT NOT NULL,
   change_type TEXT NOT NULL,
   change_id INTEGER NOT NULL,
-  FOREIGN KEY(parent_id) REFERENCES operations(id)
+  FOREIGN KEY(parent_id) REFERENCES operation(id)
 ) STRICT;
 
-CREATE TABLE file_additions (
+CREATE TABLE file_addition (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
   file_path TEXT NOT NULL,
   file_type TEXT NOT NULL
 ) STRICT;
 
-CREATE TABLE operation_summaries (
+CREATE TABLE operation_summary (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
   operation_id INTEGER NOT NULL,
   summary TEXT NOT NULL,
-  FOREIGN KEY(operation_id) REFERENCES operations(id)
+  FOREIGN KEY(operation_id) REFERENCES operation(id)
 ) STRICT;
 
 CREATE TABLE edges (
