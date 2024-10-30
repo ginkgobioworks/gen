@@ -559,7 +559,7 @@ impl Path {
             .collect()
     }
 
-    pub fn new_path_for(
+    pub fn new_path_with(
         &self,
         conn: &Connection,
         path_start: i64,
@@ -2485,7 +2485,7 @@ mod tests {
     }
 
     #[test]
-    fn test_new_path_for() {
+    fn test_new_path_with() {
         let conn = &mut get_connection(None);
         Collection::create(conn, "test collection");
         let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
@@ -2569,7 +2569,7 @@ mod tests {
             0,
         );
 
-        let path2 = path1.new_path_for(conn, 4, 11, &edge4, &edge5);
+        let path2 = path1.new_path_with(conn, 4, 11, &edge4, &edge5);
         assert_eq!(path2.sequence(conn), "ATCGCCCCCCCCAAAAA");
 
         let edge6 = Edge::create(
@@ -2595,7 +2595,7 @@ mod tests {
             0,
         );
 
-        let path3 = path1.new_path_for(conn, 4, 7, &edge6, &edge7);
+        let path3 = path1.new_path_with(conn, 4, 7, &edge6, &edge7);
         assert_eq!(path3.sequence(conn), "ATCGCCCCCCCCGAAAAAAAA");
     }
 }
