@@ -356,7 +356,7 @@ pub fn update_with_vcf(
             let sequence_string = sequence.get_sequence(None, None);
 
             let parent_path_id : i64 = *parent_block_groups.entry((collection_name, vcf_entry.path.id)).or_insert_with(|| {
-                let parent_bg = BlockGroup::query(conn, "select * from block_group where collection_name = ?1 AND sample_name is null and name = ?2", vec![SQLValue::from(collection_name.to_string()), SQLValue::from(vcf_entry.path.name.clone())]);
+                let parent_bg = BlockGroup::query(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null and name = ?2", vec![SQLValue::from(collection_name.to_string()), SQLValue::from(vcf_entry.path.name.clone())]);
                 if parent_bg.is_empty() {
                     vcf_entry.path.id
                 } else {
@@ -484,7 +484,7 @@ mod tests {
         // Blockgroup 3 belongs to the `G1` genotype and has no changes
         let test_bg = BlockGroup::query(
             conn,
-            "select * from block_group where sample_name = ?1",
+            "select * from block_groups where sample_name = ?1",
             vec![SQLValue::from("G1".to_string())],
         );
         assert_eq!(
@@ -583,7 +583,7 @@ mod tests {
 
         let missing_allele_bg = BlockGroup::query(
             conn,
-            "select * from block_group where sample_name = ?1",
+            "select * from block_groups where sample_name = ?1",
             vec![SQLValue::from("unknown".to_string())],
         );
 
@@ -805,7 +805,7 @@ mod tests {
         assert_eq!(
             Accession::query(
                 conn,
-                "select * from accession where name = ?1;",
+                "select * from accessions where name = ?1;",
                 vec![SQLValue::from("del1".to_string())]
             )
             .len(),
@@ -815,7 +815,7 @@ mod tests {
         assert_eq!(
             Accession::query(
                 conn,
-                "select * from accession where name = ?1;",
+                "select * from accessions where name = ?1;",
                 vec![SQLValue::from("lp1".to_string())]
             )
             .len(),
@@ -858,7 +858,7 @@ mod tests {
         assert_eq!(
             Accession::query(
                 conn,
-                "select * from accession where name = ?1",
+                "select * from accessions where name = ?1",
                 vec![SQLValue::from("lp1".to_string())]
             )
             .len(),

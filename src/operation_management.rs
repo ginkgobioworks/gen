@@ -213,7 +213,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
         block_group: BlockGroup::query(
             conn,
             &format!(
-                "select * from block_group where id in ({ids})",
+                "select * from block_groups where id in ({ids})",
                 ids = previous_block_groups.iter().join(",")
             ),
             vec![],
@@ -230,7 +230,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
         paths: Path::get_paths(
             conn,
             &format!(
-                "select * from path where id in ({ids})",
+                "select * from paths where id in ({ids})",
                 ids = previous_paths.iter().join(",")
             ),
             vec![],
@@ -238,7 +238,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
         accessions: Accession::query(
             conn,
             &format!(
-                "select * from accession where id in ({ids})",
+                "select * from accessions where id in ({ids})",
                 ids = previous_accessions.iter().join(",")
             ),
             vec![],
@@ -246,7 +246,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
         accession_edges: AccessionEdge::query(
             conn,
             &format!(
-                "select * from accession_edge where id in ({ids})",
+                "select * from accession_edges where id in ({ids})",
                 ids = previous_accession_edges.iter().join(",")
             ),
             vec![],
@@ -889,7 +889,7 @@ mod tests {
         let (bg_id, _path_id) = setup_block_group(conn);
         let binding = BlockGroup::query(
             conn,
-            "select * from block_group where id = ?1;",
+            "select * from block_groups where id = ?1;",
             vec![Value::from(bg_id)],
         );
         let dep_bg = binding.first().unwrap();
@@ -961,7 +961,7 @@ mod tests {
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
@@ -977,7 +977,7 @@ mod tests {
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         // NOTE: The edge count is 10 because of the following:
         // * 1 edge from the source node to the node created by the fasta import
@@ -1007,7 +1007,7 @@ mod tests {
 
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
@@ -1023,7 +1023,7 @@ mod tests {
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 10);
         assert_eq!(node_count, 5);
@@ -1078,7 +1078,7 @@ mod tests {
 
         assert_eq!(BlockGroup::get_all_sequences(conn, foo_bg_id), patch_1_seqs);
         assert_eq!(
-            BlockGroup::query(conn, "select * from block_group;", vec![])
+            BlockGroup::query(conn, "select * from block_groups;", vec![])
                 .iter()
                 .map(|v| v.sample_name.clone().unwrap_or("".to_string()))
                 .collect::<Vec<String>>(),
@@ -1114,7 +1114,7 @@ mod tests {
         assert_eq!(BlockGroup::get_all_sequences(conn, foo_bg_id), patch_2_seqs);
         assert_ne!(patch_1_seqs, patch_2_seqs);
         assert_eq!(
-            BlockGroup::query(conn, "select * from block_group;", vec![])
+            BlockGroup::query(conn, "select * from block_groups;", vec![])
                 .iter()
                 .map(|v| v.sample_name.clone().unwrap_or("".to_string()))
                 .collect::<Vec<String>>(),
@@ -1133,7 +1133,7 @@ mod tests {
         ]);
         assert_eq!(BlockGroup::get_all_sequences(conn, foo_bg_id), patch_2_seqs);
         assert_eq!(
-            BlockGroup::query(conn, "select * from block_group;", vec![])
+            BlockGroup::query(conn, "select * from block_groups;", vec![])
                 .iter()
                 .map(|v| v.sample_name.clone().unwrap_or("".to_string()))
                 .collect::<Vec<String>>(),
@@ -1179,7 +1179,7 @@ mod tests {
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
@@ -1206,7 +1206,7 @@ mod tests {
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 10);
         assert_eq!(node_count, 5);
@@ -1230,7 +1230,7 @@ mod tests {
         // ensure branch 1 operations have been undone
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
@@ -1248,7 +1248,7 @@ mod tests {
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 6);
         assert_eq!(node_count, 4);
@@ -1270,7 +1270,7 @@ mod tests {
 
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 10);
         assert_eq!(node_count, 5);

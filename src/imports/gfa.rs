@@ -235,7 +235,7 @@ mod tests {
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::get_paths(
             conn,
-            "select * from path where block_group_id = ?1 AND name = ?2",
+            "select * from paths where block_group_id = ?1 AND name = ?2",
             vec![
                 SQLValue::from(block_group_id),
                 SQLValue::from("m123".to_string()),
@@ -280,7 +280,7 @@ mod tests {
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::get_paths(
             conn,
-            "select * from path where block_group_id = ?1 AND name = ?2",
+            "select * from paths where block_group_id = ?1 AND name = ?2",
             vec![
                 SQLValue::from(block_group_id),
                 SQLValue::from("291344".to_string()),
@@ -306,7 +306,7 @@ mod tests {
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::get_paths(
             conn,
-            "select * from path where block_group_id = ?1 AND name = ?2",
+            "select * from paths where block_group_id = ?1 AND name = ?2",
             vec![
                 SQLValue::from(block_group_id),
                 SQLValue::from("124".to_string()),
@@ -335,7 +335,7 @@ mod tests {
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::get_paths(
             conn,
-            "select * from path where block_group_id = ?1 AND name = ?2",
+            "select * from paths where block_group_id = ?1 AND name = ?2",
             vec![
                 SQLValue::from(block_group_id),
                 SQLValue::from("BBa_J23100".to_string()),
@@ -438,7 +438,7 @@ mod tests {
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::get_paths(
             conn,
-            "select * from path where block_group_id = ?1 AND name = ?2",
+            "select * from paths where block_group_id = ?1 AND name = ?2",
             vec![
                 SQLValue::from(block_group_id),
                 SQLValue::from("124".to_string()),

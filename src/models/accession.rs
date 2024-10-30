@@ -82,7 +82,7 @@ impl Accession {
         path_id: i64,
         parent_accession_id: Option<i64>,
     ) -> SQLResult<Accession> {
-        let query = "INSERT INTO accession (name, path_id, parent_accession_id) VALUES (?1, ?2, ?3) RETURNING (id)";
+        let query = "INSERT INTO accessions (name, path_id, parent_accession_id) VALUES (?1, ?2, ?3) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
 
         stmt.query_row((name, path_id, parent_accession_id), |row| {
@@ -107,9 +107,9 @@ impl Accession {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
                     let mut existing_id: i64;
                     if let Some(id) = parent_accession_id {
-                        existing_id = conn.query_row("select id from accession where name = ?1 and path_id = ?2 and parent_accession_id = ?3;", params_from_iter(vec![Value::from(name.to_string()), Value::from(path_id), Value::from(id)]), |row| row.get(0)).unwrap();
+                        existing_id = conn.query_row("select id from accessions where name = ?1 and path_id = ?2 and parent_accession_id = ?3;", params_from_iter(vec![Value::from(name.to_string()), Value::from(path_id), Value::from(id)]), |row| row.get(0)).unwrap();
                     } else {
-                        existing_id = conn.query_row("select id from accession where name = ?1 and path_id = ?2 and parent_accession_id is null;", params_from_iter(vec![Value::from(name.to_string()), Value::from(path_id)]), |row| row.get(0)).unwrap();
+                        existing_id = conn.query_row("select id from accessions where name = ?1 and path_id = ?2 and parent_accession_id is null;", params_from_iter(vec![Value::from(name.to_string()), Value::from(path_id)]), |row| row.get(0)).unwrap();
                     }
                     Accession {
                         id: existing_id,
@@ -143,7 +143,7 @@ impl Query for Accession {
 impl AccessionEdge {
     pub fn create(conn: &Connection, edge: AccessionEdgeData) -> AccessionEdge {
         // TODO: handle get-or-create
-        let insert_statement = "INSERT INTO accession_edge (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) RETURNING (id);";
+        let insert_statement = "INSERT INTO accession_edges (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) RETURNING (id);";
         let placeholders: Vec<Value> = vec![
             edge.source_node_id.into(),
             edge.source_coordinate.into(),
@@ -159,7 +159,7 @@ impl AccessionEdge {
         }) {
             Ok(res) => res,
             Err(rusqlite::Error::SqliteFailure(err, details)) => {
-                conn.query_row("select id from accession_edge where source_node_id = ?1 source_coordinate = ?2 source_strand = ?3 target_node_id = ?4 target_coordinate = ?5 target_strand = ?6 chromosome_index = ?7", params_from_iter(&placeholders), |row| {
+                conn.query_row("select id from accession_edges where source_node_id = ?1 source_coordinate = ?2 source_strand = ?3 target_node_id = ?4 target_coordinate = ?5 target_strand = ?6 chromosome_index = ?7", params_from_iter(&placeholders), |row| {
                     row.get(0)
                 }).unwrap()
             }
@@ -199,7 +199,7 @@ impl AccessionEdge {
         }
         let formatted_edge_rows = edge_rows.join(", ");
 
-        let select_statement = format!("SELECT * FROM accession_edge WHERE (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index) in ({0});", formatted_edge_rows);
+        let select_statement = format!("SELECT * FROM accession_edges WHERE (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index) in ({0});", formatted_edge_rows);
         let existing_edges = AccessionEdge::query(conn, &select_statement, vec![]);
         for edge in existing_edges.iter() {
             edge_map.insert(AccessionEdgeData::from(edge), edge.id);
@@ -236,7 +236,7 @@ impl AccessionEdge {
             for chunk in edge_rows_to_insert.chunks(100000) {
                 let formatted_edge_rows_to_insert = chunk.join(", ");
 
-                let insert_statement = format!("INSERT INTO accession_edge (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index) VALUES {0} RETURNING *;", formatted_edge_rows_to_insert);
+                let insert_statement = format!("INSERT INTO accession_edges (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index) VALUES {0} RETURNING *;", formatted_edge_rows_to_insert);
                 let mut stmt = conn.prepare(&insert_statement).unwrap();
                 let rows = stmt
                     .query_map([], |row| Ok(AccessionEdge::process_row(row)))
@@ -299,7 +299,7 @@ impl AccessionPath {
             let formatted_rows_to_insert = rows_to_insert.join(", ");
 
             let insert_statement = format!(
-                "INSERT OR IGNORE INTO accession_path (accession_id, edge_id, index_in_path) VALUES {0};",
+                "INSERT OR IGNORE INTO accession_paths (accession_id, edge_id, index_in_path) VALUES {0};",
                 formatted_rows_to_insert
             );
             let _ = conn.execute(&insert_statement, ());
@@ -333,7 +333,7 @@ mod tests {
         assert_eq!(
             Accession::query(
                 conn,
-                "select * from accession where name = ?1",
+                "select * from accessions where name = ?1",
                 vec![Value::from("test".to_string())]
             ),
             vec![Accession {

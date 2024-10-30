@@ -103,7 +103,7 @@ mod tests {
         let conn = get_connection(None);
         let sequence_count: i64 = conn
             .query_row(
-                "SELECT count(*) from sequence where hash = 'foo'",
+                "SELECT count(*) from sequences where hash = 'foo'",
                 [],
                 |row| row.get(0),
             )

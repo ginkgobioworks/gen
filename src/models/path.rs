@@ -86,7 +86,7 @@ impl Path {
         // TODO: Should we do something if edge_ids don't match here? Suppose we have a path
         // for a block group with edges 1,2,3. And then the same path is added again with edges
         // 5,6,7, should this be an error? Should we just keep adding edges?
-        let query = "INSERT INTO path (name, block_group_id) VALUES (?1, ?2) RETURNING (id)";
+        let query = "INSERT INTO paths (name, block_group_id) VALUES (?1, ?2) RETURNING (id)";
         let mut stmt = conn.prepare(query).unwrap();
 
         let mut rows = stmt
@@ -102,7 +102,7 @@ impl Path {
             Ok(res) => res,
             Err(rusqlite::Error::SqliteFailure(err, _details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
-                    let query = "SELECT id from path where name = ?1 AND block_group_id = ?2;";
+                    let query = "SELECT id from paths where name = ?1 AND block_group_id = ?2;";
                     Path {
                         id: conn
                             .query_row(
@@ -132,7 +132,7 @@ impl Path {
     }
 
     pub fn get(conn: &Connection, path_id: i64) -> Path {
-        let query = "SELECT id, block_group_id, name from path where id = ?1;";
+        let query = "SELECT id, block_group_id, name from paths where id = ?1;";
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
             .query_map((path_id,), |row| {
@@ -170,7 +170,7 @@ impl Path {
     }
 
     pub fn get_paths_for_collection(conn: &Connection, collection_name: &str) -> Vec<Path> {
-        let query = "SELECT * FROM path JOIN block_group ON path.block_group_id = block_group.id WHERE block_group.collection_name = ?1";
+        let query = "SELECT * FROM paths JOIN block_groups ON paths.block_group_id = block_groups.id WHERE block_groups.collection_name = ?1";
         Path::get_paths(conn, query, vec![Value::from(collection_name.to_string())])
     }
 
