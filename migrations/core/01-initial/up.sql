@@ -145,7 +145,7 @@ CREATE TABLE operation_paths (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
   operation_id INTEGER NOT NULL,
   path_id INTEGER NOT NULL,
-  FOREIGN KEY(path_id) REFERENCES path(id)
+  FOREIGN KEY(path_id) REFERENCES paths(id)
 ) STRICT;
 CREATE UNIQUE INDEX operation_paths_uidx ON operation_paths(operation_id, path_id);
 

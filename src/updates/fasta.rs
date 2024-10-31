@@ -36,7 +36,7 @@ pub fn update_with_fasta(
 
     let mut fasta_reader = fasta::io::reader::Builder.build_from_path(fasta_file_path)?;
 
-    let block_groups = BlockGroup::query(conn, "select * from block_group where collection_name = ?1 AND sample_name is null and name = ?2;", vec![SQLValue::from(collection_name.to_string()), SQLValue::from(contig_name.to_string())]);
+    let block_groups = BlockGroup::query(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null and name = ?2;", vec![SQLValue::from(collection_name.to_string()), SQLValue::from(contig_name.to_string())]);
     if block_groups.is_empty() {
         panic!("No block group found for contig {}", contig_name);
     }
@@ -49,7 +49,7 @@ pub fn update_with_fasta(
         .iter()
         .map(|operation_path| SQLValue::from(operation_path.path_id))
         .collect::<Vec<SQLValue>>();
-    let query = "select * from path where block_group_id = ?1 and id in rarray(?2);";
+    let query = "select * from paths where block_group_id = ?1 and id in rarray(?2);";
     let params = rusqlite::params!(SQLValue::from(block_group_id), Rc::new(path_ids));
     let paths = Path::full_query(conn, query, params);
 
