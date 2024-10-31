@@ -144,7 +144,7 @@ impl<'a> NewSequence<'a> {
         }
         let hash = self.hash();
         let mut obj_hash: String = match conn.query_row(
-            "SELECT hash from sequence where hash = ?1;",
+            "SELECT hash from sequences where hash = ?1;",
             [hash.clone()],
             |row| row.get(0),
         ) {
@@ -155,7 +155,7 @@ impl<'a> NewSequence<'a> {
             }
         };
         if obj_hash.is_empty() {
-            let mut stmt = conn.prepare("INSERT INTO sequence (hash, sequence_type, sequence, name, file_path, length) VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING (hash);").unwrap();
+            let mut stmt = conn.prepare("INSERT INTO sequences (hash, sequence_type, sequence, name, file_path, length) VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING (hash);").unwrap();
             let mut rows = stmt
                 .query_map(
                     (
@@ -346,7 +346,7 @@ impl Sequence {
             .join(",");
         let sequences = Sequence::sequences(
             conn,
-            &format!("select * from sequence where hash in ({0})", joined_hashes),
+            &format!("select * from sequences where hash in ({0})", joined_hashes),
             vec![],
         );
         sequences

@@ -32,7 +32,7 @@ pub fn export_gfa(
     if let Some(sample) = sample_name {
         let block_groups = BlockGroup::query(
             conn,
-            "select * from block_group where collection_name = ?1 AND sample_name = ?2;",
+            "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
             vec![
                 SQLValue::from(collection_name.to_string()),
                 SQLValue::from(sample.clone()),

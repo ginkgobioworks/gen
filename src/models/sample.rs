@@ -10,7 +10,7 @@ pub struct Sample {
 impl Sample {
     pub fn create(conn: &Connection, name: &str) -> Sample {
         let mut stmt = conn
-            .prepare("INSERT INTO sample (name) VALUES (?1)")
+            .prepare("INSERT INTO samples (name) VALUES (?1)")
             .unwrap();
         match stmt.execute((name,)) {
             Ok(_) => Sample {

@@ -11,14 +11,14 @@ pub struct Collection {
 impl Collection {
     pub fn exists(conn: &Connection, name: &str) -> bool {
         let mut stmt = conn
-            .prepare("select name from collection where name = ?1")
+            .prepare("select name from collections where name = ?1")
             .unwrap();
         stmt.exists([name]).unwrap()
     }
 
     pub fn create(conn: &Connection, name: &str) -> Collection {
         let mut stmt = conn
-            .prepare("INSERT INTO collection (name) VALUES (?1) RETURNING *;")
+            .prepare("INSERT INTO collections (name) VALUES (?1) RETURNING *;")
             .unwrap();
 
         match stmt.query_row((name,), |_row| {
@@ -46,7 +46,7 @@ impl Collection {
     pub fn bulk_create(conn: &Connection, names: &Vec<String>) -> Vec<Collection> {
         let placeholders = names.iter().map(|_| "(?)").collect::<Vec<_>>().join(", ");
         let q = format!(
-            "INSERT INTO collection (name) VALUES {} RETURNING *",
+            "INSERT INTO collections (name) VALUES {} RETURNING *",
             placeholders
         );
         let mut stmt = conn.prepare(&q).unwrap();
@@ -61,7 +61,7 @@ impl Collection {
     pub fn get_block_groups(conn: &Connection, collection_name: &str) -> Vec<BlockGroup> {
         // Load all block groups that have the given collection_name
         let mut stmt = conn
-            .prepare("SELECT * FROM block_group WHERE collection_name = ?1")
+            .prepare("SELECT * FROM block_groups WHERE collection_name = ?1")
             .unwrap();
         let block_group_iter = stmt
             .query_map([collection_name], |row| {

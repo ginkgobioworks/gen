@@ -70,7 +70,7 @@ impl PathCache<'_> {
         } else {
             let new_path = Path::get_paths(
                 path_cache.conn,
-                "select * from path where block_group_id = ?1 AND name = ?2",
+                "select * from paths where block_group_id = ?1 AND name = ?2",
                 vec![SQLValue::from(block_group_id), SQLValue::from(name)],
             )[0]
             .clone();
@@ -97,7 +97,7 @@ impl BlockGroup {
         sample_name: Option<&str>,
         name: &str,
     ) -> BlockGroup {
-        let query = "INSERT INTO block_group (collection_name, sample_name, name) VALUES (?1, ?2, ?3) RETURNING *";
+        let query = "INSERT INTO block_groups (collection_name, sample_name, name) VALUES (?1, ?2, ?3) RETURNING *";
         let mut stmt = conn.prepare(query).unwrap();
         match stmt.query_row((collection_name, sample_name, name), |row| {
             Ok(BlockGroup {
@@ -114,7 +114,7 @@ impl BlockGroup {
                     let bg_id = match sample_name {
                         Some(v) => {conn
                             .query_row(
-                                "select id from block_group where collection_name = ?1 and sample_name = ?2 and name = ?3",
+                                "select id from block_groups where collection_name = ?1 and sample_name = ?2 and name = ?3",
                                 (collection_name, v, name),
                                 |row| row.get(0),
                             )
@@ -122,7 +122,7 @@ impl BlockGroup {
                         None => {
                             conn
                             .query_row(
-                                "select id from block_group where collection_name = ?1 and sample_name is null and name = ?2",
+                                "select id from block_groups where collection_name = ?1 and sample_name is null and name = ?2",
                                 (collection_name, name),
                                 |row| row.get(0),
                             )
@@ -165,7 +165,7 @@ impl BlockGroup {
     }
 
     pub fn get_by_id(conn: &Connection, id: i64) -> BlockGroup {
-        let query = "SELECT * FROM block_group WHERE id = ?1";
+        let query = "SELECT * FROM block_groups WHERE id = ?1";
         let mut stmt = conn.prepare(query).unwrap();
         match stmt.query_row(params_from_iter(vec![SQLValue::from(id)]), |row| {
             Ok(BlockGroup {
@@ -186,7 +186,7 @@ impl BlockGroup {
     pub fn clone(conn: &Connection, source_block_group_id: i64, target_block_group_id: i64) {
         let existing_paths = Path::get_paths(
             conn,
-            "SELECT * from path where block_group_id = ?1",
+            "SELECT * from paths where block_group_id = ?1",
             vec![SQLValue::from(source_block_group_id)],
         );
 
@@ -210,14 +210,14 @@ impl BlockGroup {
         for accession in Accession::query(
             conn,
             &format!(
-                "select * from accession where path_id IN ({path_ids});",
+                "select * from accessions where path_id IN ({path_ids});",
                 path_ids = existing_paths.iter().map(|path| path.id).join(",")
             ),
             vec![],
         ) {
             let edges = AccessionPath::query(
                 conn,
-                "Select * from accession_path where accession_id = ?1 order by index_in_path ASC;",
+                "Select * from accession_paths where accession_id = ?1 order by index_in_path ASC;",
                 vec![SQLValue::from(accession.id)],
             );
             let new_path_id = path_map[&accession.path_id];
@@ -243,7 +243,7 @@ impl BlockGroup {
         group_name: &str,
     ) -> Result<i64, &'static str> {
         let mut bg_id : i64 = match conn.query_row(
-            "select id from block_group where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
+            "select id from block_groups where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
             (collection_name, sample_name, group_name),
             |row| row.get(0),
         ) {
@@ -258,7 +258,7 @@ impl BlockGroup {
         } else {
             // use the base reference group if it exists
             bg_id = match conn.query_row(
-            "select id from block_group where collection_name = ?1 AND sample_name IS null AND name = ?2",
+            "select id from block_groups where collection_name = ?1 AND sample_name IS null AND name = ?2",
             (collection_name, group_name),
             |row| row.get(0),
             ) {
@@ -288,13 +288,13 @@ impl BlockGroup {
     ) -> i64 {
         let result = if sample_name.is_some() {
             conn.query_row(
-		"select id from block_group where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
+		"select id from block_groups where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
 		(collection_name, sample_name, group_name),
 		|row| row.get(0),
             )
         } else {
             conn.query_row(
-		"select id from block_group where collection_name = ?1 AND sample_name IS NULL AND name = ?2",
+		"select id from block_groups where collection_name = ?1 AND sample_name IS NULL AND name = ?2",
 		(collection_name, group_name),
 		|row| row.get(0),
             )
@@ -481,7 +481,7 @@ impl BlockGroup {
         for ((path, accession_name), path_edges) in new_accession_edges {
             match Accession::get(
                 conn,
-                "select * from accession where name = ?1 AND path_id = ?2",
+                "select * from accessions where name = ?1 AND path_id = ?2",
                 vec![
                     SQLValue::from(accession_name.clone()),
                     SQLValue::from(path.id),
@@ -655,7 +655,7 @@ mod tests {
         assert_eq!(
             Accession::query(
                 conn,
-                "select * from accession where name = ?1",
+                "select * from accessions where name = ?1",
                 vec![SQLValue::from("test".to_string())]
             ),
             vec![Accession {
@@ -672,7 +672,7 @@ mod tests {
         assert_eq!(
             Accession::query(
                 conn,
-                "select * from accession where name = ?1",
+                "select * from accessions where name = ?1",
                 vec![SQLValue::from("test".to_string())]
             ),
             vec![

@@ -100,17 +100,17 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                 .unwrap()
                 .0;
             match table {
-                "sequence" => {
+                "sequences" => {
                     let hash =
                         str::from_utf8(item.new_value(pk_column).unwrap().as_bytes().unwrap())
                             .unwrap();
                     created_sequences.insert(hash.to_string());
                 }
-                "block_group" => {
+                "block_groups" => {
                     let bg_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     created_block_groups.insert(bg_pk);
                 }
-                "path" => {
+                "paths" => {
                     created_paths.insert(item.new_value(pk_column).unwrap().as_i64().unwrap());
                     let bg_id = item.new_value(1).unwrap().as_i64().unwrap();
                     if !created_block_groups.contains(&bg_id) {
@@ -161,7 +161,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                         previous_block_groups.insert(bg_id);
                     }
                 }
-                "accession" => {
+                "accessions" => {
                     created_accessions.insert(item.new_value(pk_column).unwrap().as_i64().unwrap());
                     let path_id = item.new_value(2).unwrap().as_i64().unwrap();
                     let parent_accession_id = item.new_value(3).unwrap().as_i64_or_null().unwrap();
@@ -174,7 +174,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                         }
                     }
                 }
-                "accession_edge" => {
+                "accession_edges" => {
                     let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     let source_node_id = item.new_value(1).unwrap().as_i64().unwrap();
                     let target_node_id = item.new_value(4).unwrap().as_i64().unwrap();
@@ -187,7 +187,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                         previous_sequences.insert(nodes[1].sequence_hash.clone());
                     }
                 }
-                "accession_path" => {
+                "accession_paths" => {
                     let accession_id = item.new_value(1).unwrap().as_i64().unwrap();
                     let edge_id = item.new_value(3).unwrap().as_i64().unwrap();
                     if !created_accessions.contains(&accession_id) {
@@ -213,7 +213,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
         block_group: BlockGroup::query(
             conn,
             &format!(
-                "select * from block_group where id in ({ids})",
+                "select * from block_groups where id in ({ids})",
                 ids = previous_block_groups.iter().join(",")
             ),
             vec![],
@@ -230,7 +230,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
         paths: Path::get_paths(
             conn,
             &format!(
-                "select * from path where id in ({ids})",
+                "select * from paths where id in ({ids})",
                 ids = previous_paths.iter().join(",")
             ),
             vec![],
@@ -238,7 +238,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
         accessions: Accession::query(
             conn,
             &format!(
-                "select * from accession where id in ({ids})",
+                "select * from accessions where id in ({ids})",
                 ids = previous_accessions.iter().join(",")
             ),
             vec![],
@@ -246,7 +246,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
         accession_edges: AccessionEdge::query(
             conn,
             &format!(
-                "select * from accession_edge where id in ({ids})",
+                "select * from accession_edges where id in ({ids})",
                 ids = previous_accession_edges.iter().join(",")
             ),
             vec![],
@@ -391,14 +391,14 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                 .unwrap()
                 .0;
             match table {
-                "sample" => {
+                "samples" => {
                     Sample::create(
                         conn,
                         str::from_utf8(item.new_value(pk_column).unwrap().as_bytes().unwrap())
                             .unwrap(),
                     );
                 }
-                "sequence" => {
+                "sequences" => {
                     Sequence::new()
                         .sequence_type(
                             str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap()).unwrap(),
@@ -415,7 +415,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                         .length(item.new_value(5).unwrap().as_i64().unwrap())
                         .save(conn);
                 }
-                "block_group" => {
+                "block_groups" => {
                     let bg_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     if let Some(v) = dep_bg_map.get(&bg_pk) {
                         blockgroup_map.insert(bg_pk, *v);
@@ -434,7 +434,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                         blockgroup_map.insert(bg_pk, new_bg.id);
                     };
                 }
-                "path" => {
+                "paths" => {
                     // defer path creation until edges are made
                     insert_paths.push(Path {
                         id: item.new_value(pk_column).unwrap().as_i64().unwrap(),
@@ -487,14 +487,14 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                     let edge_id = item.new_value(2).unwrap().as_i64().unwrap();
                     insert_block_group_edges.push((bg_id, edge_id));
                 }
-                "collection" => {
+                "collections" => {
                     Collection::create(
                         conn,
                         str::from_utf8(item.new_value(pk_column).unwrap().as_bytes().unwrap())
                             .unwrap(),
                     );
                 }
-                "accession" => {
+                "accessions" => {
                     // we defer accession creation until edges and paths are made
                     insert_accessions.push(Accession {
                         id: item.new_value(pk_column).unwrap().as_i64().unwrap(),
@@ -505,7 +505,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                         parent_accession_id: item.new_value(2).unwrap().as_i64_or_null().unwrap(),
                     });
                 }
-                "accession_edge" => {
+                "accession_edges" => {
                     let pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     accession_edge_map.insert(
                         pk,
@@ -522,7 +522,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                         },
                     );
                 }
-                "accession_path" => {
+                "accession_paths" => {
                     let accession_id = item.new_value(1).unwrap().as_i64().unwrap();
                     let index = item.new_value(2).unwrap().as_i64().unwrap();
                     // the edge_id here may not be valid and in this database may have a different pk
@@ -803,18 +803,18 @@ pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Opera
 
 pub fn attach_session(session: &mut session::Session) {
     for table in [
-        "collection",
-        "sample",
-        "sequence",
-        "block_group",
-        "path",
+        "collections",
+        "samples",
+        "sequences",
+        "block_groups",
+        "paths",
         "nodes",
         "edges",
         "path_edges",
         "block_group_edges",
-        "accession",
-        "accession_edge",
-        "accession_path",
+        "accessions",
+        "accession_edges",
+        "accession_paths",
     ] {
         session.attach(Some(table)).unwrap();
     }
@@ -889,7 +889,7 @@ mod tests {
         let (bg_id, _path_id) = setup_block_group(conn);
         let binding = BlockGroup::query(
             conn,
-            "select * from block_group where id = ?1;",
+            "select * from block_groups where id = ?1;",
             vec![Value::from(bg_id)],
         );
         let dep_bg = binding.first().unwrap();
@@ -961,7 +961,7 @@ mod tests {
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
@@ -977,7 +977,7 @@ mod tests {
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         // NOTE: The edge count is 10 because of the following:
         // * 1 edge from the source node to the node created by the fasta import
@@ -1007,7 +1007,7 @@ mod tests {
 
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
@@ -1023,7 +1023,7 @@ mod tests {
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 10);
         assert_eq!(node_count, 5);
@@ -1078,7 +1078,7 @@ mod tests {
 
         assert_eq!(BlockGroup::get_all_sequences(conn, foo_bg_id), patch_1_seqs);
         assert_eq!(
-            BlockGroup::query(conn, "select * from block_group;", vec![])
+            BlockGroup::query(conn, "select * from block_groups;", vec![])
                 .iter()
                 .map(|v| v.sample_name.clone().unwrap_or("".to_string()))
                 .collect::<Vec<String>>(),
@@ -1114,7 +1114,7 @@ mod tests {
         assert_eq!(BlockGroup::get_all_sequences(conn, foo_bg_id), patch_2_seqs);
         assert_ne!(patch_1_seqs, patch_2_seqs);
         assert_eq!(
-            BlockGroup::query(conn, "select * from block_group;", vec![])
+            BlockGroup::query(conn, "select * from block_groups;", vec![])
                 .iter()
                 .map(|v| v.sample_name.clone().unwrap_or("".to_string()))
                 .collect::<Vec<String>>(),
@@ -1133,7 +1133,7 @@ mod tests {
         ]);
         assert_eq!(BlockGroup::get_all_sequences(conn, foo_bg_id), patch_2_seqs);
         assert_eq!(
-            BlockGroup::query(conn, "select * from block_group;", vec![])
+            BlockGroup::query(conn, "select * from block_groups;", vec![])
                 .iter()
                 .map(|v| v.sample_name.clone().unwrap_or("".to_string()))
                 .collect::<Vec<String>>(),
@@ -1179,7 +1179,7 @@ mod tests {
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
@@ -1206,7 +1206,7 @@ mod tests {
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 10);
         assert_eq!(node_count, 5);
@@ -1230,7 +1230,7 @@ mod tests {
         // ensure branch 1 operations have been undone
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
@@ -1248,7 +1248,7 @@ mod tests {
         );
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 6);
         assert_eq!(node_count, 4);
@@ -1270,7 +1270,7 @@ mod tests {
 
         let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
         let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from sample", vec![]).len();
+        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 10);
         assert_eq!(node_count, 5);

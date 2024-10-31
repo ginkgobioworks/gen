@@ -47,7 +47,7 @@ pub fn update_with_library(
 
     let path = Path::get_paths(
         conn,
-        "select * from path where name = ?1",
+        "select * from paths where name = ?1",
         vec![SQLValue::from(path_name.to_string())],
     )[0]
     .clone();
