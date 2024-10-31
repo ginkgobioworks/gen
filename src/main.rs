@@ -69,8 +69,8 @@ enum Commands {
         #[arg(short, long)]
         sample: Option<String>,
         /// Use the given sample as the parent sample for changes.
-        #[arg(long)]
-        parent_sample: Option<String>,
+        #[arg(long, alias = "cf")]
+        coordinate_frame: Option<String>,
         /// A CSV with combinatorial library information
         #[arg(short, long)]
         library: Option<String>,
@@ -240,7 +240,7 @@ fn main() {
             path_name,
             start,
             end,
-            parent_sample,
+            coordinate_frame,
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             let name = &name.clone().unwrap_or_else(|| {
@@ -266,7 +266,7 @@ fn main() {
                     sample.clone().unwrap_or("".to_string()),
                     &conn,
                     &operation_conn,
-                    parent_sample.as_deref(),
+                    coordinate_frame.as_deref(),
                 );
             } else {
                 panic!("Unknown file type provided for update.");

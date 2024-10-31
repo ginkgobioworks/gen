@@ -169,7 +169,7 @@ pub fn update_with_vcf(
     fixed_sample: String,
     conn: &Connection,
     operation_conn: &Connection,
-    parent_sample: Option<&str>,
+    coordinate_frame: Option<&str>,
 ) {
     let db_uuid = metadata::get_db_uuid(conn);
 
@@ -241,7 +241,7 @@ pub fn update_with_vcf(
                 collection_name,
                 &fixed_sample,
                 seq_name.clone(),
-                parent_sample,
+                coordinate_frame,
             );
             let sample_bg_id = sample_bg_id.expect("can't find sample bg....check this out more");
 
@@ -290,7 +290,7 @@ pub fn update_with_vcf(
                     collection_name,
                     &sample_names[sample_index],
                     seq_name.clone(),
-                    parent_sample,
+                    coordinate_frame,
                 );
 
                 let sample_bg_id =
@@ -400,7 +400,7 @@ pub fn update_with_vcf(
     }
     let mut summary: HashMap<String, HashMap<String, i64>> = HashMap::new();
     for ((path, sample_name), path_changes) in changes {
-        if let Some(parent_sample) = parent_sample {
+        if let Some(frame) = coordinate_frame {
             BlockGroup::insert_bg_changes(conn, &path_changes);
         } else {
             BlockGroup::insert_changes(conn, &path_changes, &mut path_cache);
