@@ -1,6 +1,6 @@
 use intervaltree::IntervalTree;
 use petgraph::graphmap::DiGraphMap;
-use rusqlite::Connection;
+use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
 use std::fs;
 use std::io::Write;
@@ -187,4 +187,18 @@ where
     v2.sort();
     assert_eq!(v1, expected);
     assert_eq!(v2, expected);
+}
+
+pub fn get_sample_bg<'a>(conn: &Connection, sample_name: impl Into<Option<&'a str>>) -> BlockGroup {
+    let sample_name = sample_name.into();
+    let mut query = "";
+    let mut placeholders = vec![];
+    if let Some(name) = sample_name {
+        query = "select * from block_groups where sample_name = ?1";
+        placeholders.push(Value::from(name.to_string()));
+    } else {
+        query = "select * from block_groups where sample_name is null";
+    }
+    let mut results = BlockGroup::query(conn, query, placeholders);
+    results.pop().unwrap()
 }

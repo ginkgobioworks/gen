@@ -5,5 +5,5 @@
 ##phasing=none
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
 #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	f3
-m123	4	.	A	G	1611.92	.		GT	1
-m123	15	.	CGGAA	CA	1611.92	.		GT	1
+m123	4	.	T	G	1611.92	.		GT	1
+m123	15	.	CGGAA	C	1611.92	.		GT	1
