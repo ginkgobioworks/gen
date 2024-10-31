@@ -162,15 +162,16 @@ struct VcfEntry<'a> {
     phased: i64,
 }
 
-pub fn update_with_vcf(
+pub fn update_with_vcf<'a>(
     vcf_path: &String,
-    collection_name: &str,
+    collection_name: &'a str,
     fixed_genotype: String,
     fixed_sample: String,
     conn: &Connection,
     operation_conn: &Connection,
-    coordinate_frame: Option<&str>,
+    coordinate_frame: impl Into<Option<&'a str>>,
 ) {
+    let coordinate_frame = coordinate_frame.into();
     let db_uuid = metadata::get_db_uuid(conn);
 
     let mut session = session::Session::new(conn).unwrap();
@@ -445,7 +446,9 @@ mod tests {
     use crate::models::node::Node;
     use crate::models::operations::setup_db;
     use crate::models::traits::Query;
-    use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
+    use crate::test_helpers::{
+        get_connection, get_operation_connection, get_sample_bg, setup_gen_dir,
+    };
     use std::collections::HashSet;
     use std::path::PathBuf;
     #[allow(unused_imports)]
@@ -897,6 +900,79 @@ mod tests {
             conn,
             op_conn,
             None,
+        );
+    }
+
+    #[test]
+    fn test_changes_in_child_samples() {
+        setup_gen_dir();
+        let f0_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/simple_iterative_engineering_1.vcf");
+        let f1_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/simple_iterative_engineering_2.vcf");
+        let f2_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/simple_iterative_engineering_3.vcf");
+        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+
+        update_with_vcf(
+            &f0_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+            None,
+        );
+
+        update_with_vcf(
+            &f1_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+            "f1",
+        );
+
+        update_with_vcf(
+            &f2_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+            "f2",
+        );
+
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, None).id, true),
+            HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
+        );
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, "f1").id, true),
+            HashSet::from_iter(vec!["ATCTCGATCGATCGCGGGAACACACAGAGA".to_string()])
+        );
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, "f2").id, true),
+            HashSet::from_iter(vec!["ATCTGGATCGATCGCGGAATCAGAACACACAGGA".to_string()])
+        );
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, "f3").id, true),
+            HashSet::from_iter(vec!["ATCGGGATCGATCGCTCAGAACACACAGGA".to_string()])
         );
     }
 }
