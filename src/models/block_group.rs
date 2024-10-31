@@ -284,7 +284,7 @@ impl BlockGroup {
             }
             } else {
                 bg_id = match conn.query_row(
-                    "select id from block_group where collection_name = ?1 AND sample_name IS null AND name = ?2",
+                    "select id from block_groups where collection_name = ?1 AND sample_name IS null AND name = ?2",
                     (collection_name, group_name),
                     |row| row.get(0),
                 ) {
@@ -1895,7 +1895,7 @@ mod tests {
                 .unwrap();
         let new_path = Path::query(
             conn,
-            "select * from path where block_group_id = ?1",
+            "select * from paths where block_group_id = ?1",
             vec![SQLValue::from(new_bg_id)],
         );
         let insert_sequence = Sequence::new()
@@ -2057,7 +2057,7 @@ mod tests {
                 .unwrap();
         let new_path = Path::query(
             conn,
-            "select * from path where block_group_id = ?1",
+            "select * from paths where block_group_id = ?1",
             vec![SQLValue::from(new_bg_id)],
         );
         let insert_sequence = Sequence::new()
@@ -2110,7 +2110,7 @@ mod tests {
         .unwrap();
         let new_path = Path::query(
             conn,
-            "select * from path where block_group_id = ?1",
+            "select * from paths where block_group_id = ?1",
             vec![SQLValue::from(gc_bg_id)],
         );
 
