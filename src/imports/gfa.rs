@@ -219,6 +219,7 @@ fn edge_data_from_fields(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::traits::*;
     use crate::test_helpers::{get_connection, setup_gen_dir};
     use rusqlite::types::Value as SQLValue;
     use std::path::PathBuf;

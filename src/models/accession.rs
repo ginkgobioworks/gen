@@ -1,4 +1,3 @@
-use crate::models::block_group::BlockGroup;
 use crate::models::edge::EdgeData;
 use crate::models::strand::Strand;
 use crate::models::traits::Query;

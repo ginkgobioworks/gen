@@ -1,10 +1,19 @@
-use rusqlite::types::Value;
-use rusqlite::{params_from_iter, Connection};
+use crate::models::traits::*;
+use rusqlite::{Connection, Row};
 use std::fmt::*;
 
 #[derive(Debug)]
 pub struct Sample {
     pub name: String,
+}
+
+impl Query for Sample {
+    type Model = Sample;
+    fn process_row(row: &Row) -> Self::Model {
+        Sample {
+            name: row.get(0).unwrap(),
+        }
+    }
 }
 
 impl Sample {
@@ -30,19 +39,5 @@ impl Sample {
                 panic!("something bad happened querying the database")
             }
         }
-    }
-
-    pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Sample> {
-        let mut stmt = conn.prepare(query).unwrap();
-        let rows = stmt
-            .query_map(params_from_iter(placeholders), |row| {
-                Ok(Sample { name: row.get(0)? })
-            })
-            .unwrap();
-        let mut objs = vec![];
-        for row in rows {
-            objs.push(row.unwrap());
-        }
-        objs
     }
 }

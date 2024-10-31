@@ -1,9 +1,10 @@
 use itertools::Itertools;
 use rusqlite::types::Value;
-use rusqlite::{params_from_iter, Connection};
+use rusqlite::{params_from_iter, Connection, Row};
 use std::collections::HashMap;
 
 use crate::models::edge::Edge;
+use crate::models::traits::*;
 
 #[derive(Clone, Debug)]
 pub struct PathEdge {
@@ -11,6 +12,18 @@ pub struct PathEdge {
     pub path_id: i64,
     pub index_in_path: i64,
     pub edge_id: i64,
+}
+
+impl Query for PathEdge {
+    type Model = PathEdge;
+    fn process_row(row: &Row) -> Self::Model {
+        PathEdge {
+            id: row.get(0).unwrap(),
+            path_id: row.get(1).unwrap(),
+            index_in_path: row.get(2).unwrap(),
+            edge_id: row.get(3).unwrap(),
+        }
+    }
 }
 
 impl PathEdge {
@@ -76,25 +89,6 @@ impl PathEdge {
             );
             let _ = conn.execute(&insert_statement, ());
         }
-    }
-
-    pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<PathEdge> {
-        let mut stmt = conn.prepare(query).unwrap();
-        let rows = stmt
-            .query_map(params_from_iter(placeholders), |row| {
-                Ok(PathEdge {
-                    id: row.get(0)?,
-                    path_id: row.get(1)?,
-                    index_in_path: row.get(2)?,
-                    edge_id: row.get(3)?,
-                })
-            })
-            .unwrap();
-        let mut objs = vec![];
-        for row in rows {
-            objs.push(row.unwrap());
-        }
-        objs
     }
 
     pub fn edges_for_path(conn: &Connection, path_id: i64) -> Vec<Edge> {

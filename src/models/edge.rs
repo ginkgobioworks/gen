@@ -10,6 +10,7 @@ use crate::graph::{GraphEdge, GraphNode};
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::sequence::{cached_sequence, Sequence};
 use crate::models::strand::Strand;
+use crate::models::traits::*;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub struct Edge {
@@ -96,6 +97,23 @@ impl GroupBlock {
             cached_sequence(path, name, self.start as usize, self.end as usize).unwrap()
         } else {
             panic!("Sequence or external sequence is not set.")
+        }
+    }
+}
+
+impl Query for Edge {
+    type Model = Edge;
+    fn process_row(row: &Row) -> Self::Model {
+        Edge {
+            id: row.get(0).unwrap(),
+            source_node_id: row.get(1).unwrap(),
+            source_coordinate: row.get(2).unwrap(),
+            source_strand: row.get(3).unwrap(),
+            target_node_id: row.get(4).unwrap(),
+            target_coordinate: row.get(5).unwrap(),
+            target_strand: row.get(6).unwrap(),
+            chromosome_index: row.get(7).unwrap(),
+            phased: row.get(8).unwrap(),
         }
     }
 }
@@ -189,18 +207,6 @@ impl Edge {
             .join(",");
         let query = format!("select id, source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased from edges where id in ({});", formatted_edge_ids);
         Edge::query(conn, &query, vec![])
-    }
-
-    pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Edge> {
-        let mut stmt = conn.prepare(query).unwrap();
-        let rows = stmt
-            .query_map(params_from_iter(placeholders), Edge::edge_from_row)
-            .unwrap();
-        let mut edges = vec![];
-        for row in rows {
-            edges.push(row.unwrap());
-        }
-        edges
     }
 
     pub fn bulk_create(conn: &Connection, edges: &Vec<EdgeData>) -> Vec<i64> {
@@ -537,7 +543,7 @@ mod tests {
         block_group::{BlockGroup, PathChange},
         block_group_edge::BlockGroupEdge,
         collection::Collection,
-        path::{Path, PathBlock},
+        path::PathBlock,
         sequence::Sequence,
     };
     use crate::test_helpers::{get_connection, setup_block_group};
