@@ -255,7 +255,7 @@ pub fn update_with_vcf<'a>(
                     let mut ref_start = (record.variant_start().unwrap().unwrap().get() - 1) as i64;
                     if gt.allele != 0 {
                         let mut alt_seq = alt_alleles[chromosome_index - 1];
-                        if alt_seq.len() < ref_seq.len() {
+                        if alt_seq != "*" && alt_seq.len() < ref_seq.len() {
                             ref_start += 1;
                             alt_seq = &alt_seq[1..];
                         }
@@ -321,7 +321,7 @@ pub fn update_with_vcf<'a>(
                                         .filter(|name| allele as i32 == accession_allele);
                                     if allele != 0 {
                                         let mut alt_seq = alt_alleles[allele - 1];
-                                        if alt_seq.len() < ref_seq.len() {
+                                        if alt_seq != "*" && alt_seq.len() < ref_seq.len() {
                                             ref_start += 1;
                                             alt_seq = &alt_seq[1..];
                                         }
