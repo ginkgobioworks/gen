@@ -36,7 +36,9 @@ m123	16	.	GAT	G	1611.92	.		GT	1
 gen --db simple.db update --vcf round1.vcf --name simple_example
 ```
 This creates a new sample, `f1` with the above changes baked into its genome. This example is a haploid such as e. coli
-where the genotype is always homozygous.
+where the genotype is always homozygous. Graphically, the genome now appears as such:
+
+![F1 Genome](docs/figures/iterative_changes_f1.png)
 
 Next, we want to make more changes -- snps, insertions, and deletions based on this changed genome.
 
@@ -59,7 +61,10 @@ gen --db simple.db update --vcf round2.vcf --name simple_example --coordinate-fr
 
 This command is very similar, with the exception that we are able to define which reference frame to use for changes. Here,
 we specify the reference frame of sample `f1`. This operation creates a new sample, `f2`, with the reference frame of
-`f1` for coordinates. If no coordinate frame is provided, the reference genome's frame of reference is used.
+`f1` for coordinates. If no coordinate frame is provided, the reference genome's frame of reference is used. The resulting
+genome appears as follows:
+
+![F2 Genome](docs/figures/iterative_changes_f2.png)
 
 ## Caveats
 
