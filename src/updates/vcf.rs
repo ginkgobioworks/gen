@@ -157,6 +157,7 @@ struct VcfEntry<'a> {
     sample_name: String,
     path: Path,
     ids: Option<String>,
+    ref_start: i64,
     alt_seq: &'a str,
     chromosome_index: i64,
     phased: i64,
@@ -215,8 +216,8 @@ pub fn update_with_vcf<'a>(
     for result in reader.records() {
         let record = result.unwrap();
         let seq_name: String = record.reference_sequence_name().to_string();
+        let ref_seq = record.reference_bases();
         // this converts the coordinates to be zero based, start inclusive, end exclusive
-        let mut ref_start = (record.variant_start().unwrap().unwrap().get() - 1) as i64;
         let mut ref_end = record.variant_end(&header).unwrap().get() as i64;
         let alt_bases = record.alternate_bases();
         let alt_alleles: Vec<_> = alt_bases.iter().collect::<io::Result<_>>().unwrap();
@@ -251,8 +252,13 @@ pub fn update_with_vcf<'a>(
                     let allele_accession = accession_name
                         .clone()
                         .filter(|name| gt.allele as i32 == accession_allele);
+                    let mut ref_start = (record.variant_start().unwrap().unwrap().get() - 1) as i64;
                     if gt.allele != 0 {
-                        let alt_seq = alt_alleles[chromosome_index - 1];
+                        let mut alt_seq = alt_alleles[chromosome_index - 1];
+                        if alt_seq.len() < ref_seq.len() {
+                            ref_start += 1;
+                            alt_seq = &alt_seq[1..];
+                        }
                         let phased = match gt.phasing {
                             Phasing::Phased => 1,
                             Phasing::Unphased => 0,
@@ -261,6 +267,7 @@ pub fn update_with_vcf<'a>(
                             PathCache::lookup(&mut path_cache, sample_bg_id, seq_name.clone());
                         vcf_entries.push(VcfEntry {
                             ids: allele_accession,
+                            ref_start,
                             block_group_id: sample_bg_id,
                             path: sample_path.clone(),
                             sample_name: fixed_sample.clone(),
@@ -306,12 +313,18 @@ pub fn update_with_vcf<'a>(
                                     Phasing::Phased => 1,
                                     Phasing::Unphased => 0,
                                 };
+                                let mut ref_start =
+                                    (record.variant_start().unwrap().unwrap().get() - 1) as i64;
                                 if let Some(allele) = allele {
                                     let allele_accession = accession_name
                                         .clone()
                                         .filter(|name| allele as i32 == accession_allele);
                                     if allele != 0 {
-                                        let alt_seq = alt_alleles[allele - 1];
+                                        let mut alt_seq = alt_alleles[allele - 1];
+                                        if alt_seq.len() < ref_seq.len() {
+                                            ref_start += 1;
+                                            alt_seq = &alt_seq[1..];
+                                        }
                                         let sample_path = PathCache::lookup(
                                             &mut path_cache,
                                             sample_bg_id,
@@ -321,6 +334,7 @@ pub fn update_with_vcf<'a>(
                                         vcf_entries.push(VcfEntry {
                                             ids: allele_accession,
                                             block_group_id: sample_bg_id,
+                                            ref_start,
                                             path: sample_path.clone(),
                                             sample_name: sample_names[sample_index].clone(),
                                             alt_seq,
@@ -357,6 +371,7 @@ pub fn update_with_vcf<'a>(
             if vcf_entry.alt_seq == "*" {
                 continue;
             }
+            let ref_start = vcf_entry.ref_start;
             let sequence =
                 SequenceCache::lookup(&mut sequence_cache, "DNA", vcf_entry.alt_seq.to_string());
             let sequence_string = sequence.get_sequence(None, None);

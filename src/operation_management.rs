@@ -133,11 +133,10 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                     let target_node_id = item.new_value(4).unwrap().as_i64().unwrap();
                     created_edges.insert(edge_pk);
                     let nodes = Node::get_nodes(conn, vec![source_node_id, target_node_id]);
-                    if !created_nodes.contains(&source_node_id) {
-                        previous_sequences.insert(nodes[0].sequence_hash.clone());
-                    }
-                    if !created_nodes.contains(&target_node_id) {
-                        previous_sequences.insert(nodes[1].sequence_hash.clone());
+                    for node in nodes.iter() {
+                        if !created_nodes.contains(&node.id) {
+                            previous_sequences.insert(node.sequence_hash.clone());
+                        }
                     }
                 }
                 "path_edges" => {
