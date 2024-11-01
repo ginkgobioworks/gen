@@ -1,1 +1,2 @@
-alt	7642	0	7642	+	alt	7642	0	7642	7642	7642	60	NM:i:0	ms:i:7642	AS:i:7642	nn:i:0	tp:A:P	cm:i:776	s1:i:7620	s2:i:0	de:f:0	rl:i:0	cg:Z:7642M
+ref	7507	1422	7507	+	alt	7642	1557	7642	6085	6085	60	NM:i:0	ms:i:6085	AS:i:6085	nn:i:0	tp:A:P	cm:i:612	s1:i:6051	s2:i:0	de:f:0	zd:i:2	rl:i:0	cg:Z:6085M
+ref	7507	0	766	+	alt	7642	0	766	766	766	60	NM:i:0	ms:i:766	AS:i:766	nn:i:0	tp:A:P	cm:i:74	s1:i:732	s2:i:0	de:f:0	zd:i:1	rl:i:0	cg:Z:766M
