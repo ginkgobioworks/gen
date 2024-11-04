@@ -255,6 +255,8 @@ pub fn update_with_vcf<'a>(
                     let mut ref_start = (record.variant_start().unwrap().unwrap().get() - 1) as i64;
                     if gt.allele != 0 {
                         let mut alt_seq = alt_alleles[chromosome_index - 1];
+                        // If the alt sequence is a deletion, we want to remove the base in common in the VCF spec.
+                        // So if VCF says ATC -> A, we don't want to include the `A` in the alt_seq.
                         if alt_seq != "*" && alt_seq.len() < ref_seq.len() {
                             ref_start += 1;
                             alt_seq = &alt_seq[1..];
