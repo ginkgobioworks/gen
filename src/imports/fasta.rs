@@ -133,7 +133,7 @@ mod tests {
         setup_gen_dir();
         let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fasta_path.push("fixtures/simple.fa");
-        let conn = get_connection("taf.db");
+        let conn = get_connection(None);
         let db_uuid = metadata::get_db_uuid(&conn);
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, &db_uuid);

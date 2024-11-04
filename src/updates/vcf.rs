@@ -416,11 +416,12 @@ pub fn update_with_vcf<'a>(
     }
     let mut summary: HashMap<String, HashMap<String, i64>> = HashMap::new();
     for ((path, sample_name), path_changes) in changes {
-        if let Some(frame) = coordinate_frame {
-            BlockGroup::insert_bg_changes(conn, &path_changes);
-        } else {
-            BlockGroup::insert_changes(conn, &path_changes, &mut path_cache);
-        }
+        BlockGroup::insert_changes(
+            conn,
+            &path_changes,
+            &mut path_cache,
+            coordinate_frame.is_some(),
+        );
         summary
             .entry(sample_name)
             .or_default()

@@ -1,10 +1,15 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::iter::from_fn;
 
 use crate::models::strand::Strand;
-use petgraph::visit::{GraphRef, IntoNeighbors, IntoNeighborsDirected, NodeCount};
+use petgraph::graphmap::DiGraphMap;
+use petgraph::prelude::EdgeRef;
+use petgraph::visit::{
+    GraphBase, GraphRef, IntoEdgeReferences, IntoEdges, IntoNeighbors, IntoNeighborsDirected,
+    NodeCount,
+};
 use petgraph::Direction;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -67,6 +72,45 @@ where
     })
 }
 
+pub fn all_simple_paths_by_edge<G>(
+    graph: G,
+    from: G::NodeId,
+    to: G::NodeId,
+) -> impl Iterator<Item = Vec<G::EdgeRef>>
+where
+    G: NodeCount + IntoEdges,
+    G: IntoNeighborsDirected,
+    G::NodeId: Eq + Hash,
+{
+    // list of visited nodes
+    let mut visited = vec![from];
+    // list of childs of currently exploring path nodes,
+    // last elem is list of childs of last visited node
+    let mut path: Vec<G::EdgeRef> = vec![];
+    let mut stack = vec![graph.edges(from)];
+
+    from_fn(move || {
+        while let Some(edges) = stack.last_mut() {
+            if let Some(edge) = edges.next() {
+                let target = edge.target();
+                if target == to {
+                    let a_path = path.iter().cloned().chain(Some(edge)).collect::<_>();
+                    return Some(a_path);
+                } else if !visited.contains(&target) {
+                    path.push(edge);
+                    visited.push(target);
+                    stack.push(graph.edges(target));
+                }
+            } else {
+                stack.pop();
+                path.pop();
+                visited.pop();
+            }
+        }
+        None
+    })
+}
+
 pub fn all_reachable_nodes<G>(graph: G, nodes: &[G::NodeId]) -> HashSet<G::NodeId>
 where
     G: GraphRef + IntoNeighbors,
@@ -109,6 +153,37 @@ mod tests {
         assert_eq!(paths.len(), 1);
         let path = paths.first().unwrap().clone();
         assert_eq!(path, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_path_graph_node() {
+        let mut graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
+        let a = graph.add_node(GraphNode {
+            node_id: 1,
+            block_id: 1,
+            sequence_start: 1,
+            sequence_end: 2,
+        });
+        let b = graph.add_node(GraphNode {
+            node_id: 2,
+            block_id: 1,
+            sequence_start: 1,
+            sequence_end: 2,
+        });
+
+        graph.add_edge(
+            a,
+            b,
+            GraphEdge {
+                edge_id: 1,
+                chromosome_index: 1,
+                phased: 1,
+                source_strand: Strand::Forward,
+                target_strand: Strand::Reverse,
+            },
+        );
+        let x = all_simple_paths_by_edge(&graph, a, b).next().unwrap();
+        println!("{x:?}");
     }
 
     #[test]
