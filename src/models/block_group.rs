@@ -9,7 +9,9 @@ use petgraph::Direction;
 use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
 use serde::{Deserialize, Serialize};
 
-use crate::graph::{all_reachable_nodes, all_simple_paths, GraphEdge, GraphNode};
+use crate::graph::{
+    all_reachable_nodes, all_simple_paths, all_simple_paths_by_edge, GraphEdge, GraphNode,
+};
 use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData, GroupBlock};
@@ -49,7 +51,7 @@ pub struct PathChange {
 
 pub struct PathCache<'a> {
     pub cache: HashMap<PathData, Path>,
-    pub intervaltree_cache: HashMap<Path, IntervalTree<i64, PathBlock>>,
+    pub intervaltree_cache: HashMap<Path, IntervalTree<i64, NodeIntervalBlock>>,
     pub conn: &'a Connection,
 }
 
@@ -57,7 +59,7 @@ impl PathCache<'_> {
     pub fn new(conn: &Connection) -> PathCache {
         PathCache {
             cache: HashMap::<PathData, Path>::new(),
-            intervaltree_cache: HashMap::<Path, IntervalTree<i64, PathBlock>>::new(),
+            intervaltree_cache: HashMap::<Path, IntervalTree<i64, NodeIntervalBlock>>::new(),
             conn,
         }
     }
@@ -88,20 +90,21 @@ impl PathCache<'_> {
     pub fn get_intervaltree<'a>(
         path_cache: &'a PathCache<'a>,
         path: &'a Path,
-    ) -> Option<&'a IntervalTree<i64, PathBlock>> {
+    ) -> Option<&'a IntervalTree<i64, NodeIntervalBlock>> {
         path_cache.intervaltree_cache.get(path)
     }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct NodeIntervalBlock {
-    node_id: i64,
-    start: i64,
-    end: i64,
-    sequence_start: i64,
-    sequence_end: i64,
+    pub block_id: i64,
+    pub node_id: i64,
+    pub start: i64,
+    pub end: i64,
+    pub sequence_start: i64,
+    pub sequence_end: i64,
+    pub strand: Strand,
 }
-
 impl BlockGroup {
     pub fn create(
         conn: &Connection,
@@ -463,10 +466,11 @@ impl BlockGroup {
         cache: &mut PathCache,
     ) -> Accession {
         let tree = PathCache::get_intervaltree(cache, path).unwrap();
-        let start_blocks: Vec<&PathBlock> = tree.query_point(start).map(|x| &x.value).collect();
+        let start_blocks: Vec<&NodeIntervalBlock> =
+            tree.query_point(start).map(|x| &x.value).collect();
         assert_eq!(start_blocks.len(), 1);
         let start_block = start_blocks[0];
-        let end_blocks: Vec<&PathBlock> = tree.query_point(end).map(|x| &x.value).collect();
+        let end_blocks: Vec<&NodeIntervalBlock> = tree.query_point(end).map(|x| &x.value).collect();
         assert_eq!(end_blocks.len(), 1);
         let end_block = end_blocks[0];
         // we make a start/end edge for the accession start/end, then fill in the middle
@@ -476,13 +480,13 @@ impl BlockGroup {
             source_coordinate: -1,
             source_strand: Strand::Forward,
             target_node_id: start_block.node_id,
-            target_coordinate: start - start_block.path_start + start_block.sequence_start,
+            target_coordinate: start - start_block.start + start_block.sequence_start,
             target_strand: Strand::Forward,
             chromosome_index,
         };
         let end_edge = AccessionEdgeData {
             source_node_id: end_block.node_id,
-            source_coordinate: end - end_block.path_start + end_block.sequence_start,
+            source_coordinate: end - end_block.start + end_block.sequence_start,
             source_strand: Strand::Forward,
             target_node_id: PATH_END_NODE_ID,
             target_coordinate: -1,
@@ -496,13 +500,13 @@ impl BlockGroup {
             path_edges.push(end_edge);
         } else {
             let mut in_range = false;
-            let path_blocks: Vec<&PathBlock> = tree
+            let path_blocks: Vec<&NodeIntervalBlock> = tree
                 .iter_sorted()
                 .map(|x| &x.value)
                 .filter(|block| {
-                    if block.id == start_block.id {
+                    if block.block_id == start_block.block_id {
                         in_range = true;
-                    } else if block.id == end_block.id {
+                    } else if block.block_id == end_block.block_id {
                         in_range = false;
                         return true;
                     }
@@ -531,11 +535,23 @@ impl BlockGroup {
         accession
     }
 
-    pub fn insert_changes(conn: &Connection, changes: &Vec<PathChange>, cache: &mut PathCache) {
+    pub fn insert_changes(
+        conn: &Connection,
+        changes: &Vec<PathChange>,
+        cache: &mut PathCache,
+        modify_blockgroup: bool,
+    ) {
         let mut new_edges_by_block_group = HashMap::<i64, Vec<EdgeData>>::new();
         let mut new_accession_edges = HashMap::new();
+        let mut tree_map = HashMap::new();
         for change in changes {
-            let tree = PathCache::get_intervaltree(cache, &change.path).unwrap();
+            let tree = if modify_blockgroup {
+                tree_map.entry(change.block_group_id).or_insert_with(|| {
+                    BlockGroup::intervaltree_for(conn, change.block_group_id, true)
+                })
+            } else {
+                PathCache::get_intervaltree(cache, &change.path).unwrap()
+            };
             let new_edges = BlockGroup::set_up_new_edges(change, tree);
             new_edges_by_block_group
                 .entry(change.block_group_id)
@@ -591,7 +607,7 @@ impl BlockGroup {
     pub fn insert_change(
         conn: &Connection,
         change: &PathChange,
-        tree: &IntervalTree<i64, PathBlock>,
+        tree: &IntervalTree<i64, NodeIntervalBlock>,
     ) {
         let new_edges = BlockGroup::set_up_new_edges(change, tree);
         let edge_ids = Edge::bulk_create(conn, &new_edges);
@@ -599,168 +615,6 @@ impl BlockGroup {
     }
 
     pub fn set_up_new_edges(
-        change: &PathChange,
-        tree: &IntervalTree<i64, PathBlock>,
-    ) -> Vec<EdgeData> {
-        let start_blocks: Vec<&PathBlock> =
-            tree.query_point(change.start).map(|x| &x.value).collect();
-        assert_eq!(start_blocks.len(), 1);
-        // NOTE: This may not be used but needs to be initialized here instead of inside the if
-        // statement that uses it, so that the borrow checker is happy
-        let previous_start_blocks: Vec<&PathBlock> = tree
-            .query_point(change.start - 1)
-            .map(|x| &x.value)
-            .collect();
-        assert_eq!(previous_start_blocks.len(), 1);
-        let start_block = if start_blocks[0].path_start == change.start {
-            // First part of this block will be replaced/deleted, need to get previous block to add
-            // edge including it
-            previous_start_blocks[0]
-        } else {
-            start_blocks[0]
-        };
-
-        let end_blocks: Vec<&PathBlock> = tree.query_point(change.end).map(|x| &x.value).collect();
-        assert_eq!(end_blocks.len(), 1);
-        let end_block = end_blocks[0];
-
-        let mut new_edges = vec![];
-
-        if change.block.sequence_start == change.block.sequence_end {
-            // Deletion
-            let new_edge = EdgeData {
-                source_node_id: start_block.node_id,
-                source_coordinate: change.start - start_block.path_start
-                    + start_block.sequence_start,
-                source_strand: Strand::Forward,
-                target_node_id: end_block.node_id,
-                target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
-                target_strand: Strand::Forward,
-                chromosome_index: change.chromosome_index,
-                phased: change.phased,
-            };
-            new_edges.push(new_edge);
-
-            // NOTE: If the deletion is happening at the very beginning of a path, we need to add
-            // an edge from the dedicated start node to the end of the deletion, to indicate it's
-            // another start point in the block group DAG.
-            if change.start == 0 {
-                let new_beginning_edge = EdgeData {
-                    source_node_id: PATH_START_NODE_ID,
-                    source_coordinate: 0,
-                    source_strand: Strand::Forward,
-                    target_node_id: end_block.node_id,
-                    target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
-                    target_strand: Strand::Forward,
-                    chromosome_index: change.chromosome_index,
-                    phased: change.phased,
-                };
-                new_edges.push(new_beginning_edge);
-            }
-        // NOTE: If the deletion is happening at the very end of a path, we might add an edge
-        // from the beginning of the deletion to the dedicated end node, but in practice it
-        // doesn't affect sequence readouts, so it may not be worth it.
-        } else {
-            // Insertion/replacement
-            let new_start_edge = EdgeData {
-                source_node_id: start_block.node_id,
-                source_coordinate: change.start - start_block.path_start
-                    + start_block.sequence_start,
-                source_strand: Strand::Forward,
-                target_node_id: change.block.node_id,
-                target_coordinate: change.block.sequence_start,
-                target_strand: Strand::Forward,
-                chromosome_index: change.chromosome_index,
-                phased: change.phased,
-            };
-            let new_end_edge = EdgeData {
-                source_node_id: change.block.node_id,
-                source_coordinate: change.block.sequence_end,
-                source_strand: Strand::Forward,
-                target_node_id: end_block.node_id,
-                target_coordinate: change.end - end_block.path_start + end_block.sequence_start,
-                target_strand: Strand::Forward,
-                chromosome_index: change.chromosome_index,
-                phased: change.phased,
-            };
-            new_edges.push(new_start_edge);
-            new_edges.push(new_end_edge);
-        }
-
-        new_edges
-    }
-
-    pub fn insert_bg_changes(conn: &Connection, changes: &Vec<PathChange>) {
-        let mut new_edges_by_block_group = HashMap::<i64, Vec<EdgeData>>::new();
-        let mut new_accession_edges = HashMap::new();
-        let mut tree_map = HashMap::new();
-        for change in changes {
-            let tree = tree_map
-                .entry(change.block_group_id)
-                .or_insert_with(|| BlockGroup::intervaltree_for(conn, change.block_group_id, true));
-            let new_edges = BlockGroup::set_up_new_bg_edges(change, tree);
-            new_edges_by_block_group
-                .entry(change.block_group_id)
-                .and_modify(|new_edge_data| new_edge_data.extend(new_edges.clone()))
-                .or_insert_with(|| new_edges.clone());
-            if let Some(accession) = &change.path_accession {
-                new_accession_edges
-                    .entry((&change.path, accession))
-                    .and_modify(|new_edge_data: &mut Vec<EdgeData>| {
-                        new_edge_data.extend(new_edges.clone())
-                    })
-                    .or_insert_with(|| new_edges.clone());
-            }
-        }
-
-        let mut edge_data_map = HashMap::new();
-
-        for (block_group_id, new_edges) in new_edges_by_block_group {
-            let edge_ids = Edge::bulk_create(conn, &new_edges);
-            for (i, edge_data) in new_edges.iter().enumerate() {
-                edge_data_map.insert(edge_data.clone(), edge_ids[i]);
-            }
-            BlockGroupEdge::bulk_create(conn, block_group_id, &edge_ids);
-        }
-
-        for ((path, accession_name), path_edges) in new_accession_edges {
-            match Accession::get(
-                conn,
-                "select * from accession where name = ?1 AND path_id = ?2",
-                vec![
-                    SQLValue::from(accession_name.clone()),
-                    SQLValue::from(path.id),
-                ],
-            ) {
-                Ok(_) => {
-                    println!("accession already exists, consider a better matching algorithm to determine if this is an error.");
-                }
-                Err(_) => {
-                    let acc_edges = AccessionEdge::bulk_create(
-                        conn,
-                        &path_edges.iter().map(AccessionEdgeData::from).collect(),
-                    );
-                    let acc = Accession::create(conn, accession_name, path.id, None)
-                        .expect("Accession could not be created.");
-                    AccessionPath::create(conn, acc.id, &acc_edges);
-                }
-            }
-        }
-    }
-
-    #[allow(clippy::ptr_arg)]
-    #[allow(clippy::needless_late_init)]
-    pub fn insert_bg_change(
-        conn: &Connection,
-        change: &PathChange,
-        tree: &IntervalTree<i64, NodeIntervalBlock>,
-    ) {
-        let new_edges = BlockGroup::set_up_new_bg_edges(change, tree);
-        let edge_ids = Edge::bulk_create(conn, &new_edges);
-        BlockGroupEdge::bulk_create(conn, change.block_group_id, &edge_ids);
-    }
-
-    pub fn set_up_new_bg_edges(
         change: &PathChange,
         tree: &IntervalTree<i64, NodeIntervalBlock>,
     ) -> Vec<EdgeData> {
@@ -884,50 +738,75 @@ impl BlockGroup {
 
         for start in start_nodes.iter() {
             for end_node in end_nodes.iter() {
-                for path in all_simple_paths(&graph, *start, *end_node) {
+                for path in all_simple_paths_by_edge(&graph, *start, *end_node) {
                     let mut offset = 0;
-                    for node in path.iter() {
-                        let block_len = node.length();
-                        let node_id = node.node_id;
+                    for (source_node, target_node, edge) in path.iter() {
+                        let block_len = source_node.length();
                         let node_start = offset;
                         let node_end = offset + block_len;
                         spans.insert(NodeIntervalBlock {
-                            node_id,
+                            block_id: source_node.block_id,
+                            node_id: source_node.node_id,
                             start: node_start,
                             end: node_end,
-                            sequence_start: node.sequence_start,
-                            sequence_end: node.sequence_end,
+                            sequence_start: source_node.sequence_start,
+                            sequence_end: source_node.sequence_end,
+                            strand: edge.source_strand,
+                        });
+                        spans.insert(NodeIntervalBlock {
+                            block_id: target_node.block_id,
+                            node_id: target_node.node_id,
+                            start: node_end,
+                            end: node_end + target_node.length(),
+                            sequence_start: target_node.sequence_start,
+                            sequence_end: target_node.sequence_end,
+                            strand: edge.target_strand,
                         });
                         if remove_ambiguous_positions {
-                            let node_range = NodeP {
-                                x: node_start,
-                                y: node.sequence_start,
-                            }..NodeP {
-                                x: node_end,
-                                y: node.sequence_end,
-                            };
-
-                            // TODO; This could be a bit better by trying to conserve subregions
-                            // within a node that are not ambiguous instead of kicking the entire
-                            // node out.
-                            node_tree
-                                .entry(node_id)
-                                .and_modify(|tree| {
-                                    for (stored_range, _stored_node_id) in
-                                        tree.iter_overlaps(&node_range)
-                                    {
-                                        if *stored_range != node_range {
-                                            excluded_nodes.insert(node_id);
-                                            break;
+                            for (node_id, node_range) in [
+                                (
+                                    source_node.node_id,
+                                    NodeP {
+                                        x: node_start,
+                                        y: source_node.sequence_start,
+                                    }..NodeP {
+                                        x: node_end,
+                                        y: source_node.sequence_end,
+                                    },
+                                ),
+                                (
+                                    target_node.node_id,
+                                    NodeP {
+                                        x: node_end,
+                                        y: target_node.sequence_start,
+                                    }..NodeP {
+                                        x: node_end + target_node.length(),
+                                        y: target_node.sequence_end,
+                                    },
+                                ),
+                            ] {
+                                // TODO; This could be a bit better by trying to conserve subregions
+                                // within a node that are not ambiguous instead of kicking the entire
+                                // node out.
+                                node_tree
+                                    .entry(node_id)
+                                    .and_modify(|tree| {
+                                        for (stored_range, _stored_node_id) in
+                                            tree.iter_overlaps(&node_range)
+                                        {
+                                            if *stored_range != node_range {
+                                                excluded_nodes.insert(node_id);
+                                                break;
+                                            }
                                         }
-                                    }
-                                    tree.insert(node_range.clone(), node_id);
-                                })
-                                .or_insert_with(|| {
-                                    let mut t = IT2::default();
-                                    t.insert(node_range.clone(), node_id);
-                                    t
-                                });
+                                        tree.insert(node_range.clone(), node_id);
+                                    })
+                                    .or_insert_with(|| {
+                                        let mut t = IT2::default();
+                                        t.insert(node_range.clone(), node_id);
+                                        t
+                                    });
+                            }
                         }
                         offset += block_len;
                     }
@@ -1932,44 +1811,52 @@ mod tests {
             &tree,
             3,
             &[NodeIntervalBlock {
+                block_id: 3,
                 node_id: 3,
                 start: 0,
                 end: 10,
                 sequence_start: 0,
                 sequence_end: 10,
+                strand: Strand::Forward,
             }],
         );
         interval_tree_verify(
             &tree2,
             3,
             &[NodeIntervalBlock {
+                block_id: 3,
                 node_id: 3,
                 start: 0,
                 end: 10,
                 sequence_start: 0,
                 sequence_end: 10,
+                strand: Strand::Forward,
             }],
         );
         interval_tree_verify(
             &tree,
             35,
             &[NodeIntervalBlock {
+                block_id: 0,
                 node_id: 6,
                 start: 30,
                 end: 40,
                 sequence_start: 0,
                 sequence_end: 10,
+                strand: Strand::Forward,
             }],
         );
         interval_tree_verify(
             &tree2,
             35,
             &[NodeIntervalBlock {
+                block_id: 0,
                 node_id: 6,
                 start: 30,
                 end: 40,
                 sequence_start: 0,
                 sequence_end: 10,
+                strand: Strand::Forward,
             }],
         );
 
@@ -1980,22 +1867,26 @@ mod tests {
             &tree,
             3,
             &[NodeIntervalBlock {
+                block_id: 5,
                 node_id: 3,
                 start: 0,
                 end: 7,
                 sequence_start: 0,
                 sequence_end: 7,
+                strand: Strand::Forward,
             }],
         );
         interval_tree_verify(
             &tree2,
             3,
             &[NodeIntervalBlock {
+                block_id: 5,
                 node_id: 3,
                 start: 0,
                 end: 7,
                 sequence_start: 0,
                 sequence_end: 7,
+                strand: Strand::Forward,
             }],
         );
         interval_tree_verify(
@@ -2003,18 +1894,22 @@ mod tests {
             30,
             &[
                 NodeIntervalBlock {
+                    block_id: 0,
                     node_id: 6,
                     start: 26,
                     end: 36,
                     sequence_start: 0,
                     sequence_end: 10,
+                    strand: Strand::Forward,
                 },
                 NodeIntervalBlock {
+                    block_id: 0,
                     node_id: 6,
                     start: 30,
                     end: 40,
                     sequence_start: 0,
                     sequence_end: 10,
+                    strand: Strand::Forward,
                 },
             ],
         );
@@ -2026,18 +1921,22 @@ mod tests {
             9,
             &[
                 NodeIntervalBlock {
-                    node_id: 3,
-                    start: 7,
-                    end: 10,
-                    sequence_start: 7,
-                    sequence_end: 10,
-                },
-                NodeIntervalBlock {
+                    block_id: 4,
                     node_id: 7,
                     start: 7,
                     end: 11,
                     sequence_start: 0,
                     sequence_end: 4,
+                    strand: Strand::Forward,
+                },
+                NodeIntervalBlock {
+                    block_id: 6,
+                    node_id: 3,
+                    start: 7,
+                    end: 10,
+                    sequence_start: 7,
+                    sequence_end: 10,
+                    strand: Strand::Forward,
                 },
             ],
         );
@@ -2087,7 +1986,7 @@ mod tests {
         };
         // note we are making our change against the new blockgroup, and not the parent blockgroup
         let tree = BlockGroup::intervaltree_for(conn, new_bg_id, true);
-        BlockGroup::insert_bg_change(conn, &change, &tree);
+        BlockGroup::insert_change(conn, &change, &tree);
         let all_sequences = BlockGroup::get_all_sequences(conn, new_bg_id, true);
         assert_eq!(
             all_sequences,
@@ -2136,7 +2035,7 @@ mod tests {
         };
         // take out an entire block.
         let tree = BlockGroup::intervaltree_for(conn, gc_bg_id, true);
-        BlockGroup::insert_bg_change(conn, &change, &tree);
+        BlockGroup::insert_change(conn, &change, &tree);
         let all_sequences = BlockGroup::get_all_sequences(conn, gc_bg_id, true);
         assert_eq!(
             all_sequences,

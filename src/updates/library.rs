@@ -113,8 +113,7 @@ pub fn update_with_library(
         .collect();
     assert_eq!(start_blocks.len(), 1);
     let start_block = start_blocks[0];
-    let node_start_coordinate =
-        start_coordinate - start_block.path_start + start_block.sequence_start;
+    let node_start_coordinate = start_coordinate - start_block.start + start_block.sequence_start;
 
     let end_blocks: Vec<_> = path_intervaltree
         .query_point(end_coordinate)
@@ -122,7 +121,7 @@ pub fn update_with_library(
         .collect();
     assert_eq!(end_blocks.len(), 1);
     let end_block = end_blocks[0];
-    let node_end_coordinate = end_coordinate - end_block.path_start + end_block.sequence_start;
+    let node_end_coordinate = end_coordinate - end_block.start + end_block.sequence_start;
 
     let mut new_edges = HashSet::new();
     let start_parts = parts_list.first().unwrap();

@@ -7,6 +7,7 @@ use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
 
+use crate::models::block_group::NodeIntervalBlock;
 use crate::models::{
     edge::Edge,
     node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
@@ -295,11 +296,24 @@ impl Path {
         blocks
     }
 
-    pub fn intervaltree(&self, conn: &Connection) -> IntervalTree<i64, PathBlock> {
+    pub fn intervaltree(&self, conn: &Connection) -> IntervalTree<i64, NodeIntervalBlock> {
         let blocks = self.blocks(conn);
-        let tree: IntervalTree<i64, PathBlock> = blocks
+        let tree: IntervalTree<i64, NodeIntervalBlock> = blocks
             .into_iter()
-            .map(|block| (block.path_start..block.path_end, block))
+            .map(|block| {
+                (
+                    block.path_start..block.path_end,
+                    NodeIntervalBlock {
+                        block_id: block.id,
+                        node_id: block.node_id,
+                        start: block.path_start,
+                        end: block.path_end,
+                        sequence_start: block.sequence_start,
+                        sequence_end: block.sequence_end,
+                        strand: block.strand,
+                    },
+                )
+            })
             .collect();
         tree
     }
@@ -809,34 +823,34 @@ mod tests {
             &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
         );
         let tree = path.intervaltree(conn);
-        let blocks1: Vec<PathBlock> = tree.query_point(2).map(|x| x.value.clone()).collect();
+        let blocks1: Vec<NodeIntervalBlock> = tree.query_point(2).map(|x| x.value).collect();
         assert_eq!(blocks1.len(), 1);
         let block1 = &blocks1[0];
         assert_eq!(block1.node_id, node1_id);
         assert_eq!(block1.sequence_start, 0);
         assert_eq!(block1.sequence_end, 8);
-        assert_eq!(block1.path_start, 0);
-        assert_eq!(block1.path_end, 8);
+        assert_eq!(block1.start, 0);
+        assert_eq!(block1.end, 8);
         assert_eq!(block1.strand, Strand::Forward);
 
-        let blocks2: Vec<PathBlock> = tree.query_point(12).map(|x| x.value.clone()).collect();
+        let blocks2: Vec<NodeIntervalBlock> = tree.query_point(12).map(|x| x.value).collect();
         assert_eq!(blocks2.len(), 1);
         let block2 = &blocks2[0];
         assert_eq!(block2.node_id, node2_id);
         assert_eq!(block2.sequence_start, 1);
         assert_eq!(block2.sequence_end, 8);
-        assert_eq!(block2.path_start, 8);
-        assert_eq!(block2.path_end, 15);
+        assert_eq!(block2.start, 8);
+        assert_eq!(block2.end, 15);
         assert_eq!(block2.strand, Strand::Forward);
 
-        let blocks4: Vec<PathBlock> = tree.query_point(25).map(|x| x.value.clone()).collect();
+        let blocks4: Vec<NodeIntervalBlock> = tree.query_point(25).map(|x| x.value).collect();
         assert_eq!(blocks4.len(), 1);
         let block4 = &blocks4[0];
         assert_eq!(block4.node_id, node4_id);
         assert_eq!(block4.sequence_start, 1);
         assert_eq!(block4.sequence_end, 8);
-        assert_eq!(block4.path_start, 22);
-        assert_eq!(block4.path_end, 29);
+        assert_eq!(block4.start, 22);
+        assert_eq!(block4.end, 29);
         assert_eq!(block4.strand, Strand::Forward);
     }
 
