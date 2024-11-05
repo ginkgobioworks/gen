@@ -570,8 +570,8 @@ impl Path {
         // Creates a new path from the current one by replacing all edges between path_start and
         // path_end with the input edges that are to and from a new node
         let tree = self.intervaltree(conn);
-        let block_with_start = tree.query_point(path_start).next().unwrap().value.clone();
-        let block_with_end = tree.query_point(path_end).next().unwrap().value.clone();
+        let block_with_start = tree.query_point(path_start).next().unwrap().value;
+        let block_with_end = tree.query_point(path_end).next().unwrap().value;
 
         let edges = PathEdge::edges_for_path(conn, self.id);
         let edges_by_source = edges
