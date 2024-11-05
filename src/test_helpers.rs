@@ -18,6 +18,7 @@ use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::path::Path;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
+use crate::models::traits::*;
 
 pub fn get_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Connection {
     let path: Option<&str> = db_path.into();

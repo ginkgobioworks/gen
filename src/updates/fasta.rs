@@ -203,7 +203,7 @@ mod tests {
             "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
         ];
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 1),
+            BlockGroup::get_all_sequences(conn, 1, false),
             HashSet::from_iter(expected_sequences),
         );
     }
@@ -262,7 +262,7 @@ mod tests {
             "ATAATTTTTTTTAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
         ];
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 1),
+            BlockGroup::get_all_sequences(conn, 1, false),
             HashSet::from_iter(expected_sequences),
         );
     }
@@ -321,7 +321,7 @@ mod tests {
             "ATTTTTTTTAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
         ];
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 1),
+            BlockGroup::get_all_sequences(conn, 1, false),
             HashSet::from_iter(expected_sequences),
         );
     }
@@ -386,7 +386,7 @@ mod tests {
             "ATTTTTTTTGATCGATCGATCGGGAACACACAGAGA".to_string(),
         ];
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 1),
+            BlockGroup::get_all_sequences(conn, 1, false),
             HashSet::from_iter(expected_sequences),
         );
     }
@@ -445,7 +445,7 @@ mod tests {
             "ATAAAATTTTTTTTGATCGATCGATCGGGAACACACAGAGA".to_string(),
         ];
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 1),
+            BlockGroup::get_all_sequences(conn, 1, false),
             HashSet::from_iter(expected_sequences),
         );
     }
@@ -502,7 +502,7 @@ mod tests {
             "ATAAAAAAAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
         ];
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 1),
+            BlockGroup::get_all_sequences(conn, 1, false),
             HashSet::from_iter(expected_sequences),
         );
     }
