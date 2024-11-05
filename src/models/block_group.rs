@@ -4,7 +4,6 @@ use interavl::IntervalTree as IT2;
 use intervaltree::IntervalTree;
 use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
-use petgraph::visit::Bfs;
 use petgraph::Direction;
 use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
 use serde::{Deserialize, Serialize};
@@ -882,7 +881,7 @@ mod tests {
         );
 
         Sample::create(conn, "sample2");
-        let bg2 =
+        let _bg2 =
             BlockGroup::get_or_create_sample_block_group(conn, "test", "sample2", "chr1", None)
                 .unwrap();
         assert_eq!(
@@ -1765,7 +1764,7 @@ mod tests {
     fn test_blockgroup_interval_tree() {
         let conn = &get_connection(None);
         let (block_group_id, path) = setup_block_group(conn);
-        let new_sample = Sample::create(conn, "child");
+        let _new_sample = Sample::create(conn, "child");
         let new_bg_id =
             BlockGroup::get_or_create_sample_block_group(conn, "test", "child", "chr1", None)
                 .unwrap();
@@ -1942,8 +1941,8 @@ mod tests {
     #[test]
     fn test_changes_against_derivative_blockgroups() {
         let conn = &get_connection(None);
-        let (block_group_id, path) = setup_block_group(conn);
-        let new_sample = Sample::create(conn, "child");
+        let (_block_group_id, _path) = setup_block_group(conn);
+        let _new_sample = Sample::create(conn, "child");
         let new_bg_id =
             BlockGroup::get_or_create_sample_block_group(conn, "test", "child", "chr1", None)
                 .unwrap();
@@ -1987,7 +1986,7 @@ mod tests {
         );
 
         // Now, we make a change against another descendant
-        let new_sample = Sample::create(conn, "grandchild");
+        let _new_sample = Sample::create(conn, "grandchild");
         let gc_bg_id = BlockGroup::get_or_create_sample_block_group(
             conn,
             "test",
@@ -2037,8 +2036,8 @@ mod tests {
         // This test ensures that if we have heterozygous changes that do not introduce frameshifts,
         // we can modify regions downstream of them.
         let conn = &get_connection(None);
-        let (block_group_id, path) = setup_block_group(conn);
-        let new_sample = Sample::create(conn, "child");
+        let (_block_group_id, _path) = setup_block_group(conn);
+        let _new_sample = Sample::create(conn, "child");
         let new_bg_id =
             BlockGroup::get_or_create_sample_block_group(conn, "test", "child", "chr1", None)
                 .unwrap();
@@ -2085,7 +2084,7 @@ mod tests {
         );
 
         // Now, we make a change against another descendant
-        let new_sample = Sample::create(conn, "grandchild");
+        let _new_sample = Sample::create(conn, "grandchild");
         let gc_bg_id = BlockGroup::get_or_create_sample_block_group(
             conn,
             "test",
@@ -2147,8 +2146,8 @@ mod tests {
     fn test_prohibits_out_of_frame_changes_against_derivative_diploid_blockgroups() {
         // This test ensures that we do not allow ambiguous changes by coordinates
         let conn = &get_connection(None);
-        let (block_group_id, path) = setup_block_group(conn);
-        let new_sample = Sample::create(conn, "child");
+        let (_block_group_id, _path) = setup_block_group(conn);
+        let _new_sample = Sample::create(conn, "child");
         let new_bg_id =
             BlockGroup::get_or_create_sample_block_group(conn, "test", "child", "chr1", None)
                 .unwrap();
@@ -2197,7 +2196,7 @@ mod tests {
         );
 
         // Now, we make a change against another descendant and get an error
-        let new_sample = Sample::create(conn, "grandchild");
+        let _new_sample = Sample::create(conn, "grandchild");
         let gc_bg_id = BlockGroup::get_or_create_sample_block_group(
             conn,
             "test",

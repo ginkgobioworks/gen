@@ -1,15 +1,11 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::iter::from_fn;
 
 use crate::models::strand::Strand;
-use petgraph::graphmap::DiGraphMap;
 use petgraph::prelude::EdgeRef;
-use petgraph::visit::{
-    GraphBase, GraphRef, IntoEdgeReferences, IntoEdges, IntoNeighbors, IntoNeighborsDirected,
-    NodeCount,
-};
+use petgraph::visit::{GraphRef, IntoEdges, IntoNeighbors, IntoNeighborsDirected, NodeCount};
 use petgraph::Direction;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
