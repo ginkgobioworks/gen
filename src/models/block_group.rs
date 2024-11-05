@@ -2141,4 +2141,106 @@ mod tests {
             ])
         )
     }
+
+    #[test]
+    #[should_panic]
+    fn test_prohibits_out_of_frame_changes_against_derivative_diploid_blockgroups() {
+        // This test ensures that we do not allow ambiguous changes by coordinates
+        let conn = &get_connection(None);
+        let (block_group_id, path) = setup_block_group(conn);
+        let new_sample = Sample::create(conn, "child");
+        let new_bg_id =
+            BlockGroup::get_or_create_sample_block_group(conn, "test", "child", "chr1", None)
+                .unwrap();
+        let new_path = Path::query(
+            conn,
+            "select * from paths where block_group_id = ?1",
+            vec![SQLValue::from(new_bg_id)],
+        );
+        // This is a heterozygous replacement of 5 bases with 4 bases, so positions
+        // downstream of this are not addressable.
+        let insert_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(conn);
+        let insert_node_id = Node::create(conn, insert_sequence.hash.as_str(), None);
+        let insert = PathBlock {
+            id: 0,
+            node_id: insert_node_id,
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 7,
+            path_end: 12,
+            strand: Strand::Forward,
+        };
+        let change = PathChange {
+            block_group_id: new_bg_id,
+            path: new_path[0].clone(),
+            path_accession: None,
+            start: 7,
+            end: 12,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        // note we are making our change against the new blockgroup, and not the parent blockgroup
+        let tree = BlockGroup::intervaltree_for(conn, new_bg_id, true);
+        BlockGroup::insert_change(conn, &change, &tree);
+        let all_sequences = BlockGroup::get_all_sequences(conn, new_bg_id, true);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAAAAANNNNTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+            ])
+        );
+
+        // Now, we make a change against another descendant and get an error
+        let new_sample = Sample::create(conn, "grandchild");
+        let gc_bg_id = BlockGroup::get_or_create_sample_block_group(
+            conn,
+            "test",
+            "grandchild",
+            "chr1",
+            Some("child"),
+        )
+        .unwrap();
+        let new_path = Path::query(
+            conn,
+            "select * from paths where block_group_id = ?1",
+            vec![SQLValue::from(gc_bg_id)],
+        );
+
+        let insert_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(conn);
+        let insert_node_id =
+            Node::create(conn, insert_sequence.hash.as_str(), "new-hash".to_string());
+
+        let insert = PathBlock {
+            id: 0,
+            node_id: insert_node_id,
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 20,
+            path_end: 24,
+            strand: Strand::Forward,
+        };
+        let change = PathChange {
+            block_group_id: gc_bg_id,
+            path: new_path[0].clone(),
+            path_accession: None,
+            start: 20,
+            end: 24,
+            block: insert,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        // take out an entire block.
+        let tree = BlockGroup::intervaltree_for(conn, gc_bg_id, true);
+        BlockGroup::insert_change(conn, &change, &tree);
+    }
 }
