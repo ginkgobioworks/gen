@@ -156,34 +156,51 @@ mod tests {
     }
 
     #[test]
-    fn test_path_graph_node() {
-        let mut graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
-        let a = graph.add_node(GraphNode {
-            node_id: 1,
-            block_id: 1,
-            sequence_start: 1,
-            sequence_end: 2,
-        });
-        let b = graph.add_node(GraphNode {
-            node_id: 2,
-            block_id: 1,
-            sequence_start: 1,
-            sequence_end: 2,
-        });
+    fn test_get_simple_paths_by_edge() {
+        let mut graph: DiGraphMap<i64, ()> = DiGraphMap::new();
+        graph.add_node(1);
+        graph.add_node(2);
+        graph.add_node(3);
+        graph.add_node(4);
+        graph.add_node(5);
+        graph.add_node(6);
+        graph.add_node(7);
+        graph.add_node(8);
+        graph.add_node(9);
 
-        graph.add_edge(
-            a,
-            b,
-            GraphEdge {
-                edge_id: 1,
-                chromosome_index: 1,
-                phased: 1,
-                source_strand: Strand::Forward,
-                target_strand: Strand::Reverse,
-            },
+        graph.add_edge(1, 2, ());
+        graph.add_edge(2, 3, ());
+        graph.add_edge(3, 4, ());
+        graph.add_edge(4, 5, ());
+        graph.add_edge(2, 6, ());
+        graph.add_edge(6, 7, ());
+        graph.add_edge(7, 4, ());
+        graph.add_edge(6, 8, ());
+        graph.add_edge(8, 7, ());
+
+        let edge_path =
+            all_simple_paths_by_edge(&graph, 1, 5).collect::<Vec<Vec<(i64, i64, &())>>>();
+        assert_eq!(
+            edge_path,
+            vec![
+                vec![(1, 2, &()), (2, 3, &()), (3, 4, &()), (4, 5, &())],
+                vec![
+                    (1, 2, &()),
+                    (2, 6, &()),
+                    (6, 7, &()),
+                    (7, 4, &()),
+                    (4, 5, &())
+                ],
+                vec![
+                    (1, 2, &()),
+                    (2, 6, &()),
+                    (6, 8, &()),
+                    (8, 7, &()),
+                    (7, 4, &()),
+                    (4, 5, &())
+                ]
+            ]
         );
-        let x = all_simple_paths_by_edge(&graph, a, b).next().unwrap();
-        println!("{x:?}");
     }
 
     #[test]
