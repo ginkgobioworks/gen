@@ -102,9 +102,9 @@ impl Accession {
     ) -> Accession {
         match Accession::create(conn, name, path_id, parent_accession_id) {
             Ok(accession) => accession,
-            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+            Err(rusqlite::Error::SqliteFailure(err, _details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
-                    let mut existing_id: i64;
+                    let existing_id: i64;
                     if let Some(id) = parent_accession_id {
                         existing_id = conn.query_row("select id from accessions where name = ?1 and path_id = ?2 and parent_accession_id = ?3;", params_from_iter(vec![Value::from(name.to_string()), Value::from(path_id), Value::from(id)]), |row| row.get(0)).unwrap();
                     } else {
@@ -157,7 +157,7 @@ impl AccessionEdge {
             row.get(0)
         }) {
             Ok(res) => res,
-            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+            Err(rusqlite::Error::SqliteFailure(_err, _details)) => {
                 conn.query_row("select id from accession_edges where source_node_id = ?1 source_coordinate = ?2 source_strand = ?3 target_node_id = ?4 target_coordinate = ?5 target_strand = ?6 chromosome_index = ?7", params_from_iter(&placeholders), |row| {
                     row.get(0)
                 }).unwrap()
@@ -326,9 +326,9 @@ mod tests {
     #[test]
     fn test_accession_create_query() {
         let conn = &get_connection(None);
-        let (bg, path) = setup_block_group(conn);
+        let (_bg, path) = setup_block_group(conn);
         let accession = Accession::create(conn, "test", path.id, None).unwrap();
-        let accession_2 = Accession::create(conn, "test2", path.id, None).unwrap();
+        let _accession_2 = Accession::create(conn, "test2", path.id, None).unwrap();
         assert_eq!(
             Accession::query(
                 conn,

@@ -159,14 +159,14 @@ pub fn save_graph(graph: &DiGraphMap<GraphNode, GraphEdge>, path: &str) {
     use petgraph::dot::{Config, Dot};
     use std::fs::File;
     let mut file = File::create(path).unwrap();
-    file.write_all(
+    let _ = file.write_all(
         format!(
             "{dot:?}",
             dot = Dot::with_attr_getters(
                 &graph,
                 &[Config::NodeNoLabel, Config::EdgeNoLabel],
                 &|_, (_, _, edge_weight)| format!("label = \"{}\"", edge_weight.chromosome_index),
-                &|_, (node, weight)| format!(
+                &|_, (node, _weight)| format!(
                     "label = \"{}[{}-{}]\"",
                     node.node_id, node.sequence_start, node.sequence_end
                 ),
@@ -191,8 +191,8 @@ where
 
 pub fn get_sample_bg<'a>(conn: &Connection, sample_name: impl Into<Option<&'a str>>) -> BlockGroup {
     let sample_name = sample_name.into();
-    let mut query = "";
     let mut placeholders = vec![];
+    let query;
     if let Some(name) = sample_name {
         query = "select * from block_groups where sample_name = ?1";
         placeholders.push(Value::from(name.to_string()));

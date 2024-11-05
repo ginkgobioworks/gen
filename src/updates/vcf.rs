@@ -19,7 +19,7 @@ use noodles::vcf::variant::record::info::field::Value as InfoValue;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
 use noodles::vcf::variant::record::samples::series::Value;
 use noodles::vcf::variant::record::samples::Sample as NoodlesSample;
-use noodles::vcf::variant::record::{AlternateBases, ReferenceBases};
+use noodles::vcf::variant::record::AlternateBases;
 use noodles::vcf::variant::Record;
 use rusqlite::{session, types::Value as SQLValue, Connection};
 
@@ -218,7 +218,7 @@ pub fn update_with_vcf<'a>(
         let seq_name: String = record.reference_sequence_name().to_string();
         let ref_seq = record.reference_bases();
         // this converts the coordinates to be zero based, start inclusive, end exclusive
-        let mut ref_end = record.variant_end(&header).unwrap().get() as i64;
+        let ref_end = record.variant_end(&header).unwrap().get() as i64;
         let alt_bases = record.alternate_bases();
         let alt_alleles: Vec<_> = alt_bases.iter().collect::<io::Result<_>>().unwrap();
         let mut vcf_entries = vec![];
@@ -238,7 +238,7 @@ pub fn update_with_vcf<'a>(
         };
 
         if !fixed_sample.is_empty() && !genotype.is_empty() {
-            let mut sample_bg_id = BlockGroupCache::lookup(
+            let sample_bg_id = BlockGroupCache::lookup(
                 &mut block_group_cache,
                 collection_name,
                 &fixed_sample,
@@ -251,7 +251,7 @@ pub fn update_with_vcf<'a>(
                 if let Some(gt) = genotype {
                     let allele_accession = accession_name
                         .clone()
-                        .filter(|name| gt.allele as i32 == accession_allele);
+                        .filter(|_| gt.allele as i32 == accession_allele);
                     let mut ref_start = (record.variant_start().unwrap().unwrap().get() - 1) as i64;
                     if gt.allele != 0 {
                         let mut alt_seq = alt_alleles[chromosome_index - 1];
@@ -295,7 +295,7 @@ pub fn update_with_vcf<'a>(
             }
         } else {
             for (sample_index, sample) in record.samples().iter().enumerate() {
-                let mut sample_bg_id = BlockGroupCache::lookup(
+                let sample_bg_id = BlockGroupCache::lookup(
                     &mut block_group_cache,
                     collection_name,
                     &sample_names[sample_index],
@@ -320,7 +320,7 @@ pub fn update_with_vcf<'a>(
                                 if let Some(allele) = allele {
                                     let allele_accession = accession_name
                                         .clone()
-                                        .filter(|name| allele as i32 == accession_allele);
+                                        .filter(|_| allele as i32 == accession_allele);
                                     if allele != 0 {
                                         let mut alt_seq = alt_alleles[allele - 1];
                                         if alt_seq != "*" && alt_seq.len() < ref_seq.len() {
@@ -459,7 +459,6 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use crate::imports::fasta::import_fasta;
-    use crate::imports::gfa::import_gfa;
     use crate::models::accession::Accession;
     use crate::models::node::Node;
     use crate::models::operations::setup_db;
