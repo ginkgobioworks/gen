@@ -86,10 +86,10 @@ if __name__ == '__main__':
     reference_id = sequences[0][0]
     reference_seq = sequences[0][1]
 
-    translated_crossovers = {}
     for id, seq in sequences[1:]:
-        translated_crossovers[id] = translate_coordinates(reference_seq, seq, args.crossovers)
-
+        translated_crossovers = translate_coordinates(reference_seq, seq, args.crossovers)
+        segments = split_at_crossovers(seq, translated_crossovers)
+        print(f'{id}: {segments}')
         
 
     

@@ -26,7 +26,7 @@ GB1 dataset: Adaptation in protein fitness landscapes is facilitated by indirect
 
 There's also the 2014 publication _A Comprehensive Biophysical Description of Pairwise Epistasis throughout an Entire Protein Domain_ by Olson et al. (doi: [10.1016/j.cub.2014.09.072](https://doi.org/10.1016/j.cub.2014.09.072)) but that's more DMS
 
-## Deep Diversification with Printed Oligonucleotids 
+## Deep Diversification with Printed Oligonucleotides 
 AAV Dataset
 
 Bryant et al. Nature Methods 2021
