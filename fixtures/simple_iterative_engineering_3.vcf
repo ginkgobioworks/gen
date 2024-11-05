@@ -1,0 +1,9 @@
+##fileformat=VCFv4.1
+##filedate=Tue Sep  4 13:12:57 2018
+##reference=simple.fa
+##contig=<ID=m123,length=34>
+##phasing=none
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	f3
+m123	4	.	T	G	1611.92	.		GT	1
+m123	15	.	CGGAA	C	1611.92	.		GT	1

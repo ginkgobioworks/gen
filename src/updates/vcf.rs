@@ -42,6 +42,7 @@ impl<'a> BlockGroupCache<'_> {
         collection_name: &'a str,
         sample_name: &'a str,
         name: String,
+        parent_sample: Option<&'a str>,
     ) -> Result<i64, &'static str> {
         let block_group_key = BlockGroupData {
             collection_name,
@@ -57,6 +58,7 @@ impl<'a> BlockGroupCache<'_> {
                 collection_name,
                 sample_name,
                 &name,
+                parent_sample,
             );
 
             block_group_cache
@@ -155,19 +157,22 @@ struct VcfEntry<'a> {
     sample_name: String,
     path: Path,
     ids: Option<String>,
+    ref_start: i64,
     alt_seq: &'a str,
     chromosome_index: i64,
     phased: i64,
 }
 
-pub fn update_with_vcf(
+pub fn update_with_vcf<'a>(
     vcf_path: &String,
-    collection_name: &str,
+    collection_name: &'a str,
     fixed_genotype: String,
     fixed_sample: String,
     conn: &Connection,
     operation_conn: &Connection,
+    coordinate_frame: impl Into<Option<&'a str>>,
 ) {
+    let coordinate_frame = coordinate_frame.into();
     let db_uuid = metadata::get_db_uuid(conn);
 
     let mut session = session::Session::new(conn).unwrap();
@@ -211,8 +216,8 @@ pub fn update_with_vcf(
     for result in reader.records() {
         let record = result.unwrap();
         let seq_name: String = record.reference_sequence_name().to_string();
+        let ref_seq = record.reference_bases();
         // this converts the coordinates to be zero based, start inclusive, end exclusive
-        let mut ref_start = (record.variant_start().unwrap().unwrap().get() - 1) as i64;
         let mut ref_end = record.variant_end(&header).unwrap().get() as i64;
         let alt_bases = record.alternate_bases();
         let alt_alleles: Vec<_> = alt_bases.iter().collect::<io::Result<_>>().unwrap();
@@ -238,6 +243,7 @@ pub fn update_with_vcf(
                 collection_name,
                 &fixed_sample,
                 seq_name.clone(),
+                coordinate_frame,
             );
             let sample_bg_id = sample_bg_id.expect("can't find sample bg....check this out more");
 
@@ -246,8 +252,15 @@ pub fn update_with_vcf(
                     let allele_accession = accession_name
                         .clone()
                         .filter(|name| gt.allele as i32 == accession_allele);
+                    let mut ref_start = (record.variant_start().unwrap().unwrap().get() - 1) as i64;
                     if gt.allele != 0 {
-                        let alt_seq = alt_alleles[chromosome_index - 1];
+                        let mut alt_seq = alt_alleles[chromosome_index - 1];
+                        // If the alt sequence is a deletion, we want to remove the base in common in the VCF spec.
+                        // So if VCF says ATC -> A, we don't want to include the `A` in the alt_seq.
+                        if alt_seq != "*" && alt_seq.len() < ref_seq.len() {
+                            ref_start += 1;
+                            alt_seq = &alt_seq[1..];
+                        }
                         let phased = match gt.phasing {
                             Phasing::Phased => 1,
                             Phasing::Unphased => 0,
@@ -256,6 +269,7 @@ pub fn update_with_vcf(
                             PathCache::lookup(&mut path_cache, sample_bg_id, seq_name.clone());
                         vcf_entries.push(VcfEntry {
                             ids: allele_accession,
+                            ref_start,
                             block_group_id: sample_bg_id,
                             path: sample_path.clone(),
                             sample_name: fixed_sample.clone(),
@@ -286,6 +300,7 @@ pub fn update_with_vcf(
                     collection_name,
                     &sample_names[sample_index],
                     seq_name.clone(),
+                    coordinate_frame,
                 );
 
                 let sample_bg_id =
@@ -300,12 +315,18 @@ pub fn update_with_vcf(
                                     Phasing::Phased => 1,
                                     Phasing::Unphased => 0,
                                 };
+                                let mut ref_start =
+                                    (record.variant_start().unwrap().unwrap().get() - 1) as i64;
                                 if let Some(allele) = allele {
                                     let allele_accession = accession_name
                                         .clone()
                                         .filter(|name| allele as i32 == accession_allele);
                                     if allele != 0 {
-                                        let alt_seq = alt_alleles[allele - 1];
+                                        let mut alt_seq = alt_alleles[allele - 1];
+                                        if alt_seq != "*" && alt_seq.len() < ref_seq.len() {
+                                            ref_start += 1;
+                                            alt_seq = &alt_seq[1..];
+                                        }
                                         let sample_path = PathCache::lookup(
                                             &mut path_cache,
                                             sample_bg_id,
@@ -315,6 +336,7 @@ pub fn update_with_vcf(
                                         vcf_entries.push(VcfEntry {
                                             ids: allele_accession,
                                             block_group_id: sample_bg_id,
+                                            ref_start,
                                             path: sample_path.clone(),
                                             sample_name: sample_names[sample_index].clone(),
                                             alt_seq,
@@ -351,6 +373,7 @@ pub fn update_with_vcf(
             if vcf_entry.alt_seq == "*" {
                 continue;
             }
+            let ref_start = vcf_entry.ref_start;
             let sequence =
                 SequenceCache::lookup(&mut sequence_cache, "DNA", vcf_entry.alt_seq.to_string());
             let sequence_string = sequence.get_sequence(None, None);
@@ -395,7 +418,12 @@ pub fn update_with_vcf(
     }
     let mut summary: HashMap<String, HashMap<String, i64>> = HashMap::new();
     for ((path, sample_name), path_changes) in changes {
-        BlockGroup::insert_changes(conn, &path_changes, &mut path_cache);
+        BlockGroup::insert_changes(
+            conn,
+            &path_changes,
+            &mut path_cache,
+            coordinate_frame.is_some(),
+        );
         summary
             .entry(sample_name)
             .or_default()
@@ -436,7 +464,9 @@ mod tests {
     use crate::models::node::Node;
     use crate::models::operations::setup_db;
     use crate::models::traits::Query;
-    use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
+    use crate::test_helpers::{
+        get_connection, get_operation_connection, get_sample_bg, setup_gen_dir,
+    };
     use std::collections::HashSet;
     use std::path::PathBuf;
     #[allow(unused_imports)]
@@ -470,9 +500,10 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 1),
+            BlockGroup::get_all_sequences(conn, 1, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
         // A homozygous set of variants should only return 1 sequence
@@ -488,12 +519,12 @@ mod tests {
             vec![SQLValue::from("G1".to_string())],
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, test_bg[0].id),
+            BlockGroup::get_all_sequences(conn, test_bg[0].id, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
         // This individual is homozygous for the first variant and does not contain the second
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 4),
+            BlockGroup::get_all_sequences(conn, 4, false),
             HashSet::from_iter(vec![
                 "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
                 "ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
@@ -530,13 +561,14 @@ mod tests {
             "sample 1".to_string(),
             conn,
             op_conn,
+            None,
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 1),
+            BlockGroup::get_all_sequences(conn, 1, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 2),
+            BlockGroup::get_all_sequences(conn, 2, false),
             HashSet::from_iter(
                 [
                     "ATCGATCGATAGAGATCGATCGGGAACACACAGAGA",
@@ -579,6 +611,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
 
         let missing_allele_bg = BlockGroup::query(
@@ -588,7 +621,7 @@ mod tests {
         );
 
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, missing_allele_bg[0].id),
+            BlockGroup::get_all_sequences(conn, missing_allele_bg[0].id, false),
             HashSet::from_iter(
                 [
                     "ATCGATCGATCGATCGATCGGGAACACACAGAGA",
@@ -629,9 +662,10 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 2),
+            BlockGroup::get_all_sequences(conn, 2, false),
             HashSet::from_iter(
                 [
                     "ATCGATCGATCGATCGATCGGGAACACACAGAGA",
@@ -672,6 +706,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
 
         let nodes = Node::query(conn, "select * from nodes;", vec![]);
@@ -684,6 +719,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
         let nodes = Node::query(conn, "select * from nodes;", vec![]);
         assert_eq!(nodes.len(), 5);
@@ -720,6 +756,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
 
         let nodes = Node::query(conn, "select * from nodes;", vec![]);
@@ -732,6 +769,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
         let nodes = Node::query(conn, "select * from nodes;", vec![]);
         assert_eq!(nodes.len(), 8);
@@ -768,6 +806,7 @@ mod tests {
             "test".to_string(),
             conn,
             op_conn,
+            None,
         );
         assert!(s.elapsed().as_secs() < 20);
     }
@@ -801,6 +840,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
         assert_eq!(
             Accession::query(
@@ -853,6 +893,7 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
         );
 
         assert_eq!(
@@ -876,6 +917,80 @@ mod tests {
             "".to_string(),
             conn,
             op_conn,
+            None,
+        );
+    }
+
+    #[test]
+    fn test_changes_in_child_samples() {
+        setup_gen_dir();
+        let f0_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/simple_iterative_engineering_1.vcf");
+        let f1_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/simple_iterative_engineering_2.vcf");
+        let f2_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/simple_iterative_engineering_3.vcf");
+        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        );
+
+        update_with_vcf(
+            &f0_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+            None,
+        );
+
+        update_with_vcf(
+            &f1_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+            "f1",
+        );
+
+        update_with_vcf(
+            &f2_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+            "f2",
+        );
+
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, None).id, true),
+            HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
+        );
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, "f1").id, true),
+            HashSet::from_iter(vec!["ATCTCGATCGATCGCGGGAACACACAGAGA".to_string()])
+        );
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, "f2").id, true),
+            HashSet::from_iter(vec!["ATCTGGATCGATCGCGGAATCAGAACACACAGGA".to_string()])
+        );
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, "f3").id, true),
+            HashSet::from_iter(vec!["ATCGGGATCGATCGCTCAGAACACACAGGA".to_string()])
         );
     }
 }

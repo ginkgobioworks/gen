@@ -146,7 +146,7 @@ mod tests {
             op_conn,
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(&conn, 1),
+            BlockGroup::get_all_sequences(&conn, 1, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
 
@@ -175,7 +175,7 @@ mod tests {
             op_conn,
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(&conn, 1),
+            BlockGroup::get_all_sequences(&conn, 1, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
 
