@@ -244,7 +244,7 @@ pub fn update_with_vcf<'a>(
                 collection_name,
                 &fixed_sample,
                 seq_name.clone(),
-                coordinate_frame,
+                Some(""),
             );
             let sample_bg_id = sample_bg_id.expect("can't find sample bg....check this out more");
 
@@ -301,7 +301,7 @@ pub fn update_with_vcf<'a>(
                     collection_name,
                     &sample_names[sample_index],
                     seq_name.clone(),
-                    coordinate_frame,
+                    Some(""),
                 );
 
                 let sample_bg_id =
@@ -977,7 +977,7 @@ mod tests {
         );
 
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, None).id, true),
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, "").id, true),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
         assert_eq!(

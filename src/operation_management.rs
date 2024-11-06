@@ -1000,7 +1000,7 @@ mod tests {
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
-        assert_eq!(sample_count, 0);
+        assert_eq!(sample_count, 1);
         assert_eq!(op_count, 1);
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
@@ -1029,7 +1029,7 @@ mod tests {
         // * 1 node created by the initial fasta import
         // * 2 nodes created by the VCF update.  See above explanation of edge count for more details.
         assert_eq!(node_count, 5);
-        assert_eq!(sample_count, 3);
+        assert_eq!(sample_count, 4);
         assert_eq!(op_count, 2);
 
         // revert back to state 1 where vcf samples and blockpaths do not exist
@@ -1047,7 +1047,7 @@ mod tests {
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
-        assert_eq!(sample_count, 0);
+        assert_eq!(sample_count, 1);
         assert_eq!(op_count, 2);
 
         apply_changeset(
@@ -1063,7 +1063,7 @@ mod tests {
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 10);
         assert_eq!(node_count, 5);
-        assert_eq!(sample_count, 3);
+        assert_eq!(sample_count, 4);
         assert_eq!(op_count, 2);
     }
 
@@ -1230,7 +1230,7 @@ mod tests {
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
-        assert_eq!(sample_count, 0);
+        assert_eq!(sample_count, 1);
         assert_eq!(op_count, 1);
 
         let branch_1 = Branch::create(operation_conn, &db_uuid, "branch_1");
@@ -1258,7 +1258,7 @@ mod tests {
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 10);
         assert_eq!(node_count, 5);
-        assert_eq!(sample_count, 3);
+        assert_eq!(sample_count, 4);
         assert_eq!(op_count, 2);
 
         // checkout branch 2
@@ -1282,7 +1282,7 @@ mod tests {
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
-        assert_eq!(sample_count, 0);
+        assert_eq!(sample_count, 1);
         assert_eq!(op_count, 2);
 
         // apply vcf2
@@ -1301,7 +1301,7 @@ mod tests {
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 6);
         assert_eq!(node_count, 4);
-        assert_eq!(sample_count, 1);
+        assert_eq!(sample_count, 2);
         assert_eq!(op_count, 3);
 
         // migrate to branch 1 again
@@ -1323,7 +1323,7 @@ mod tests {
         let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
         assert_eq!(edge_count, 10);
         assert_eq!(node_count, 5);
-        assert_eq!(sample_count, 3);
+        assert_eq!(sample_count, 4);
         assert_eq!(op_count, 3);
     }
 

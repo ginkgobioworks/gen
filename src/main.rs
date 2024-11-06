@@ -22,7 +22,7 @@ use std::str;
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    // The path to the database you wish to utilize
+    /// The path to the database you wish to utilize
     #[arg(short, long)]
     db: Option<String>,
     #[command(subcommand)]
