@@ -141,14 +141,6 @@ CREATE TABLE block_group_edges (
 ) STRICT;
 CREATE UNIQUE INDEX block_group_edges_uidx ON block_group_edges(block_group_id, edge_id);
 
-CREATE TABLE operation_paths (
-  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-  operation_id INTEGER NOT NULL,
-  path_id INTEGER NOT NULL,
-  FOREIGN KEY(path_id) REFERENCES paths(id)
-) STRICT;
-CREATE UNIQUE INDEX operation_paths_uidx ON operation_paths(operation_id, path_id);
-
 INSERT INTO gen_metadata (db_uuid) values (lower(
     hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-' || '4' ||
     substr(hex( randomblob(2)), 2) || '-' ||

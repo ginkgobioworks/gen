@@ -1,26 +1,29 @@
 use noodles::fasta;
 use rusqlite;
 use rusqlite::{types::Value as SQLValue, Connection};
-use std::{io, rc::Rc, str};
+use std::{io, str};
 
 use crate::models::{
     block_group::{BlockGroup, PathChange},
     edge::Edge,
     file_types::FileTypes,
     node::Node,
-    operation_path::OperationPath,
-    path::{Path, PathBlock},
+    path::PathBlock,
+    sample::Sample,
     sequence::Sequence,
     strand::Strand,
     traits::*,
 };
 use crate::{calculate_hash, operation_management};
 
+#[allow(clippy::too_many_arguments)]
 pub fn update_with_fasta(
     conn: &Connection,
     operation_conn: &Connection,
     collection_name: &str,
-    contig_name: &str,
+    parent_sample_name: &str,
+    new_sample_name: &str,
+    region_name: &str,
     start_coordinate: i64,
     end_coordinate: i64,
     fasta_file_path: &str,
@@ -36,31 +39,37 @@ pub fn update_with_fasta(
 
     let mut fasta_reader = fasta::io::reader::Builder.build_from_path(fasta_file_path)?;
 
-    let block_groups = BlockGroup::query(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null and name = ?2;", vec![SQLValue::from(collection_name.to_string()), SQLValue::from(contig_name.to_string())]);
-    if block_groups.is_empty() {
-        panic!("No block group found for contig {}", contig_name);
+    let _new_sample = Sample::create(conn, new_sample_name);
+    let block_groups = BlockGroup::query(
+        conn,
+        "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
+        vec![
+            SQLValue::from(collection_name.to_string()),
+            SQLValue::from(parent_sample_name.to_string()),
+        ],
+    );
+
+    let mut new_block_group_id = 0;
+    for block_group in block_groups {
+        let new_bg_id = BlockGroup::get_or_create_sample_block_group(
+            conn,
+            collection_name,
+            new_sample_name,
+            &block_group.name,
+            Some(parent_sample_name),
+        )
+        .unwrap();
+        BlockGroup::clone(conn, block_group.id, new_bg_id);
+        if block_group.name == region_name {
+            new_block_group_id = new_bg_id;
+        }
     }
-    let block_group_id = block_groups[0].id;
 
-    let operation_parent_id = operation.parent_id.unwrap();
-    let operation_paths = OperationPath::paths_for_operation(conn, operation_parent_id);
-
-    let path_ids = operation_paths
-        .iter()
-        .map(|operation_path| SQLValue::from(operation_path.path_id))
-        .collect::<Vec<SQLValue>>();
-    let query = "select * from paths where block_group_id = ?1 and id in rarray(?2);";
-    let params = rusqlite::params!(SQLValue::from(block_group_id), Rc::new(path_ids));
-    let paths = Path::full_query(conn, query, params);
-
-    if paths.len() != 1 {
-        panic!(
-            "Expected one path for block group {} (contig name: {})",
-            block_group_id, contig_name
-        );
+    if new_block_group_id == 0 {
+        panic!("No block group found with region name: {}", region_name);
     }
 
-    let path = paths[0].clone();
+    let path = BlockGroup::get_current_path(conn, new_block_group_id);
 
     // Assuming just one entry in the fasta file
     let record = fasta_reader.records().next().ok_or_else(|| {
@@ -98,7 +107,7 @@ pub fn update_with_fasta(
     };
 
     let path_change = PathChange {
-        block_group_id,
+        block_group_id: new_block_group_id,
         path: path.clone(),
         path_accession: None,
         start: start_coordinate,
@@ -130,14 +139,6 @@ pub fn update_with_fasta(
         &edge_to_new_node,
         &edge_from_new_node,
     );
-
-    for operation_path in operation_paths {
-        if operation_path.path_id != path.id {
-            OperationPath::create(conn, operation.id, operation_path.path_id);
-        }
-    }
-
-    OperationPath::create(conn, operation.id, new_path.id);
 
     let summary_str = format!(" {}: 1 change", new_path.name);
     operation_management::end_operation(
@@ -193,17 +194,29 @@ mod tests {
             conn,
             op_conn,
             &collection,
+            "",
+            "new sample",
             "m123",
             2,
             5,
             fasta_update_path.to_str().unwrap(),
         );
+
         let expected_sequences = vec![
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
             "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
         ];
+        let block_groups = BlockGroup::query(
+            conn,
+            "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
+            vec![
+                SQLValue::from(collection),
+                SQLValue::from("new sample".to_string()),
+            ],
+        );
+        assert_eq!(block_groups.len(), 1);
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 1, false),
+            BlockGroup::get_all_sequences(conn, block_groups[0].id, false),
             HashSet::from_iter(expected_sequences),
         );
     }
@@ -241,6 +254,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
+            "",
+            "new sample",
             "m123",
             2,
             5,
@@ -251,6 +266,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
+            "",
+            "new sample",
             "m123",
             4,
             6,
@@ -261,8 +278,17 @@ mod tests {
             "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
             "ATAATTTTTTTTAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
         ];
+        let block_groups = BlockGroup::query(
+            conn,
+            "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
+            vec![
+                SQLValue::from(collection),
+                SQLValue::from("new sample".to_string()),
+            ],
+        );
+        assert_eq!(block_groups.len(), 1);
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 1, false),
+            BlockGroup::get_all_sequences(conn, block_groups[0].id, false),
             HashSet::from_iter(expected_sequences),
         );
     }
@@ -300,6 +326,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
+            "",
+            "new sample",
             "m123",
             2,
             5,
@@ -310,6 +338,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
+            "",
+            "new sample",
             "m123",
             1,
             6,
@@ -320,8 +350,17 @@ mod tests {
             "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
             "ATTTTTTTTAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
         ];
+        let block_groups = BlockGroup::query(
+            conn,
+            "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
+            vec![
+                SQLValue::from(collection),
+                SQLValue::from("new sample".to_string()),
+            ],
+        );
+        assert_eq!(block_groups.len(), 1);
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 1, false),
+            BlockGroup::get_all_sequences(conn, block_groups[0].id, false),
             HashSet::from_iter(expected_sequences),
         );
     }
@@ -365,6 +404,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
+            "",
+            "new sample",
             "m123",
             2,
             5,
@@ -375,6 +416,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
+            "",
+            "new sample",
             "m123",
             1,
             12,
@@ -385,8 +428,17 @@ mod tests {
             "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
             "ATTTTTTTTGATCGATCGATCGGGAACACACAGAGA".to_string(),
         ];
+        let block_groups = BlockGroup::query(
+            conn,
+            "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
+            vec![
+                SQLValue::from(collection),
+                SQLValue::from("new sample".to_string()),
+            ],
+        );
+        assert_eq!(block_groups.len(), 1);
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 1, false),
+            BlockGroup::get_all_sequences(conn, block_groups[0].id, false),
             HashSet::from_iter(expected_sequences),
         );
     }
@@ -424,6 +476,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
+            "",
+            "new sample",
             "m123",
             2,
             5,
@@ -434,6 +488,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
+            "",
+            "new sample",
             "m123",
             6,
             12,
@@ -444,8 +500,17 @@ mod tests {
             "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
             "ATAAAATTTTTTTTGATCGATCGATCGGGAACACACAGAGA".to_string(),
         ];
+        let block_groups = BlockGroup::query(
+            conn,
+            "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
+            vec![
+                SQLValue::from(collection),
+                SQLValue::from("new sample".to_string()),
+            ],
+        );
+        assert_eq!(block_groups.len(), 1);
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 1, false),
+            BlockGroup::get_all_sequences(conn, block_groups[0].id, false),
             HashSet::from_iter(expected_sequences),
         );
     }
@@ -481,6 +546,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
+            "",
+            "new sample",
             "m123",
             2,
             5,
@@ -491,6 +558,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
+            "",
+            "new sample",
             "m123",
             4,
             6,
@@ -501,8 +570,17 @@ mod tests {
             "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
             "ATAAAAAAAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
         ];
+        let block_groups = BlockGroup::query(
+            conn,
+            "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
+            vec![
+                SQLValue::from(collection),
+                SQLValue::from("new sample".to_string()),
+            ],
+        );
+        assert_eq!(block_groups.len(), 1);
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 1, false),
+            BlockGroup::get_all_sequences(conn, block_groups[0].id, false),
             HashSet::from_iter(expected_sequences),
         );
     }

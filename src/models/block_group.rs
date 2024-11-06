@@ -800,6 +800,15 @@ impl BlockGroup {
             .collect();
         tree
     }
+
+    pub fn get_current_path(conn: &Connection, block_group_id: i64) -> Path {
+        let paths = Path::get_paths(
+            conn,
+            "SELECT * FROM paths WHERE block_group_id = ?1 ORDER BY id DESC",
+            vec![SQLValue::from(block_group_id)],
+        );
+        paths[0].clone()
+    }
 }
 
 impl Query for BlockGroup {
