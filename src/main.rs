@@ -70,6 +70,9 @@ enum Commands {
         /// If no sample is provided, enter the sample to associate variants to
         #[arg(short, long)]
         sample: Option<String>,
+        /// New sample name if we are updating with intentional edits
+        #[arg(long)]
+        new_sample: Option<String>,
         /// Use the given sample as the parent sample for changes.
         #[arg(long, alias = "cf")]
         coordinate_frame: Option<String>,
@@ -82,9 +85,9 @@ enum Commands {
         /// The name of the path to add the library to
         #[arg(short, long)]
         path_name: Option<String>,
-        /// The name of the contig to update
+        /// The name of the region to update (eg "chr1")
         #[arg(long)]
-        contig_name: Option<String>,
+        region_name: Option<String>,
         /// The start coordinate for the region to add the library to
         #[arg(long)]
         start: Option<i64>,
@@ -247,8 +250,9 @@ fn main() {
             parts,
             genotype,
             sample,
+            new_sample,
             path_name,
-            contig_name,
+            region_name,
             start,
             end,
             coordinate_frame,
@@ -277,7 +281,9 @@ fn main() {
                     &conn,
                     &operation_conn,
                     name,
-                    &contig_name.clone().unwrap(),
+                    &sample.clone().unwrap_or("".to_string()),
+                    &new_sample.clone().unwrap(),
+                    &region_name.clone().unwrap(),
                     start.unwrap(),
                     end.unwrap(),
                     fasta_path,
@@ -427,8 +433,12 @@ fn main() {
             if let Some(gfa_path) = gfa {
                 export_gfa(&conn, name, &PathBuf::from(gfa_path), sample.clone());
             } else if let Some(fasta_path) = fasta {
-                let current_op = OperationState::get_operation(&operation_conn, &db_uuid).unwrap();
-                export_fasta(&conn, current_op, &PathBuf::from(fasta_path));
+                export_fasta(
+                    &conn,
+                    name,
+                    &sample.clone().unwrap_or("".to_string()),
+                    &PathBuf::from(fasta_path),
+                );
             } else {
                 panic!("No file type specified for export.");
             }
