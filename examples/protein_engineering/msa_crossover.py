@@ -2,7 +2,10 @@
 
 import unittest
 from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 import argparse
+import os
 
 def gapped_indices(seq):
     ''' Converts a sequence with gaps to a list of indices, where gaps are represented as None '''
@@ -42,6 +45,9 @@ def translate_coordinates(from_seq, to_seq, coordinates):
 def split_at_crossovers(seq, crossovers):
     ''' Splits a sequence after the given crossovers (one-based indexing) '''
 
+    # Remove any gaps in case the sequence comes from an alignment
+    seq = seq.replace('-', '')
+
     subsequences = []
     start = 0
     for x in crossovers:
@@ -49,6 +55,47 @@ def split_at_crossovers(seq, crossovers):
         start = x
     subsequences.append(seq[start:])
     return subsequences
+
+def write_segments_to_disk(sequences, crossovers, output_dir='output'):
+    reference_id = sequences[0][0]
+    reference_seq = sequences[0][1]
+
+    # Check if the output directory exists and create it if it doesn't
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # Set up the output files
+    segments_file = os.path.join(output_dir, f'segments.fa')
+    layout_file = os.path.join(output_dir, 'layout.csv')
+
+    # Clear the output files if they already exist so we can write new data
+    for f in [segments_file, layout_file]:
+        if os.path.exists(f):
+            os.remove(f)
+
+    for id, seq in sequences:
+        translated_crossovers = translate_coordinates(reference_seq, seq, crossovers)
+        segments = split_at_crossovers(seq, translated_crossovers)
+        # Each segment receives a unique ID based on the original sequence ID 
+        # and the starting coordinate (zero-based indexing to match gen GFAs)
+        segment_starts = [0] + [x - 1 for x in translated_crossovers]
+        segment_ids = [f'{id}.{i}' for i in segment_starts]
+        
+        # Make sure there are no commas in the sequence IDs (this shouldn't be the case)
+        if any(',' in segment_id for segment_id in segment_ids):
+            raise ValueError('Commas are not allowed in sequence IDs')
+
+        # Write each segment to a fasta file
+        with open(segments_file, 'a') as f:
+            for segment_id, segment in zip(segment_ids, segments):
+                record = SeqRecord(segment, id=segment_id, description="")
+                SeqIO.write(record, f, 'fasta')
+
+        # Write the list of segments to a layout csv file
+        with open(layout_file, 'a') as f:
+            f.write(",".join(segment_ids) + '\n')
+            
+
 
 class TestGappedIndices(unittest.TestCase):
     def test_gapped_indices(self):
@@ -61,15 +108,32 @@ class TestTranslateCoordinates(unittest.TestCase):
     def test_translate_coordinates(self):
         test_msa = ['A-BCDE',
                     'FGH-IJ']
+        coordinates = [1, 2, 3, 4, 5]
         expected_translation = [1, 3, None, 4, 5]
         result = translate_coordinates(test_msa[0],
                                        test_msa[1],
-                                       [1, 2, 3, 4, 5])
+                                       coordinates)
+        self.assertEqual(result, expected_translation)
+
+    def test_translate_coordinates_reference(self):
+        reference = 'A-BCDE'
+        coordinates = [1, 2, 3, 4, 5]
+        expected_translation = coordinates
+        result = translate_coordinates(reference,
+                                       reference,
+                                       coordinates)
         self.assertEqual(result, expected_translation)
 
 class TestSplitAtCrossover(unittest.TestCase):
     def test_split_at_crossovers(self):
         test_seq = 'ABCDEFG'
+        test_crossovers = [2, 4]
+        expected_subsequences = ['AB', 'CD', 'EFG']
+        result = split_at_crossovers(test_seq, test_crossovers)
+        self.assertEqual(result, expected_subsequences)
+
+    def test_split_at_crossovers_gapped(self):
+        test_seq = 'ABCDE-FG'
         test_crossovers = [2, 4]
         expected_subsequences = ['AB', 'CD', 'EFG']
         result = split_at_crossovers(test_seq, test_crossovers)
@@ -83,14 +147,4 @@ if __name__ == '__main__':
 
     sequences = [(r.id, r.seq) for r in SeqIO.parse(open(args.msa), 'fasta')]
 
-    reference_id = sequences[0][0]
-    reference_seq = sequences[0][1]
-
-    for id, seq in sequences[1:]:
-        translated_crossovers = translate_coordinates(reference_seq, seq, args.crossovers)
-        segments = split_at_crossovers(seq, translated_crossovers)
-        print(f'{id}: {segments}')
-        
-
-    
-# [64, 122, 166, 216, 268, 328, 404])
+    write_segments_to_disk(sequences, args.crossovers)

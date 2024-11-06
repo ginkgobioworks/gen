@@ -3,20 +3,38 @@
 
 This example recreates a protein engineering library made through site-directed, homologous recombination guided by structure-based computation (SCHEMA) ([Otey 2006](doi.org/10.1371/journal.pbio.0040112)). Starting from three existing cytochrome P450 proteins, approximately 3,000 artifical (chimeric) proteins were constructed and tested.
 
-"We generated an artificial family of cytochromes P450 by recombining fragments of the genes encoding the heme-binding domains of three bacterial P450s, CYP102A1 (also known as P450BM3), CYP102A2, and CYP102A3 (abbreviated A1, A2, and A3), which share ̃65% amino acid identity [21, 22] (Figure 1). The parent proteins are 463–466 amino acids long and contain the single substitution F87A (A1) or F88A (A2 and A3), which increases the peroxygenase activities of these heme domains. [...] The final design has crossovers located after residues Glu64, Ile122, Tyr166, Val216, Thr268, Ala328, and Gln404, based on the numbering of the A1 sequence"
+"We generated an artificial family of cytochromes P450 by recombining fragments of the genes encoding the heme-binding domains of three bacterial P450s, CYP102A1 (also known as P450BM3), CYP102A2, and CYP102A3 (abbreviated A1, A2, and A3), which share ̃65% amino acid identity [...] The final design has crossovers located after residues Glu64, Ile122, Tyr166, Val216, Thr268, Ala328, and Gln404, based on the numbering of the A1 sequence"
+
+First we download the sequences of the parent proteins and combine them into one fasta file:
 
 ```console
 wget https://rest.uniprot.org/uniprotkb/P14779.fasta https://rest.uniprot.org/uniprotkb/O08394.fasta https://rest.uniprot.org/uniprotkb/O08336.fasta
 cat O08336.fasta O08394.fasta P14779.fasta > parents.fa
 ```
 
+Next we create multiple sequence alignment using the Muscle application, for example through Docker:
+
 ```console
  docker run --rm --volume $PWD:/data --workdir /data pegi3s/muscle -in parents.fa -out parents_aligned.fa
 ```
 
-WIP: translate_breakpoints.py to generate the parts.fa and layout CSV
+With this alignment, we can then translate the crossover points from the A1 reference frame to all other proteins. The msa_crossover.py Python script performs those calculations, creates the protein segments, and saves them to disk in a format readable by the gen update command.
 
--> followed by combinatorial update into gen
+```console
+python msa_crossover.py parents_aligned.fa 64 122 166 216 268 328 404
+```
+
+The default output of this script is a directory called 'output' that contains the files 'layout.csv' and 'segments.fa'. We now set up our gen repository, import one of the parents to have a starting point, and then perform an update operation.
+
+```console
+gen init
+gen defaults --database test.db --collection protein
+gen import --fasta P14779.fasta
+gen update --parts output/segments.fa --library output/layout.csv --path-name PXB_PRIM2 --start 0 --end 657
+```
+
+** this errors out, changing the start and end positions to internal positions doesn't fix it **
+
 
 ## Site Saturation Mutagenesis
 GB1 dataset: Adaptation in protein fitness landscapes is facilitated by indirect paths
