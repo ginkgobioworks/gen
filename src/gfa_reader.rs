@@ -702,7 +702,7 @@ impl<'a, T: SampleType, S: Opt, U: Opt> Pansn<'a, T, S, U> {
 
     /// Get all path
     #[allow(clippy::type_complexity)]
-    pub fn get_paths_direct(&self) -> Vec<(String, Vec<&Path<T, S, U>>)> {
+    pub fn query_direct(&self) -> Vec<(String, Vec<&Path<T, S, U>>)> {
         let mut result = Vec::new();
         for x in self.genomes.iter() {
             for y in x.haplotypes.iter() {
@@ -720,6 +720,6 @@ impl<'a, T: SampleType, S: Opt, U: Opt> Pansn<'a, T, S, U> {
             "Number of individual haplotypes: {}",
             self.get_haplo_path().len()
         );
-        println!("Total number of paths: {}", self.get_paths_direct().len());
+        println!("Total number of paths: {}", self.query_direct().len());
     }
 }

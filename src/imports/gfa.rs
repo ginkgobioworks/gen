@@ -234,7 +234,7 @@ mod tests {
         import_gfa(&gfa_path, &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
-        let path = Path::get_paths(
+        let path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1 AND name = ?2",
             vec![
@@ -279,7 +279,7 @@ mod tests {
         import_gfa(&gfa_path, &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
-        let path = Path::get_paths(
+        let path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1 AND name = ?2",
             vec![
@@ -305,7 +305,7 @@ mod tests {
         import_gfa(&gfa_path, &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
-        let path = Path::get_paths(
+        let path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1 AND name = ?2",
             vec![
@@ -330,11 +330,11 @@ mod tests {
         let conn = &get_connection(None);
         import_gfa(&gfa_path, &collection_name, conn);
 
-        let paths = Path::get_paths_for_collection(conn, &collection_name);
+        let paths = Path::query_for_collection(conn, &collection_name);
         assert_eq!(paths.len(), 20);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
-        let path = Path::get_paths(
+        let path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1 AND name = ?2",
             vec![
@@ -437,7 +437,7 @@ mod tests {
         import_gfa(&gfa_path, &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
-        let path = Path::get_paths(
+        let path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1 AND name = ?2",
             vec![

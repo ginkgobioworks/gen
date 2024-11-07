@@ -227,7 +227,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
             ),
             vec![],
         ),
-        paths: Path::get_paths(
+        paths: Path::query(
             conn,
             &format!(
                 "select * from paths where id in ({ids})",

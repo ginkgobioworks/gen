@@ -71,7 +71,7 @@ impl PathCache<'_> {
         if let Some(path) = path_lookup {
             path.clone()
         } else {
-            let new_path = Path::get_paths(
+            let new_path = Path::query(
                 path_cache.conn,
                 "select * from paths where block_group_id = ?1 AND name = ?2",
                 vec![SQLValue::from(block_group_id), SQLValue::from(name)],
@@ -178,7 +178,7 @@ impl BlockGroup {
     }
 
     pub fn clone(conn: &Connection, source_block_group_id: i64, target_block_group_id: i64) {
-        let existing_paths = Path::get_paths(
+        let existing_paths = Path::query(
             conn,
             "SELECT * from paths where block_group_id = ?1 ORDER BY id ASC;",
             vec![SQLValue::from(source_block_group_id)],
@@ -802,7 +802,7 @@ impl BlockGroup {
     }
 
     pub fn get_current_path(conn: &Connection, block_group_id: i64) -> Path {
-        let paths = Path::get_paths(
+        let paths = Path::query(
             conn,
             "SELECT * FROM paths WHERE block_group_id = ?1 ORDER BY id DESC",
             vec![SQLValue::from(block_group_id)],
