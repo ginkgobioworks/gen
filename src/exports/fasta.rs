@@ -9,17 +9,26 @@ use crate::models::traits::*;
 pub fn export_fasta(
     conn: &Connection,
     collection_name: &str,
-    sample_name: &str,
+    sample_name: Option<&str>,
     filename: &PathBuf,
 ) {
-    let block_groups = BlockGroup::query(
-        conn,
-        "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-        vec![
-            SQLValue::from(collection_name.to_string()),
-            SQLValue::from(sample_name.to_string()),
-        ],
-    );
+    let block_groups;
+    if let Some(sample_name) = sample_name {
+        block_groups = BlockGroup::query(
+            conn,
+            "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
+            vec![
+                SQLValue::from(collection_name.to_string()),
+                SQLValue::from(sample_name.to_string()),
+            ],
+        );
+    } else {
+        block_groups = BlockGroup::query(
+            conn,
+            "select * from block_groups where collection_name = ?1 AND sample_name IS NULL;",
+            vec![SQLValue::from(collection_name.to_string())],
+        );
+    }
 
     let file = File::create(filename).unwrap();
     let mut writer = fasta::io::Writer::new(file);
@@ -71,7 +80,7 @@ mod tests {
         );
         let tmp_dir = TempDir::new("export_fasta_files").unwrap().into_path();
         let filename = tmp_dir.join("out.fa");
-        export_fasta(conn, &collection, "", &filename);
+        export_fasta(conn, &collection, None, &filename);
 
         let mut fasta_reader = fasta::io::reader::Builder
             .build_from_path(filename)
@@ -121,8 +130,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
-            "",
-            "new sample",
+            None,
+            "child sample",
             "m123",
             2,
             5,
@@ -131,7 +140,7 @@ mod tests {
 
         let tmp_dir = TempDir::new("export_fasta_files").unwrap().into_path();
         let filename = tmp_dir.join("out.fa");
-        export_fasta(conn, &collection, "new sample", &filename);
+        export_fasta(conn, &collection, Some("child sample"), &filename);
 
         let mut fasta_reader = fasta::io::reader::Builder
             .build_from_path(filename)

@@ -21,7 +21,7 @@ pub fn update_with_fasta(
     conn: &Connection,
     operation_conn: &Connection,
     collection_name: &str,
-    parent_sample_name: &str,
+    parent_sample_name: Option<&str>,
     new_sample_name: &str,
     region_name: &str,
     start_coordinate: i64,
@@ -40,14 +40,23 @@ pub fn update_with_fasta(
     let mut fasta_reader = fasta::io::reader::Builder.build_from_path(fasta_file_path)?;
 
     let _new_sample = Sample::create(conn, new_sample_name);
-    let block_groups = BlockGroup::query(
-        conn,
-        "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-        vec![
-            SQLValue::from(collection_name.to_string()),
-            SQLValue::from(parent_sample_name.to_string()),
-        ],
-    );
+    let block_groups;
+    if let Some(parent_name) = parent_sample_name {
+        block_groups = BlockGroup::query(
+            conn,
+            "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
+            vec![
+                SQLValue::from(collection_name.to_string()),
+                SQLValue::from(parent_name.to_string()),
+            ],
+        );
+    } else {
+        block_groups = BlockGroup::query(
+            conn,
+            "select * from block_groups where collection_name = ?1 AND sample_name IS NULL;",
+            vec![SQLValue::from(collection_name.to_string())],
+        );
+    }
 
     let mut new_block_group_id = 0;
     for block_group in block_groups {
@@ -56,7 +65,7 @@ pub fn update_with_fasta(
             collection_name,
             new_sample_name,
             &block_group.name,
-            Some(parent_sample_name),
+            parent_sample_name,
         )
         .unwrap();
         BlockGroup::clone(conn, block_group.id, new_bg_id);
@@ -194,8 +203,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
-            "",
-            "new sample",
+            None,
+            "child sample",
             "m123",
             2,
             5,
@@ -211,7 +220,7 @@ mod tests {
             "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
             vec![
                 SQLValue::from(collection),
-                SQLValue::from("new sample".to_string()),
+                SQLValue::from("child sample".to_string()),
             ],
         );
         assert_eq!(block_groups.len(), 1);
@@ -254,8 +263,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
-            "",
-            "new sample",
+            None,
+            "child sample",
             "m123",
             2,
             5,
@@ -266,8 +275,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
-            "",
-            "new sample",
+            Some("child sample"),
+            "grandchild sample",
             "m123",
             4,
             6,
@@ -283,7 +292,7 @@ mod tests {
             "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
             vec![
                 SQLValue::from(collection),
-                SQLValue::from("new sample".to_string()),
+                SQLValue::from("grandchild sample".to_string()),
             ],
         );
         assert_eq!(block_groups.len(), 1);
@@ -326,8 +335,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
-            "",
-            "new sample",
+            None,
+            "child sample",
             "m123",
             2,
             5,
@@ -338,8 +347,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
-            "",
-            "new sample",
+            Some("child sample"),
+            "grandchild sample",
             "m123",
             1,
             6,
@@ -355,7 +364,7 @@ mod tests {
             "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
             vec![
                 SQLValue::from(collection),
-                SQLValue::from("new sample".to_string()),
+                SQLValue::from("grandchild sample".to_string()),
             ],
         );
         assert_eq!(block_groups.len(), 1);
@@ -404,8 +413,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
-            "",
-            "new sample",
+            None,
+            "child sample",
             "m123",
             2,
             5,
@@ -416,8 +425,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
-            "",
-            "new sample",
+            Some("child sample"),
+            "grandchild sample",
             "m123",
             1,
             12,
@@ -433,7 +442,7 @@ mod tests {
             "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
             vec![
                 SQLValue::from(collection),
-                SQLValue::from("new sample".to_string()),
+                SQLValue::from("grandchild sample".to_string()),
             ],
         );
         assert_eq!(block_groups.len(), 1);
@@ -476,8 +485,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
-            "",
-            "new sample",
+            None,
+            "child sample",
             "m123",
             2,
             5,
@@ -488,8 +497,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
-            "",
-            "new sample",
+            Some("child sample"),
+            "grandchild sample",
             "m123",
             6,
             12,
@@ -505,7 +514,7 @@ mod tests {
             "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
             vec![
                 SQLValue::from(collection),
-                SQLValue::from("new sample".to_string()),
+                SQLValue::from("grandchild sample".to_string()),
             ],
         );
         assert_eq!(block_groups.len(), 1);
@@ -546,8 +555,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
-            "",
-            "new sample",
+            None,
+            "child sample",
             "m123",
             2,
             5,
@@ -558,8 +567,8 @@ mod tests {
             conn,
             op_conn,
             &collection,
-            "",
-            "new sample",
+            Some("child sample"),
+            "grandchild sample",
             "m123",
             4,
             6,
@@ -575,7 +584,7 @@ mod tests {
             "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
             vec![
                 SQLValue::from(collection),
-                SQLValue::from("new sample".to_string()),
+                SQLValue::from("grandchild sample".to_string()),
             ],
         );
         assert_eq!(block_groups.len(), 1);
