@@ -16,6 +16,7 @@ use crate::models::operations::{FileAddition, Operation, OperationSummary};
 use crate::models::path::Path;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
+use crate::models::traits::*;
 use crate::{calculate_hash, operation_management};
 
 #[allow(clippy::too_many_arguments)]
@@ -45,7 +46,7 @@ pub fn update_with_library(
 
     let mut parts_reader = fasta::io::reader::Builder.build_from_path(parts_file_path)?;
 
-    let path = Path::get_paths(
+    let path = Path::query(
         conn,
         "select * from paths where name = ?1",
         vec![SQLValue::from(path_name.to_string())],

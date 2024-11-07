@@ -176,7 +176,7 @@ fn write_paths(
     collection_name: &str,
     blocks: &[GroupBlock],
 ) {
-    let paths = Path::get_paths_for_collection(conn, collection_name);
+    let paths = Path::query_for_collection(conn, collection_name);
     let edges_by_path_id =
         PathEdge::edges_for_paths(conn, paths.iter().map(|path| path.id).collect());
 
@@ -362,7 +362,7 @@ mod tests {
 
         assert_eq!(all_sequences, all_sequences2);
 
-        let paths = Path::get_paths_for_collection(&conn, "test collection 2");
+        let paths = Path::query_for_collection(&conn, "test collection 2");
         assert_eq!(paths.len(), 1);
         assert_eq!(paths[0].sequence(&conn), "AAAATTTTGGGGCCCC");
     }
