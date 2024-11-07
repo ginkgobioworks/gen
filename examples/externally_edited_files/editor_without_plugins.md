@@ -1,6 +1,8 @@
 # Tracking sequence edits across applications - without plugins
 
-In this example a user makes changes in a third party genetic sequence editing suite like the freely available [ApE](https://jorgensen.biology.utah.edu/wayned/ape/) or commercial software like [Geneious](https://www.geneious.com/). The task at hand is: "change the selection marker of the Bacterial Artificial Chromosome (BAC) pBeloBAC11 ([file](./pBeloBAC11.gb) provided by NEB) from chloramphenicol resistance to kanamycin resistance." We will use the kanamycin resistance marker from the Tn5 transposon (GenBank: U00004.1), which we can download from NCBI:
+In this example a user makes changes in a third party genetic sequence editing suite like the freely available [ApE](https://jorgensen.biology.utah.edu/wayned/ape/) or commercial software like [Geneious](https://www.geneious.com/). In order to track these changes in Gen as well, we need a way to represent what the user did in a format gen can understand. What follows is one possible route, but this is still very much a work in progress.
+
+The task at hand is: "change the selection marker of the Bacterial Artificial Chromosome (BAC) pBeloBAC11 ([file](./pBeloBAC11.gb) provided by NEB) from chloramphenicol resistance to kanamycin resistance." We will use the kanamycin resistance marker from the Tn5 transposon (GenBank: U00004.1), which we can download from NCBI:
 
 ```console
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&rettype=gb&id=U00004.1" -O Tn5.gb
@@ -49,13 +51,11 @@ seqwish --seqs combined.fa --paf-alns aln.paf --gfa out.gfa --min-match-len=12
 
 In this specific example ommitting the min-match-len filter results in a graph that contains a node of only 1 bp long because of a local alignment. This is confirmed by the CIGAR string in the alignment file: `cg:Z:766=790I1=655D6085=`. If further normalization is needed the complete pggb pipeline can be used instead, but it was not necessary in this case.
 
-The path lines in the GFA file indicate that this is a replacement, which we then translate to a gen update command.
+The path lines in the GFA file indicate that this is a replacement: node 2 is replaced by node 4. Gen doesn't know about these node identifiers however, so we can't import the GFA directly at this point. One option is to convert the path differences to one or more gen update commands, an alternative approach may be to rewrite the node IDs. (TODO) 
 ```
 P       ref     1+,2+,3+        *
 P       alt     1+,4+,3+        *
 ```
-
-TODO: test this out with >2 protein engineering sequences as a way to get the multiple sequence alignment import working too.
 
 ## Appendix
 ### Minimap2 instead of wfmash
