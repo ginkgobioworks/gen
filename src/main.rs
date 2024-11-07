@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use gen::config;
 use gen::config::get_operation_connection;
 
+use gen::exports::fasta::export_fasta;
 use gen::exports::gfa::export_gfa;
 use gen::get_connection;
 use gen::imports::fasta::import_fasta;
@@ -10,6 +11,7 @@ use gen::imports::gfa::import_gfa;
 use gen::models::metadata;
 use gen::models::operations::{setup_db, Branch, OperationState};
 use gen::operation_management;
+use gen::updates::fasta::update_with_fasta;
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::update_with_vcf;
 use rusqlite::{types::Value, Connection};
@@ -68,6 +70,9 @@ enum Commands {
         /// If no sample is provided, enter the sample to associate variants to
         #[arg(short, long)]
         sample: Option<String>,
+        /// New sample name if we are updating with intentional edits
+        #[arg(long)]
+        new_sample: Option<String>,
         /// Use the given sample as the parent sample for changes.
         #[arg(long, alias = "cf")]
         coordinate_frame: Option<String>,
@@ -80,6 +85,9 @@ enum Commands {
         /// The name of the path to add the library to
         #[arg(short, long)]
         path_name: Option<String>,
+        /// The name of the region to update (eg "chr1")
+        #[arg(long)]
+        region_name: Option<String>,
         /// The start coordinate for the region to add the library to
         #[arg(long)]
         start: Option<i64>,
@@ -138,10 +146,13 @@ enum Commands {
         name: Option<String>,
         /// The name of the GFA file to export to
         #[arg(short, long)]
-        gfa: String,
+        gfa: Option<String>,
         /// An optional sample name
         #[arg(short, long)]
         sample: Option<String>,
+        /// The name of the fasta file to export to
+        #[arg(short, long)]
+        fasta: Option<String>,
     },
     Defaults {
         /// The default database to use
@@ -208,6 +219,7 @@ fn main() {
             shallow,
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
+            operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
             let name = &name.clone().unwrap_or_else(|| {
                 get_default_collection(&operation_conn)
                     .expect("No collection specified and default not setup.")
@@ -228,6 +240,7 @@ fn main() {
                 );
             }
             conn.execute("END TRANSACTION", []).unwrap();
+            operation_conn.execute("END TRANSACTION", []).unwrap();
         }
         Some(Commands::Update {
             name,
@@ -237,12 +250,15 @@ fn main() {
             parts,
             genotype,
             sample,
+            new_sample,
             path_name,
+            region_name,
             start,
             end,
             coordinate_frame,
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
+            operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
             let name = &name.clone().unwrap_or_else(|| {
                 get_default_collection(&operation_conn)
                     .expect("No collection specified and default not setup.")
@@ -257,6 +273,20 @@ fn main() {
                     end.unwrap(),
                     &parts.clone().unwrap(),
                     library_path,
+                );
+            } else if let Some(fasta_path) = fasta {
+                // NOTE: This has to go after library because the library update also uses a fasta
+                // file
+                update_with_fasta(
+                    &conn,
+                    &operation_conn,
+                    name,
+                    sample.clone().as_deref(),
+                    &new_sample.clone().unwrap(),
+                    &region_name.clone().unwrap(),
+                    start.unwrap(),
+                    end.unwrap(),
+                    fasta_path,
                 );
             } else if let Some(vcf_path) = vcf {
                 update_with_vcf(
@@ -273,6 +303,7 @@ fn main() {
             }
 
             conn.execute("END TRANSACTION", []).unwrap();
+            operation_conn.execute("END TRANSACTION", []).unwrap();
         }
         Some(Commands::Operations { branch }) => {
             let current_op = OperationState::get_operation(&operation_conn, &db_uuid)
@@ -387,14 +418,32 @@ fn main() {
         Some(Commands::Reset { id }) => {
             operation_management::reset(&conn, &operation_conn, &db_uuid, *id);
         }
-        Some(Commands::Export { name, gfa, sample }) => {
+        Some(Commands::Export {
+            name,
+            gfa,
+            sample,
+            fasta,
+        }) => {
             let name = &name.clone().unwrap_or_else(|| {
                 get_default_collection(&operation_conn)
                     .expect("No collection specified and default not setup.")
             });
             conn.execute("BEGIN TRANSACTION", []).unwrap();
-            export_gfa(&conn, name, &PathBuf::from(gfa), sample.clone());
+            operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
+            if let Some(gfa_path) = gfa {
+                export_gfa(&conn, name, &PathBuf::from(gfa_path), sample.clone());
+            } else if let Some(fasta_path) = fasta {
+                export_fasta(
+                    &conn,
+                    name,
+                    sample.clone().as_deref(),
+                    &PathBuf::from(fasta_path),
+                );
+            } else {
+                panic!("No file type specified for export.");
+            }
             conn.execute("END TRANSACTION", []).unwrap();
+            operation_conn.execute("END TRANSACTION", []).unwrap();
         }
         None => {}
         // these will never be handled by this method as we search for them earlier.

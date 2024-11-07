@@ -5,7 +5,7 @@ use intervaltree::IntervalTree;
 use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
-use rusqlite::{params_from_iter, types::Value as SQLValue, Connection};
+use rusqlite::{params_from_iter, types::Value as SQLValue, Connection, Row};
 use serde::{Deserialize, Serialize};
 
 use crate::graph::{
@@ -158,25 +158,6 @@ impl BlockGroup {
         }
     }
 
-    pub fn query(conn: &Connection, query: &str, placeholders: Vec<SQLValue>) -> Vec<BlockGroup> {
-        let mut stmt = conn.prepare(query).unwrap();
-        let rows = stmt
-            .query_map(params_from_iter(placeholders), |row| {
-                Ok(BlockGroup {
-                    id: row.get(0)?,
-                    collection_name: row.get(1)?,
-                    sample_name: row.get(2)?,
-                    name: row.get(3)?,
-                })
-            })
-            .unwrap();
-        let mut objs = vec![];
-        for row in rows {
-            objs.push(row.unwrap());
-        }
-        objs
-    }
-
     pub fn get_by_id(conn: &Connection, id: i64) -> BlockGroup {
         let query = "SELECT * FROM block_groups WHERE id = ?1";
         let mut stmt = conn.prepare(query).unwrap();
@@ -199,7 +180,7 @@ impl BlockGroup {
     pub fn clone(conn: &Connection, source_block_group_id: i64, target_block_group_id: i64) {
         let existing_paths = Path::get_paths(
             conn,
-            "SELECT * from paths where block_group_id = ?1",
+            "SELECT * from paths where block_group_id = ?1 ORDER BY id ASC;",
             vec![SQLValue::from(source_block_group_id)],
         );
 
@@ -818,6 +799,27 @@ impl BlockGroup {
             .map(|block| (block.start..block.end, *block))
             .collect();
         tree
+    }
+
+    pub fn get_current_path(conn: &Connection, block_group_id: i64) -> Path {
+        let paths = Path::get_paths(
+            conn,
+            "SELECT * FROM paths WHERE block_group_id = ?1 ORDER BY id DESC",
+            vec![SQLValue::from(block_group_id)],
+        );
+        paths[0].clone()
+    }
+}
+
+impl Query for BlockGroup {
+    type Model = BlockGroup;
+    fn process_row(row: &Row) -> Self::Model {
+        BlockGroup {
+            id: row.get(0).unwrap(),
+            collection_name: row.get(1).unwrap(),
+            sample_name: row.get(2).unwrap(),
+            name: row.get(3).unwrap(),
+        }
     }
 }
 

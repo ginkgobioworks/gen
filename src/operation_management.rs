@@ -17,6 +17,7 @@ use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::collection::Collection;
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::file_types::FileTypes;
+use crate::models::metadata;
 use crate::models::node::Node;
 use crate::models::operations::{
     Branch, FileAddition, Operation, OperationState, OperationSummary,
@@ -798,6 +799,41 @@ pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Opera
             }
         }
     }
+}
+
+pub fn start_operation<'a>(
+    conn: &'a Connection,
+    operation_conn: &'a Connection,
+    file_path: &'a str,
+    file_type: FileTypes,
+    operation_description: &'a str,
+    name: &'a str,
+) -> (session::Session<'a>, Operation) {
+    let mut session = session::Session::new(conn).unwrap();
+    attach_session(&mut session);
+    let change = FileAddition::create(operation_conn, file_path, file_type);
+    let db_uuid = metadata::get_db_uuid(conn);
+    let operation = Operation::create(
+        operation_conn,
+        &db_uuid,
+        name.to_string(),
+        operation_description,
+        change.id,
+    );
+    (session, operation)
+}
+
+pub fn end_operation(
+    conn: &Connection,
+    operation_conn: &Connection,
+    operation: &Operation,
+    session: &mut session::Session,
+    summary_str: &str,
+) {
+    OperationSummary::create(operation_conn, operation.id, summary_str);
+    let mut output = Vec::new();
+    session.changeset_strm(&mut output).unwrap();
+    write_changeset(conn, operation, &output);
 }
 
 pub fn attach_session(session: &mut session::Session) {
