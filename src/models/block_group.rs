@@ -180,7 +180,7 @@ impl BlockGroup {
     pub fn clone(conn: &Connection, source_block_group_id: i64, target_block_group_id: i64) {
         let existing_paths = Path::get_paths(
             conn,
-            "SELECT * from paths where block_group_id = ?1",
+            "SELECT * from paths where block_group_id = ?1 ORDER BY id ASC;",
             vec![SQLValue::from(source_block_group_id)],
         );
 
