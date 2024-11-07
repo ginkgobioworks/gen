@@ -68,7 +68,6 @@ pub fn update_with_fasta(
             parent_sample_name,
         )
         .unwrap();
-        BlockGroup::clone(conn, block_group.id, new_bg_id);
         if block_group.name == region_name {
             new_block_group_id = new_bg_id;
         }
