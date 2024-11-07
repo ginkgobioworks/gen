@@ -11,7 +11,6 @@ use crate::models::{
     metadata,
     node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
     path::Path,
-    sample::Sample,
     sequence::Sequence,
     strand::Strand,
 };
@@ -49,8 +48,6 @@ pub fn import_fasta(
             name: name.to_string(),
         }
     };
-    let sample_name = "";
-    let _sample = Sample::create(conn, sample_name);
     let mut summary: HashMap<String, i64> = HashMap::new();
 
     for result in reader.records() {
@@ -82,7 +79,7 @@ pub fn import_fasta(
                 hash = seq.hash
             )),
         );
-        let block_group = BlockGroup::create(conn, &collection.name, Some(sample_name), &name);
+        let block_group = BlockGroup::create(conn, &collection.name, None, &name);
         let edge_into = Edge::create(
             conn,
             PATH_START_NODE_ID,

@@ -281,7 +281,7 @@ fn main() {
                     &conn,
                     &operation_conn,
                     name,
-                    &sample.clone().unwrap_or("".to_string()),
+                    sample.clone().as_deref(),
                     &new_sample.clone().unwrap(),
                     &region_name.clone().unwrap(),
                     start.unwrap(),
@@ -436,7 +436,7 @@ fn main() {
                 export_fasta(
                     &conn,
                     name,
-                    &sample.clone().unwrap_or("".to_string()),
+                    sample.clone().as_deref(),
                     &PathBuf::from(fasta_path),
                 );
             } else {
