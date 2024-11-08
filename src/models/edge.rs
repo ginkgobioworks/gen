@@ -5,6 +5,7 @@ use rusqlite::{params_from_iter, Connection, Result as SQLResult, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, RandomState};
+use std::rc::Rc;
 
 use crate::graph::{GraphEdge, GraphNode};
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
@@ -200,13 +201,12 @@ impl Edge {
     }
 
     pub fn bulk_load(conn: &Connection, edge_ids: &[i64]) -> Vec<Edge> {
-        let formatted_edge_ids = edge_ids
+        let query_edge_ids = edge_ids
             .iter()
-            .map(|edge_id| edge_id.to_string())
-            .collect::<Vec<_>>()
-            .join(",");
-        let query = format!("select id, source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased from edges where id in ({});", formatted_edge_ids);
-        Edge::query(conn, &query, vec![])
+            .map(|edge_id| Value::from(*edge_id))
+            .collect::<Vec<_>>();
+        let query = "select id, source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased from edges where id in rarray(?1);";
+        Edge::query(conn, query, rusqlite::params!(Rc::new(query_edge_ids)))
     }
 
     pub fn bulk_create(conn: &Connection, edges: &Vec<EdgeData>) -> Vec<i64> {
@@ -231,7 +231,7 @@ impl Edge {
         let formatted_edge_rows = edge_rows.join(", ");
 
         let select_statement = format!("SELECT * FROM edges WHERE (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased) in ({0});", formatted_edge_rows);
-        let existing_edges = Edge::query(conn, &select_statement, vec![]);
+        let existing_edges = Edge::query(conn, &select_statement, rusqlite::params!());
         for edge in existing_edges.iter() {
             edge_map.insert(EdgeData::from(edge), edge.id);
         }
@@ -669,7 +669,7 @@ mod tests {
             let binding = Edge::query(
                 conn,
                 "select * from edges where id = ?1;",
-                vec![Value::from(*id)],
+                rusqlite::params!(Value::from(*id)),
             );
             let edge = binding.first().unwrap();
             assert_eq!(EdgeData::from(edge), edges[index]);
@@ -685,7 +685,7 @@ mod tests {
             let binding = Edge::query(
                 conn,
                 "select * from edges where id = ?1;",
-                vec![Value::from(*id)],
+                rusqlite::params!(Value::from(*id)),
             );
             let edge = binding.first().unwrap();
             assert_eq!(EdgeData::from(edge), edges[index]);

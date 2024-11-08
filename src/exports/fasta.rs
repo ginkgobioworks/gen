@@ -1,4 +1,5 @@
 use noodles::fasta;
+use rusqlite;
 use rusqlite::{types::Value as SQLValue, Connection};
 use std::fs::File;
 use std::path::PathBuf;
@@ -17,16 +18,16 @@ pub fn export_fasta(
         block_groups = BlockGroup::query(
             conn,
             "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-            vec![
+            rusqlite::params!(
                 SQLValue::from(collection_name.to_string()),
                 SQLValue::from(sample_name.to_string()),
-            ],
+            ),
         );
     } else {
         block_groups = BlockGroup::query(
             conn,
             "select * from block_groups where collection_name = ?1 AND sample_name IS NULL;",
-            vec![SQLValue::from(collection_name.to_string())],
+            rusqlite::params!(SQLValue::from(collection_name.to_string())),
         );
     }
 

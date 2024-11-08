@@ -1,7 +1,9 @@
 use itertools::Itertools;
+use rusqlite;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection, Row};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::models::edge::Edge;
 use crate::models::traits::*;
@@ -95,7 +97,7 @@ impl PathEdge {
         let path_edges = PathEdge::query(
             conn,
             "select * from path_edges where path_id = ?1 order by index_in_path ASC",
-            vec![Value::from(path_id)],
+            rusqlite::params!(Value::from(path_id)),
         );
         let edge_ids = path_edges
             .into_iter()
@@ -113,18 +115,14 @@ impl PathEdge {
     }
 
     pub fn edges_for_paths(conn: &Connection, path_ids: Vec<i64>) -> HashMap<i64, Vec<Edge>> {
-        let placeholder_string = path_ids.iter().map(|_| "?").join(",");
+        let query_path_ids = path_ids
+            .iter()
+            .map(|path_id| Value::from(*path_id))
+            .collect::<Vec<Value>>();
         let path_edges = PathEdge::query(
             conn,
-            format!(
-                "select * from path_edges where path_id in ({}) ORDER BY path_id, index_in_path",
-                placeholder_string
-            )
-            .as_str(),
-            path_ids
-                .into_iter()
-                .map(Value::from)
-                .collect::<Vec<Value>>(),
+            "select * from path_edges where path_id in rarray(?1) ORDER BY path_id, index_in_path",
+            rusqlite::params!(Rc::new(query_path_ids)),
         );
         let edge_ids = path_edges
             .clone()

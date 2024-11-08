@@ -34,10 +34,10 @@ pub fn export_gfa(
         let block_groups = BlockGroup::query(
             conn,
             "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-            vec![
+            rusqlite::params!(
                 SQLValue::from(collection_name.to_string()),
                 SQLValue::from(sample.clone()),
-            ],
+            ),
         );
         if block_groups.is_empty() {
             panic!(

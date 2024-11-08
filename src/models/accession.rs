@@ -1,6 +1,6 @@
 use crate::models::edge::EdgeData;
 use crate::models::strand::Strand;
-use crate::models::traits::Query;
+use crate::models::traits::*;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection, Result as SQLResult, Row};
 use serde::{Deserialize, Serialize};
@@ -199,7 +199,7 @@ impl AccessionEdge {
         let formatted_edge_rows = edge_rows.join(", ");
 
         let select_statement = format!("SELECT * FROM accession_edges WHERE (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index) in ({0});", formatted_edge_rows);
-        let existing_edges = AccessionEdge::query(conn, &select_statement, vec![]);
+        let existing_edges = AccessionEdge::query(conn, &select_statement, rusqlite::params!());
         for edge in existing_edges.iter() {
             edge_map.insert(AccessionEdgeData::from(edge), edge.id);
         }
@@ -333,7 +333,7 @@ mod tests {
             Accession::query(
                 conn,
                 "select * from accessions where name = ?1",
-                vec![Value::from("test".to_string())]
+                rusqlite::params!(Value::from("test".to_string())),
             ),
             vec![Accession {
                 id: accession.id,

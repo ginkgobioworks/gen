@@ -150,7 +150,11 @@ impl Path {
 
     pub fn query_for_collection(conn: &Connection, collection_name: &str) -> Vec<Path> {
         let query = "SELECT * FROM paths JOIN block_groups ON paths.block_group_id = block_groups.id WHERE block_groups.collection_name = ?1";
-        Path::query(conn, query, vec![Value::from(collection_name.to_string())])
+        Path::query(
+            conn,
+            query,
+            rusqlite::params!(Value::from(collection_name.to_string())),
+        )
     }
 
     pub fn sequence(&self, conn: &Connection) -> String {
