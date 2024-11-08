@@ -12,6 +12,7 @@ use gen::models::metadata;
 use gen::models::operations::{setup_db, Branch, OperationState};
 use gen::operation_management;
 use gen::updates::fasta::update_with_fasta;
+use gen::updates::gaf::update_with_gaf;
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::update_with_vcf;
 use rusqlite::{types::Value, Connection};
@@ -94,6 +95,19 @@ enum Commands {
         /// The end coordinate for the region to add the library to
         #[arg(short, long)]
         end: Option<i64>,
+    },
+    /// Use a GAF
+    #[command(name = "update-gaf")]
+    UpdateGaf {
+        /// The name of the collection to update
+        #[arg(short, long)]
+        name: Option<String>,
+        /// The GAF input
+        #[arg(short, long)]
+        gaf: String,
+        /// The sample to update
+        #[arg(short, long)]
+        sample: Option<String>,
     },
     /// Initialize a gen repository
     Init {},
@@ -233,7 +247,7 @@ fn main() {
                     &operation_conn,
                 );
             } else if gfa.is_some() {
-                import_gfa(&PathBuf::from(gfa.clone().unwrap()), name, &conn);
+                import_gfa(&PathBuf::from(gfa.clone().unwrap()), name, None, &conn);
             } else {
                 panic!(
                     "ERROR: Import command attempted but no recognized file format was specified"
@@ -304,6 +318,13 @@ fn main() {
 
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
+        }
+        Some(Commands::UpdateGaf { name, gaf, sample }) => {
+            let name = &name.clone().unwrap_or_else(|| {
+                get_default_collection(&operation_conn)
+                    .expect("No collection specified and default not setup.")
+            });
+            update_with_gaf(&conn, &operation_conn, gaf, name, sample.as_deref());
         }
         Some(Commands::Operations { branch }) => {
             let current_op = OperationState::get_operation(&operation_conn, &db_uuid)
