@@ -49,7 +49,7 @@ pub fn update_with_library(
     let path = Path::query(
         conn,
         "select * from paths where name = ?1",
-        vec![SQLValue::from(path_name.to_string())],
+        rusqlite::params!(SQLValue::from(path_name.to_string())),
     )[0]
     .clone();
 

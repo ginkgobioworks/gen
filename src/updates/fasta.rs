@@ -45,16 +45,16 @@ pub fn update_with_fasta(
         block_groups = BlockGroup::query(
             conn,
             "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-            vec![
+            rusqlite::params!(
                 SQLValue::from(collection_name.to_string()),
                 SQLValue::from(parent_name.to_string()),
-            ],
+            ),
         );
     } else {
         block_groups = BlockGroup::query(
             conn,
             "select * from block_groups where collection_name = ?1 AND sample_name IS NULL;",
-            vec![SQLValue::from(collection_name.to_string())],
+            rusqlite::params!(SQLValue::from(collection_name.to_string())),
         );
     }
 
@@ -131,13 +131,13 @@ pub fn update_with_fasta(
     let edge_to_new_node = Edge::query(
         conn,
         "select * from edges where target_node_id = ?1",
-        vec![SQLValue::from(node_id)],
+        rusqlite::params!(SQLValue::from(node_id)),
     )[0]
     .clone();
     let edge_from_new_node = Edge::query(
         conn,
         "select * from edges where source_node_id = ?1",
-        vec![SQLValue::from(node_id)],
+        rusqlite::params!(SQLValue::from(node_id)),
     )[0]
     .clone();
     let new_path = path.new_path_with(
@@ -217,10 +217,10 @@ mod tests {
         let block_groups = BlockGroup::query(
             conn,
             "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-            vec![
+            rusqlite::params!(
                 SQLValue::from(collection),
                 SQLValue::from("child sample".to_string()),
-            ],
+            ),
         );
         assert_eq!(block_groups.len(), 1);
         assert_eq!(
@@ -289,10 +289,10 @@ mod tests {
         let block_groups = BlockGroup::query(
             conn,
             "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-            vec![
+            rusqlite::params!(
                 SQLValue::from(collection),
                 SQLValue::from("grandchild sample".to_string()),
-            ],
+            ),
         );
         assert_eq!(block_groups.len(), 1);
         assert_eq!(
@@ -361,10 +361,10 @@ mod tests {
         let block_groups = BlockGroup::query(
             conn,
             "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-            vec![
+            rusqlite::params!(
                 SQLValue::from(collection),
                 SQLValue::from("grandchild sample".to_string()),
-            ],
+            ),
         );
         assert_eq!(block_groups.len(), 1);
         assert_eq!(
@@ -439,10 +439,10 @@ mod tests {
         let block_groups = BlockGroup::query(
             conn,
             "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-            vec![
+            rusqlite::params!(
                 SQLValue::from(collection),
                 SQLValue::from("grandchild sample".to_string()),
-            ],
+            ),
         );
         assert_eq!(block_groups.len(), 1);
         assert_eq!(
@@ -511,10 +511,10 @@ mod tests {
         let block_groups = BlockGroup::query(
             conn,
             "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-            vec![
+            rusqlite::params!(
                 SQLValue::from(collection),
                 SQLValue::from("grandchild sample".to_string()),
-            ],
+            ),
         );
         assert_eq!(block_groups.len(), 1);
         assert_eq!(
@@ -581,10 +581,10 @@ mod tests {
         let block_groups = BlockGroup::query(
             conn,
             "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-            vec![
+            rusqlite::params!(
                 SQLValue::from(collection),
                 SQLValue::from("grandchild sample".to_string()),
-            ],
+            ),
         );
         assert_eq!(block_groups.len(), 1);
         assert_eq!(

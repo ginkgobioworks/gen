@@ -1,6 +1,7 @@
 use rusqlite::{params_from_iter, types::Value as SQLValue, Connection, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::models::sequence::Sequence;
 use crate::models::traits::*;
@@ -65,13 +66,14 @@ impl Node {
     pub fn get_nodes(conn: &Connection, node_ids: Vec<i64>) -> Vec<Node> {
         let mut nodes: Vec<Node> = vec![];
         for chunk in node_ids.chunks(1000) {
+            let query_node_ids: Vec<SQLValue> = chunk
+                .iter()
+                .map(|node_id| SQLValue::from(*node_id))
+                .collect();
             nodes.extend(Node::query(
                 conn,
-                &format!(
-                    "SELECT * FROM nodes WHERE id IN ({})",
-                    chunk.iter().map(|_| "?").collect::<Vec<_>>().join(", ")
-                ),
-                chunk.iter().map(|id| SQLValue::Integer(*id)).collect(),
+                "SELECT * FROM nodes WHERE id IN rarray(?1);",
+                rusqlite::params!(Rc::new(query_node_ids)),
             ))
         }
         nodes

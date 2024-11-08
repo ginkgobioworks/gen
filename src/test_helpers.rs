@@ -192,14 +192,14 @@ where
 
 pub fn get_sample_bg<'a>(conn: &Connection, sample_name: impl Into<Option<&'a str>>) -> BlockGroup {
     let sample_name = sample_name.into();
-    let mut placeholders = vec![];
-    let query;
+    let mut results;
     if let Some(name) = sample_name {
-        query = "select * from block_groups where sample_name = ?1";
-        placeholders.push(Value::from(name.to_string()));
+        let query = "select * from block_groups where sample_name = ?1";
+        let params = rusqlite::params!(Value::from(name.to_string()));
+        results = BlockGroup::query(conn, query, params);
     } else {
-        query = "select * from block_groups where sample_name is null";
+        let query = "select * from block_groups where sample_name is null";
+        results = BlockGroup::query(conn, query, rusqlite::params!());
     }
-    let mut results = BlockGroup::query(conn, query, placeholders);
     results.pop().unwrap()
 }
