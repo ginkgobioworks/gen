@@ -1,6 +1,7 @@
 use crate::models::edge::Edge;
 use crate::models::traits::*;
 use rusqlite;
+use rusqlite::types::Value;
 use rusqlite::{Connection, Row};
 
 #[derive(Clone, Debug)]
@@ -41,11 +42,11 @@ impl BlockGroupEdge {
     }
 
     pub fn edges_for_block_group(conn: &Connection, block_group_id: i64) -> Vec<Edge> {
-        let query = format!(
-            "select * from block_group_edges where block_group_id = {};",
-            block_group_id
+        let block_group_edges = BlockGroupEdge::query(
+            conn,
+            "select * from block_group_edges where block_group_id = ?1;",
+            rusqlite::params!(Value::from(block_group_id)),
         );
-        let block_group_edges = BlockGroupEdge::query(conn, &query, rusqlite::params!());
         let edge_ids = block_group_edges
             .into_iter()
             .map(|block_group_edge| block_group_edge.edge_id)
