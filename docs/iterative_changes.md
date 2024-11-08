@@ -73,4 +73,4 @@ contained a heterozygous insertion, it would create an ambiguity in positions do
 these changes are not permitted. However, this format is very amenable for simpler organisms such as e. coli.
 
 For changes where positions are ambiguous, the following approaches may be taken to model changes:
-* links here
+* [Updating sequences using alignments](updates_with_gaf.md)
