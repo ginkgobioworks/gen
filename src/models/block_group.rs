@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 use interavl::IntervalTree as IT2;
 use intervaltree::IntervalTree;
-use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
 use rusqlite::{params_from_iter, types::Value as SQLValue, Connection, Row};
@@ -71,10 +71,10 @@ impl PathCache<'_> {
         if let Some(path) = path_lookup {
             path.clone()
         } else {
-            let new_path = Path::get_paths(
+            let new_path = Path::query(
                 path_cache.conn,
                 "select * from paths where block_group_id = ?1 AND name = ?2",
-                vec![SQLValue::from(block_group_id), SQLValue::from(name)],
+                rusqlite::params!(SQLValue::from(block_group_id), SQLValue::from(name)),
             )[0]
             .clone();
 
@@ -178,10 +178,10 @@ impl BlockGroup {
     }
 
     pub fn clone(conn: &Connection, source_block_group_id: i64, target_block_group_id: i64) {
-        let existing_paths = Path::get_paths(
+        let existing_paths = Path::query(
             conn,
             "SELECT * from paths where block_group_id = ?1 ORDER BY id ASC;",
-            vec![SQLValue::from(source_block_group_id)],
+            rusqlite::params!(SQLValue::from(source_block_group_id)),
         );
 
         let edge_ids = BlockGroupEdge::edges_for_block_group(conn, source_block_group_id)
@@ -203,16 +203,18 @@ impl BlockGroup {
 
         for accession in Accession::query(
             conn,
-            &format!(
-                "select * from accessions where path_id IN ({path_ids});",
-                path_ids = existing_paths.iter().map(|path| path.id).join(",")
-            ),
-            vec![],
+            "select * from accessions where path_id IN rarray(?1);",
+            rusqlite::params!(Rc::new(
+                existing_paths
+                    .iter()
+                    .map(|path| SQLValue::from(path.id))
+                    .collect::<Vec<SQLValue>>()
+            )),
         ) {
             let edges = AccessionPath::query(
                 conn,
                 "Select * from accession_paths where accession_id = ?1 order by index_in_path ASC;",
-                vec![SQLValue::from(accession.id)],
+                rusqlite::params!(SQLValue::from(accession.id)),
             );
             let new_path_id = path_map[&accession.path_id];
             let obj = Accession::create(
@@ -802,10 +804,10 @@ impl BlockGroup {
     }
 
     pub fn get_current_path(conn: &Connection, block_group_id: i64) -> Path {
-        let paths = Path::get_paths(
+        let paths = Path::query(
             conn,
             "SELECT * FROM paths WHERE block_group_id = ?1 ORDER BY id DESC",
-            vec![SQLValue::from(block_group_id)],
+            rusqlite::params!(SQLValue::from(block_group_id)),
         );
         paths[0].clone()
     }
@@ -872,7 +874,7 @@ mod tests {
             Accession::query(
                 conn,
                 "select * from accessions where name = ?1",
-                vec![SQLValue::from("test".to_string())]
+                rusqlite::params!(SQLValue::from("test".to_string())),
             ),
             vec![Accession {
                 id: acc_1.id,
@@ -890,7 +892,7 @@ mod tests {
             Accession::query(
                 conn,
                 "select * from accessions where name = ?1",
-                vec![SQLValue::from("test".to_string())]
+                rusqlite::params!(SQLValue::from("test".to_string())),
             ),
             vec![
                 Accession {
@@ -1773,7 +1775,7 @@ mod tests {
         let new_path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1",
-            vec![SQLValue::from(new_bg_id)],
+            rusqlite::params!(SQLValue::from(new_bg_id)),
         );
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
@@ -1951,7 +1953,7 @@ mod tests {
         let new_path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1",
-            vec![SQLValue::from(new_bg_id)],
+            rusqlite::params!(SQLValue::from(new_bg_id)),
         );
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
@@ -2000,7 +2002,7 @@ mod tests {
         let new_path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1",
-            vec![SQLValue::from(gc_bg_id)],
+            rusqlite::params!(SQLValue::from(gc_bg_id)),
         );
 
         let insert = PathBlock {
@@ -2046,7 +2048,7 @@ mod tests {
         let new_path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1",
-            vec![SQLValue::from(new_bg_id)],
+            rusqlite::params!(SQLValue::from(new_bg_id)),
         );
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
@@ -2098,7 +2100,7 @@ mod tests {
         let new_path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1",
-            vec![SQLValue::from(gc_bg_id)],
+            rusqlite::params!(SQLValue::from(gc_bg_id)),
         );
 
         let insert_sequence = Sequence::new()
@@ -2156,7 +2158,7 @@ mod tests {
         let new_path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1",
-            vec![SQLValue::from(new_bg_id)],
+            rusqlite::params!(SQLValue::from(new_bg_id)),
         );
         // This is a heterozygous replacement of 5 bases with 4 bases, so positions
         // downstream of this are not addressable.
@@ -2210,7 +2212,7 @@ mod tests {
         let new_path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1",
-            vec![SQLValue::from(gc_bg_id)],
+            rusqlite::params!(SQLValue::from(gc_bg_id)),
         );
 
         let insert_sequence = Sequence::new()

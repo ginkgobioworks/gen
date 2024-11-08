@@ -5,6 +5,7 @@ use std::{fs, path::PathBuf, str};
 use fallible_streaming_iterator::FallibleStreamingIterator;
 use itertools::Itertools;
 use petgraph::Direction;
+use rusqlite;
 use rusqlite::session::ChangesetIter;
 use rusqlite::types::{FromSql, Value};
 use rusqlite::{session, Connection};
@@ -216,7 +217,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                 "select * from block_groups where id in ({ids})",
                 ids = previous_block_groups.iter().join(",")
             ),
-            vec![],
+            rusqlite::params!(),
         ),
         nodes: vec![],
         edges: Edge::query(
@@ -225,15 +226,15 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                 "select * from edges where id in ({ids})",
                 ids = previous_edges.iter().join(",")
             ),
-            vec![],
+            rusqlite::params!(),
         ),
-        paths: Path::get_paths(
+        paths: Path::query(
             conn,
             &format!(
                 "select * from paths where id in ({ids})",
                 ids = previous_paths.iter().join(",")
             ),
-            vec![],
+            rusqlite::params!(),
         ),
         accessions: Accession::query(
             conn,
@@ -241,7 +242,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                 "select * from accessions where id in ({ids})",
                 ids = previous_accessions.iter().join(",")
             ),
-            vec![],
+            rusqlite::params!(),
         ),
         accession_edges: AccessionEdge::query(
             conn,
@@ -249,7 +250,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                 "select * from accession_edges where id in ({ids})",
                 ids = previous_accession_edges.iter().join(",")
             ),
-            vec![],
+            rusqlite::params!(),
         ),
     };
     serde_json::to_vec(&s).unwrap()
@@ -742,7 +743,7 @@ pub fn reset(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_i
     for op in Operation::query(
         operation_conn,
         "select * from operation where parent_id = ?1",
-        vec![Value::from(op_id)],
+        rusqlite::params!(Value::from(op_id)),
     )
     .iter()
     {
@@ -925,7 +926,7 @@ mod tests {
         let binding = BlockGroup::query(
             conn,
             "select * from block_groups where id = ?1;",
-            vec![Value::from(bg_id)],
+            rusqlite::params!(Value::from(bg_id)),
         );
         let dep_bg = binding.first().unwrap();
 
@@ -994,10 +995,15 @@ mod tests {
             conn,
             operation_conn,
         );
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
-        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
+        let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
+        let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
+        let op_count = Operation::query(
+            operation_conn,
+            "select * from operation",
+            rusqlite::params!(),
+        )
+        .len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
         assert_eq!(sample_count, 0);
@@ -1011,10 +1017,15 @@ mod tests {
             operation_conn,
             None,
         );
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
-        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
+        let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
+        let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
+        let op_count = Operation::query(
+            operation_conn,
+            "select * from operation",
+            rusqlite::params!(),
+        )
+        .len();
         // NOTE: The edge count is 10 because of the following:
         // * 1 edge from the source node to the node created by the fasta import
         // * 1 edge from the node created by the fasta import to the sink node
@@ -1041,10 +1052,15 @@ mod tests {
             ),
         );
 
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
-        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
+        let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
+        let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
+        let op_count = Operation::query(
+            operation_conn,
+            "select * from operation",
+            rusqlite::params!(),
+        )
+        .len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
         assert_eq!(sample_count, 0);
@@ -1057,10 +1073,15 @@ mod tests {
                 OperationState::get_operation(operation_conn, &db_uuid).unwrap(),
             ),
         );
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
-        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
+        let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
+        let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
+        let op_count = Operation::query(
+            operation_conn,
+            "select * from operation",
+            rusqlite::params!(),
+        )
+        .len();
         assert_eq!(edge_count, 10);
         assert_eq!(node_count, 5);
         assert_eq!(sample_count, 3);
@@ -1118,7 +1139,7 @@ mod tests {
             patch_1_seqs
         );
         assert_eq!(
-            BlockGroup::query(conn, "select * from block_groups;", vec![])
+            BlockGroup::query(conn, "select * from block_groups;", rusqlite::params!())
                 .iter()
                 .map(|v| v.sample_name.clone().unwrap_or("".to_string()))
                 .collect::<Vec<String>>(),
@@ -1158,7 +1179,7 @@ mod tests {
         );
         assert_ne!(patch_1_seqs, patch_2_seqs);
         assert_eq!(
-            BlockGroup::query(conn, "select * from block_groups;", vec![])
+            BlockGroup::query(conn, "select * from block_groups;", rusqlite::params!())
                 .iter()
                 .map(|v| v.sample_name.clone().unwrap_or("".to_string()))
                 .collect::<Vec<String>>(),
@@ -1180,7 +1201,7 @@ mod tests {
             patch_2_seqs
         );
         assert_eq!(
-            BlockGroup::query(conn, "select * from block_groups;", vec![])
+            BlockGroup::query(conn, "select * from block_groups;", rusqlite::params!())
                 .iter()
                 .map(|v| v.sample_name.clone().unwrap_or("".to_string()))
                 .collect::<Vec<String>>(),
@@ -1224,10 +1245,15 @@ mod tests {
             conn,
             operation_conn,
         );
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
-        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
+        let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
+        let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
+        let op_count = Operation::query(
+            operation_conn,
+            "select * from operation",
+            rusqlite::params!(),
+        )
+        .len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
         assert_eq!(sample_count, 0);
@@ -1252,10 +1278,15 @@ mod tests {
             operation_conn,
             None,
         );
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
-        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
+        let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
+        let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
+        let op_count = Operation::query(
+            operation_conn,
+            "select * from operation",
+            rusqlite::params!(),
+        )
+        .len();
         assert_eq!(edge_count, 10);
         assert_eq!(node_count, 5);
         assert_eq!(sample_count, 3);
@@ -1276,10 +1307,15 @@ mod tests {
         );
 
         // ensure branch 1 operations have been undone
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
-        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
+        let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
+        let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
+        let op_count = Operation::query(
+            operation_conn,
+            "select * from operation",
+            rusqlite::params!(),
+        )
+        .len();
         assert_eq!(edge_count, 2);
         assert_eq!(node_count, 3);
         assert_eq!(sample_count, 0);
@@ -1295,10 +1331,15 @@ mod tests {
             operation_conn,
             None,
         );
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
-        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
+        let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
+        let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
+        let op_count = Operation::query(
+            operation_conn,
+            "select * from operation",
+            rusqlite::params!(),
+        )
+        .len();
         assert_eq!(edge_count, 6);
         assert_eq!(node_count, 4);
         assert_eq!(sample_count, 1);
@@ -1317,10 +1358,15 @@ mod tests {
             branch_1.id
         );
 
-        let edge_count = Edge::query(conn, "select * from edges", vec![]).len();
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len();
-        let sample_count = Sample::query(conn, "select * from samples", vec![]).len();
-        let op_count = Operation::query(operation_conn, "select * from operation", vec![]).len();
+        let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
+        let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
+        let op_count = Operation::query(
+            operation_conn,
+            "select * from operation",
+            rusqlite::params!(),
+        )
+        .len();
         assert_eq!(edge_count, 10);
         assert_eq!(node_count, 5);
         assert_eq!(sample_count, 3);

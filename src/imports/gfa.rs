@@ -1,3 +1,4 @@
+use rusqlite;
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
 use std::path::Path as FilePath;
@@ -234,20 +235,20 @@ mod tests {
         import_gfa(&gfa_path, &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
-        let path = Path::get_paths(
+        let path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1 AND name = ?2",
-            vec![
+            rusqlite::params!(
                 SQLValue::from(block_group_id),
                 SQLValue::from("m123".to_string()),
-            ],
+            ),
         )[0]
         .clone();
 
         let result = path.sequence(conn);
         assert_eq!(result, "ATCGATCGATCGATCGATCGGGAACACACAGAGA");
 
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i64;
+        let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len() as i64;
         assert_eq!(node_count, 6);
     }
 
@@ -266,7 +267,7 @@ mod tests {
             HashSet::from_iter(vec!["AAAATTTTGGGGCCCC".to_string()])
         );
 
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i64;
+        let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len() as i64;
         assert_eq!(node_count, 6);
     }
 
@@ -279,20 +280,20 @@ mod tests {
         import_gfa(&gfa_path, &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
-        let path = Path::get_paths(
+        let path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1 AND name = ?2",
-            vec![
+            rusqlite::params!(
                 SQLValue::from(block_group_id),
                 SQLValue::from("291344".to_string()),
-            ],
+            ),
         )[0]
         .clone();
 
         let result = path.sequence(conn);
         assert_eq!(result, "ACCTACAAATTCAAAC");
 
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i64;
+        let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len() as i64;
         assert_eq!(node_count, 6);
     }
 
@@ -305,20 +306,20 @@ mod tests {
         import_gfa(&gfa_path, &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
-        let path = Path::get_paths(
+        let path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1 AND name = ?2",
-            vec![
+            rusqlite::params!(
                 SQLValue::from(block_group_id),
                 SQLValue::from("124".to_string()),
-            ],
+            ),
         )[0]
         .clone();
 
         let result = path.sequence(conn);
         assert_eq!(result, "TATGCCAGCTGCGAATA");
 
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i64;
+        let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len() as i64;
         assert_eq!(node_count, 6);
     }
 
@@ -330,17 +331,17 @@ mod tests {
         let conn = &get_connection(None);
         import_gfa(&gfa_path, &collection_name, conn);
 
-        let paths = Path::get_paths_for_collection(conn, &collection_name);
+        let paths = Path::query_for_collection(conn, &collection_name);
         assert_eq!(paths.len(), 20);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
-        let path = Path::get_paths(
+        let path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1 AND name = ?2",
-            vec![
+            rusqlite::params!(
                 SQLValue::from(block_group_id),
                 SQLValue::from("BBa_J23100".to_string()),
-            ],
+            ),
         )[0]
         .clone();
 
@@ -423,7 +424,7 @@ mod tests {
         assert_eq!(all_sequences.len(), 1024);
         assert_eq!(all_sequences, expected_sequences);
 
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i64;
+        let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len() as i64;
         assert_eq!(node_count, 28);
     }
 
@@ -437,13 +438,13 @@ mod tests {
         import_gfa(&gfa_path, &collection_name, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
-        let path = Path::get_paths(
+        let path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1 AND name = ?2",
-            vec![
+            rusqlite::params!(
                 SQLValue::from(block_group_id),
                 SQLValue::from("124".to_string()),
-            ],
+            ),
         )[0]
         .clone();
 
@@ -453,7 +454,7 @@ mod tests {
         let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id, false);
         assert_eq!(all_sequences, HashSet::from_iter(vec!["AA".to_string()]));
 
-        let node_count = Node::query(conn, "select * from nodes", vec![]).len() as i64;
+        let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len() as i64;
         assert_eq!(node_count, 4);
     }
 }

@@ -22,6 +22,7 @@ use noodles::vcf::variant::record::samples::series::Value;
 use noodles::vcf::variant::record::samples::Sample as NoodlesSample;
 use noodles::vcf::variant::record::AlternateBases;
 use noodles::vcf::variant::Record;
+use rusqlite;
 use rusqlite::{session, types::Value as SQLValue, Connection};
 
 #[derive(Debug)]
@@ -380,7 +381,7 @@ pub fn update_with_vcf<'a>(
             let sequence_string = sequence.get_sequence(None, None);
 
             let parent_path_id : i64 = *parent_block_groups.entry((collection_name, vcf_entry.path.id)).or_insert_with(|| {
-                let parent_bg = BlockGroup::query(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null and name = ?2", vec![SQLValue::from(collection_name.to_string()), SQLValue::from(vcf_entry.path.name.clone())]);
+                let parent_bg = BlockGroup::query(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null and name = ?2", rusqlite::params!(SQLValue::from(collection_name.to_string()), SQLValue::from(vcf_entry.path.name.clone())));
                 if parent_bg.is_empty() {
                     vcf_entry.path.id
                 } else {
@@ -463,7 +464,6 @@ mod tests {
     use crate::models::accession::Accession;
     use crate::models::node::Node;
     use crate::models::operations::setup_db;
-    use crate::models::traits::Query;
     use crate::test_helpers::{
         get_connection, get_operation_connection, get_sample_bg, setup_gen_dir,
     };
@@ -516,7 +516,7 @@ mod tests {
         let test_bg = BlockGroup::query(
             conn,
             "select * from block_groups where sample_name = ?1",
-            vec![SQLValue::from("G1".to_string())],
+            rusqlite::params!(SQLValue::from("G1".to_string())),
         );
         assert_eq!(
             BlockGroup::get_all_sequences(conn, test_bg[0].id, false),
@@ -617,7 +617,7 @@ mod tests {
         let missing_allele_bg = BlockGroup::query(
             conn,
             "select * from block_groups where sample_name = ?1",
-            vec![SQLValue::from("unknown".to_string())],
+            rusqlite::params!(SQLValue::from("unknown".to_string())),
         );
 
         assert_eq!(
@@ -709,7 +709,7 @@ mod tests {
             None,
         );
 
-        let nodes = Node::query(conn, "select * from nodes;", vec![]);
+        let nodes = Node::query(conn, "select * from nodes;", rusqlite::params!());
         assert_eq!(nodes.len(), 5);
 
         update_with_vcf(
@@ -721,7 +721,7 @@ mod tests {
             op_conn,
             None,
         );
-        let nodes = Node::query(conn, "select * from nodes;", vec![]);
+        let nodes = Node::query(conn, "select * from nodes;", rusqlite::params!());
         assert_eq!(nodes.len(), 5);
     }
 
@@ -747,7 +747,10 @@ mod tests {
             op_conn,
         );
 
-        assert_eq!(Node::query(conn, "select * from nodes;", vec![]).len(), 5);
+        assert_eq!(
+            Node::query(conn, "select * from nodes;", rusqlite::params!()).len(),
+            5
+        );
 
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
@@ -759,7 +762,7 @@ mod tests {
             None,
         );
 
-        let nodes = Node::query(conn, "select * from nodes;", vec![]);
+        let nodes = Node::query(conn, "select * from nodes;", rusqlite::params!());
         assert_eq!(nodes.len(), 8);
 
         update_with_vcf(
@@ -771,7 +774,7 @@ mod tests {
             op_conn,
             None,
         );
-        let nodes = Node::query(conn, "select * from nodes;", vec![]);
+        let nodes = Node::query(conn, "select * from nodes;", rusqlite::params!());
         assert_eq!(nodes.len(), 8);
     }
 
@@ -846,7 +849,7 @@ mod tests {
             Accession::query(
                 conn,
                 "select * from accessions where name = ?1;",
-                vec![SQLValue::from("del1".to_string())]
+                rusqlite::params!(SQLValue::from("del1".to_string())),
             )
             .len(),
             1
@@ -856,7 +859,7 @@ mod tests {
             Accession::query(
                 conn,
                 "select * from accessions where name = ?1;",
-                vec![SQLValue::from("lp1".to_string())]
+                rusqlite::params!(SQLValue::from("lp1".to_string())),
             )
             .len(),
             1
@@ -900,7 +903,7 @@ mod tests {
             Accession::query(
                 conn,
                 "select * from accessions where name = ?1",
-                vec![SQLValue::from("lp1".to_string())]
+                rusqlite::params!(SQLValue::from("lp1".to_string()))
             )
             .len(),
             1

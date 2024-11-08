@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use intervaltree::IntervalTree;
 use itertools::Itertools;
 use rusqlite::types::Value;
-use rusqlite::{params_from_iter, Connection};
+use rusqlite::{params_from_iter, Connection, Row};
 use serde::{Deserialize, Serialize};
 
 use crate::models::block_group::NodeIntervalBlock;
@@ -14,6 +14,7 @@ use crate::models::{
     path_edge::PathEdge,
     sequence::Sequence,
     strand::Strand,
+    traits::*,
 };
 use crate::range::{Range, RangeMapping};
 
@@ -147,32 +148,13 @@ impl Path {
         rows.next().unwrap().unwrap()
     }
 
-    pub fn get_paths(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Path> {
-        let mut stmt = conn.prepare(query).unwrap();
-        let rows = stmt
-            .query_map(params_from_iter(placeholders), |row| {
-                let path_id = row.get(0).unwrap();
-                Ok(Path {
-                    id: path_id,
-                    block_group_id: row.get(1)?,
-                    name: row.get(2)?,
-                })
-            })
-            .unwrap();
-        let mut paths = vec![];
-        for row in rows {
-            paths.push(row.unwrap());
-        }
-        paths
-    }
-
-    pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Path> {
-        Path::get_paths(conn, query, placeholders)
-    }
-
-    pub fn get_paths_for_collection(conn: &Connection, collection_name: &str) -> Vec<Path> {
+    pub fn query_for_collection(conn: &Connection, collection_name: &str) -> Vec<Path> {
         let query = "SELECT * FROM paths JOIN block_groups ON paths.block_group_id = block_groups.id WHERE block_groups.collection_name = ?1";
-        Path::get_paths(conn, query, vec![Value::from(collection_name.to_string())])
+        Path::query(
+            conn,
+            query,
+            rusqlite::params!(Value::from(collection_name.to_string())),
+        )
     }
 
     pub fn sequence(&self, conn: &Connection) -> String {
@@ -593,6 +575,17 @@ impl Path {
             self.name, path_start, path_end, edge_to_new_node.target_node_id
         );
         Path::create(conn, &new_name, self.block_group_id, &new_edge_ids)
+    }
+}
+
+impl Query for Path {
+    type Model = Path;
+    fn process_row(row: &Row) -> Self::Model {
+        Path {
+            id: row.get(0).unwrap(),
+            block_group_id: row.get(1).unwrap(),
+            name: row.get(2).unwrap(),
+        }
     }
 }
 

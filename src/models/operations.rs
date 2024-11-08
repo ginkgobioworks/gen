@@ -1,10 +1,11 @@
 use crate::graph::all_simple_paths;
 use crate::models::file_types::FileTypes;
+use crate::models::traits::*;
 use petgraph::graphmap::{DiGraphMap, UnGraphMap};
 use petgraph::visit::{Dfs, Reversed};
 use petgraph::Direction;
 use rusqlite::types::Value;
-use rusqlite::{params_from_iter, Connection};
+use rusqlite::{params_from_iter, Connection, Row};
 use std::collections::HashSet;
 use std::string::ToString;
 
@@ -95,7 +96,7 @@ impl Operation {
 
     pub fn get_operation_graph(conn: &Connection) -> DiGraphMap<i64, ()> {
         let mut graph: DiGraphMap<i64, ()> = DiGraphMap::new();
-        let operations = Operation::query(conn, "select * from operation;", vec![]);
+        let operations = Operation::query(conn, "select * from operation;", rusqlite::params![]);
         for op in operations.iter() {
             graph.add_node(op.id);
             if let Some(v) = op.parent_id {
@@ -148,28 +149,6 @@ impl Operation {
         patch_path
     }
 
-    pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Operation> {
-        let mut stmt = conn.prepare(query).unwrap();
-        let rows = stmt
-            .query_map(params_from_iter(placeholders), |row| {
-                Ok(Operation {
-                    id: row.get(0)?,
-                    db_uuid: row.get(1)?,
-                    parent_id: row.get(2)?,
-                    branch_id: row.get(3)?,
-                    collection_name: row.get(4)?,
-                    change_type: row.get(5)?,
-                    change_id: row.get(6)?,
-                })
-            })
-            .unwrap();
-        let mut objs = vec![];
-        for row in rows {
-            objs.push(row.unwrap());
-        }
-        objs
-    }
-
     pub fn get(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Operation {
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
@@ -194,6 +173,21 @@ impl Operation {
             "select * from operation where id = ?1",
             vec![Value::from(op_id)],
         )
+    }
+}
+
+impl Query for Operation {
+    type Model = Operation;
+    fn process_row(row: &Row) -> Self::Model {
+        Operation {
+            id: row.get(0).unwrap(),
+            db_uuid: row.get(1).unwrap(),
+            parent_id: row.get(2).unwrap(),
+            branch_id: row.get(3).unwrap(),
+            collection_name: row.get(4).unwrap(),
+            change_type: row.get(5).unwrap(),
+            change_id: row.get(6).unwrap(),
+        }
     }
 }
 
@@ -423,7 +417,7 @@ impl Branch {
                 Operation::query(
                     conn,
                     "select * from operation where branch_id = ?1;",
-                    vec![Value::from(branch_id)],
+                    rusqlite::params!(Value::from(branch_id)),
                 )
                 .iter()
                 .map(|op| op.id)

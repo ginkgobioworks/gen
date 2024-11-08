@@ -16,6 +16,7 @@ use crate::models::{
 };
 use crate::{calculate_hash, operation_management};
 use noodles::fasta;
+use rusqlite;
 use rusqlite::{session, Connection};
 
 pub fn import_fasta(
@@ -205,7 +206,10 @@ mod tests {
             conn,
             op_conn,
         );
-        assert_eq!(Node::query(conn, "select * from nodes;", vec![]).len(), 3);
+        assert_eq!(
+            Node::query(conn, "select * from nodes;", rusqlite::params!()).len(),
+            3
+        );
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &collection,
@@ -213,6 +217,9 @@ mod tests {
             conn,
             op_conn,
         );
-        assert_eq!(Node::query(conn, "select * from nodes;", vec![]).len(), 3);
+        assert_eq!(
+            Node::query(conn, "select * from nodes;", rusqlite::params!()).len(),
+            3
+        );
     }
 }
