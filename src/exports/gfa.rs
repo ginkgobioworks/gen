@@ -58,7 +58,8 @@ pub fn export_gfa(
 
     let mut edges = edge_set.into_iter().collect();
 
-    let blocks = Edge::blocks_from_edges(conn, &edges);
+    let mut blocks = Edge::blocks_from_edges(conn, &edges);
+    blocks.sort_by(|a, b| a.node_id.cmp(&b.node_id));
     let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
     edges.extend(boundary_edges.clone());
 

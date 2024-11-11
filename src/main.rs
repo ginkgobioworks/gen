@@ -105,6 +105,9 @@ enum Commands {
         /// The GAF input
         #[arg(short, long)]
         gaf: String,
+        /// The GAF input
+        #[arg(short, long)]
+        csv: String,
         /// The sample to update
         #[arg(short, long)]
         sample: Option<String>,
@@ -319,12 +322,17 @@ fn main() {
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
         }
-        Some(Commands::UpdateGaf { name, gaf, sample }) => {
+        Some(Commands::UpdateGaf {
+            name,
+            gaf,
+            csv,
+            sample,
+        }) => {
             let name = &name.clone().unwrap_or_else(|| {
                 get_default_collection(&operation_conn)
                     .expect("No collection specified and default not setup.")
             });
-            update_with_gaf(&conn, &operation_conn, gaf, name, sample.as_deref());
+            update_with_gaf(&conn, &operation_conn, gaf, csv, name, sample.as_deref());
         }
         Some(Commands::Operations { branch }) => {
             let current_op = OperationState::get_operation(&operation_conn, &db_uuid)

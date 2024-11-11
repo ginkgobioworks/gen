@@ -1,0 +1,3 @@
+test_left	50	0	49	+	>138.0	50	0	49	49	49	28	tp:A:P	NM:i:0	cm:i:15	s1:i:49	s2:i:0	dv:f:0	cg:Z:49=	ds:Z::49
+test_right	50	1	50	+	>140.0	50	1	50	49	49	28	tp:A:P	NM:i:0	cm:i:14	s1:i:49	s2:i:0	dv:f:0	cg:Z:49=	ds:Z::49
+nonsense_entry	50	1	50	+	>140.0	50	1	50	49	49	28	tp:A:P	NM:i:0	cm:i:14	s1:i:49	s2:i:0	dv:f:0	cg:Z:49=	ds:Z::49
