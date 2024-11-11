@@ -305,6 +305,8 @@ fn main() {
                     &conn,
                     &operation_conn,
                     name,
+                    sample.clone().as_deref(),
+                    &new_sample.clone().unwrap(),
                     &path_name.clone().unwrap(),
                     start.unwrap(),
                     end.unwrap(),
