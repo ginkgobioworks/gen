@@ -115,6 +115,8 @@ pub fn update_with_gaf<'a, P>(
         (?P<align_block_len>\d+)
         \t
         (?P<mapq>\d+)
+        .+
+        cg:Z:(?P<cigar>[^\t]+)
         ",
     )
     .unwrap();
@@ -152,8 +154,7 @@ pub fn update_with_gaf<'a, P>(
         for line in lines.map_while(Result::ok) {
             let entry = re.captures(&line).unwrap();
             let aln_path = &entry["path"];
-            let node_start: i64 = entry["path_start"].parse::<i64>().unwrap();
-            let node_end: i64 = entry["path_end"].parse::<i64>().unwrap();
+            let mut node_start: i64 = entry["path_start"].parse::<i64>().unwrap();
             let mut nodes = vec![];
             if [">", "<"].iter().any(|s| aln_path.starts_with(*s)) {
                 // orient id
@@ -170,69 +171,50 @@ pub fn update_with_gaf<'a, P>(
                 // we're a stable id
                 nodes.push((Strand::Forward, aln_path.to_string()));
             }
-            match nodes.len().cmp(&1) {
-                Ordering::Greater => {
-                    for ((src_strand, src_segment), (dest_strand, dest_segment)) in
-                        nodes.iter().tuple_windows()
-                    {
-                        if let Some(src_node) = node_map.get(src_segment) {
-                            if let Some(dest_node) = node_map.get(dest_segment) {
-                                if let Some(edge) =
-                                    sample_graph.edge_weight(**src_node, **dest_node)
-                                {
-                                    if edge.source_strand == *src_strand
-                                        && edge.target_strand == *dest_strand
-                                    {
-                                        let query = entry["query_name"].to_string();
-                                        println!("found us {edge:?} {line:?}");
-                                        if let Some(id_re) = query_re.captures(&query) {
-                                            let query_id = id_re["query_id"].to_string();
-                                            println!("match with {qn:?} {query_id}", qn = query);
-                                        }
-                                    }
-                                }
+            let query = entry["query_name"].to_string();
+            if let Some(id_re) = query_re.captures(&query) {
+                let query_id = id_re["query_id"].to_string();
+                if change_spec.contains_key(&query_id) {
+                    let mut strand: Option<Strand> = None;
+                    let mut segment_id: Option<String> = None;
+                    let mut query_key = "";
+                    if query.ends_with("left") {
+                        query_key = "left";
+                        let mut matches = entry["residue_match"].parse::<i64>().unwrap();
+                        for (node_strand, node_id) in nodes.iter() {
+                            let node = node_map[node_id];
+                            let len = node.length();
+                            if len >= matches {
+                                strand = Some(*node_strand);
+                                segment_id = Some(node_id.clone());
+                                node_start = matches;
+                                break;
                             }
+                            matches -= len;
                         }
+                    } else if query.ends_with("right") {
+                        query_key = "right";
+                        let node = nodes.first().unwrap();
+                        strand = Some(node.0);
+                        segment_id = Some(node.clone().1)
                     }
-                }
-                Ordering::Less => {}
-                Ordering::Equal => {
-                    let (src_strand, src_segment) = &nodes[0];
-                    if let Some(src_node) = node_map.get(src_segment) {
-                        let query = entry["query_name"].to_string();
-                        if let Some(id_re) = query_re.captures(&query) {
-                            let query_id = id_re["query_id"].to_string();
-                            if let Some(user_change) = change_spec.get(&query_id) {
+
+                    if let Some(segment_id) = segment_id {
+                        if let Some(strand) = strand {
+                            if let Some(node) = node_map.get(&segment_id) {
                                 gaf_changes
                                     .entry(query_id)
                                     .and_modify(|change| {
-                                        if query.ends_with("left") {
-                                            change.entry("left".to_string()).or_insert((
-                                                **src_node,
-                                                *src_strand,
-                                                node_end,
-                                            ));
-                                        } else {
-                                            change.entry("right".to_string()).or_insert((
-                                                **src_node,
-                                                *src_strand,
-                                                node_start,
-                                            ));
-                                        }
+                                        change
+                                            .entry(query_key.to_string())
+                                            .or_insert((**node, strand, node_start));
                                     })
                                     .or_insert_with(|| {
                                         let mut change = HashMap::new();
-                                        if query.ends_with("left") {
-                                            change.insert(
-                                                "left".to_string(),
-                                                (**src_node, *src_strand, node_end),
-                                            );
-                                        } else {
-                                            change.insert(
-                                                "right".to_string(),
-                                                (**src_node, *src_strand, node_start),
-                                            );
-                                        }
+                                        change.insert(
+                                            query_key.to_string(),
+                                            (**node, strand, node_start),
+                                        );
                                         change
                                     });
                             }
