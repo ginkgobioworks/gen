@@ -13,6 +13,7 @@ use gen::models::operations::{setup_db, Branch, OperationState};
 use gen::operation_management;
 use gen::updates::fasta::update_with_fasta;
 use gen::updates::gaf::update_with_gaf;
+use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::update_with_vcf;
 use rusqlite::{types::Value, Connection};
@@ -39,6 +40,11 @@ fn get_default_collection(conn: &Connection) -> Option<String> {
 
 #[derive(Subcommand)]
 enum Commands {
+    Transform {
+        /// For update-gaf, this transforms the csv to a fasta for use in alignments
+        #[arg(long)]
+        format_csv_for_gaf: Option<String>,
+    },
     /// Import a new sequence collection.
     Import {
         /// Fasta file path
@@ -211,6 +217,14 @@ fn main() {
                 .unwrap();
             println!("Default collection set to {name}");
         }
+        return;
+    }
+
+    if let Some(Commands::Transform { format_csv_for_gaf }) = &cli.command {
+        let csv = format_csv_for_gaf
+            .clone()
+            .expect("csv for transformation not provided.");
+        transform_csv_to_fasta(csv);
         return;
     }
 
@@ -484,5 +498,6 @@ fn main() {
             database,
             collection,
         }) => {}
+        Some(Commands::Transform { format_csv_for_gaf }) => {}
     }
 }

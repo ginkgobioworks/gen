@@ -33,6 +33,32 @@ struct GafChange {
     right: String,
 }
 
+pub fn transform_csv_to_fasta<P>(path: P)
+where
+    P: AsRef<Path>,
+{
+    let csv_file = File::open(path).unwrap();
+    let csv_bufreader = BufReader::new(csv_file);
+
+    let mut csv_reader = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(csv_bufreader);
+    let headers = csv_reader
+        .headers()
+        .expect("Input csv missing headers. Headers should be id,left,sequence,right.")
+        .clone();
+    for (index, result) in csv_reader.records().enumerate() {
+        let record = result.unwrap();
+        let row: CSVRow = record.deserialize(Some(&headers)).unwrap();
+        let id = row.id.clone().unwrap_or_else(|| index.to_string());
+        println!(
+            ">{id}_left\n{left}\n>{id}_right\n{right}",
+            left = row.left,
+            right = row.right
+        );
+    }
+}
+
 pub fn update_with_gaf<'a, P>(
     conn: &Connection,
     op_conn: &Connection,

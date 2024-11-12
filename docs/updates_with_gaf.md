@@ -23,7 +23,7 @@ simple_insert,atgggagtataattttagatagtgaagatttctgtattcaaatgccacat,atcgatcgatcggag
 The id field is optional. If provided, an [accession](path_accessions.md) will be created with the id given.
 
 ```console
-gen update-gaf --format-csv example.csv > example.fa 
+gen transform --format-csv-for-gaf example.csv > example.fa 
 ```
 
 This creates a fasta file suitable for alignment with graph aligners such as Minigraph, GraphAligner, VG, etc. The goal is
