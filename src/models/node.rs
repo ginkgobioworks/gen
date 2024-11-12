@@ -1,14 +1,10 @@
-use crate::graph::GraphNode;
-use crate::models::block_group::{BlockGroup, NodeIntervalBlock, PathChange};
-use crate::models::block_group_edge::BlockGroupEdge;
-use crate::models::edge::{Edge, EdgeData};
-use crate::models::sequence::Sequence;
-use crate::models::traits::*;
-use intervaltree::IntervalTree;
 use rusqlite::{params_from_iter, types::Value as SQLValue, Connection, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::rc::Rc;
+
+use crate::models::sequence::Sequence;
+use crate::models::traits::*;
 
 pub const PATH_START_NODE_ID: i64 = 1;
 pub const PATH_END_NODE_ID: i64 = 2;
@@ -114,22 +110,4 @@ impl Node {
     pub fn is_terminal(node_id: i64) -> bool {
         node_id == PATH_START_NODE_ID || node_id == PATH_END_NODE_ID
     }
-
-    // pub fn insert_change(
-    //     conn: &Connection,
-    //     node: &GraphNode,
-    //     node_pos: i64,
-    //     node_strand: Strand,
-    //     sequence: &Sequence,
-    //     sequence_pos: i64,
-    //
-    // ) {
-    //     let new_edge = EdgeData {
-    //         source_node_id: node.node_id,
-    //         source_coordinate: node_pos,
-    //         source_strand: node.
-    //     }
-    //     let edge_ids = Edge::bulk_create(conn, &new_edges);
-    //     BlockGroupEdge::bulk_create(conn, change.block_group_id, &edge_ids);
-    // }
 }
