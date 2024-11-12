@@ -423,7 +423,7 @@ impl Path {
             .collect::<Vec<RangeMapping>>()
     }
 
-    fn propagate_annotation(
+    pub fn propagate_annotation(
         annotation: Annotation,
         mapping_tree: &IntervalTree<i64, RangeMapping>,
         sequence_length: i64,
@@ -494,15 +494,13 @@ impl Path {
         })
     }
 
-    pub fn propagate_annotations(
+    pub fn get_mapping_tree(
         &self,
         conn: &Connection,
         path: &Path,
-        annotations: Vec<Annotation>,
-    ) -> Vec<Annotation> {
+    ) -> IntervalTree<i64, RangeMapping> {
         let mappings = self.find_block_mappings(conn, path);
-        let sequence_length = path.sequence(conn).len();
-        let mapping_tree: IntervalTree<i64, RangeMapping> = mappings
+        mappings
             .into_iter()
             .map(|mapping| {
                 (
@@ -510,8 +508,17 @@ impl Path {
                     mapping,
                 )
             })
-            .collect();
+            .collect()
+    }
 
+    pub fn propagate_annotations(
+        &self,
+        conn: &Connection,
+        path: &Path,
+        annotations: Vec<Annotation>,
+    ) -> Vec<Annotation> {
+        let mapping_tree = self.get_mapping_tree(conn, path);
+        let sequence_length = path.sequence(conn).len();
         annotations
             .into_iter()
             .filter_map(|annotation| {

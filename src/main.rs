@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use gen::config;
 use gen::config::get_operation_connection;
 
+use gen::annotations::gff::propagate_gff;
 use gen::exports::fasta::export_fasta;
 use gen::exports::gfa::export_gfa;
 use gen::get_connection;
@@ -194,6 +195,23 @@ enum Commands {
         /// The default collection to use
         #[arg(short, long)]
         collection: Option<String>,
+    },
+    PropagateAnnotations {
+        /// The name of the collection to annotate
+        #[arg(short, long)]
+        name: Option<String>,
+        /// The name of the sample the annotations are referenced to (if not provided, the default)
+        #[arg(short, long)]
+        from_sample: Option<String>,
+        /// The name of the sample to annotate
+        #[arg(short, long)]
+        to_sample: String,
+        /// The name of the annotation file to propagate
+        #[arg(short, long)]
+        gff: String,
+        /// The name of the output file
+        #[arg(short, long)]
+        output_gff: String,
     },
 }
 
@@ -543,5 +561,33 @@ fn main() {
             collection,
         }) => {}
         Some(Commands::Transform { format_csv_for_gaf }) => {}
+        Some(Commands::PropagateAnnotations {
+            name,
+            from_sample,
+            to_sample,
+            gff,
+            output_gff,
+        }) => {
+            let name = &name.clone().unwrap_or_else(|| {
+                get_default_collection(&operation_conn)
+                    .expect("No collection specified and default not setup.")
+            });
+            let from_sample_name = from_sample.clone();
+
+            conn.execute("BEGIN TRANSACTION", []).unwrap();
+            operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
+
+            propagate_gff(
+                &conn,
+                name,
+                from_sample_name.as_deref(),
+                to_sample,
+                gff,
+                output_gff,
+            );
+
+            conn.execute("END TRANSACTION", []).unwrap();
+            operation_conn.execute("END TRANSACTION", []).unwrap();
+        }
     }
 }

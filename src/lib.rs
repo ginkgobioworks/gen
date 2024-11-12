@@ -3,6 +3,7 @@ use std::io::BufRead;
 use std::path::Path;
 use std::{io, str};
 
+pub mod annotations;
 pub mod config;
 pub mod exports;
 pub mod gfa_reader;
