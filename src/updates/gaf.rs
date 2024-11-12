@@ -6,6 +6,7 @@ use crate::models::node::Node;
 use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
+use crate::models::traits::*;
 use crate::read_lines;
 use crate::test_helpers::save_graph;
 use itertools::Itertools;
@@ -72,20 +73,19 @@ pub fn update_with_gaf<'a, P>(
     // Given a gaf, this will incorporate the alignment into the specified graph, creating new nodes.
 
     let sample_name = sample_name.into();
-    let sample_graph = Sample::get_graph(conn, collection_name, sample_name);
 
-    let mut node_map: HashMap<String, &GraphNode> = HashMap::new();
-    for (node, node_ref) in sample_graph.node_references() {
-        node_map.insert(
-            format!(
-                "{node}.{start}",
-                node = node.node_id,
-                start = node.sequence_start
-            ),
-            node_ref,
-        );
-        node_map.insert(format!("{node}", node = node.node_id), node_ref);
-    }
+    let mut node_lengths: HashMap<String, (i64, i64)> = HashMap::new();
+
+    let mut get_node_info = |node_id: &str| -> (i64, i64) {
+        *node_lengths.entry(node_id.to_string()).or_insert_with(|| {
+            let node_info : Vec<&str> = node_id.rsplitn(2, '.').collect();
+            let node_id = *node_info.last().unwrap();
+            let id = node_id.parse::<i64>().unwrap();
+            let mut stmt = conn.prepare_cached("select s.length from nodes n left join sequences s on (s.hash = n.sequence_hash) where n.id = ?1;").unwrap();
+            let res = stmt.query_row([id], |row| row.get(0)).unwrap();
+            (id, res)
+        })
+    };
 
     // our GFA export encodes segments like node_id.sequence_start, where sequence_end can be inferred by the
     // node sequence length
@@ -147,15 +147,14 @@ pub fn update_with_gaf<'a, P>(
         change_spec.insert(row.id.clone().unwrap_or_else(|| index.to_string()), row);
     }
 
-    let mut gaf_changes: HashMap<String, HashMap<String, (GraphNode, Strand, i64)>> =
-        HashMap::new();
+    let mut gaf_changes: HashMap<String, HashMap<String, (i64, Strand, i64)>> = HashMap::new();
 
     if let Ok(lines) = read_lines(gaf_path) {
         for line in lines.map_while(Result::ok) {
             let entry = re.captures(&line).unwrap();
             let aln_path = &entry["path"];
             let mut node_start: i64 = entry["path_start"].parse::<i64>().unwrap();
-            let mut nodes = vec![];
+            let mut segments = vec![];
             if [">", "<"].iter().any(|s| aln_path.starts_with(*s)) {
                 // orient id
                 for sub_match in orient_id_re.captures_iter(aln_path) {
@@ -165,59 +164,59 @@ pub fn update_with_gaf<'a, P>(
                         Strand::Reverse
                     };
                     let node = sub_match["node"].to_string();
-                    nodes.push((orientation, node));
+                    segments.push((orientation, node));
                 }
             } else {
                 // we're a stable id
-                nodes.push((Strand::Forward, aln_path.to_string()));
+                segments.push((Strand::Forward, aln_path.to_string()));
             }
             let query = entry["query_name"].to_string();
             if let Some(id_re) = query_re.captures(&query) {
                 let query_id = id_re["query_id"].to_string();
                 if change_spec.contains_key(&query_id) {
                     let mut strand: Option<Strand> = None;
-                    let mut segment_id: Option<String> = None;
+                    let mut node_id: Option<i64> = None;
                     let mut query_key = "";
                     if query.ends_with("left") {
                         query_key = "left";
                         let mut matches = entry["residue_match"].parse::<i64>().unwrap();
-                        for (node_strand, node_id) in nodes.iter() {
-                            let node = node_map[node_id];
-                            let len = node.length();
-                            if len >= matches {
-                                strand = Some(*node_strand);
-                                segment_id = Some(node_id.clone());
+                        for (segment_strand, segment_id) in segments.iter() {
+                            let (segment_node_id, node_length) = get_node_info(segment_id);
+                            if node_length >= matches {
+                                strand = Some(*segment_strand);
+                                node_id = Some(segment_node_id);
                                 node_start = matches;
                                 break;
                             }
-                            matches -= len;
+                            matches -= node_length;
                         }
                     } else if query.ends_with("right") {
                         query_key = "right";
-                        let node = nodes.first().unwrap();
-                        strand = Some(node.0);
-                        segment_id = Some(node.clone().1)
-                    }
+                        let (segment_strand, segment_id) = segments.first().unwrap();
+                        let (segmnet_node_id, _node_length) = get_node_info(segment_id);
+                        strand = Some(*segment_strand);
+                        node_id = Some(segmnet_node_id);
+                    } else {
+                        continue;
+                    };
 
-                    if let Some(segment_id) = segment_id {
+                    if let Some(node_id) = node_id {
                         if let Some(strand) = strand {
-                            if let Some(node) = node_map.get(&segment_id) {
-                                gaf_changes
-                                    .entry(query_id)
-                                    .and_modify(|change| {
-                                        change
-                                            .entry(query_key.to_string())
-                                            .or_insert((**node, strand, node_start));
-                                    })
-                                    .or_insert_with(|| {
-                                        let mut change = HashMap::new();
-                                        change.insert(
-                                            query_key.to_string(),
-                                            (**node, strand, node_start),
-                                        );
-                                        change
-                                    });
-                            }
+                            gaf_changes
+                                .entry(query_id)
+                                .and_modify(|change| {
+                                    change
+                                        .entry(query_key.to_string())
+                                        .or_insert((node_id, strand, node_start));
+                                })
+                                .or_insert_with(|| {
+                                    let mut change = HashMap::new();
+                                    change.insert(
+                                        query_key.to_string(),
+                                        (node_id, strand, node_start),
+                                    );
+                                    change
+                                });
                         }
                     }
                 }
@@ -243,7 +242,7 @@ pub fn update_with_gaf<'a, P>(
                 ),
             );
             let left_edge = EdgeData {
-                source_node_id: left_node.node_id,
+                source_node_id: left_node,
                 source_coordinate: left_pos,
                 source_strand: left_strand,
                 target_node_id: seq_node,
@@ -256,7 +255,7 @@ pub fn update_with_gaf<'a, P>(
                 source_node_id: seq_node,
                 source_coordinate: sequence.length,
                 source_strand: Strand::Forward,
-                target_node_id: right_node.node_id,
+                target_node_id: right_node,
                 target_coordinate: right_pos,
                 target_strand: right_strand,
                 chromosome_index: 0,
@@ -264,9 +263,9 @@ pub fn update_with_gaf<'a, P>(
             };
             let edges = Edge::bulk_create(conn, &vec![left_edge, right_edge]);
             let bgs = if let Some(sample) = sample_name {
-                BlockGroup::query(conn, "select distinct bg.* from block_groups bg left join block_group_edges bge on (bg.id = bge.block_group_id) left join edges e on (e.id = bge.edge_id and (e.source_node_id in (?3, ?4) or e.target_node_id in (?3, ?4))) where collection_name = ?1 and sample_name = ?2", vec![Value::from(collection_name.to_string()), Value::from(sample.to_string()), Value::from(left_node.node_id), Value::from(right_node.node_id)])
+                BlockGroup::query(conn, "select distinct bg.* from block_groups bg left join block_group_edges bge on (bg.id = bge.block_group_id) left join edges e on (e.id = bge.edge_id and (e.source_node_id in (?3, ?4) or e.target_node_id in (?3, ?4))) where collection_name = ?1 and sample_name = ?2", vec![Value::from(collection_name.to_string()), Value::from(sample.to_string()), Value::from(left_node), Value::from(right_node)])
             } else {
-                BlockGroup::query(conn, "select distinct bg.* from block_groups bg left join block_group_edges bge on (bg.id = bge.block_group_id) left join edges e on (e.id = bge.edge_id and (e.source_node_id in (?2, ?3) or e.target_node_id in (?2, ?3))) where collection_name = ?1 and sample_name is null", vec![Value::from(collection_name.to_string()), Value::from(left_node.node_id), Value::from(right_node.node_id)])
+                BlockGroup::query(conn, "select distinct bg.* from block_groups bg left join block_group_edges bge on (bg.id = bge.block_group_id) left join edges e on (e.id = bge.edge_id and (e.source_node_id in (?2, ?3) or e.target_node_id in (?2, ?3))) where collection_name = ?1 and sample_name is null", vec![Value::from(collection_name.to_string()), Value::from(left_node), Value::from(right_node)])
             };
             for bg in bgs.iter() {
                 BlockGroupEdge::bulk_create(conn, bg.id, &edges);
