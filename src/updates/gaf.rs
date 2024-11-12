@@ -203,10 +203,6 @@ pub fn update_with_gaf<'a, P>(
                         if let Some(id_re) = query_re.captures(&query) {
                             let query_id = id_re["query_id"].to_string();
                             if let Some(user_change) = change_spec.get(&query_id) {
-                                println!(
-                                    "match with {qn:?} {query_id} {user_change:?}",
-                                    qn = query
-                                );
                                 gaf_changes
                                     .entry(query_id)
                                     .and_modify(|change| {
@@ -295,8 +291,6 @@ pub fn update_with_gaf<'a, P>(
             }
         }
     }
-
-    println!("changes to make {gaf_changes:?}");
 }
 
 mod tests {
