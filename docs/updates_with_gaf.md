@@ -22,6 +22,10 @@ simple_insert,atgggagtataattttagatagtgaagatttctgtattcaaatgccacat,atcgatcgatcggag
 
 The id field is optional. If provided, an [accession](path_accessions.md) will be created with the id given.
 
+NOTE: This is not implemented currently, as accessions may need to change to reference a block_group instead of a path.
+Because the above mechanism doesn't actually have a path. It could be we do not have this behavior for this update style
+or change accessions.
+
 ```console
 gen transform --format-csv-for-gaf example.csv > example.fa 
 ```
