@@ -4,18 +4,21 @@ use crate::graph::GraphNode;
 use crate::models::block_group::BlockGroup;
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData};
+use crate::models::file_types::FileTypes;
+use crate::models::metadata;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
+use crate::models::operations::{FileAddition, Operation, OperationSummary};
 use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 use crate::models::traits::*;
-use crate::read_lines;
 use crate::test_helpers::save_graph;
+use crate::{operation_management, read_lines};
 use itertools::Itertools;
 use petgraph::visit::IntoNodeReferences;
 use regex::Regex;
 use rusqlite::types::Value;
-use rusqlite::{params, Connection};
+use rusqlite::{params, session, Connection};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fs::File;
@@ -82,6 +85,22 @@ pub fn update_with_gaf<'a, P>(
     P: AsRef<Path> + Clone,
 {
     // Given a gaf, this will incorporate the alignment into the specified graph, creating new nodes.
+
+    let mut session = session::Session::new(conn).unwrap();
+    operation_management::attach_session(&mut session);
+
+    // TODO: Make operation model for multiple files
+    let change = FileAddition::create(op_conn, gaf_path.as_ref().to_str().unwrap(), FileTypes::GAF);
+
+    let db_uuid = metadata::get_db_uuid(conn);
+
+    let operation = Operation::create(
+        op_conn,
+        &db_uuid,
+        collection_name.to_string(),
+        "insert_via_gaf",
+        change.id,
+    );
 
     let sample_name = sample_name.into();
 
@@ -239,8 +258,10 @@ pub fn update_with_gaf<'a, P>(
         }
     }
 
+    let mut change_count = 0;
     for (path_id, path_changes) in gaf_changes.iter() {
         if let Some(change) = change_spec.get(path_id) {
+            change_count += 1;
             let sequence = Sequence::new()
                 .sequence(&change.sequence)
                 .sequence_type("DNA")
@@ -355,6 +376,11 @@ pub fn update_with_gaf<'a, P>(
             }
         }
     }
+
+    OperationSummary::create(op_conn, operation.id, &format!("{change_count} updates."));
+    let mut output = Vec::new();
+    session.changeset_strm(&mut output).unwrap();
+    operation_management::write_changeset(conn, &operation, &output);
 }
 
 #[cfg(test)]

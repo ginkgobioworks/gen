@@ -345,11 +345,15 @@ fn main() {
             csv,
             sample,
         }) => {
+            conn.execute("BEGIN TRANSACTION", []).unwrap();
+            operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
             let name = &name.clone().unwrap_or_else(|| {
                 get_default_collection(&operation_conn)
                     .expect("No collection specified and default not setup.")
             });
             update_with_gaf(&conn, &operation_conn, gaf, csv, name, sample.as_deref());
+            conn.execute("END TRANSACTION", []).unwrap();
+            operation_conn.execute("END TRANSACTION", []).unwrap();
         }
         Some(Commands::Operations { branch }) => {
             let current_op = OperationState::get_operation(&operation_conn, &db_uuid)
