@@ -436,7 +436,7 @@ mod tests {
     #[test]
     fn test_insertion_from_gaf() {
         setup_gen_dir();
-        let conn = &get_connection("x.db");
+        let conn = &get_connection(None);
         let db_uuid = &metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, db_uuid);
