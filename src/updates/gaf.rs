@@ -36,6 +36,8 @@ struct GafChange {
     right: String,
 }
 
+const GEN_PREFIX: &str = "_gen_";
+
 pub fn transform_csv_to_fasta<P>(path: P)
 where
     P: AsRef<Path>,
@@ -55,7 +57,10 @@ where
     for (index, result) in csv_reader.records().enumerate() {
         let record = result.unwrap();
         let row: CSVRow = record.deserialize(Some(&headers)).unwrap();
-        let id = row.id.clone().unwrap_or_else(|| index.to_string());
+        let id = row
+            .id
+            .clone()
+            .unwrap_or_else(|| format!("{GEN_PREFIX}{index}"));
         writeln!(
             handle,
             ">{id}_left\n{left}\n>{id}_right\n{right}",
@@ -149,7 +154,12 @@ pub fn update_with_gaf<'a, P>(
     for (index, result) in csv_reader.records().enumerate() {
         let record = result.unwrap();
         let row: CSVRow = record.deserialize(Some(&headers)).unwrap();
-        change_spec.insert(row.id.clone().unwrap_or_else(|| index.to_string()), row);
+        change_spec.insert(
+            row.id
+                .clone()
+                .unwrap_or_else(|| format!("{GEN_PREFIX}{index}")),
+            row,
+        );
     }
 
     let mut gaf_changes: HashMap<String, HashMap<String, (i64, Strand, i64)>> = HashMap::new();
