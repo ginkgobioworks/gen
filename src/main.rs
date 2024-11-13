@@ -12,7 +12,6 @@ use gen::models::metadata;
 use gen::models::operations::{setup_db, Branch, OperationState};
 use gen::operation_management;
 use gen::updates::fasta::update_with_fasta;
-use gen::updates::gaf::update_with_gaf;
 use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::update_with_vcf;

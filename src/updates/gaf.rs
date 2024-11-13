@@ -4,7 +4,7 @@ use crate::graph::GraphNode;
 use crate::models::block_group::BlockGroup;
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData};
-use crate::models::node::Node;
+use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
@@ -15,12 +15,13 @@ use itertools::Itertools;
 use petgraph::visit::IntoNodeReferences;
 use regex::Regex;
 use rusqlite::types::Value;
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use std::rc::Rc;
 
 #[derive(Debug, serde::Deserialize)]
 struct CSVRow {
@@ -59,13 +60,14 @@ where
             .id
             .clone()
             .unwrap_or_else(|| format!("{GEN_PREFIX}{index}"));
-        writeln!(
-            writer,
-            ">{id}_left\n{left}\n>{id}_right\n{right}",
-            left = row.left,
-            right = row.right
-        )
-        .expect("Failed to write to stdout.");
+        if !row.left.is_empty() {
+            writeln!(writer, ">{id}_left\n{left}", left = row.left,)
+                .expect("Unable to write fasta entry.");
+        }
+        if !row.right.is_empty() {
+            writeln!(writer, ">{id}_right\n{right}", right = row.right)
+                .expect("Unable to write fasta entry.");
+        }
     }
 }
 
@@ -206,9 +208,9 @@ pub fn update_with_gaf<'a, P>(
                     } else if query.ends_with("right") {
                         query_key = "right";
                         let (segment_strand, segment_id) = segments.first().unwrap();
-                        let (segmnet_node_id, _node_length) = get_node_info(segment_id);
+                        let (segment_node_id, _node_length) = get_node_info(segment_id);
                         strand = Some(*segment_strand);
-                        node_id = Some(segmnet_node_id);
+                        node_id = Some(segment_node_id);
                     } else {
                         continue;
                     };
@@ -239,9 +241,6 @@ pub fn update_with_gaf<'a, P>(
 
     for (path_id, path_changes) in gaf_changes.iter() {
         if let Some(change) = change_spec.get(path_id) {
-            // todo: handle extremes where no left/right path
-            let (left_node, left_strand, left_pos) = path_changes["left"];
-            let (right_node, right_strand, right_pos) = path_changes["right"];
             let sequence = Sequence::new()
                 .sequence(&change.sequence)
                 .sequence_type("DNA")
@@ -250,35 +249,106 @@ pub fn update_with_gaf<'a, P>(
                 conn,
                 &sequence.hash,
                 format!(
-                    "{left_node:?}:{left_strand}:{left_pos}->{hash}",
-                    hash = sequence.hash
+                    "{left_node_info:?}->{hash}->{right_node_info:?}",
+                    left_node_info = path_changes
+                        .get("left")
+                        .unwrap_or(&(-1, Strand::Unknown, -1)),
+                    hash = sequence.hash,
+                    right_node_info =
+                        path_changes
+                            .get("right")
+                            .unwrap_or(&(-1, Strand::Unknown, -1)),
                 ),
             );
-            let left_edge = EdgeData {
-                source_node_id: left_node,
-                source_coordinate: left_pos,
-                source_strand: left_strand,
-                target_node_id: seq_node,
-                target_coordinate: 0,
-                target_strand: Strand::Forward,
-                chromosome_index: 0,
-                phased: 0,
-            };
-            let right_edge = EdgeData {
-                source_node_id: seq_node,
-                source_coordinate: sequence.length,
-                source_strand: Strand::Forward,
-                target_node_id: right_node,
-                target_coordinate: right_pos,
-                target_strand: right_strand,
-                chromosome_index: 0,
-                phased: 0,
-            };
-            let edges = Edge::bulk_create(conn, &vec![left_edge, right_edge]);
-            let bgs = if let Some(sample) = sample_name {
-                BlockGroup::query(conn, "select distinct bg.* from block_groups bg left join block_group_edges bge on (bg.id = bge.block_group_id) left join edges e on (e.id = bge.edge_id and (e.source_node_id in (?3, ?4) or e.target_node_id in (?3, ?4))) where collection_name = ?1 and sample_name = ?2", vec![Value::from(collection_name.to_string()), Value::from(sample.to_string()), Value::from(left_node), Value::from(right_node)])
+
+            let mut new_edges = vec![];
+            let mut bg_nodes = vec![];
+
+            if change.left.is_empty() && change.right.is_empty() {
+                panic!("Invalid change specification");
+            } else if change.left.is_empty() {
+                // we are inserting at the far left side, so our right node mapping is actually
+                // where we want to be
+                let (node, strand, pos) = path_changes["right"];
+                bg_nodes.push(Value::from(node));
+                new_edges.push(EdgeData {
+                    source_node_id: PATH_START_NODE_ID,
+                    source_coordinate: 0,
+                    source_strand: Strand::Forward,
+                    target_node_id: seq_node,
+                    target_coordinate: 0,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                });
+                new_edges.push(EdgeData {
+                    source_node_id: seq_node,
+                    source_coordinate: sequence.length,
+                    source_strand: Strand::Forward,
+                    target_node_id: node,
+                    target_coordinate: pos,
+                    target_strand: strand,
+                    chromosome_index: 0,
+                    phased: 0,
+                });
+            } else if change.right.is_empty() {
+                // we are inserting at the far right side
+                let (node, strand, pos) = path_changes["left"];
+                bg_nodes.push(Value::from(node));
+                new_edges.push(EdgeData {
+                    source_node_id: node,
+                    source_coordinate: pos,
+                    source_strand: strand,
+                    target_node_id: seq_node,
+                    target_coordinate: 0,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                });
+                new_edges.push(EdgeData {
+                    source_node_id: seq_node,
+                    source_coordinate: sequence.length,
+                    source_strand: Strand::Forward,
+                    target_node_id: PATH_END_NODE_ID,
+                    target_coordinate: 0,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                });
             } else {
-                BlockGroup::query(conn, "select distinct bg.* from block_groups bg left join block_group_edges bge on (bg.id = bge.block_group_id) left join edges e on (e.id = bge.edge_id and (e.source_node_id in (?2, ?3) or e.target_node_id in (?2, ?3))) where collection_name = ?1 and sample_name is null", vec![Value::from(collection_name.to_string()), Value::from(left_node), Value::from(right_node)])
+                // normal insert
+                let (node, strand, pos) = path_changes["left"];
+                bg_nodes.push(Value::from(node));
+                new_edges.push(EdgeData {
+                    source_node_id: node,
+                    source_coordinate: pos,
+                    source_strand: strand,
+                    target_node_id: seq_node,
+                    target_coordinate: 0,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                });
+
+                let (node, strand, pos) = path_changes["right"];
+                bg_nodes.push(Value::from(node));
+                new_edges.push(EdgeData {
+                    source_node_id: seq_node,
+                    source_coordinate: sequence.length,
+                    source_strand: Strand::Forward,
+                    target_node_id: node,
+                    target_coordinate: pos,
+                    target_strand: strand,
+                    chromosome_index: 0,
+                    phased: 0,
+                });
+            }
+
+            let edges = Edge::bulk_create(conn, &new_edges);
+            let bgs = if let Some(sample) = sample_name {
+                BlockGroup::query(conn, "select distinct bg.* from block_groups bg left join block_group_edges bge on (bg.id = bge.block_group_id) left join edges e on (e.id = bge.edge_id and (e.source_node_id in rarray(?3) or e.target_node_id in rarray(?3))) where collection_name = ?1 and sample_name = ?2", params!(collection_name.to_string(), sample.to_string(), Rc::new(bg_nodes)))
+            } else {
+                BlockGroup::query(conn, "select distinct bg.* from block_groups bg left join block_group_edges bge on (bg.id = bge.block_group_id) left join edges e on (e.id = bge.edge_id and (e.source_node_id in rarray(?2) or e.target_node_id in rarray(?2))) where collection_name = ?1 and sample_name is null", params!(collection_name.to_string(), Rc::new(bg_nodes)))
             };
             for bg in bgs.iter() {
                 BlockGroupEdge::bulk_create(conn, bg.id, &edges);
@@ -296,6 +366,7 @@ mod tests {
     use crate::models::operations::setup_db;
     use crate::models::traits::Query;
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
+    use petgraph::Direction;
     use std::path::PathBuf;
 
     mod test_transform {
@@ -315,7 +386,11 @@ mod tests {
             >2node_span_left\n\
             GACCTTATCTTTTAAAAATATAaaaaaaTTTTTACATTAATTACTTCCAAAATAGAGATCAGTTGCATACAAATGGCAGGTCACC\n\
             >2node_span_right\n\
-            atacctttctgctcttgtcagacaattaaggggtctttgaatacttcagccctaataatttgcttcctaacatacatattgcagtgctt\n")
+            atacctttctgctcttgtcagacaattaaggggtctttgaatacttcagccctaataatttgcttcctaacatacatattgcagtgctt\n\
+            >left_extreme_left\n\
+            GAATTCTTGTGTTTATATAATAAGATGTCCTATAATTTCTGTTTGGAATA\n\
+            >right_extreme_right\n\
+            GGAGATTACAAATTTGCAAACCTCAGCTGCTCTCATTTTATGCTTTCACC\n")
         }
 
         #[test]
@@ -333,6 +408,26 @@ mod tests {
             aaa\n\
             >{GEN_PREFIX}0_right\n\
             ccc\n"
+                )
+            );
+        }
+
+        #[test]
+        fn test_prefixes_entries_with_extremes() {
+            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/chr22_insert.csv");
+            let mut input =
+                "id,left,sequence,right\nextreme_left,aaa,ttt,\nextreme_right,,ccc,ggg".as_bytes();
+            let mut buffer = Vec::new();
+            transform_csv_to_fasta(&mut input, &mut buffer);
+            let results = String::from_utf8(buffer).unwrap();
+            assert_eq!(
+                results,
+                format!(
+                    "\
+            >extreme_left_left\n\
+            aaa\n\
+            >extreme_right_right\n\
+            ggg\n"
                 )
             );
         }
@@ -356,7 +451,7 @@ mod tests {
         update_with_gaf(conn, op_conn, gaf_path, csv_path, "test", None);
         let graph = Sample::get_graph(conn, "test", None);
 
-        let query = Node::query(conn, "select n.* from nodes n left join sequences s on (n.sequence_hash = s.hash) where s.sequence = ?1", vec![Value::from("AATCGAATCG".to_string())]);
+        let query = Node::query(conn, "select n.* from nodes n left join sequences s on (n.sequence_hash = s.hash) where s.sequence = ?1", params!("AATCGAATCG".to_string()));
         let insert_node_id = query.first().unwrap().id;
         let insert_node = graph
             .nodes()
@@ -398,5 +493,63 @@ mod tests {
                 .len()
                 == 1
         );
+    }
+
+    #[test]
+    fn test_insertion_from_gaf_extremes() {
+        setup_gen_dir();
+        let conn = &get_connection("x.db");
+        let db_uuid = &metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, db_uuid);
+
+        let collection = "test".to_string();
+
+        let gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/chr22_het.gfa");
+        let csv_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/chr22_insert.csv");
+
+        import_gfa(&gfa_path, &collection, None, conn);
+        let gaf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/chr22_het.gaf");
+        update_with_gaf(conn, op_conn, gaf_path, csv_path, "test", None);
+        let graph = Sample::get_graph(conn, "test", None);
+
+        // we should end up with a new edge putting our insert to the beginning of the graph, which is node 3.
+        let query = Node::query(conn, "select n.* from nodes n left join sequences s on (n.sequence_hash = s.hash) where s.sequence = ?1", params!("aaa".to_string()));
+        let insert_node_id = query.first().unwrap().id;
+        let insert_node = graph
+            .nodes()
+            .filter(|node| node.node_id == insert_node_id)
+            .collect::<Vec<GraphNode>>();
+        let insert_node = insert_node.first().unwrap();
+        let start_node_id = graph
+            .nodes()
+            .filter(|node| node.node_id == 3)
+            .collect::<Vec<GraphNode>>();
+
+        let incoming_edges: Vec<(GraphNode, GraphNode, &GraphEdge)> = graph
+            .edges_directed(start_node_id[0], Direction::Incoming)
+            .collect();
+
+        // This checks that we have an incoming edge from our new insert to the old end of the graph
+        assert_eq!(incoming_edges[1].0.node_id, insert_node_id);
+
+        let query = Node::query(conn, "select n.* from nodes n left join sequences s on (n.sequence_hash = s.hash) where s.sequence = ?1", params!("ttt".to_string()));
+        let insert_node_id = query.first().unwrap().id;
+        let insert_node = graph
+            .nodes()
+            .filter(|node| node.node_id == insert_node_id)
+            .collect::<Vec<GraphNode>>();
+        let insert_node = insert_node.first().unwrap();
+        let end_node_id = graph
+            .nodes()
+            .filter(|node| node.node_id == 1001)
+            .collect::<Vec<GraphNode>>();
+
+        let edges: Vec<(GraphNode, GraphNode, &GraphEdge)> = graph
+            .edges_directed(end_node_id[0], Direction::Outgoing)
+            .collect();
+
+        // This checks that we have an incoming edge from our new insert to the old end of the graph
+        assert_eq!(edges[1].1.node_id, insert_node_id);
     }
 }
