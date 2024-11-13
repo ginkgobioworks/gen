@@ -18,8 +18,9 @@ use gen::updates::library::update_with_library;
 use gen::updates::vcf::update_with_vcf;
 use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
+use std::fs::File;
 use std::path::PathBuf;
-use std::str;
+use std::{io, str};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -224,7 +225,10 @@ fn main() {
         let csv = format_csv_for_gaf
             .clone()
             .expect("csv for transformation not provided.");
-        transform_csv_to_fasta(csv);
+        let stdout = io::stdout();
+        let mut handle = stdout.lock();
+        let mut csv_file = File::open(csv).unwrap();
+        transform_csv_to_fasta(&mut csv_file, &mut handle);
         return;
     }
 
