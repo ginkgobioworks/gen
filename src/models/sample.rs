@@ -3,7 +3,7 @@ use crate::models::block_group::BlockGroup;
 use crate::models::traits::*;
 use petgraph::prelude::DiGraphMap;
 use rusqlite::types::Value;
-use rusqlite::{Connection, Row};
+use rusqlite::{params, Connection, Row};
 use std::fmt::*;
 
 #[derive(Debug)]
@@ -54,16 +54,13 @@ impl Sample {
             BlockGroup::query(
                 conn,
                 "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-                vec![
-                    Value::from(collection.to_string()),
-                    Value::from(sample.to_string()),
-                ],
+                params!(collection.to_string(), sample.to_string()),
             )
         } else {
             BlockGroup::query(
                 conn,
                 "select * from block_groups where collection_name = ?1 AND sample_name is null;",
-                vec![Value::from(collection.to_string())],
+                params!(collection.to_string()),
             )
         };
         let mut sample_graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
