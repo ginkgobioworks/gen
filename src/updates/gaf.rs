@@ -1,3 +1,5 @@
+use std::io::{self, Write};
+
 use crate::graph::GraphNode;
 use crate::models::block_group::BlockGroup;
 use crate::models::block_group_edge::BlockGroupEdge;
@@ -48,15 +50,19 @@ where
         .headers()
         .expect("Input csv missing headers. Headers should be id,left,sequence,right.")
         .clone();
+    let stdout = io::stdout();
+    let mut handle = stdout.lock();
     for (index, result) in csv_reader.records().enumerate() {
         let record = result.unwrap();
         let row: CSVRow = record.deserialize(Some(&headers)).unwrap();
         let id = row.id.clone().unwrap_or_else(|| index.to_string());
-        println!(
+        writeln!(
+            handle,
             ">{id}_left\n{left}\n>{id}_right\n{right}",
             left = row.left,
             right = row.right
-        );
+        )
+        .expect("Failed to write to stdout.");
     }
 }
 
@@ -87,8 +93,7 @@ pub fn update_with_gaf<'a, P>(
         })
     };
 
-    // our GFA export encodes segments like node_id.sequence_start, where sequence_end can be inferred by the
-    // node sequence length
+    // our GFA export encodes segments like node_id.sequence_start
     let re = Regex::new(
         r"(?x)
         ^
