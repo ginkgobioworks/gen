@@ -5,6 +5,7 @@ use rusqlite::ToSql;
 pub enum FileTypes {
     Fasta,
     GFA,
+    GAF,
     VCF,
     Changeset,
     CSV,
@@ -18,6 +19,7 @@ impl ToSql for FileTypes {
             FileTypes::VCF => "vcf".into(),
             FileTypes::Changeset => "changeset".into(),
             FileTypes::CSV => "csv".into(),
+            FileTypes::GAF => "gaf".into(),
         };
         Ok(result)
     }
@@ -31,6 +33,7 @@ impl From<FileTypes> for Value {
             FileTypes::VCF => "vcf",
             FileTypes::Changeset => "changeset",
             FileTypes::CSV => "csv",
+            FileTypes::GAF => "gaf",
         };
         Value::Text(result.to_string())
     }
@@ -44,6 +47,7 @@ impl FromSql for FileTypes {
             Ok("vcf") => FileTypes::VCF,
             Ok("changeset") => FileTypes::Changeset,
             Ok("csv") => FileTypes::CSV,
+            Ok("gaf") => FileTypes::GAF,
             _ => panic!("Invalid entry in database"),
         };
         Ok(result)
