@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 
 use crate::graph::GraphNode;
 use crate::models::block_group::BlockGroup;
@@ -38,12 +38,12 @@ struct GafChange {
 
 const GEN_PREFIX: &str = "_gen_";
 
-pub fn transform_csv_to_fasta<P>(path: P)
+pub fn transform_csv_to_fasta<R, W>(reader: R, writer: &mut W)
 where
-    P: AsRef<Path>,
+    R: Read,
+    W: Write,
 {
-    let csv_file = File::open(path).unwrap();
-    let csv_bufreader = BufReader::new(csv_file);
+    let csv_bufreader = BufReader::new(reader);
 
     let mut csv_reader = csv::ReaderBuilder::new()
         .has_headers(true)
@@ -52,8 +52,6 @@ where
         .headers()
         .expect("Input csv missing headers. Headers should be id,left,sequence,right.")
         .clone();
-    let stdout = io::stdout();
-    let mut handle = stdout.lock();
     for (index, result) in csv_reader.records().enumerate() {
         let record = result.unwrap();
         let row: CSVRow = record.deserialize(Some(&headers)).unwrap();
@@ -62,7 +60,7 @@ where
             .clone()
             .unwrap_or_else(|| format!("{GEN_PREFIX}{index}"));
         writeln!(
-            handle,
+            writer,
             ">{id}_left\n{left}\n>{id}_right\n{right}",
             left = row.left,
             right = row.right
@@ -289,6 +287,7 @@ pub fn update_with_gaf<'a, P>(
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::graph::GraphEdge;
@@ -298,6 +297,46 @@ mod tests {
     use crate::models::traits::Query;
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use std::path::PathBuf;
+
+    mod test_transform {
+        use super::*;
+        #[test]
+        fn test_transforms_to_fasta() {
+            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/chr22_insert.csv");
+            let mut csv_file = File::open(path).unwrap();
+            let mut buffer = Vec::new();
+            transform_csv_to_fasta(&mut csv_file, &mut buffer);
+            let results = String::from_utf8(buffer).unwrap();
+            assert_eq!(results, "\
+            >test_left\n\
+            atgggagtataattttagatagtgaagatttctgtattcaaatgccacat\n\
+            >test_right\n\
+            acacagaaaaaggcaggcagagaaaataacaaggataaagacactgaagt\n\
+            >2node_span_left\n\
+            GACCTTATCTTTTAAAAATATAaaaaaaTTTTTACATTAATTACTTCCAAAATAGAGATCAGTTGCATACAAATGGCAGGTCACC\n\
+            >2node_span_right\n\
+            atacctttctgctcttgtcagacaattaaggggtctttgaatacttcagccctaataatttgcttcctaacatacatattgcagtgctt\n")
+        }
+
+        #[test]
+        fn test_prefixes_entries_without_id() {
+            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/chr22_insert.csv");
+            let mut input = "id,left,sequence,right\n,aaa,ttt,ccc".as_bytes();
+            let mut buffer = Vec::new();
+            transform_csv_to_fasta(&mut input, &mut buffer);
+            let results = String::from_utf8(buffer).unwrap();
+            assert_eq!(
+                results,
+                format!(
+                    "\
+            >{GEN_PREFIX}0_left\n\
+            aaa\n\
+            >{GEN_PREFIX}0_right\n\
+            ccc\n"
+                )
+            );
+        }
+    }
 
     #[test]
     fn test_insertion_from_gaf() {
