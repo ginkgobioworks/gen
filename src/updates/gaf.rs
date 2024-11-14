@@ -87,20 +87,14 @@ pub fn update_with_gaf<'a, P>(
 {
     // Given a gaf, this will incorporate the alignment into the specified graph, creating new nodes.
 
-    let mut session = session::Session::new(conn).unwrap();
-    operation_management::attach_session(&mut session);
-
-    // TODO: Make operation model for multiple files
-    let change = FileAddition::create(op_conn, gaf_path.as_ref().to_str().unwrap(), FileTypes::GAF);
-
-    let db_uuid = metadata::get_db_uuid(conn);
-
-    let operation = Operation::create(
+    let binding = gaf_path.clone();
+    let (mut session, operation) = operation_management::start_operation(
+        conn,
         op_conn,
-        &db_uuid,
-        collection_name.to_string(),
+        binding.as_ref().to_str().unwrap(),
+        FileTypes::GAF,
         "insert_via_gaf",
-        change.id,
+        collection_name,
     );
 
     let parent_sample = parent_sample.into();
@@ -381,10 +375,13 @@ pub fn update_with_gaf<'a, P>(
         }
     }
 
-    OperationSummary::create(op_conn, operation.id, &format!("{change_count} updates."));
-    let mut output = Vec::new();
-    session.changeset_strm(&mut output).unwrap();
-    operation_management::write_changeset(conn, &operation, &output);
+    operation_management::end_operation(
+        conn,
+        op_conn,
+        &operation,
+        &mut session,
+        &format!("{change_count} updates."),
+    );
 }
 
 #[cfg(test)]
@@ -579,7 +576,7 @@ mod tests {
             .edges_directed(end_node_id[0], Direction::Outgoing)
             .collect();
 
-        // This checks that we have an incoming edge from our new insert to the old end of the graph
+        // This checks that we have an outgoing edge from the end of the old graph to our insert
         assert_eq!(edges[1].1.node_id, insert_node_id);
     }
 }
