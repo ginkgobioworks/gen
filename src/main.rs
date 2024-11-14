@@ -12,12 +12,14 @@ use gen::models::metadata;
 use gen::models::operations::{setup_db, Branch, OperationState};
 use gen::operation_management;
 use gen::updates::fasta::update_with_fasta;
+use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::update_with_vcf;
 use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
+use std::fs::File;
 use std::path::PathBuf;
-use std::str;
+use std::{io, str};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -38,6 +40,11 @@ fn get_default_collection(conn: &Connection) -> Option<String> {
 
 #[derive(Subcommand)]
 enum Commands {
+    Transform {
+        /// For update-gaf, this transforms the csv to a fasta for use in alignments
+        #[arg(long)]
+        format_csv_for_gaf: Option<String>,
+    },
     /// Import a new sequence collection.
     Import {
         /// Fasta file path
@@ -94,6 +101,25 @@ enum Commands {
         /// The end coordinate for the region to add the library to
         #[arg(short, long)]
         end: Option<i64>,
+    },
+    /// Use a GAF
+    #[command(name = "update-gaf")]
+    UpdateGaf {
+        /// The name of the collection to update
+        #[arg(short, long)]
+        name: Option<String>,
+        /// The GAF input
+        #[arg(short, long)]
+        gaf: String,
+        /// The GAF input
+        #[arg(short, long)]
+        csv: String,
+        /// The sample to update or create
+        #[arg(short, long)]
+        sample: String,
+        /// If specified, the newly created sample will inherit this sample's existing graph
+        #[arg(short, long)]
+        parent_sample: Option<String>,
     },
     /// Initialize a gen repository
     Init {},
@@ -197,6 +223,17 @@ fn main() {
         return;
     }
 
+    if let Some(Commands::Transform { format_csv_for_gaf }) = &cli.command {
+        let csv = format_csv_for_gaf
+            .clone()
+            .expect("csv for transformation not provided.");
+        let stdout = io::stdout();
+        let mut handle = stdout.lock();
+        let mut csv_file = File::open(csv).unwrap();
+        transform_csv_to_fasta(&mut csv_file, &mut handle);
+        return;
+    }
+
     let binding = cli.db.unwrap_or_else(|| {
         let mut stmt = operation_conn
             .prepare("select db_name from defaults where id = 1;")
@@ -233,7 +270,7 @@ fn main() {
                     &operation_conn,
                 );
             } else if gfa.is_some() {
-                import_gfa(&PathBuf::from(gfa.clone().unwrap()), name, &conn);
+                import_gfa(&PathBuf::from(gfa.clone().unwrap()), name, None, &conn);
             } else {
                 panic!(
                     "ERROR: Import command attempted but no recognized file format was specified"
@@ -302,6 +339,31 @@ fn main() {
                 panic!("Unknown file type provided for update.");
             }
 
+            conn.execute("END TRANSACTION", []).unwrap();
+            operation_conn.execute("END TRANSACTION", []).unwrap();
+        }
+        Some(Commands::UpdateGaf {
+            name,
+            gaf,
+            csv,
+            sample,
+            parent_sample,
+        }) => {
+            conn.execute("BEGIN TRANSACTION", []).unwrap();
+            operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
+            let name = &name.clone().unwrap_or_else(|| {
+                get_default_collection(&operation_conn)
+                    .expect("No collection specified and default not setup.")
+            });
+            update_with_gaf(
+                &conn,
+                &operation_conn,
+                gaf,
+                csv,
+                name,
+                Some(sample.as_ref()),
+                parent_sample.as_deref(),
+            );
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
         }
@@ -455,5 +517,6 @@ fn main() {
             database,
             collection,
         }) => {}
+        Some(Commands::Transform { format_csv_for_gaf }) => {}
     }
 }

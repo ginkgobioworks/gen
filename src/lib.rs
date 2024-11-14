@@ -1,4 +1,7 @@
-use std::str;
+use std::fs::File;
+use std::io::BufRead;
+use std::path::Path;
+use std::{io, str};
 
 pub mod config;
 pub mod exports;
@@ -83,6 +86,14 @@ pub fn get_overlap(a: i64, b: i64, x: i64, y: i64) -> (bool, bool, bool) {
     let contains_end = a <= y && y < b;
     let overlap = a < y && x < b;
     (contains_start, contains_end, overlap)
+}
+
+pub fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
+where
+    P: AsRef<Path>,
+{
+    let file = File::open(filename)?;
+    Ok(io::BufReader::new(file).lines())
 }
 
 #[cfg(test)]

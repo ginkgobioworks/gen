@@ -23,9 +23,15 @@ fn bool_to_strand(direction: bool) -> Strand {
     }
 }
 
-pub fn import_gfa(gfa_path: &FilePath, collection_name: &str, conn: &Connection) {
+pub fn import_gfa<'a>(
+    gfa_path: &FilePath,
+    collection_name: &str,
+    sample_name: impl Into<Option<&'a str>>,
+    conn: &Connection,
+) {
     Collection::create(conn, collection_name);
-    let block_group = BlockGroup::create(conn, collection_name, None, "");
+    let sample_name = sample_name.into();
+    let block_group = BlockGroup::create(conn, collection_name, sample_name, "");
     let gfa: Gfa<String, (), ()> = Gfa::parse_gfa_file(gfa_path.to_str().unwrap());
     let mut sequences_by_segment_id: HashMap<&String, Sequence> = HashMap::new();
     let mut node_ids_by_segment_id: HashMap<&String, i64> = HashMap::new();
@@ -232,7 +238,7 @@ mod tests {
         gfa_path.push("fixtures/simple.gfa");
         let collection_name = "test".to_string();
         let conn = &get_connection(None);
-        import_gfa(&gfa_path, &collection_name, conn);
+        import_gfa(&gfa_path, &collection_name, None, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::query(
@@ -258,7 +264,7 @@ mod tests {
         gfa_path.push("fixtures/no_path.gfa");
         let collection_name = "no path".to_string();
         let conn = &get_connection(None);
-        import_gfa(&gfa_path, &collection_name, conn);
+        import_gfa(&gfa_path, &collection_name, None, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id, false);
@@ -277,7 +283,7 @@ mod tests {
         gfa_path.push("fixtures/walk.gfa");
         let collection_name = "walk".to_string();
         let conn = &mut get_connection(None);
-        import_gfa(&gfa_path, &collection_name, conn);
+        import_gfa(&gfa_path, &collection_name, None, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::query(
@@ -303,7 +309,7 @@ mod tests {
         gfa_path.push("fixtures/reverse_strand.gfa");
         let collection_name = "test".to_string();
         let conn = &get_connection(None);
-        import_gfa(&gfa_path, &collection_name, conn);
+        import_gfa(&gfa_path, &collection_name, None, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::query(
@@ -329,7 +335,7 @@ mod tests {
         gfa_path.push("fixtures/anderson_promoters.gfa");
         let collection_name = "anderson promoters".to_string();
         let conn = &get_connection(None);
-        import_gfa(&gfa_path, &collection_name, conn);
+        import_gfa(&gfa_path, &collection_name, None, conn);
 
         let paths = Path::query_for_collection(conn, &collection_name);
         assert_eq!(paths.len(), 20);
@@ -435,7 +441,7 @@ mod tests {
         gfa_path.push("fixtures/aa.gfa");
         let collection_name = "test".to_string();
         let conn = &get_connection(None);
-        import_gfa(&gfa_path, &collection_name, conn);
+        import_gfa(&gfa_path, &collection_name, None, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::query(

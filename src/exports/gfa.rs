@@ -58,7 +58,8 @@ pub fn export_gfa(
 
     let mut edges = edge_set.into_iter().collect();
 
-    let blocks = Edge::blocks_from_edges(conn, &edges);
+    let mut blocks = Edge::blocks_from_edges(conn, &edges);
+    blocks.sort_by(|a, b| a.node_id.cmp(&b.node_id));
     let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
     edges.extend(boundary_edges.clone());
 
@@ -353,7 +354,7 @@ mod tests {
 
         export_gfa(&conn, collection_name, &gfa_path, None);
         // NOTE: Not directly checking file contents because segments are written in random order
-        import_gfa(&gfa_path, "test collection 2", &conn);
+        import_gfa(&gfa_path, "test collection 2", None, &conn);
 
         let block_group2 = Collection::get_block_groups(&conn, "test collection 2")
             .pop()
@@ -374,7 +375,7 @@ mod tests {
         gfa_path.push("fixtures/simple.gfa");
         let collection_name = "test".to_string();
         let conn = &get_connection(None);
-        import_gfa(&gfa_path, &collection_name, conn);
+        import_gfa(&gfa_path, &collection_name, None, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id, false);
@@ -384,7 +385,7 @@ mod tests {
         gfa_path.push("intermediate.gfa");
 
         export_gfa(conn, &collection_name, &gfa_path, None);
-        import_gfa(&gfa_path, "test collection 2", conn);
+        import_gfa(&gfa_path, "test collection 2", None, conn);
 
         let block_group2 = Collection::get_block_groups(conn, "test collection 2")
             .pop()
@@ -401,7 +402,7 @@ mod tests {
         gfa_path.push("fixtures/anderson_promoters.gfa");
         let collection_name = "anderson promoters".to_string();
         let conn = &get_connection(None);
-        import_gfa(&gfa_path, &collection_name, conn);
+        import_gfa(&gfa_path, &collection_name, None, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id, false);
@@ -411,7 +412,7 @@ mod tests {
         gfa_path.push("intermediate.gfa");
 
         export_gfa(conn, &collection_name, &gfa_path, None);
-        import_gfa(&gfa_path, "anderson promoters 2", conn);
+        import_gfa(&gfa_path, "anderson promoters 2", None, conn);
 
         let block_group2 = Collection::get_block_groups(conn, "anderson promoters 2")
             .pop()
@@ -428,7 +429,7 @@ mod tests {
         gfa_path.push("fixtures/reverse_strand.gfa");
         let collection_name = "test".to_string();
         let conn = &get_connection(None);
-        import_gfa(&gfa_path, &collection_name, conn);
+        import_gfa(&gfa_path, &collection_name, None, conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id, false);
@@ -438,7 +439,7 @@ mod tests {
         gfa_path.push("intermediate.gfa");
 
         export_gfa(conn, &collection_name, &gfa_path, None);
-        import_gfa(&gfa_path, "test collection 2", conn);
+        import_gfa(&gfa_path, "test collection 2", None, conn);
 
         let block_group2 = Collection::get_block_groups(conn, "test collection 2")
             .pop()
@@ -520,7 +521,7 @@ mod tests {
         let mut gfa_path = PathBuf::from(temp_dir.path());
         gfa_path.push("intermediate.gfa");
         export_gfa(&conn, "test", &gfa_path, None);
-        import_gfa(&gfa_path, "test collection 2", &conn);
+        import_gfa(&gfa_path, "test collection 2", None, &conn);
 
         let block_group2 = Collection::get_block_groups(&conn, "test collection 2")
             .pop()

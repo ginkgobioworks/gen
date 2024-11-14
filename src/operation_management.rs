@@ -393,7 +393,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                 .0;
             match table {
                 "samples" => {
-                    Sample::create(
+                    Sample::get_or_create(
                         conn,
                         str::from_utf8(item.new_value(pk_column).unwrap().as_bytes().unwrap())
                             .unwrap(),

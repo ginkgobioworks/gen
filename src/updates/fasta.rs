@@ -39,7 +39,7 @@ pub fn update_with_fasta(
 
     let mut fasta_reader = fasta::io::reader::Builder.build_from_path(fasta_file_path)?;
 
-    let _new_sample = Sample::create(conn, new_sample_name);
+    let _new_sample = Sample::get_or_create(conn, new_sample_name);
     let block_groups;
     if let Some(parent_name) = parent_sample_name {
         block_groups = BlockGroup::query(
