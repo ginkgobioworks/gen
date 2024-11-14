@@ -838,7 +838,7 @@ mod tests {
         let bg1 = BlockGroup::create(conn, "test", None, "hg19");
         assert_eq!(bg1.collection_name, "test");
         assert_eq!(bg1.name, "hg19");
-        Sample::create(conn, "sample");
+        Sample::get_or_create(conn, "sample");
         let bg2 = BlockGroup::create(conn, "test", Some("sample"), "hg19");
         assert_eq!(bg2.collection_name, "test");
         assert_eq!(bg2.name, "hg19");
@@ -853,7 +853,7 @@ mod tests {
         let bg1 = BlockGroup::create(conn, "test", None, "hg19");
         assert_eq!(bg1.collection_name, "test");
         assert_eq!(bg1.name, "hg19");
-        Sample::create(conn, "sample");
+        Sample::get_or_create(conn, "sample");
         let bg2 =
             BlockGroup::get_or_create_sample_block_group(conn, "test", "sample", "hg19", None)
                 .unwrap();
@@ -884,7 +884,7 @@ mod tests {
             }]
         );
 
-        Sample::create(conn, "sample2");
+        Sample::get_or_create(conn, "sample2");
         let _bg2 =
             BlockGroup::get_or_create_sample_block_group(conn, "test", "sample2", "chr1", None)
                 .unwrap();
@@ -1768,7 +1768,7 @@ mod tests {
     fn test_blockgroup_interval_tree() {
         let conn = &get_connection(None);
         let (block_group_id, path) = setup_block_group(conn);
-        let _new_sample = Sample::create(conn, "child");
+        let _new_sample = Sample::get_or_create(conn, "child");
         let new_bg_id =
             BlockGroup::get_or_create_sample_block_group(conn, "test", "child", "chr1", None)
                 .unwrap();
@@ -1946,7 +1946,7 @@ mod tests {
     fn test_changes_against_derivative_blockgroups() {
         let conn = &get_connection(None);
         let (_block_group_id, _path) = setup_block_group(conn);
-        let _new_sample = Sample::create(conn, "child");
+        let _new_sample = Sample::get_or_create(conn, "child");
         let new_bg_id =
             BlockGroup::get_or_create_sample_block_group(conn, "test", "child", "chr1", None)
                 .unwrap();
@@ -1990,7 +1990,7 @@ mod tests {
         );
 
         // Now, we make a change against another descendant
-        let _new_sample = Sample::create(conn, "grandchild");
+        let _new_sample = Sample::get_or_create(conn, "grandchild");
         let gc_bg_id = BlockGroup::get_or_create_sample_block_group(
             conn,
             "test",
@@ -2041,7 +2041,7 @@ mod tests {
         // we can modify regions downstream of them.
         let conn = &get_connection(None);
         let (_block_group_id, _path) = setup_block_group(conn);
-        let _new_sample = Sample::create(conn, "child");
+        let _new_sample = Sample::get_or_create(conn, "child");
         let new_bg_id =
             BlockGroup::get_or_create_sample_block_group(conn, "test", "child", "chr1", None)
                 .unwrap();
@@ -2088,7 +2088,7 @@ mod tests {
         );
 
         // Now, we make a change against another descendant
-        let _new_sample = Sample::create(conn, "grandchild");
+        let _new_sample = Sample::get_or_create(conn, "grandchild");
         let gc_bg_id = BlockGroup::get_or_create_sample_block_group(
             conn,
             "test",
@@ -2151,7 +2151,7 @@ mod tests {
         // This test ensures that we do not allow ambiguous changes by coordinates
         let conn = &get_connection(None);
         let (_block_group_id, _path) = setup_block_group(conn);
-        let _new_sample = Sample::create(conn, "child");
+        let _new_sample = Sample::get_or_create(conn, "child");
         let new_bg_id =
             BlockGroup::get_or_create_sample_block_group(conn, "test", "child", "chr1", None)
                 .unwrap();
@@ -2200,7 +2200,7 @@ mod tests {
         );
 
         // Now, we make a change against another descendant and get an error
-        let _new_sample = Sample::create(conn, "grandchild");
+        let _new_sample = Sample::get_or_create(conn, "grandchild");
         let gc_bg_id = BlockGroup::get_or_create_sample_block_group(
             conn,
             "test",

@@ -81,6 +81,7 @@ pub fn update_with_gaf<'a, P>(
     csv_path: P,
     collection_name: &'a str,
     sample_name: impl Into<Option<&'a str>>,
+    parent_sample: impl Into<Option<&'a str>>,
 ) where
     P: AsRef<Path> + Clone,
 {
@@ -102,7 +103,10 @@ pub fn update_with_gaf<'a, P>(
         change.id,
     );
 
-    let sample_name = sample_name.into();
+    let parent_sample = parent_sample.into();
+    let sample_name = sample_name
+        .into()
+        .map(|name| Sample::get_or_create_child(conn, collection_name, name, parent_sample).name);
 
     let mut node_lengths: HashMap<String, (i64, i64)> = HashMap::new();
 
@@ -366,8 +370,8 @@ pub fn update_with_gaf<'a, P>(
             }
 
             let edges = Edge::bulk_create(conn, &new_edges);
-            let bgs = if let Some(sample) = sample_name {
-                BlockGroup::query(conn, "select distinct bg.* from block_groups bg left join block_group_edges bge on (bg.id = bge.block_group_id) left join edges e on (e.id = bge.edge_id and (e.source_node_id in rarray(?3) or e.target_node_id in rarray(?3))) where collection_name = ?1 and sample_name = ?2", params!(collection_name.to_string(), sample.to_string(), Rc::new(bg_nodes)))
+            let bgs = if let Some(sample) = sample_name.clone() {
+                BlockGroup::query(conn, "select distinct bg.* from block_groups bg left join block_group_edges bge on (bg.id = bge.block_group_id) left join edges e on (e.id = bge.edge_id and (e.source_node_id in rarray(?3) or e.target_node_id in rarray(?3))) where collection_name = ?1 and sample_name = ?2", params!(collection_name.to_string(), sample, Rc::new(bg_nodes)))
             } else {
                 BlockGroup::query(conn, "select distinct bg.* from block_groups bg left join block_group_edges bge on (bg.id = bge.block_group_id) left join edges e on (e.id = bge.edge_id and (e.source_node_id in rarray(?2) or e.target_node_id in rarray(?2))) where collection_name = ?1 and sample_name is null", params!(collection_name.to_string(), Rc::new(bg_nodes)))
             };
@@ -474,8 +478,8 @@ mod tests {
 
         import_gfa(&gfa_path, &collection, None, conn);
         let gaf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/chr22_het.gaf");
-        update_with_gaf(conn, op_conn, gaf_path, csv_path, "test", None);
-        let graph = Sample::get_graph(conn, "test", None);
+        update_with_gaf(conn, op_conn, gaf_path, csv_path, "test", "child", None);
+        let graph = Sample::get_graph(conn, "test", "child");
 
         let query = Node::query(conn, "select n.* from nodes n left join sequences s on (n.sequence_hash = s.hash) where s.sequence = ?1", params!("AATCGAATCG".to_string()));
         let insert_node_id = query.first().unwrap().id;
@@ -536,8 +540,8 @@ mod tests {
 
         import_gfa(&gfa_path, &collection, None, conn);
         let gaf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/chr22_het.gaf");
-        update_with_gaf(conn, op_conn, gaf_path, csv_path, "test", None);
-        let graph = Sample::get_graph(conn, "test", None);
+        update_with_gaf(conn, op_conn, gaf_path, csv_path, "test", "child", None);
+        let graph = Sample::get_graph(conn, "test", "child");
 
         // we should end up with a new edge putting our insert to the beginning of the graph, which is node 3.
         let query = Node::query(conn, "select n.* from nodes n left join sequences s on (n.sequence_hash = s.hash) where s.sequence = ?1", params!("aaa".to_string()));
