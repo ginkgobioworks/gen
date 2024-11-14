@@ -28,7 +28,6 @@ use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 use crate::models::traits::*;
-
 /* General information
 
 Changesets from sqlite will be created in the order that operations are applied in the database,
@@ -773,6 +772,27 @@ pub fn apply(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_i
     let mut output = Vec::new();
     session.changeset_strm(&mut output).unwrap();
     write_changeset(conn, &operation, &output);
+}
+
+pub fn merge(
+    conn: &Connection,
+    operation_conn: &Connection,
+    db_uuid: &str,
+    source_branch: i64,
+    other_branch: i64,
+) {
+    let current_operations = Branch::get_operations(operation_conn, source_branch);
+    let other_operations = Branch::get_operations(operation_conn, other_branch);
+    let first_common_op = other_operations
+        .iter()
+        .position(|op| current_operations.contains(op))
+        .expect("No common operations between two branches.");
+    if first_common_op < other_operations.len() {
+        for operation in other_operations[first_common_op + 1..].iter() {
+            println!("Applying operation {op_id}", op_id = operation.id);
+            apply(conn, operation_conn, db_uuid, operation.id);
+        }
+    }
 }
 
 pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Operation) {
