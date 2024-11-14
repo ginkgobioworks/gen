@@ -195,10 +195,10 @@ pub fn update_with_vcf<'a>(
     let header = reader.read_header().unwrap();
     let sample_names = header.sample_names();
     for name in sample_names {
-        Sample::create(conn, name);
+        Sample::get_or_create(conn, name);
     }
     if !fixed_sample.is_empty() {
-        Sample::create(conn, &fixed_sample);
+        Sample::get_or_create(conn, &fixed_sample);
     }
     let mut genotype = vec![];
     if !fixed_genotype.is_empty() {

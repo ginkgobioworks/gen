@@ -2,8 +2,7 @@ use crate::graph::{GraphEdge, GraphNode};
 use crate::models::block_group::BlockGroup;
 use crate::models::traits::*;
 use petgraph::prelude::DiGraphMap;
-use rusqlite::types::Value;
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, Result as SQLResult, Row};
 use std::fmt::*;
 
 #[derive(Debug)]
@@ -21,17 +20,22 @@ impl Query for Sample {
 }
 
 impl Sample {
-    pub fn create(conn: &Connection, name: &str) -> Sample {
+    pub fn create(conn: &Connection, name: &str) -> SQLResult<Sample> {
         let mut stmt = conn
-            .prepare("INSERT INTO samples (name) VALUES (?1)")
+            .prepare("INSERT INTO samples (name) VALUES (?1) returning (name);")
             .unwrap();
-        match stmt.execute((name,)) {
-            Ok(_) => Sample {
+        stmt.query_row((name,), |row| {
+            Ok(Sample {
                 name: name.to_string(),
-            },
-            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+            })
+        })
+    }
+
+    pub fn get_or_create(conn: &Connection, name: &str) -> Sample {
+        match Sample::create(conn, name) {
+            Ok(sample) => sample,
+            Err(rusqlite::Error::SqliteFailure(err, _details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
-                    println!("{err:?} {details:?}");
                     Sample {
                         name: name.to_string(),
                     }
@@ -39,17 +43,18 @@ impl Sample {
                     panic!("something bad happened querying the database")
                 }
             }
-            Err(_) => {
-                panic!("something bad happened querying the database")
+            Err(err) => {
+                panic!("something bad happened.")
             }
         }
     }
 
-    pub fn get_graph(
+    pub fn get_graph<'a>(
         conn: &Connection,
         collection: &str,
-        name: Option<&str>,
+        name: impl Into<Option<&'a str>>,
     ) -> DiGraphMap<GraphNode, GraphEdge> {
+        let name = name.into();
         let block_groups = if let Some(sample) = name {
             BlockGroup::query(
                 conn,
@@ -74,5 +79,38 @@ impl Sample {
             }
         }
         sample_graph
+    }
+
+    pub fn get_or_create_child(
+        conn: &Connection,
+        collection_name: &str,
+        sample_name: &str,
+        parent_sample: Option<&str>,
+    ) -> Sample {
+        if let Ok(new_sample) = Sample::create(conn, sample_name) {
+            let bgs = if let Some(parent) = parent_sample {
+                BlockGroup::query(
+                    conn,
+                    "select * from block_groups where collection_name = ?1 AND sample_name = ?2",
+                    params!(collection_name, parent),
+                )
+            } else {
+                BlockGroup::query(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null;", params!(collection_name))
+            };
+            for bg in bgs.iter() {
+                BlockGroup::get_or_create_sample_block_group(
+                    conn,
+                    collection_name,
+                    &new_sample.name,
+                    &bg.name,
+                    parent_sample,
+                );
+            }
+            new_sample
+        } else {
+            Sample {
+                name: sample_name.to_string(),
+            }
+        }
     }
 }

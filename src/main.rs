@@ -114,9 +114,12 @@ enum Commands {
         /// The GAF input
         #[arg(short, long)]
         csv: String,
-        /// The sample to update
+        /// The sample to update or create
         #[arg(short, long)]
-        sample: Option<String>,
+        sample: String,
+        /// If specified, the newly created sample will inherit this sample's existing graph
+        #[arg(short, long)]
+        parent_sample: Option<String>,
     },
     /// Initialize a gen repository
     Init {},
@@ -344,6 +347,7 @@ fn main() {
             gaf,
             csv,
             sample,
+            parent_sample,
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
@@ -351,7 +355,15 @@ fn main() {
                 get_default_collection(&operation_conn)
                     .expect("No collection specified and default not setup.")
             });
-            update_with_gaf(&conn, &operation_conn, gaf, csv, name, sample.as_deref());
+            update_with_gaf(
+                &conn,
+                &operation_conn,
+                gaf,
+                csv,
+                name,
+                Some(sample.as_ref()),
+                parent_sample.as_deref(),
+            );
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
         }

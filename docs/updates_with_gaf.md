@@ -88,9 +88,13 @@ This indicates the left arm starts at node `44.0` in our graph and aligns for 50
 This GAF is then fed into gen via:
 
 ```console
-gen --db example.db update-gaf -n k562 -f example.fa -g example.gaf
+gen --db example.db update-gaf -n k562 --csv example.csv --gaf example.gaf --sample child
 ```
 
-This will create a new entry containing our insertion sequence starting at the end of the left homology arm and before the
-right arm. If there are misalignments in the homology arm, those regions will not be used. For example, suppose the CIGAR string
-was 45=4X, the insertion would begin after the 45th base pair. If more fine tuning is desired, the CIGAR string can be manually modified.
+This will create a new sample (or reuse a sample if it exists) with the name "child". This new entry will contain a copy
+of the reference graph for K562 with our sequence inserted. The insertion will be located at the end of the left homology 
+arm and before the right arm. If there are misalignments in the homology arm, those regions will not be used. For 
+example, suppose the CIGAR string was 45=4X, the insertion would begin after the 45th base pair. If more fine tuning is 
+desired, the GAF entry can be manually modified. The location of the insertion for the left end is determined by the 
+path_start field (8th column) + the number of residue matches (10th column). The right end is determined by the path start
+field.
