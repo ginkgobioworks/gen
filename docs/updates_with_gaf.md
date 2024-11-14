@@ -8,9 +8,12 @@ and is an area we are constantly trying to improve. One manner to circumvent thi
 of graph aligners to localize changes. The following example walks through updating a sample where after each round
 of engineering, background changes are recorded into the graph.
 
-Our sample in this case is called `K562`, a cell line. We wish to insert a gene into chromsome 22. To do this, we will
+Our sample in this case is called `K562`, a human cell line. We wish to insert a gene into chromsome 22. To do this, we will
 take the region flanking the left and right side of the insertion point, and use a graph aligner to identify the nodes
 in our graph corresponding to this region. Then, the provided insert will be placed in between the bounds of that region.
+
+Although most human genomes are present as a linear fasta file, for this example we use a portion of chr22 from Hg38, 
+located in [fixtures/chr22_het.gfa](../fixtures/chr22_het.gfa).
 
 For this, we accept a csv file format which gen will autoformat into a fasta file for each update we wish to make.
 
