@@ -1,25 +1,18 @@
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 
-use crate::graph::GraphNode;
 use crate::models::block_group::BlockGroup;
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::file_types::FileTypes;
-use crate::models::metadata;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
-use crate::models::operations::{FileAddition, Operation, OperationSummary};
 use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 use crate::models::traits::*;
-use crate::test_helpers::save_graph;
 use crate::{operation_management, read_lines};
-use itertools::Itertools;
-use petgraph::visit::IntoNodeReferences;
 use regex::Regex;
 use rusqlite::types::Value;
-use rusqlite::{params, session, Connection};
-use std::cmp::Ordering;
+use rusqlite::{params, Connection};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
@@ -31,12 +24,6 @@ struct CSVRow {
     id: Option<String>,
     left: String,
     sequence: String,
-    right: String,
-}
-
-struct GafChange {
-    id: String,
-    left: String,
     right: String,
 }
 
@@ -208,7 +195,7 @@ pub fn update_with_gaf<'a, P>(
                 if change_spec.contains_key(&query_id) {
                     let mut strand: Option<Strand> = None;
                     let mut node_id: Option<i64> = None;
-                    let mut query_key = "";
+                    let query_key;
                     if query.ends_with("left") {
                         query_key = "left";
                         let mut matches = entry["residue_match"].parse::<i64>().unwrap();
@@ -387,7 +374,7 @@ pub fn update_with_gaf<'a, P>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::GraphEdge;
+    use crate::graph::{GraphEdge, GraphNode};
     use crate::imports::gfa::import_gfa;
     use crate::models::metadata;
     use crate::models::operations::setup_db;
@@ -422,7 +409,6 @@ mod tests {
 
         #[test]
         fn test_prefixes_entries_without_id() {
-            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/chr22_insert.csv");
             let mut input = "id,left,sequence,right\n,aaa,ttt,ccc".as_bytes();
             let mut buffer = Vec::new();
             transform_csv_to_fasta(&mut input, &mut buffer);
@@ -441,7 +427,6 @@ mod tests {
 
         #[test]
         fn test_prefixes_entries_with_extremes() {
-            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/chr22_insert.csv");
             let mut input =
                 "id,left,sequence,right\nextreme_left,aaa,ttt,\nextreme_right,,ccc,ggg".as_bytes();
             let mut buffer = Vec::new();
@@ -543,11 +528,6 @@ mod tests {
         // we should end up with a new edge putting our insert to the beginning of the graph, which is node 3.
         let query = Node::query(conn, "select n.* from nodes n left join sequences s on (n.sequence_hash = s.hash) where s.sequence = ?1", params!("aaa".to_string()));
         let insert_node_id = query.first().unwrap().id;
-        let insert_node = graph
-            .nodes()
-            .filter(|node| node.node_id == insert_node_id)
-            .collect::<Vec<GraphNode>>();
-        let insert_node = insert_node.first().unwrap();
         let start_node_id = graph
             .nodes()
             .filter(|node| node.node_id == 3)
@@ -562,11 +542,6 @@ mod tests {
 
         let query = Node::query(conn, "select n.* from nodes n left join sequences s on (n.sequence_hash = s.hash) where s.sequence = ?1", params!("ttt".to_string()));
         let insert_node_id = query.first().unwrap().id;
-        let insert_node = graph
-            .nodes()
-            .filter(|node| node.node_id == insert_node_id)
-            .collect::<Vec<GraphNode>>();
-        let insert_node = insert_node.first().unwrap();
         let end_node_id = graph
             .nodes()
             .filter(|node| node.node_id == 1001)

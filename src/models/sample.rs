@@ -24,11 +24,7 @@ impl Sample {
         let mut stmt = conn
             .prepare("INSERT INTO samples (name) VALUES (?1) returning (name);")
             .unwrap();
-        stmt.query_row((name,), |row| {
-            Ok(Sample {
-                name: name.to_string(),
-            })
-        })
+        stmt.query_row((name,), |row| Ok(Sample { name: row.get(0)? }))
     }
 
     pub fn get_or_create(conn: &Connection, name: &str) -> Sample {
@@ -43,7 +39,7 @@ impl Sample {
                     panic!("something bad happened querying the database")
                 }
             }
-            Err(err) => {
+            Err(_) => {
                 panic!("something bad happened.")
             }
         }
@@ -104,7 +100,8 @@ impl Sample {
                     &new_sample.name,
                     &bg.name,
                     parent_sample,
-                );
+                )
+                .expect("failed to get or create blockgroup clone.");
             }
             new_sample
         } else {
