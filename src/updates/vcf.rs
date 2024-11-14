@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::{io, str};
 
@@ -214,6 +214,7 @@ pub fn update_with_vcf<'a>(
     let mut changes: HashMap<(Path, String), Vec<PathChange>> = HashMap::new();
 
     let mut parent_block_groups: HashMap<(&str, i64), i64> = HashMap::new();
+    let mut created_samples = HashSet::new();
 
     for result in reader.records() {
         let record = result.unwrap();
@@ -240,6 +241,10 @@ pub fn update_with_vcf<'a>(
         };
 
         if !fixed_sample.is_empty() && !genotype.is_empty() {
+            if !created_samples.contains(&fixed_sample) {
+                Sample::get_or_create_child(conn, collection_name, &fixed_sample, coordinate_frame);
+                created_samples.insert(&fixed_sample);
+            }
             let sample_bg_id = BlockGroupCache::lookup(
                 &mut block_group_cache,
                 collection_name,
@@ -297,10 +302,20 @@ pub fn update_with_vcf<'a>(
             }
         } else {
             for (sample_index, sample) in record.samples().iter().enumerate() {
+                let sample_name = &sample_names[sample_index];
+                if !created_samples.contains(sample_name) {
+                    Sample::get_or_create_child(
+                        conn,
+                        collection_name,
+                        sample_name,
+                        coordinate_frame,
+                    );
+                    created_samples.insert(sample_name);
+                }
                 let sample_bg_id = BlockGroupCache::lookup(
                     &mut block_group_cache,
                     collection_name,
-                    &sample_names[sample_index],
+                    sample_name,
                     seq_name.clone(),
                     coordinate_frame,
                 );
@@ -340,7 +355,7 @@ pub fn update_with_vcf<'a>(
                                             block_group_id: sample_bg_id,
                                             ref_start,
                                             path: sample_path.clone(),
-                                            sample_name: sample_names[sample_index].clone(),
+                                            sample_name: sample_name.clone(),
                                             alt_seq,
                                             chromosome_index: chromosome_index as i64,
                                             phased,
