@@ -9,7 +9,7 @@ use gen::get_connection;
 use gen::imports::fasta::import_fasta;
 use gen::imports::gfa::import_gfa;
 use gen::models::metadata;
-use gen::models::operations::{setup_db, Branch, OperationState};
+use gen::models::operations::{setup_db, Branch, Operation, OperationState};
 use gen::operation_management;
 use gen::updates::fasta::update_with_fasta;
 use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
@@ -137,6 +137,8 @@ enum Commands {
         /// List all branches
         #[arg(short, long, action)]
         list: bool,
+        #[arg(short, long, action)]
+        merge: bool,
         /// The branch name
         #[clap(index = 1)]
         branch_name: Option<String>,
@@ -408,6 +410,7 @@ fn main() {
             delete,
             checkout,
             list,
+            merge,
             branch_name,
         }) => {
             if *create {
@@ -466,6 +469,24 @@ fn main() {
                         col1 = branch.name,
                         col2 = branch.current_operation_id.unwrap_or(-1)
                     );
+                }
+            } else if *merge {
+                let branch_name = branch_name.clone().expect("Branch name must be provided.");
+                let current_branch = OperationState::get_current_branch(&operation_conn, &db_uuid)
+                    .expect("Unable to find current branch.");
+                let other_branch = Branch::get_by_name(&operation_conn, &db_uuid, &branch_name)
+                    .unwrap_or_else(|| panic!("Unable to find branch {branch_name}."));
+                let current_operations = Branch::get_operations(&operation_conn, current_branch);
+                let other_operations = Branch::get_operations(&operation_conn, other_branch.id);
+                let first_common_op = other_operations
+                    .iter()
+                    .position(|op| current_operations.contains(op))
+                    .expect("No common operations between two branches.");
+                if first_common_op < other_operations.len() {
+                    for operation in other_operations[first_common_op + 1..].iter() {
+                        println!("Applying operation {op_id}", op_id = operation.id);
+                        operation_management::apply(&conn, &operation_conn, &db_uuid, operation.id);
+                    }
                 }
             } else {
                 println!("No options selected.");
