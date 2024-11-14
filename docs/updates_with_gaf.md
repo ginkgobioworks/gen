@@ -13,7 +13,11 @@ take the region flanking the left and right side of the insertion point, and use
 in our graph corresponding to this region. Then, the provided insert will be placed in between the bounds of that region.
 
 Although most human genomes are present as a linear fasta file, for this example we use a portion of chr22 from Hg38, 
-located in [fixtures/chr22_het.gfa](../fixtures/chr22_het.gfa).
+located in [fixtures/chr22_het.gfa](../fixtures/chr22_het.gfa). We start by importing this file to a database
+
+```console
+gen --db example.db import --name k562 --gaf chr22_het.gfa  
+```
 
 For this, we accept a csv file format which gen will autoformat into a fasta file for each update we wish to make.
 
