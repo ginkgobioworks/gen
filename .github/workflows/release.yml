@@ -25,9 +25,9 @@ jobs:
     - name: upload-binary
       run: |
         zip -j -r gen.macos-arm64.zip target/release/gen
-        zip -j -r gen.macos-x86.zip target/x86_64-apple-darwin/gen
+        zip -j -r gen.macos-x86_64.zip target/x86_64-apple-darwin/gen
         gh release upload nightly gen.macos-arm64.zip --clobber
-        gh release upload nightly gen.macos-x86.zip --clobber
+        gh release upload nightly gen.macos-x86_64.zip --clobber
 
   release-ubuntu:
     runs-on: ubuntu-latest
@@ -35,10 +35,16 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: actions-rust-lang/setup-rust-toolchain@v1
+    - name: arm toolchain
+      run: |
+        rustup target add aarch64-unknown-linux-gnu
     - name: Build
       run: |
         cargo build --release
+        cargo build --release --target aarch64-unknown-linux-gnu --target-dir target/aarch64-unknown-linux-gnu
     - name: upload-binary
       run: |
-        zip -j -r gen.ubuntu.zip target/release/gen
-        gh release upload nightly gen.ubuntu.zip --clobber
+        zip -j -r gen.linux-x86_64.zip target/release/gen
+        zip -j -r gen.linux-arm64.zip target/aarch64-unknown-linux-gnu/gen
+        gh release upload nightly gen.linux-x86_64.zip --clobber
+        gh release upload nightly gen.linux-arm64.zip --clobber
