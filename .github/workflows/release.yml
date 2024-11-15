@@ -24,7 +24,7 @@ jobs:
         cargo build --release
     - name: upload-binary
       run: |
-        find -name gen
+        find . -name "gen"
         zip -j gen.macos-arm64.zip target/release/gen
         zip -j gen.macos-x86_64.zip target/x86_64-apple-darwin/gen
         gh release upload nightly gen.macos-arm64.zip --clobber
