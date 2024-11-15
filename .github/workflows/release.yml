@@ -24,8 +24,9 @@ jobs:
         cargo build --release
     - name: upload-binary
       run: |
-        zip -j -r gen.macos-arm64.zip target/release/gen
-        zip -j -r gen.macos-x86_64.zip target/x86_64-apple-darwin/gen
+        find -name gen
+        zip -j gen.macos-arm64.zip target/release/gen
+        zip -j gen.macos-x86_64.zip target/x86_64-apple-darwin/gen
         gh release upload nightly gen.macos-arm64.zip --clobber
         gh release upload nightly gen.macos-x86_64.zip --clobber
 
@@ -44,7 +45,8 @@ jobs:
         cargo build --release --target aarch64-unknown-linux-gnu --target-dir target/aarch64-unknown-linux-gnu
     - name: upload-binary
       run: |
-        zip -j -r gen.linux-x86_64.zip target/release/gen
-        zip -j -r gen.linux-arm64.zip target/aarch64-unknown-linux-gnu/gen
+        find -name gen
+        zip -j gen.linux-x86_64.zip target/release/gen
+        zip -j gen.linux-arm64.zip target/aarch64-unknown-linux-gnu/gen
         gh release upload nightly gen.linux-x86_64.zip --clobber
         gh release upload nightly gen.linux-arm64.zip --clobber
