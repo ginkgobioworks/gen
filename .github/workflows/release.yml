@@ -16,11 +16,10 @@ jobs:
     - uses: actions-rust-lang/setup-rust-toolchain@v1
     - name: Build
       run: cargo build --release
-    - uses: actions/upload-artifact@v4
-      with:
-        name: gen.macos
-        path: target/release/gen
-        overwrite: true
+    - name: upload-binary
+      run: |
+        zip -r gen.macos.zip target/release/gen
+        gh release upload nightly gen.macos.zip --clobber
 
   release-ubuntu:
     runs-on: ubuntu-latest
@@ -30,8 +29,7 @@ jobs:
     - uses: actions-rust-lang/setup-rust-toolchain@v1
     - name: Build
       run: cargo build --release
-    - uses: actions/upload-artifact@v4
-      with:
-        name: gen.ubuntu
-        path: target/release/gen
-        overwrite: true
+    - name: upload-binary
+      run: |
+        zip -r gen.ubuntu.zip target/release/gen
+        gh release upload nightly gen.ubuntu.zip --clobber
