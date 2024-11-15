@@ -26,7 +26,7 @@ jobs:
       run: |
         find . -name "gen"
         zip -j gen.macos-arm64.zip target/release/gen
-        zip -j gen.macos-x86_64.zip target/x86_64-apple-darwin/gen
+        zip -j gen.macos-x86_64.zip target/x86_64-apple-darwin/release/gen
         gh release upload nightly gen.macos-arm64.zip --clobber
         gh release upload nightly gen.macos-x86_64.zip --clobber
 
@@ -48,6 +48,6 @@ jobs:
       run: |
         find -name gen
         zip -j gen.linux-x86_64.zip target/release/gen
-        zip -j gen.linux-arm64.zip target/aarch64-unknown-linux-gnu/gen
+        zip -j gen.linux-arm64.zip target/aarch64-unknown-linux-gnu/release/gen
         gh release upload nightly gen.linux-x86_64.zip --clobber
         gh release upload nightly gen.linux-arm64.zip --clobber
