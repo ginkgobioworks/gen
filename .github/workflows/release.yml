@@ -43,7 +43,7 @@ jobs:
     - name: Build
       run: |
         cargo build --release
-        cargo build --release --target aarch64-unknown-linux-gnu
+        cargo build --release --target aarch64-unknown-linux-gnu --config target.aarch64-unknown-linux-gnu.linker=\"aarch64-linux-gnu-gcc\"
     - name: upload-binary
       run: |
         find -name gen
