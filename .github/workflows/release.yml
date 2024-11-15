@@ -19,7 +19,7 @@ jobs:
       run: cargo build --release
     - name: upload-binary
       run: |
-        zip -r gen.macos.zip target/release/gen
+        zip -j -r gen.macos.zip target/release/gen
         gh release upload nightly gen.macos.zip --clobber
 
   release-ubuntu:
@@ -32,5 +32,5 @@ jobs:
       run: cargo build --release
     - name: upload-binary
       run: |
-        zip -r gen.ubuntu.zip target/release/gen
+        zip -j -r gen.ubuntu.zip target/release/gen
         gh release upload nightly gen.ubuntu.zip --clobber
