@@ -35,6 +35,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: actions-rust-lang/setup-rust-toolchain@v1
+    - name: Build
+      run: |
+        cargo build --release
     - name: upload-binary
       run: |
         zip -j -r gen.ubuntu.zip target/release/gen
