@@ -28,7 +28,6 @@ use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 use crate::models::traits::*;
-
 /* General information
 
 Changesets from sqlite will be created in the order that operations are applied in the database,
@@ -775,6 +774,32 @@ pub fn apply(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_i
     write_changeset(conn, &operation, &output);
 }
 
+pub fn merge(
+    conn: &Connection,
+    operation_conn: &Connection,
+    db_uuid: &str,
+    source_branch: i64,
+    other_branch: i64,
+) {
+    let current_branch =
+        OperationState::get_current_branch(operation_conn, db_uuid).expect("No current branch.");
+    if source_branch != current_branch {
+        panic!("Unable to merge branch. Source branch and current branch must match. Checkout the branch you wish to merge into.");
+    }
+    let current_operations = Branch::get_operations(operation_conn, source_branch);
+    let other_operations = Branch::get_operations(operation_conn, other_branch);
+    let first_different_op = other_operations
+        .iter()
+        .position(|op| !current_operations.contains(op))
+        .expect("No common operations between two branches.");
+    if first_different_op < other_operations.len() {
+        for operation in other_operations[first_different_op..].iter() {
+            println!("Applying operation {op_id}", op_id = operation.id);
+            apply(conn, operation_conn, db_uuid, operation.id);
+        }
+    }
+}
+
 pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Operation) {
     let current_op_id = OperationState::get_operation(operation_conn, &operation.db_uuid).unwrap();
     let op_id = operation.id;
@@ -899,6 +924,107 @@ mod tests {
     use crate::updates::vcf::update_with_vcf;
     use rusqlite::{session::Session, types::Value};
     use std::path::{Path, PathBuf};
+
+    fn create_operation(
+        conn: &Connection,
+        op_conn: &Connection,
+        file_path: &str,
+        file_type: FileTypes,
+        description: &str,
+        name: &str,
+    ) -> Operation {
+        let (mut session, op) =
+            start_operation(conn, op_conn, file_path, file_type, description, name);
+        end_operation(conn, op_conn, &op, &mut session, "test operation");
+        op
+    }
+
+    #[cfg(test)]
+    mod merge {
+        use super::*;
+        use crate::operation_management::checkout;
+
+        #[test]
+        fn test_merges() {
+            setup_gen_dir();
+            let conn = &get_connection(None);
+            let db_uuid = &metadata::get_db_uuid(conn);
+            let op_conn = &get_operation_connection(None);
+            setup_db(op_conn, db_uuid);
+
+            let op_1 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "blah",
+                "fasta_addition",
+            );
+            let op_2 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "blah",
+                "fasta_addition",
+            );
+
+            let branch_1 = Branch::create(op_conn, db_uuid, "branch-1");
+            let branch_2 = Branch::create(op_conn, db_uuid, "branch-2");
+            OperationState::set_branch(op_conn, db_uuid, "branch-1");
+            let op_3 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "blah",
+                "vcf_addition",
+            );
+            let op_4 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "blah",
+                "vcf_addition",
+            );
+            checkout(conn, op_conn, db_uuid, &Some("branch-2".to_string()), None);
+            let op_5 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "blah",
+                "vcf_addition",
+            );
+            let op_6 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "blah",
+                "vcf_addition",
+            );
+
+            checkout(conn, op_conn, db_uuid, &Some("branch-1".to_string()), None);
+            merge(conn, op_conn, db_uuid, branch_1.id, branch_2.id);
+
+            let b1_ops = Branch::get_operations(op_conn, branch_1.id)
+                .iter()
+                .map(|f| f.id)
+                .collect::<Vec<i64>>();
+
+            let b2_ops = Branch::get_operations(op_conn, branch_2.id)
+                .iter()
+                .map(|f| f.id)
+                .collect::<Vec<i64>>();
+            assert_eq!(
+                b1_ops,
+                vec![op_1.id, op_2.id, op_3.id, op_4.id, op_6.id + 1, op_6.id + 2]
+            );
+            assert_eq!(b2_ops, vec![op_1.id, op_2.id, op_5.id, op_6.id]);
+        }
+    }
 
     #[test]
     fn test_writes_operation_id() {

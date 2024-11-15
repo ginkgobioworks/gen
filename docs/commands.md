@@ -22,6 +22,8 @@ Deleting a branch can be accomplished via `gen --db db_name.db branch --delete b
 To list all available branches, `gen --db db_name.db branch --list`. The current branch will be marked with a `>` before it.
 To checkout a branch, `gen --db db_name.db branch --checkout branch_name`. This will migrate the database to the last change
 applied in a given branch.
+To merge a branch, `gen --db db_name.db branch --merge branch_name`, will merge a given branch into the current branch. If there
+is no common point between the two branches, this will return an error.
 
 # Reset
 
