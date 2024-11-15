@@ -1,0 +1,24 @@
+name: Test
+
+on:
+  push:
+    branches: [ "release-build" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+
+    runs-on: [ubuntu-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions-rust-lang/setup-rust-toolchain@v1
+    - name: Build
+      run: cargo build --release
+    - uses: actions/upload-artifact@v4
+      with:
+        name: gen."${{ inputs.chosen-os }}"
+        path: target/release/gen
+        overwrite: true
