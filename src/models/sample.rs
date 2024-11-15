@@ -2,7 +2,7 @@ use crate::graph::{GraphEdge, GraphNode};
 use crate::models::block_group::BlockGroup;
 use crate::models::traits::*;
 use petgraph::prelude::DiGraphMap;
-use rusqlite::{params, Connection, Result as SQLResult, Row};
+use rusqlite::{params, types::Value as SQLValue, Connection, Result as SQLResult, Row};
 use std::fmt::*;
 
 #[derive(Debug)]
@@ -108,6 +108,29 @@ impl Sample {
             Sample {
                 name: sample_name.to_string(),
             }
+        }
+    }
+
+    pub fn get_block_groups(
+        conn: &Connection,
+        collection_name: &str,
+        sample_name: Option<&str>,
+    ) -> Vec<BlockGroup> {
+        if let Some(sample) = sample_name {
+            BlockGroup::query(
+                conn,
+                "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
+                rusqlite::params!(
+                    SQLValue::from(collection_name.to_string()),
+                    SQLValue::from(sample.to_string()),
+                ),
+            )
+        } else {
+            BlockGroup::query(
+                conn,
+                "select * from block_groups where collection_name = ?1 AND sample_name IS NULL;",
+                rusqlite::params!(SQLValue::from(collection_name.to_string())),
+            )
         }
     }
 }

@@ -40,23 +40,7 @@ pub fn update_with_fasta(
     let mut fasta_reader = fasta::io::reader::Builder.build_from_path(fasta_file_path)?;
 
     let _new_sample = Sample::get_or_create(conn, new_sample_name);
-    let block_groups;
-    if let Some(parent_name) = parent_sample_name {
-        block_groups = BlockGroup::query(
-            conn,
-            "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-            rusqlite::params!(
-                SQLValue::from(collection_name.to_string()),
-                SQLValue::from(parent_name.to_string()),
-            ),
-        );
-    } else {
-        block_groups = BlockGroup::query(
-            conn,
-            "select * from block_groups where collection_name = ?1 AND sample_name IS NULL;",
-            rusqlite::params!(SQLValue::from(collection_name.to_string())),
-        );
-    }
+    let block_groups = Sample::get_block_groups(conn, collection_name, parent_sample_name);
 
     let mut new_block_group_id = 0;
     for block_group in block_groups {
@@ -74,7 +58,7 @@ pub fn update_with_fasta(
     }
 
     if new_block_group_id == 0 {
-        panic!("No block group found with region name: {}", region_name);
+        panic!("No region found with name: {}", region_name);
     }
 
     let path = BlockGroup::get_current_path(conn, new_block_group_id);

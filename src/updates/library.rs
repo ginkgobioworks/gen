@@ -1,57 +1,68 @@
 use csv;
 use itertools::Itertools;
 use noodles::fasta;
-use rusqlite::{session, types::Value as SQLValue, Connection};
+use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::BufReader;
 use std::str;
 
+use crate::models::block_group::BlockGroup;
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::file_types::FileTypes;
-use crate::models::metadata;
 use crate::models::node::Node;
-use crate::models::operations::{FileAddition, Operation, OperationSummary};
-use crate::models::path::Path;
+use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
-use crate::models::traits::*;
 use crate::{calculate_hash, operation_management};
 
 #[allow(clippy::too_many_arguments)]
 pub fn update_with_library(
     conn: &Connection,
     operation_conn: &Connection,
-    name: &str,
-    path_name: &str,
+    collection_name: &str,
+    parent_sample_name: Option<&str>,
+    new_sample_name: &str,
+    region_name: &str,
     start_coordinate: i64,
     end_coordinate: i64,
     parts_file_path: &str,
     library_file_path: &str,
 ) -> std::io::Result<()> {
-    let mut session = session::Session::new(conn).unwrap();
-    operation_management::attach_session(&mut session);
-    let change = FileAddition::create(operation_conn, library_file_path, FileTypes::CSV);
-
-    let db_uuid = metadata::get_db_uuid(conn);
-
-    let operation = Operation::create(
+    let (mut session, operation) = operation_management::start_operation(
+        conn,
         operation_conn,
-        &db_uuid,
-        name.to_string(),
+        library_file_path,
+        FileTypes::CSV,
         "library_csv_update",
-        change.id,
+        collection_name,
     );
 
     let mut parts_reader = fasta::io::reader::Builder.build_from_path(parts_file_path)?;
 
-    let path = Path::query(
-        conn,
-        "select * from paths where name = ?1",
-        rusqlite::params!(SQLValue::from(path_name.to_string())),
-    )[0]
-    .clone();
+    let _new_sample = Sample::create(conn, new_sample_name);
+    let block_groups = Sample::get_block_groups(conn, collection_name, parent_sample_name);
+
+    let mut new_block_group_id = 0;
+    for block_group in block_groups {
+        let new_bg_id = BlockGroup::get_or_create_sample_block_group(
+            conn,
+            collection_name,
+            new_sample_name,
+            &block_group.name,
+            parent_sample_name,
+        )
+        .unwrap();
+        if block_group.name == region_name {
+            new_block_group_id = new_bg_id;
+        }
+    }
+
+    if new_block_group_id == 0 {
+        panic!("No region found with name: {}", region_name);
+    }
+    let path = BlockGroup::get_current_path(conn, new_block_group_id);
 
     let mut node_ids_by_name = HashMap::new();
     let mut sequence_lengths_by_node_id = HashMap::new();
@@ -182,13 +193,16 @@ pub fn update_with_library(
     let new_edge_ids = Edge::bulk_create(conn, &new_edges.iter().cloned().collect());
     BlockGroupEdge::bulk_create(conn, path.block_group_id, &new_edge_ids);
 
-    let summary_str = format!("{path_name}: {path_changes_count} changes.\n");
-    OperationSummary::create(operation_conn, operation.id, &summary_str);
+    let summary_str = format!("{region_name}: {path_changes_count} changes.\n");
+    operation_management::end_operation(
+        conn,
+        operation_conn,
+        &operation,
+        &mut session,
+        &summary_str,
+    );
 
     println!("Updated with library file: {}", library_file_path);
-    let mut output = Vec::new();
-    session.changeset_strm(&mut output).unwrap();
-    operation_management::write_changeset(conn, &operation, &output);
 
     Ok(())
 }
@@ -197,7 +211,7 @@ pub fn update_with_library(
 mod tests {
     use super::*;
     use crate::imports::fasta::import_fasta;
-    use crate::models::{block_group::BlockGroup, collection::Collection, operations::setup_db};
+    use crate::models::{block_group::BlockGroup, metadata, operations::setup_db};
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use std::path::PathBuf;
 
@@ -229,6 +243,8 @@ mod tests {
             conn,
             op_conn,
             "test",
+            None,
+            "new sample",
             "m123",
             7,
             20,
@@ -236,7 +252,7 @@ mod tests {
             library_path.to_str().unwrap(),
         );
 
-        let block_groups = Collection::get_block_groups(conn, "test");
+        let block_groups = Sample::get_block_groups(conn, "test", Some("new sample"));
         let block_group = &block_groups[0];
 
         let all_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
