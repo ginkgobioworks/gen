@@ -40,6 +40,7 @@ fn get_default_collection(conn: &Connection) -> Option<String> {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Commands for transforming file types for input to Gen.
     Transform {
         /// For update-gaf, this transforms the csv to a fasta for use in alignments
         #[arg(long)]
@@ -152,6 +153,7 @@ enum Commands {
         #[clap(index = 1)]
         id: Option<i64>,
     },
+    /// Reset a branch to a previous operation
     Reset {
         /// The operation id to reset to
         #[clap(index = 1)]
@@ -163,11 +165,13 @@ enum Commands {
         #[arg(short, long)]
         branch: Option<String>,
     },
+    /// Apply an operation to a branch
     Apply {
         /// The operation id to apply
         #[clap(index = 1)]
         id: i64,
     },
+    /// Export sequence data
     Export {
         /// The name of the collection to export
         #[arg(short, long)]
@@ -182,6 +186,7 @@ enum Commands {
         #[arg(short, long)]
         fasta: Option<String>,
     },
+    /// Configure default options
     Defaults {
         /// The default database to use
         #[arg(short, long)]
