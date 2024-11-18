@@ -58,7 +58,7 @@ mod tests {
     use noodles::fasta;
     use std::path::PathBuf;
     use std::{io, str};
-    use tempdir::TempDir;
+    use tempfile;
 
     #[test]
     fn test_import_then_export() {
@@ -79,7 +79,7 @@ mod tests {
             conn,
             op_conn,
         );
-        let tmp_dir = TempDir::new("export_fasta_files").unwrap().into_path();
+        let tmp_dir = tempfile::tempdir().unwrap().into_path();
         let filename = tmp_dir.join("out.fa");
         export_fasta(conn, &collection, None, &filename);
 
@@ -139,7 +139,7 @@ mod tests {
             fasta_update_path.to_str().unwrap(),
         );
 
-        let tmp_dir = TempDir::new("export_fasta_files").unwrap().into_path();
+        let tmp_dir = tempfile::tempdir().unwrap().into_path();
         let filename = tmp_dir.join("out.fa");
         export_fasta(conn, &collection, Some("child sample"), &filename);
 
