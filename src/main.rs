@@ -22,7 +22,7 @@ use std::path::PathBuf;
 use std::{io, str};
 
 #[derive(Parser)]
-#[command(version, about, long_about = None)]
+#[command(version, about, long_about = None, arg_required_else_help(true))]
 struct Cli {
     /// The path to the database you wish to utilize
     #[arg(short, long)]
@@ -194,6 +194,7 @@ enum Commands {
 
 fn main() {
     let cli = Cli::parse();
+
     // commands not requiring a db connection are handled here
     if let Some(Commands::Init {}) = &cli.command {
         config::get_or_create_gen_dir();
