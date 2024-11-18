@@ -1,0 +1,53 @@
+name: Nightly Release
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  release-macos:
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions-rust-lang/setup-rust-toolchain@v1
+    - name: x86 toolchain
+      run: |
+        rustup target add x86_64-apple-darwin
+    - name: Build
+      run: |
+        cargo build --release --target x86_64-apple-darwin
+        cargo build --release
+    - name: upload-binary
+      run: |
+        find . -name "gen"
+        zip -j gen.macos-arm64.zip target/release/gen
+        zip -j gen.macos-x86_64.zip target/x86_64-apple-darwin/release/gen
+        gh release upload nightly gen.macos-arm64.zip --clobber
+        gh release upload nightly gen.macos-x86_64.zip --clobber
+
+  release-ubuntu:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions-rust-lang/setup-rust-toolchain@v1
+    - name: arm toolchain
+      run: |
+        rustup target add aarch64-unknown-linux-gnu
+        sudo apt install gcc-aarch64-linux-gnu
+    - name: Build
+      run: |
+        cargo build --release
+        cargo build --release --target aarch64-unknown-linux-gnu --config target.aarch64-unknown-linux-gnu.linker=\"aarch64-linux-gnu-gcc\"
+    - name: upload-binary
+      run: |
+        find -name gen
+        zip -j gen.linux-x86_64.zip target/release/gen
+        zip -j gen.linux-arm64.zip target/aarch64-unknown-linux-gnu/release/gen
+        gh release upload nightly gen.linux-x86_64.zip --clobber
+        gh release upload nightly gen.linux-arm64.zip --clobber
