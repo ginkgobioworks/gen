@@ -35,6 +35,11 @@ graph. Block groups are adressed on three facets: name, sample, and collection. 
 "chromosome II", and the sample could refer to a real individual or a virtual outcome of an experiment. The meaning of a
 collection is flexible, and for example could refer to the type of data (genomic, protein, ...) or experiment.
 
+## Prebuilt binaries
+
+Prebuilt binaries exist for various platforms and architectures on the [Release page](https://github.com/ginkgobioworks/gen/releases). The latest version can be found
+[here](https://github.com/ginkgobioworks/gen/releases/tag/nightly).
+
 ## Installing from Source
 Make sure you have a Rust compiler installed on your system. You can install the Rust toolset using the [rustup
 installer](https://rustup.rs/).
