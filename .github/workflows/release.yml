@@ -51,7 +51,14 @@ jobs:
         zip -j gen.linux-arm64.zip target/aarch64-unknown-linux-gnu/release/gen
         gh release upload nightly gen.linux-x86_64.zip --clobber
         gh release upload nightly gen.linux-arm64.zip --clobber
-    - name: Set nightly tag to current head
-      run: |
-        git tag -f nightly HEAD
-        git push -f origin nightly
+
+  update-release-source:
+    runs-on: ubuntu-latest
+    needs: [release-macos, release-ubuntu]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set nightly tag to current head
+        run: |
+          git tag -f nightly HEAD
+          git push -f origin nightly
