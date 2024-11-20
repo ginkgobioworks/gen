@@ -41,7 +41,7 @@ pub enum FileMode {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
-struct DependencyModels {
+pub struct DependencyModels {
     sequences: Vec<Sequence>,
     block_group: Vec<BlockGroup>,
     nodes: Vec<Node>,
@@ -958,34 +958,12 @@ mod tests {
     use crate::models::operations::{setup_db, Branch, FileAddition, Operation, OperationState};
     use crate::models::{edge::Edge, metadata, node::Node, sample::Sample};
     use crate::test_helpers::{
-        get_connection, get_operation_connection, setup_block_group, setup_gen_dir,
+        create_operation, get_connection, get_operation_connection, setup_block_group,
+        setup_gen_dir,
     };
     use crate::updates::vcf::update_with_vcf;
     use rusqlite::types::Value;
     use std::path::{Path, PathBuf};
-
-    fn create_operation<'a>(
-        conn: &Connection,
-        op_conn: &Connection,
-        file_path: &str,
-        file_type: FileTypes,
-        description: &str,
-        hash: impl Into<Option<&'a str>>,
-    ) -> Operation {
-        let mut session = start_operation(conn);
-        end_operation(
-            conn,
-            op_conn,
-            &mut session,
-            None,
-            file_path,
-            file_type,
-            description,
-            "test operation",
-            hash.into(),
-        )
-        .unwrap()
-    }
 
     #[cfg(test)]
     mod merge {

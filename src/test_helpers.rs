@@ -14,11 +14,14 @@ use crate::models::block_group::BlockGroup;
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::collection::Collection;
 use crate::models::edge::Edge;
+use crate::models::file_types::FileTypes;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
+use crate::models::operations::Operation;
 use crate::models::path::Path;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 use crate::models::traits::*;
+use crate::operation_management::{end_operation, start_operation};
 
 pub fn get_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Connection {
     let path: Option<&str> = db_path.into();
@@ -203,3 +206,26 @@ pub fn get_sample_bg<'a>(conn: &Connection, sample_name: impl Into<Option<&'a st
     }
     results.pop().unwrap()
 }
+
+fn create_operation<'a>(
+        conn: &Connection,
+        op_conn: &Connection,
+        file_path: &str,
+        file_type: FileTypes,
+        description: &str,
+        hash: impl Into<Option<&'a str>>,
+    ) -> Operation {
+        let mut session = start_operation(conn);
+        end_operation(
+            conn,
+            op_conn,
+            &mut session,
+            None,
+            file_path,
+            file_type,
+            description,
+            "test operation",
+            hash.into(),
+        )
+        .unwrap()
+    }
