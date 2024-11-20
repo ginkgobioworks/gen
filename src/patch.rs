@@ -18,7 +18,11 @@ struct OperationPatch {
     changeset: Vec<u8>,
 }
 
-pub fn create_patch(op_conn: &Connection, operations: &[i64]) {
+pub fn create_patch<W>(op_conn: &Connection, operations: &[i64], write_stream: &mut W)
+where
+    W: Write,
+{
+    let mut patches = vec![];
     for operation in operations.iter() {
         let operation = Operation::get_by_id(op_conn, *operation);
         let dependency_path =
@@ -30,32 +34,28 @@ pub fn create_patch(op_conn: &Connection, operations: &[i64]) {
         let mut file = fs::File::open(change_path).unwrap();
         let mut contents = vec![];
         file.read_to_end(&mut contents).unwrap();
-        let mut stream = fs::File::create(format!("op_{id}.zz", id = operation.id)).unwrap();
-        let to_compress = serde_json::to_vec(&OperationPatch {
+        patches.push(OperationPatch {
             operation_id: operation.id,
             dependencies,
             changeset: contents,
         })
-        .unwrap();
-        let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
-        let _ = e.write(&to_compress).unwrap();
-        let compressed = e.finish().unwrap();
-        stream.write_all(&compressed).unwrap();
     }
+    let to_compress = serde_json::to_vec(&patches).unwrap();
+    let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
+    let _ = e.write(&to_compress).unwrap();
+    let compressed = e.finish().unwrap();
+    write_stream.write_all(&compressed).unwrap();
 }
 
-pub fn load_patch<P>(conn: &Connection, op_conn: &Connection, patch_file: P)
+pub fn load_patches<R>(reader: R) -> Vec<OperationPatch>
 where
-    P: AsRef<Path>,
+    R: Read,
 {
-    let mut file = File::open(patch_file).unwrap();
-    let mut contents: Vec<u8> = vec![];
-    file.read_to_end(&mut contents);
-    let mut d = read::ZlibDecoder::new(&contents[..]);
+    let mut d = read::ZlibDecoder::new(reader);
     let mut s = String::new();
     d.read_to_string(&mut s).unwrap();
-    let patch: OperationPatch = serde_json::from_str(&s).unwrap();
-    println!("p is {patch:?}");
+    let patches: Vec<OperationPatch> = serde_json::from_str(&s).unwrap();
+    patches
 }
 
 #[cfg(test)]
@@ -94,7 +94,8 @@ mod tests {
             operation_conn,
             None,
         );
-        create_patch(operation_conn, &[1, 2]);
-        load_patch(conn, operation_conn, "op_1.zz")
+        let mut write_stream: Vec<u8> = Vec::new();
+        create_patch(operation_conn, &[1, 2], &mut write_stream);
+        load_patches(&write_stream[..]);
     }
 }
