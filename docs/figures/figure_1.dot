@@ -35,7 +35,7 @@ strict digraph "" {
 	source:e -> 1:caption	[constraint=False,
 		pos="e,71.875,90 54,90 56.731,90 58.758,90 60.565,90",
 		rank=same,
-		to_pos=caption];
+		to_pos=0];
 	sink	[height=0.5,
 		label=end,
 		pos="363,90",

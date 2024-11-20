@@ -30,10 +30,13 @@ The default output of this script is a directory called 'output' that contains t
 gen init
 gen defaults --database test.db --collection protein
 gen import --fasta P14779.fasta
-gen update --parts output/segments.fa --library output/layout.csv --path-name PXB_PRIM2 --start 0 --end 657
+gen update --parts output/segments.fa --library output/layout.csv --path-name sp\|P14779\|CPXB_PRIM2 --start 0 --end 657
+
 ```
 
-** this errors out, changing the start and end positions to internal positions doesn't fix it **
+```console
+IN='P450_chimera.svg'; cp $IN ${IN%.*}_fixed.${IN##*.} && while IFS=$'\t' read _ new old; do sed "s#font-size=\"14.00\">$old</text>#font-size=\"14.00\">$new</text>#g" ${IN%.*}_fixed.${IN##*.} > temp_file.html && mv temp_file.html ${IN%.*}_fixed.${IN##*.}; done < translation_table.txt
+```
 
 
 ## Site Saturation Mutagenesis
