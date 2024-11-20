@@ -1,8 +1,8 @@
 use crate::config::get_changeset_path;
 use crate::models::operations::Operation;
 use crate::operation_management;
-use flate2::read;
-use flate2::write::ZlibEncoder;
+use flate2::read::GzDecoder;
+use flate2::write::GzEncoder;
 use flate2::{Compression, Decompress};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -41,7 +41,7 @@ where
         })
     }
     let to_compress = serde_json::to_vec(&patches).unwrap();
-    let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
+    let mut e = GzEncoder::new(Vec::new(), Compression::default());
     let _ = e.write(&to_compress).unwrap();
     let compressed = e.finish().unwrap();
     write_stream.write_all(&compressed).unwrap();
@@ -51,7 +51,7 @@ pub fn load_patches<R>(reader: R) -> Vec<OperationPatch>
 where
     R: Read,
 {
-    let mut d = read::ZlibDecoder::new(reader);
+    let mut d = GzDecoder::new(reader);
     let mut s = String::new();
     d.read_to_string(&mut s).unwrap();
     let patches: Vec<OperationPatch> = serde_json::from_str(&s).unwrap();
