@@ -1,6 +1,5 @@
 strict digraph "" {
 	graph [bb="0,0,390,108",
-		overlap=scale,
 		rankdir=TD,
 		splines=true
 	];
