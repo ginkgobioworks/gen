@@ -5,7 +5,8 @@ use petgraph::graphmap::{DiGraphMap, UnGraphMap};
 use petgraph::visit::{Dfs, Reversed};
 use petgraph::Direction;
 use rusqlite::types::Value;
-use rusqlite::{params_from_iter, Connection, Row};
+use rusqlite::{params, params_from_iter, Connection, Row};
+use sha2::digest::typenum::op;
 use std::collections::HashSet;
 use std::string::ToString;
 
@@ -13,6 +14,7 @@ use std::string::ToString;
 pub struct Operation {
     pub id: i64,
     pub db_uuid: String,
+    pub hash: Option<String>,
     pub parent_id: Option<i64>,
     pub branch_id: i64,
     pub collection_name: Option<String>,
@@ -66,6 +68,7 @@ impl Operation {
                     Ok(Operation {
                         id: row.get(0)?,
                         db_uuid: db_uuid.to_string(),
+                        hash: None,
                         parent_id: current_op,
                         branch_id: current_branch_id,
                         collection_name: collection_name.clone(),
@@ -153,15 +156,7 @@ impl Operation {
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
             .query_map(params_from_iter(placeholders), |row| {
-                Ok(Operation {
-                    id: row.get(0)?,
-                    db_uuid: row.get(1)?,
-                    parent_id: row.get(2)?,
-                    branch_id: row.get(3)?,
-                    collection_name: row.get(4)?,
-                    change_type: row.get(5)?,
-                    change_id: row.get(6)?,
-                })
+                Ok(Self::process_row(row))
             })
             .unwrap();
         rows.next().unwrap().unwrap()
@@ -174,6 +169,14 @@ impl Operation {
             vec![Value::from(op_id)],
         )
     }
+
+    pub fn set_hash(conn: &Connection, op_id: i64, hash: &str) {
+        let mut stmt = conn
+            .prepare("update operation set hash=?2 where id = ?1 and hash is null;")
+            .unwrap();
+        stmt.execute(params!(Value::from(op_id), Value::from(hash.to_string())))
+            .unwrap();
+    }
 }
 
 impl Query for Operation {
@@ -182,11 +185,12 @@ impl Query for Operation {
         Operation {
             id: row.get(0).unwrap(),
             db_uuid: row.get(1).unwrap(),
-            parent_id: row.get(2).unwrap(),
-            branch_id: row.get(3).unwrap(),
-            collection_name: row.get(4).unwrap(),
-            change_type: row.get(5).unwrap(),
-            change_id: row.get(6).unwrap(),
+            hash: row.get(2).unwrap(),
+            parent_id: row.get(3).unwrap(),
+            branch_id: row.get(4).unwrap(),
+            collection_name: row.get(5).unwrap(),
+            change_type: row.get(6).unwrap(),
+            change_id: row.get(7).unwrap(),
         }
     }
 }
