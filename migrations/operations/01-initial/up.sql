@@ -15,6 +15,7 @@ CREATE TABLE operation_state (
 CREATE TABLE operation (
   id INTEGER PRIMARY KEY NOT NULL,
   db_uuid TEXT NOT NULL,
+  hash TEXT,
   parent_id INTEGER,
   branch_id INTEGER NOT NULL,
   collection_name TEXT,
@@ -23,6 +24,7 @@ CREATE TABLE operation (
   FOREIGN KEY(parent_id) REFERENCES operation(id)
   FOREIGN KEY(branch_id) REFERENCES branch(id)
 ) STRICT;
+CREATE UNIQUE INDEX operation_uidx ON operation(db_uuid, hash);
 
 CREATE TABLE file_addition (
   id INTEGER PRIMARY KEY NOT NULL,

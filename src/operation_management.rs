@@ -1,16 +1,4 @@
-use std::collections::{HashMap, HashSet};
-use std::io::{Read, Write};
-use std::{fs, path::PathBuf, str};
-
-use fallible_streaming_iterator::FallibleStreamingIterator;
-use itertools::Itertools;
-use petgraph::Direction;
-use rusqlite;
-use rusqlite::session::ChangesetIter;
-use rusqlite::types::{FromSql, Value};
-use rusqlite::{session, Connection};
-use serde::{Deserialize, Serialize};
-
+use crate::calculate_hash;
 use crate::config::get_changeset_path;
 use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group::BlockGroup;
@@ -28,6 +16,19 @@ use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 use crate::models::traits::*;
+use fallible_streaming_iterator::FallibleStreamingIterator;
+use itertools::Itertools;
+use petgraph::Direction;
+use rusqlite;
+use rusqlite::session::ChangesetIter;
+use rusqlite::types::{FromSql, Value};
+use rusqlite::{session, Connection};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::io::{Read, Write};
+use std::{fs, path::PathBuf, str};
 /* General information
 
 Changesets from sqlite will be created in the order that operations are applied in the database,
@@ -860,6 +861,19 @@ pub fn end_operation(
     let mut output = Vec::new();
     session.changeset_strm(&mut output).unwrap();
     write_changeset(conn, operation, &output);
+
+    let mut hasher = Sha256::new();
+    hasher.update(&output[..]);
+    let mut dependency_models = File::open(
+        get_changeset_path(operation).join(format!("{op_id}.dep", op_id = operation.id)),
+    )
+    .unwrap();
+    let mut output = Vec::new();
+    let _ = dependency_models.read_to_end(&mut output).unwrap();
+    hasher.update(&output[..]);
+    let result = hasher.finalize();
+
+    Operation::set_hash(operation_conn, operation.id, &format!("{:x}", result));
 }
 
 pub fn attach_session(session: &mut session::Session) {
@@ -935,6 +949,7 @@ mod tests {
     ) -> Operation {
         let (mut session, op) =
             start_operation(conn, op_conn, file_path, file_type, description, name);
+        Operation::set_hash(op_conn, op.id, &format!("hash-{id}", id = op.id));
         end_operation(conn, op_conn, &op, &mut session, "test operation");
         op
     }
