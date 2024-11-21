@@ -887,6 +887,9 @@ pub fn end_operation<'a>(
         Ok(operation) => {
             OperationSummary::create(operation_conn, operation.id, summary_str);
             write_changeset(&operation, &output, &dependencies);
+            operation_conn
+                .execute("RELEASE SAVEPOINT new_operation;", [])
+                .unwrap();
             Ok(operation)
         }
         Err(_) => {

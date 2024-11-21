@@ -5,7 +5,7 @@ use petgraph::graphmap::{DiGraphMap, UnGraphMap};
 use petgraph::visit::{Dfs, Reversed};
 use petgraph::Direction;
 use rusqlite::types::Value;
-use rusqlite::{params, params_from_iter, Connection, Result as SQLResult, Row};
+use rusqlite::{params_from_iter, Connection, Result as SQLResult, Row};
 use std::collections::HashSet;
 use std::string::ToString;
 
@@ -169,14 +169,6 @@ impl Operation {
             "select * from operation where id = ?1",
             vec![Value::from(op_id)],
         )
-    }
-
-    pub fn set_hash(conn: &Connection, op_id: i64, hash: &str) {
-        let mut stmt = conn
-            .prepare("update operation set hash=?2 where id = ?1 and hash is null;")
-            .unwrap();
-        stmt.execute(params!(Value::from(op_id), Value::from(hash.to_string())))
-            .unwrap();
     }
 }
 
