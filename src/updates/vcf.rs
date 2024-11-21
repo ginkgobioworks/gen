@@ -5,16 +5,15 @@ use std::{io, str};
 use crate::models::{
     block_group::{BlockGroup, BlockGroupData, PathCache, PathChange},
     file_types::FileTypes,
-    metadata,
     node::Node,
-    operations::{FileAddition, Operation, OperationSummary},
     path::{Path, PathBlock},
     sample::Sample,
     sequence::Sequence,
     strand::Strand,
     traits::*,
 };
-use crate::{calculate_hash, operation_management, parse_genotype};
+use crate::operation_management::{end_operation, start_operation};
+use crate::{calculate_hash, parse_genotype};
 use noodles::vcf;
 use noodles::vcf::variant::record::info::field::Value as InfoValue;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
@@ -23,7 +22,7 @@ use noodles::vcf::variant::record::samples::Sample as NoodlesSample;
 use noodles::vcf::variant::record::AlternateBases;
 use noodles::vcf::variant::Record;
 use rusqlite;
-use rusqlite::{session, types::Value as SQLValue, Connection};
+use rusqlite::{types::Value as SQLValue, Connection};
 
 #[derive(Debug)]
 struct BlockGroupCache<'a> {
@@ -175,19 +174,8 @@ pub fn update_with_vcf<'a>(
     coordinate_frame: impl Into<Option<&'a str>>,
 ) {
     let coordinate_frame = coordinate_frame.into();
-    let db_uuid = metadata::get_db_uuid(conn);
 
-    let mut session = session::Session::new(conn).unwrap();
-    operation_management::attach_session(&mut session);
-
-    let change = FileAddition::create(operation_conn, vcf_path, FileTypes::VCF);
-    let operation = Operation::create(
-        operation_conn,
-        &db_uuid,
-        collection_name.to_string(),
-        "vcf_addition",
-        change.id,
-    );
+    let mut session = start_operation(conn);
 
     let mut reader = vcf::io::reader::Builder::default()
         .build_from_path(vcf_path)
@@ -465,10 +453,19 @@ pub fn update_with_vcf<'a>(
             summary_str.push_str(&format!(" {path_name}: {change_count} changes.\n"));
         }
     }
-    OperationSummary::create(operation_conn, operation.id, &summary_str);
-    let mut output = Vec::new();
-    session.changeset_strm(&mut output).unwrap();
-    operation_management::write_changeset(conn, &operation, &output);
+
+    end_operation(
+        conn,
+        operation_conn,
+        &mut session,
+        collection_name,
+        vcf_path,
+        FileTypes::VCF,
+        "vcf_addition",
+        &summary_str,
+        None,
+    )
+    .unwrap();
 }
 
 #[cfg(test)]
@@ -477,6 +474,7 @@ mod tests {
     use super::*;
     use crate::imports::fasta::import_fasta;
     use crate::models::accession::Accession;
+    use crate::models::metadata;
     use crate::models::node::Node;
     use crate::models::operations::setup_db;
     use crate::test_helpers::{

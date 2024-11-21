@@ -30,14 +30,7 @@ pub fn update_with_library(
     parts_file_path: &str,
     library_file_path: &str,
 ) -> std::io::Result<()> {
-    let (mut session, operation) = operation_management::start_operation(
-        conn,
-        operation_conn,
-        library_file_path,
-        FileTypes::CSV,
-        "library_csv_update",
-        collection_name,
-    );
+    let mut session = operation_management::start_operation(conn);
 
     let mut parts_reader = fasta::io::reader::Builder.build_from_path(parts_file_path)?;
 
@@ -197,10 +190,15 @@ pub fn update_with_library(
     operation_management::end_operation(
         conn,
         operation_conn,
-        &operation,
         &mut session,
+        collection_name,
+        library_file_path,
+        FileTypes::CSV,
+        "library_csv_update",
         &summary_str,
-    );
+        None,
+    )
+    .unwrap();
 
     println!("Updated with library file: {}", library_file_path);
 
