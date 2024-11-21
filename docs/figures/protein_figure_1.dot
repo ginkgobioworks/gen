@@ -1,5 +1,5 @@
 strict digraph "" {
-	graph [bb="0,0,1219.5,144",
+	graph [bb="0,0,1368,144",
 		rankdir=LR,
 		splines=false
 	];
@@ -16,14 +16,14 @@ strict digraph "" {
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>4.0:&nbsp;</TD><TD><FONT FACE='Courier New'>M&nbsp;…&nbsp;D</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>4.0:&nbsp;</TD><TD><FONT FACE='Courier New'>MTI…ACD</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=4,
-		pos="131.38,126",
+		pos="139.62,126",
 		sequence=MTIKEMPQPKTFGELKNLPLLNTDKPVQALMKIADELGEIFKFEAPGRVTRYLSSQRLIKEACD,
 		shape=none,
 		start=0,
-		width=1.0556];
+		width=1.2847];
 	source:e -> 4.0:caption	[pos="e,92.375,126 54,72 54,72 75.139,101.75 86.038,117.08",
 		reference=False];
 	12.0	[end=64,
@@ -32,14 +32,14 @@ False, False, False, False, False, False, False]",
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>12.0:&nbsp;</TD><TD><FONT FACE='Courier New'>M&nbsp;…&nbsp;D</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>12.0:&nbsp;</TD><TD><FONT FACE='Courier New'>MKQ…VCD</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=12,
-		pos="131.38,72",
+		pos="139.62,72",
 		sequence=MKQASAIPQPKTYGPLKNLPHLEKEQLSQSLWRIADELGPIFRFDFPGVSSVFVSGHNLVAEVCD,
 		shape=none,
 		start=0,
-		width=1.1493];
+		width=1.3785];
 	source:e -> 12.0:caption	[pos="e,90,72 54,72 54,72 68.062,72 78.609,72",
 		reference=False];
 	20.0	[end=64,
@@ -48,14 +48,14 @@ False, False, False, False, False, False, False, False]",
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>20.0:&nbsp;</TD><TD><FONT FACE='Courier New'>M&nbsp;…&nbsp;D</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>20.0:&nbsp;</TD><TD><FONT FACE='Courier New'>MKE…VCD</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=20,
-		pos="131.38,18",
+		pos="139.62,18",
 		sequence=MKETSPIPQPKTFGPLGNLPLIDKDKPTLSLIKLAEEQGPIFQIHTPAGTTIVVSGHELVKEVCD,
 		shape=none,
 		start=0,
-		width=1.1493];
+		width=1.3785];
 	source:e -> 20.0:caption	[pos="e,90,18 54,72 54,72 73.415,42.877 83.729,27.406",
 		reference=False];
 	5.0	[end=57,
@@ -64,15 +64,15 @@ False, False, False, False, False, False, False, False]",
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>5.0:&nbsp;</TD><TD><FONT FACE='Courier New'>E&nbsp;…&nbsp;D</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>5.0:&nbsp;</TD><TD><FONT FACE='Courier New'>ESR…MVD</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=5,
-		pos="250.12,126",
+		pos="274.88,126",
 		sequence=ESRFDKNLSQALKFVRDFAGDGLFTSWTHEKNWKKAHNILLPSFSQQAMKGYHAMMVD,
 		shape=none,
 		start=0,
-		width=1.0556];
-	4.0:e -> 5.0:caption	[pos="e,211.12,126 170.34,126 170.34,126 187.9,126 199.98,126",
+		width=1.2847];
+	4.0:e -> 5.0:caption	[pos="e,227.62,126 186.83,126 186.83,126 204.4,126 216.48,126",
 		reference=False];
 	13.0	[end=57,
 		height=0.5,
@@ -80,15 +80,15 @@ False]",
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>13.0:&nbsp;</TD><TD><FONT FACE='Courier New'>E&nbsp;…&nbsp;D</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>13.0:&nbsp;</TD><TD><FONT FACE='Courier New'>EKR…MLD</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=13,
-		pos="250.12,72",
+		pos="274.88,72",
 		sequence=EKRFDKNLGKGLQKVREFGGDGLFTSWTHEPNWQKAHRILLPSFSQKAMKGYHSMMLD,
 		shape=none,
 		start=0,
-		width=1.1493];
-	4.0:e -> 13.0:caption	[pos="e,208.75,72 170.34,126 170.34,126 191.5,96.255 202.41,80.917",
+		width=1.3785];
+	4.0:e -> 13.0:caption	[pos="e,225.25,72 186.83,126 186.83,126 207.99,96.255 218.91,80.917",
 		reference=False];
 	21.0	[end=57,
 		height=0.5,
@@ -96,89 +96,89 @@ False]",
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>21.0:&nbsp;</TD><TD><FONT FACE='Courier New'>E&nbsp;…&nbsp;D</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>21.0:&nbsp;</TD><TD><FONT FACE='Courier New'>EER…MVD</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=21,
-		pos="250.12,18",
+		pos="274.88,18",
 		sequence=EERFDKSIEGALEKVRAFSGDGLFTSWTHEPNWRKAHNILMPTFSQRAMKDYHEKMVD,
 		shape=none,
 		start=0,
-		width=1.1493];
-	4.0:e -> 21.0:caption	[pos="e,208.75,18 170.34,126 170.34,126 195.21,56.068 204.93,28.75",
+		width=1.3785];
+	4.0:e -> 21.0:caption	[pos="e,225.25,18 186.83,126 186.83,126 211.71,56.068 221.43,28.75",
 		reference=False];
-	12.0:e -> 5.0:caption	[pos="e,211.12,126 172.75,72 172.75,72 193.89,101.75 204.79,117.08",
+	12.0:e -> 5.0:caption	[pos="e,227.62,126 189.25,72 189.25,72 210.39,101.75 221.29,117.08",
 		reference=False];
-	12.0:e -> 13.0:caption	[pos="e,208.75,72 172.75,72 172.75,72 186.81,72 197.36,72",
+	12.0:e -> 13.0:caption	[pos="e,225.25,72 189.25,72 189.25,72 203.31,72 213.86,72",
 		reference=False];
-	12.0:e -> 21.0:caption	[pos="e,208.75,18 172.75,72 172.75,72 192.17,42.877 202.48,27.406",
+	12.0:e -> 21.0:caption	[pos="e,225.25,18 189.25,72 189.25,72 208.67,42.877 218.98,27.406",
 		reference=False];
-	20.0:e -> 5.0:caption	[pos="e,211.12,126 172.75,18 172.75,18 197.6,87.932 207.31,115.25",
+	20.0:e -> 5.0:caption	[pos="e,227.62,126 189.25,18 189.25,18 214.1,87.932 223.81,115.25",
 		reference=False];
-	20.0:e -> 13.0:caption	[pos="e,208.75,72 172.75,18 172.75,18 192.17,47.123 202.48,62.594",
+	20.0:e -> 13.0:caption	[pos="e,225.25,72 189.25,18 189.25,18 208.67,47.123 218.98,62.594",
 		reference=False];
-	20.0:e -> 21.0:caption	[pos="e,208.75,18 172.75,18 172.75,18 186.81,18 197.36,18",
+	20.0:e -> 21.0:caption	[pos="e,225.25,18 189.25,18 189.25,18 203.31,18 213.86,18",
 		reference=False];
 	6.0	[end=43,
 		height=0.5,
 		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>6.0:&nbsp;</TD><TD><FONT FACE='Courier New'>I&nbsp;…&nbsp;F</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>6.0:&nbsp;</TD><TD><FONT FACE='Courier New'>IAV…NSF</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=6,
-		pos="368.88,126",
+		pos="410.12,126",
 		sequence=IAVQLVQKWERLNADEHIEVPEDMTRLTLDTIGLCGFNYRFNSF,
 		shape=none,
 		start=0,
-		width=1.0556];
-	5.0:e -> 6.0:caption	[pos="e,329.88,126 289.09,126 289.09,126 306.65,126 318.73,126",
+		width=1.2847];
+	5.0:e -> 6.0:caption	[pos="e,362.88,126 322.08,126 322.08,126 339.65,126 351.73,126",
 		reference=False];
 	14.0	[end=43,
 		height=0.5,
 		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>14.0:&nbsp;</TD><TD><FONT FACE='Courier New'>I&nbsp;…&nbsp;F</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>14.0:&nbsp;</TD><TD><FONT FACE='Courier New'>IAT…NSF</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=14,
-		pos="368.88,72",
+		pos="410.12,72",
 		sequence=IATQLIQKWSRLNPNEEIDVADDMTRLTLDTIGLCGFNYRFNSF,
 		shape=none,
 		start=0,
-		width=1.1493];
-	5.0:e -> 14.0:caption	[pos="e,327.5,72 289.09,126 289.09,126 310.25,96.255 321.16,80.917",
+		width=1.3785];
+	5.0:e -> 14.0:caption	[pos="e,360.5,72 322.08,126 322.08,126 343.24,96.255 354.16,80.917",
 		reference=False];
 	22.0	[end=43,
 		height=0.5,
 		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>22.0:&nbsp;</TD><TD><FONT FACE='Courier New'>I&nbsp;…&nbsp;Y</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>22.0:&nbsp;</TD><TD><FONT FACE='Courier New'>IAV…NSY</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=22,
-		pos="368.88,18",
+		pos="410.12,18",
 		sequence=IAVQLIQKWARLNPNEAVDVPGDMTRLTLDTIGLCGFNYRFNSY,
 		shape=none,
 		start=0,
-		width=1.1493];
-	5.0:e -> 22.0:caption	[pos="e,327.5,18 289.09,126 289.09,126 313.96,56.068 323.68,28.75",
+		width=1.3785];
+	5.0:e -> 22.0:caption	[pos="e,360.5,18 322.08,126 322.08,126 346.96,56.068 356.68,28.75",
 		reference=False];
-	13.0:e -> 6.0:caption	[pos="e,329.88,126 291.5,72 291.5,72 312.64,101.75 323.54,117.08",
+	13.0:e -> 6.0:caption	[pos="e,362.88,126 324.5,72 324.5,72 345.64,101.75 356.54,117.08",
 		reference=False];
-	13.0:e -> 14.0:caption	[pos="e,327.5,72 291.5,72 291.5,72 305.56,72 316.11,72",
+	13.0:e -> 14.0:caption	[pos="e,360.5,72 324.5,72 324.5,72 338.56,72 349.11,72",
 		reference=False];
-	13.0:e -> 22.0:caption	[pos="e,327.5,18 291.5,72 291.5,72 310.92,42.877 321.23,27.406",
+	13.0:e -> 22.0:caption	[pos="e,360.5,18 324.5,72 324.5,72 343.92,42.877 354.23,27.406",
 		reference=False];
-	21.0:e -> 6.0:caption	[pos="e,329.88,126 291.5,18 291.5,18 316.35,87.932 326.06,115.25",
+	21.0:e -> 6.0:caption	[pos="e,362.88,126 324.5,18 324.5,18 349.35,87.932 359.06,115.25",
 		reference=False];
-	21.0:e -> 14.0:caption	[pos="e,327.5,72 291.5,18 291.5,18 310.92,47.123 321.23,62.594",
+	21.0:e -> 14.0:caption	[pos="e,360.5,72 324.5,18 324.5,18 343.92,47.123 354.23,62.594",
 		reference=False];
-	21.0:e -> 22.0:caption	[pos="e,327.5,18 291.5,18 291.5,18 305.56,18 316.11,18",
+	21.0:e -> 22.0:caption	[pos="e,360.5,18 324.5,18 324.5,18 338.56,18 349.11,18",
 		reference=False];
 	sink	[height=0.5,
 		label=end,
 		original_node=sink,
-		pos="1192.5,72",
+		pos="1341,72",
 		start=0,
 		width=0.75];
 	3.657	[end=1048,
@@ -204,129 +204,129 @@ False, False, False, False, False, False, False, False, False, False, False, Fal
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>3.657:&nbsp;</TD><TD><FONT FACE='Courier New'>K&nbsp;…&nbsp;G</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>3.657:&nbsp;</TD><TD><FONT FACE='Courier New'>KMH…WAG</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=3,
-		pos="1084.8,72",
+		pos="1225,72",
 		sequence=KMHGAFSTNVVASKELQQPGSARSTRHLEIELPKEASYQEGDHLGVIPRNYEGIVNRVTARFGLDASQQIRLEAEEEKLAHLPLAKTVSVEELLQYVELQDPVTRTQLRAMAAKTVCPPHKVELEALLEKQAYKEQVLAKRLTMLELLEKYPACEMKFSEFIALLPSIRPRYYSISSSPRVDEKQASITVSVVSGEAWSGYGEYKGIASNYLAELQEGDTITCFISTPQSEFTLPKDPETPLIMVGPGTGVAPFRGFVQARKQLKEQGQSLGEAHLYFGCRSPHEDYLYQEELENAQSEGIITLHTAFSRMPNQPKTYVQHVMEQDGKKLIELLDQGAHFYICGDGSQMAPAVEATLMKSYADVHQVSEADARLWLQQLEEKGRYAKDVWAG,
 		shape=none,
 		start=657,
-		width=1.2431];
-	3.657:e -> sink:caption	[pos="e,1165.2,72 1129.5,72 1129.5,72 1141,72 1154.1,72",
+		width=1.4722];
+	3.657:e -> sink:caption	[pos="e,1313.7,72 1278,72 1278,72 1289.5,72 1302.6,72",
 		reference=False];
 	7.0	[end=49,
 		height=0.5,
 		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>7.0:&nbsp;</TD><TD><FONT FACE='Courier New'>Y&nbsp;…&nbsp;L</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>7.0:&nbsp;</TD><TD><FONT FACE='Courier New'>YRD…NDL</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=7,
-		pos="487.62,126",
+		pos="545.38,126",
 		sequence=YRDQPHPFITSMVRALDEAMNKLQRANPDDPAYDENKRQFQEDIKVMNDL,
 		shape=none,
 		start=0,
-		width=1.0556];
-	6.0:e -> 7.0:caption	[pos="e,448.62,126 407.84,126 407.84,126 425.4,126 437.48,126",
+		width=1.2847];
+	6.0:e -> 7.0:caption	[pos="e,498.12,126 457.33,126 457.33,126 474.9,126 486.98,126",
 		reference=False];
 	15.0	[end=49,
 		height=0.5,
 		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>15.0:&nbsp;</TD><TD><FONT FACE='Courier New'>Y&nbsp;…&nbsp;L</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>15.0:&nbsp;</TD><TD><FONT FACE='Courier New'>YRD…NSL</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=15,
-		pos="487.62,72",
+		pos="545.38,72",
 		sequence=YRDSQHPFITSMLRALKEAMNQSKRLGLQDKMMVKTKLQFQKDIEVMNSL,
 		shape=none,
 		start=0,
-		width=1.1493];
-	6.0:e -> 15.0:caption	[pos="e,446.25,72 407.84,126 407.84,126 429,96.255 439.91,80.917",
+		width=1.3785];
+	6.0:e -> 15.0:caption	[pos="e,495.75,72 457.33,126 457.33,126 478.49,96.255 489.41,80.917",
 		reference=False];
 	23.0	[end=49,
 		height=0.5,
 		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>23.0:&nbsp;</TD><TD><FONT FACE='Courier New'>Y&nbsp;…&nbsp;L</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>23.0:&nbsp;</TD><TD><FONT FACE='Courier New'>YRE…FSL</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=23,
-		pos="487.62,18",
+		pos="545.38,18",
 		sequence=YRETPHPFINSMVRALDEAMHQMQRLDVQDKLMVRTKRQFRYDIQTMFSL,
 		shape=none,
 		start=0,
-		width=1.1493];
-	6.0:e -> 23.0:caption	[pos="e,446.25,18 407.84,126 407.84,126 432.71,56.068 442.43,28.75",
+		width=1.3785];
+	6.0:e -> 23.0:caption	[pos="e,495.75,18 457.33,126 457.33,126 482.21,56.068 491.93,28.75",
 		reference=False];
-	14.0:e -> 7.0:caption	[pos="e,448.62,126 410.25,72 410.25,72 431.39,101.75 442.29,117.08",
+	14.0:e -> 7.0:caption	[pos="e,498.12,126 459.75,72 459.75,72 480.89,101.75 491.79,117.08",
 		reference=False];
-	14.0:e -> 15.0:caption	[pos="e,446.25,72 410.25,72 410.25,72 424.31,72 434.86,72",
+	14.0:e -> 15.0:caption	[pos="e,495.75,72 459.75,72 459.75,72 473.81,72 484.36,72",
 		reference=False];
-	14.0:e -> 23.0:caption	[pos="e,446.25,18 410.25,72 410.25,72 429.67,42.877 439.98,27.406",
+	14.0:e -> 23.0:caption	[pos="e,495.75,18 459.75,72 459.75,72 479.17,42.877 489.48,27.406",
 		reference=False];
-	22.0:e -> 7.0:caption	[pos="e,448.62,126 410.25,18 410.25,18 435.1,87.932 444.81,115.25",
+	22.0:e -> 7.0:caption	[pos="e,498.12,126 459.75,18 459.75,18 484.6,87.932 494.31,115.25",
 		reference=False];
-	22.0:e -> 15.0:caption	[pos="e,446.25,72 410.25,18 410.25,18 429.67,47.123 439.98,62.594",
+	22.0:e -> 15.0:caption	[pos="e,495.75,72 459.75,18 459.75,18 479.17,47.123 489.48,62.594",
 		reference=False];
-	22.0:e -> 23.0:caption	[pos="e,446.25,18 410.25,18 410.25,18 424.31,18 434.86,18",
+	22.0:e -> 23.0:caption	[pos="e,495.75,18 459.75,18 459.75,18 473.81,18 484.36,18",
 		reference=False];
 	8.0	[end=51,
 		height=0.5,
 		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>8.0:&nbsp;</TD><TD><FONT FACE='Courier New'>V&nbsp;…&nbsp;E</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>8.0:&nbsp;</TD><TD><FONT FACE='Courier New'>VDK…GHE</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=8,
-		pos="606.38,126",
+		pos="680.62,126",
 		sequence=VDKIIADRKASGEQSDDLLTHMLNGKDPETGEPLDDENIRYQIITFLIAGHE,
 		shape=none,
 		start=0,
-		width=1.0556];
-	7.0:e -> 8.0:caption	[pos="e,567.38,126 526.59,126 526.59,126 544.15,126 556.23,126",
+		width=1.2847];
+	7.0:e -> 8.0:caption	[pos="e,633.38,126 592.58,126 592.58,126 610.15,126 622.23,126",
 		reference=False];
 	16.0	[end=52,
 		height=0.5,
 		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>16.0:&nbsp;</TD><TD><FONT FACE='Courier New'>V&nbsp;…&nbsp;E</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>16.0:&nbsp;</TD><TD><FONT FACE='Courier New'>VDR…GHE</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=16,
-		pos="606.38,72",
+		pos="680.62,72",
 		sequence=VDRMIAERKANPDENIKDLLSLMLYAKDPVTGETLDDENIRYQIITFLIAGHE,
 		shape=none,
 		start=0,
-		width=1.1493];
-	7.0:e -> 16.0:caption	[pos="e,565,72 526.59,126 526.59,126 547.75,96.255 558.66,80.917",
+		width=1.3785];
+	7.0:e -> 16.0:caption	[pos="e,631,72 592.58,126 592.58,126 613.74,96.255 624.66,80.917",
 		reference=False];
 	24.0	[end=52,
 		height=0.5,
 		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>24.0:&nbsp;</TD><TD><FONT FACE='Courier New'>V&nbsp;…&nbsp;E</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>24.0:&nbsp;</TD><TD><FONT FACE='Courier New'>VDS…GHE</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=24,
-		pos="606.38,18",
+		pos="680.62,18",
 		sequence=VDSIIAERRANGDQDEKDLLARMLNVEDPETGEKLDDENIRFQIITFLIAGHE,
 		shape=none,
 		start=0,
-		width=1.1493];
-	7.0:e -> 24.0:caption	[pos="e,565,18 526.59,126 526.59,126 551.46,56.068 561.18,28.75",
+		width=1.3785];
+	7.0:e -> 24.0:caption	[pos="e,631,18 592.58,126 592.58,126 617.46,56.068 627.18,28.75",
 		reference=False];
-	15.0:e -> 8.0:caption	[pos="e,567.38,126 529,72 529,72 550.14,101.75 561.04,117.08",
+	15.0:e -> 8.0:caption	[pos="e,633.38,126 595,72 595,72 616.14,101.75 627.04,117.08",
 		reference=False];
-	15.0:e -> 16.0:caption	[pos="e,565,72 529,72 529,72 543.06,72 553.61,72",
+	15.0:e -> 16.0:caption	[pos="e,631,72 595,72 595,72 609.06,72 619.61,72",
 		reference=False];
-	15.0:e -> 24.0:caption	[pos="e,565,18 529,72 529,72 548.42,42.877 558.73,27.406",
+	15.0:e -> 24.0:caption	[pos="e,631,18 595,72 595,72 614.42,42.877 624.73,27.406",
 		reference=False];
-	23.0:e -> 8.0:caption	[pos="e,567.38,126 529,18 529,18 553.85,87.932 563.56,115.25",
+	23.0:e -> 8.0:caption	[pos="e,633.38,126 595,18 595,18 619.85,87.932 629.56,115.25",
 		reference=False];
-	23.0:e -> 16.0:caption	[pos="e,565,72 529,18 529,18 548.42,47.123 558.73,62.594",
+	23.0:e -> 16.0:caption	[pos="e,631,72 595,18 595,18 614.42,47.123 624.73,62.594",
 		reference=False];
-	23.0:e -> 24.0:caption	[pos="e,565,18 529,18 529,18 543.06,18 553.61,18",
+	23.0:e -> 24.0:caption	[pos="e,631,18 595,18 595,18 609.06,18 619.61,18",
 		reference=False];
 	9.0	[end=59,
 		height=0.5,
@@ -334,15 +334,15 @@ False, False, False, False, False, False, False, False, False, False, False, Fal
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>9.0:&nbsp;</TD><TD><FONT FACE='Courier New'>T&nbsp;…&nbsp;T</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>9.0:&nbsp;</TD><TD><FONT FACE='Courier New'>TTS…WPT</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=9,
-		pos="725.12,126",
+		pos="815.88,126",
 		sequence=TTSGLLSFALYFLVKNPHVLQKAAEEAARVLVDPVPSYKQVKQLKYVGMVLNEALRLWPT,
 		shape=none,
 		start=0,
-		width=1.0556];
-	8.0:e -> 9.0:caption	[pos="e,686.12,126 645.34,126 645.34,126 662.9,126 674.98,126",
+		width=1.2847];
+	8.0:e -> 9.0:caption	[pos="e,768.62,126 727.83,126 727.83,126 745.4,126 757.48,126",
 		reference=False];
 	17.0	[end=59,
 		height=0.5,
@@ -350,15 +350,15 @@ False, False, False]",
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>17.0:&nbsp;</TD><TD><FONT FACE='Courier New'>T&nbsp;…&nbsp;T</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>17.0:&nbsp;</TD><TD><FONT FACE='Courier New'>TTS…YPT</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=17,
-		pos="725.12,72",
+		pos="815.88,72",
 		sequence=TTSGLLSFAIYCLLTHPEKLKKAQEEADRVLTDDTPEYKQIQQLKYIRMVLNETLRLYPT,
 		shape=none,
 		start=0,
-		width=1.1493];
-	8.0:e -> 17.0:caption	[pos="e,683.75,72 645.34,126 645.34,126 666.5,96.255 677.41,80.917",
+		width=1.3785];
+	8.0:e -> 17.0:caption	[pos="e,766.25,72 727.83,126 727.83,126 748.99,96.255 759.91,80.917",
 		reference=False];
 	25.0	[end=59,
 		height=0.5,
@@ -366,27 +366,27 @@ False, False, False]",
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>25.0:&nbsp;</TD><TD><FONT FACE='Courier New'>T&nbsp;…&nbsp;T</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>25.0:&nbsp;</TD><TD><FONT FACE='Courier New'>TTS…WPT</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=25,
-		pos="725.12,18",
+		pos="815.88,18",
 		sequence=TTSGLLSFATYFLLKHPDKLKKAYEEVDRVLTDAAPTYKQVLELTYIRMILNESLRLWPT,
 		shape=none,
 		start=0,
-		width=1.1493];
-	8.0:e -> 25.0:caption	[pos="e,683.75,18 645.34,126 645.34,126 670.21,56.068 679.93,28.75",
+		width=1.3785];
+	8.0:e -> 25.0:caption	[pos="e,766.25,18 727.83,126 727.83,126 752.71,56.068 762.43,28.75",
 		reference=False];
-	16.0:e -> 9.0:caption	[pos="e,686.12,126 647.75,72 647.75,72 668.89,101.75 679.79,117.08",
+	16.0:e -> 9.0:caption	[pos="e,768.62,126 730.25,72 730.25,72 751.39,101.75 762.29,117.08",
 		reference=False];
-	16.0:e -> 17.0:caption	[pos="e,683.75,72 647.75,72 647.75,72 661.81,72 672.36,72",
+	16.0:e -> 17.0:caption	[pos="e,766.25,72 730.25,72 730.25,72 744.31,72 754.86,72",
 		reference=False];
-	16.0:e -> 25.0:caption	[pos="e,683.75,18 647.75,72 647.75,72 667.17,42.877 677.48,27.406",
+	16.0:e -> 25.0:caption	[pos="e,766.25,18 730.25,72 730.25,72 749.67,42.877 759.98,27.406",
 		reference=False];
-	24.0:e -> 9.0:caption	[pos="e,686.12,126 647.75,18 647.75,18 672.6,87.932 682.31,115.25",
+	24.0:e -> 9.0:caption	[pos="e,768.62,126 730.25,18 730.25,18 755.1,87.932 764.81,115.25",
 		reference=False];
-	24.0:e -> 17.0:caption	[pos="e,683.75,72 647.75,18 647.75,18 667.17,47.123 677.48,62.594",
+	24.0:e -> 17.0:caption	[pos="e,766.25,72 730.25,18 730.25,18 749.67,47.123 759.98,62.594",
 		reference=False];
-	24.0:e -> 25.0:caption	[pos="e,683.75,18 647.75,18 647.75,18 661.81,18 672.36,18",
+	24.0:e -> 25.0:caption	[pos="e,766.25,18 730.25,18 730.25,18 744.31,18 754.86,18",
 		reference=False];
 	10.0	[end=75,
 		height=0.5,
@@ -394,15 +394,15 @@ False, False, False]",
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>10.0:&nbsp;</TD><TD><FONT FACE='Courier New'>A&nbsp;…&nbsp;Q</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>10.0:&nbsp;</TD><TD><FONT FACE='Courier New'>APA…IGQ</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=10,
-		pos="843.88,126",
+		pos="951.12,126",
 		sequence=APAFSLYAKEDTVLGGEYPLEKGDELMVLIPQLHRDKTIWGDDVEEFRPERFENPSAIPQHAFKPFGNGQRACIGQ,
 		shape=none,
 		start=0,
-		width=1.1493];
-	9.0:e -> 10.0:caption	[pos="e,802.5,126 764.09,126 764.09,126 779.85,126 791.18,126",
+		width=1.3785];
+	9.0:e -> 10.0:caption	[pos="e,901.5,126 863.08,126 863.08,126 878.85,126 890.18,126",
 		reference=False];
 	18.0	[end=75,
 		height=0.5,
@@ -410,15 +410,15 @@ False, False, False, False, False, False, False, False, False, False, False, Fal
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>18.0:&nbsp;</TD><TD><FONT FACE='Courier New'>A&nbsp;…&nbsp;M</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>18.0:&nbsp;</TD><TD><FONT FACE='Courier New'>APA…IGM</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=18,
-		pos="843.88,72",
+		pos="951.12,72",
 		sequence=APAFSLYAKEDTVLGGEYPISKGQPVTVLIPKLHRDQNAWGPDAEDFRPERFEDPSSIPHHAYKPFGNGQRACIGM,
 		shape=none,
 		start=0,
-		width=1.1493];
-	9.0:e -> 18.0:caption	[pos="e,802.5,72 764.09,126 764.09,126 785.25,96.255 796.16,80.917",
+		width=1.3785];
+	9.0:e -> 18.0:caption	[pos="e,901.5,72 863.08,126 863.08,126 884.24,96.255 895.16,80.917",
 		reference=False];
 	26.0	[end=75,
 		height=0.5,
@@ -426,27 +426,27 @@ False, False, False, False, False, False, False, False, False, False, False, Fal
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>26.0:&nbsp;</TD><TD><FONT FACE='Courier New'>A&nbsp;…&nbsp;M</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>26.0:&nbsp;</TD><TD><FONT FACE='Courier New'>APA…IGM</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=26,
-		pos="843.88,18",
+		pos="951.12,18",
 		sequence=APAFSLYPKEDTVIGGKFPITTNDRISVLIPQLHRDRDAWGKDAEEFRPERFEHQDQVPHHAYKPFGNGQRACIGM,
 		shape=none,
 		start=0,
-		width=1.1493];
-	9.0:e -> 26.0:caption	[pos="e,802.5,18 764.09,126 764.09,126 788.96,56.068 798.68,28.75",
+		width=1.3785];
+	9.0:e -> 26.0:caption	[pos="e,901.5,18 863.08,126 863.08,126 887.96,56.068 897.68,28.75",
 		reference=False];
-	17.0:e -> 10.0:caption	[pos="e,802.5,126 766.5,72 766.5,72 785.92,101.12 796.23,116.59",
+	17.0:e -> 10.0:caption	[pos="e,901.5,126 865.5,72 865.5,72 884.92,101.12 895.23,116.59",
 		reference=False];
-	17.0:e -> 18.0:caption	[pos="e,802.5,72 766.5,72 766.5,72 780.56,72 791.11,72",
+	17.0:e -> 18.0:caption	[pos="e,901.5,72 865.5,72 865.5,72 879.56,72 890.11,72",
 		reference=False];
-	17.0:e -> 26.0:caption	[pos="e,802.5,18 766.5,72 766.5,72 785.92,42.877 796.23,27.406",
+	17.0:e -> 26.0:caption	[pos="e,901.5,18 865.5,72 865.5,72 884.92,42.877 895.23,27.406",
 		reference=False];
-	25.0:e -> 10.0:caption	[pos="e,802.5,126 766.5,18 766.5,18 789.81,87.932 798.92,115.25",
+	25.0:e -> 10.0:caption	[pos="e,901.5,126 865.5,18 865.5,18 888.81,87.932 897.92,115.25",
 		reference=False];
-	25.0:e -> 18.0:caption	[pos="e,802.5,72 766.5,18 766.5,18 785.92,47.123 796.23,62.594",
+	25.0:e -> 18.0:caption	[pos="e,901.5,72 865.5,18 865.5,18 884.92,47.123 895.23,62.594",
 		reference=False];
-	25.0:e -> 26.0:caption	[pos="e,802.5,18 766.5,18 766.5,18 780.56,18 791.11,18",
+	25.0:e -> 26.0:caption	[pos="e,901.5,18 865.5,18 865.5,18 879.56,18 890.11,18",
 		reference=False];
 	11.0	[end=644,
 		height=0.5,
@@ -484,15 +484,15 @@ False, False, False, False, False, False, False, False, False, False, False, Fal
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>11.0:&nbsp;</TD><TD><FONT FACE='Courier New'>Q&nbsp;…&nbsp;G</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>11.0:&nbsp;</TD><TD><FONT FACE='Courier New'>QFA…WAG</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=11,
-		pos="962.62,126",
+		pos="1086.4,126",
 		sequence=QFALHEATLVLGMMLKHFDFEDHTNYELDIKETLTLKPEGFVVKAKSKKIPLGGIPSPSTEQSAKKVRKKAENAHNTPLLVLYGSNMGTAEGTARDLADIAMSKGFAPQVATLDSHAGNLPREGAVLIVTASYNGHPPDNAKQFVDWLDQASADEVKGVRYSVFGCGDKNWATTYQKVPAFIDETLAAKGAENIADRGEADASDDFEGTYEEWREHMWSDVAAYFNLDIENSEDNKSTLSLQFVDSAADMPLAKMHGAFSTNVVASKELQQPGSARSTRHLEIELPKEASYQEGDHLGVIPRNYEGIVNRVTARFGLDASQQIRLEAEEEKLAHLPLAKTVSVEELLQYVELQDPVTRTQLRAMAAKTVCPPHKVELEALLEKQAYKEQVLAKRLTMLELLEKYPACEMKFSEFIALLPSIRPRYYSISSSPRVDEKQASITVSVVSGEAWSGYGEYKGIASNYLAELQEGDTITCFISTPQSEFTLPKDPETPLIMVGPGTGVAPFRGFVQARKQLKEQGQSLGEAHLYFGCRSPHEDYLYQEELENAQSEGIITLHTAFSRMPNQPKTYVQHVMEQDGKKLIELLDQGAHFYICGDGSQMAPAVEATLMKSYADVHQVSEADARLWLQQLEEKGRYAKDVWAG,
 		shape=none,
 		start=0,
-		width=1.1493];
-	10.0:e -> 11.0:caption	[pos="e,921.25,126 885.25,126 885.25,126 899.31,126 909.86,126",
+		width=1.3785];
+	10.0:e -> 11.0:caption	[pos="e,1036.8,126 1000.8,126 1000.8,126 1014.8,126 1025.4,126",
 		reference=False];
 	19.0	[end=647,
 		height=0.5,
@@ -531,15 +531,15 @@ False, False, False, False, False, False, False, False, False, False, False, Fal
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>19.0:&nbsp;</TD><TD><FONT FACE='Courier New'>Q&nbsp;…&nbsp;M</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>19.0:&nbsp;</TD><TD><FONT FACE='Courier New'>QFA…TGM</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=19,
-		pos="962.62,72",
+		pos="1086.4,72",
 		sequence=QFALQEATMVLGLVLKHFELINHTGYELKIKEALTIKPDDFKITVKPRKTAAINVQRKEQADIKAETKPKETKPKHGTPLLVLFGSNLGTAEGIAGELAAQGRQMGFTAETAPLDDYIGKLPEEGAVVIVTASYNGAPPDNAAGFVEWLKELEEGQLKGVSYAVFGCGNRSWASTYQRIPRLIDDMMKAKGASRLTAIGEGDAADDFESHRESWENRFWKETMDAFDINEIAQKEDRPSLSITFLSEATETPVAKAYGAFEGIVLENRELQTAASTRSTRHIELEIPAGKTYKEGDHIGILPKNSRELVQRVLSRFGLQSNHVIKVSGSAHMAHLPMDRPIKVVDLLSSYVELQEPASRLQLRELASYTVCPPHQKELEQLVSDDGIYKEQVLAKRLTMLDFLEDYPACEMPFERFLALLPSLKPRYYSISSSPKVHANIVSMTVGVVKASAWSGRGEYRGVASNYLAELNTGDAAACFIRTPQSGFQMPNDPETPMIMVGPGTGIAPFRGFIQARSVLKKEGSTLGEALLYFGCRRPDHDDLYREELDQAEQDGLVTIRRCYSRVENEPKGYVQHLLKQDTQKLMTLIEKGAHIYVCGDGSQMAPDVERTLRLAYEAEKAASQEESAVWLQKLQDQRRYVKDVWTGM,
 		shape=none,
 		start=0,
-		width=1.1493];
-	10.0:e -> 19.0:caption	[pos="e,921.25,72 885.25,126 885.25,126 904.67,96.877 914.98,81.406",
+		width=1.3785];
+	10.0:e -> 19.0:caption	[pos="e,1036.8,72 1000.8,126 1000.8,126 1020.2,96.877 1030.5,81.406",
 		reference=False];
 	27.0	[end=654,
 		height=0.5,
@@ -578,32 +578,32 @@ False, False, False, False, False, False, False, False, False, False, False, Fal
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
 False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>27.0:&nbsp;</TD><TD><FONT FACE='Courier New'>Q&nbsp;…&nbsp;I</FONT></TD></TR></TABLE>>,
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>27.0:&nbsp;</TD><TD><FONT FACE='Courier New'>QFA…AGI</FONT></TD></TR></TABLE>>,
 		margin=0,
 		original_node=27,
-		pos="962.62,18",
+		pos="1086.4,18",
 		sequence=QFALHEATLVLGMILKYFTLIDHENYELDIKQTLTLKPGDFHISVQSRHQEAIHADVQAAEKAAPDEQKEKTEAKGASVIGLNNRPLLVLYGSDTGTAEGVARELADTASLHGVRTKTAPLNDRIGKLPKEGAVVIVTSSYNGKPPSNAGQFVQWLQEIKPGELEGVHYAVFGCGDHNWASTYQYVPRFIDEQLAEKGATRFSARGEGDVSGDFEGQLDEWKKSMWADAIKAFGLELNENADKERSTLSLQFVRGLGESPLARSYEASHASIAENRELQSADSDRSTRHIEIALPPDVEYQEGDHLGVLPKNSQTNVSRILHRFGLKGTDQVTLSASGRSAGHLPLGRPVSLHDLLSYSVEVQEAATRAQIRELASFTVCPPHRRELEELSAEGVYQEQILKKRISMLDLLEKYEACDMPFERFLELLRPLKPRYYSISSSPRVNPRQASITVGVVRGPAWSGRGEYRGVASNDLAERQAGDDVVMFIRTPESRFQLPKDPETPIIMVGPGTGVAPFRGFLQARDVLKREGKTLGEAHLYFGCRNDRDFIYRDELERFEKDGIVTVHTAFSRKEGMPKTYVQHLMADQADTLISILDRGGRLYVCGDGSKMAPDVEAALQKAYQAVHGTGEQEAQNWLRHLQDTGMYAKDVWAGI,
 		shape=none,
 		start=0,
-		width=1.1493];
-	10.0:e -> 27.0:caption	[pos="e,921.25,18 885.25,126 885.25,126 908.56,56.068 917.67,28.75",
+		width=1.3785];
+	10.0:e -> 27.0:caption	[pos="e,1036.8,18 1000.8,126 1000.8,126 1024.1,56.068 1033.2,28.75",
 		reference=False];
-	18.0:e -> 11.0:caption	[pos="e,921.25,126 885.25,72 885.25,72 904.67,101.12 914.98,116.59",
+	18.0:e -> 11.0:caption	[pos="e,1036.8,126 1000.8,72 1000.8,72 1020.2,101.12 1030.5,116.59",
 		reference=False];
-	18.0:e -> 19.0:caption	[pos="e,921.25,72 885.25,72 885.25,72 899.31,72 909.86,72",
+	18.0:e -> 19.0:caption	[pos="e,1036.8,72 1000.8,72 1000.8,72 1014.8,72 1025.4,72",
 		reference=False];
-	18.0:e -> 27.0:caption	[pos="e,921.25,18 885.25,72 885.25,72 904.67,42.877 914.98,27.406",
+	18.0:e -> 27.0:caption	[pos="e,1036.8,18 1000.8,72 1000.8,72 1020.2,42.877 1030.5,27.406",
 		reference=False];
-	26.0:e -> 11.0:caption	[pos="e,921.25,126 885.25,18 885.25,18 908.56,87.932 917.67,115.25",
+	26.0:e -> 11.0:caption	[pos="e,1036.8,126 1000.8,18 1000.8,18 1024.1,87.932 1033.2,115.25",
 		reference=False];
-	26.0:e -> 19.0:caption	[pos="e,921.25,72 885.25,18 885.25,18 904.67,47.123 914.98,62.594",
+	26.0:e -> 19.0:caption	[pos="e,1036.8,72 1000.8,18 1000.8,18 1020.2,47.123 1030.5,62.594",
 		reference=False];
-	26.0:e -> 27.0:caption	[pos="e,921.25,18 885.25,18 885.25,18 899.31,18 909.86,18",
+	26.0:e -> 27.0:caption	[pos="e,1036.8,18 1000.8,18 1000.8,18 1014.8,18 1025.4,18",
 		reference=False];
-	11.0:e -> 3.657:caption	[pos="e,1040,72 1004,126 1004,126 1023.4,96.877 1033.7,81.406",
+	11.0:e -> 3.657:caption	[pos="e,1172,72 1136,126 1136,126 1155.4,96.877 1165.7,81.406",
 		reference=False];
-	19.0:e -> 3.657:caption	[pos="e,1040,72 1004,72 1004,72 1018.1,72 1028.6,72",
+	19.0:e -> 3.657:caption	[pos="e,1172,72 1136,72 1136,72 1150.1,72 1160.6,72",
 		reference=False];
-	27.0:e -> 3.657:caption	[pos="e,1040,72 1004,18 1004,18 1023.4,47.123 1033.7,62.594",
+	27.0:e -> 3.657:caption	[pos="e,1172,72 1136,18 1136,18 1155.4,47.123 1165.7,62.594",
 		reference=False];
 }

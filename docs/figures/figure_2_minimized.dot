@@ -1,77 +1,56 @@
 strict digraph "" {
-	graph [bb="0,0,464.75,90",
-		rankdir=LR,
+	graph [bb="0,0,490,108",
+		rankdir=TD,
 		splines=true
 	];
 	node [label="\N"];
-	source	[end=-1,
-		height=0.5,
+	source	[height=0.5,
 		label=start,
-		original_node=source,
-		pos="27,45",
+		pos="27,90",
 		width=0.75];
-	1.0	[end=7,
-		height=0.5,
-		highlights="[True, True, True, True, True, True, True, True]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>1.0:&nbsp;</TD><TD><FONT FACE='Courier New'><B>A</B>&nbsp;…&nbsp;<B>C</B></FONT></TD></TR></TABLE>>,
+	1	[height=0.5,
+		highlights="[True, True, True, True, True, True, True, True, False, False, True, True, True, True, True, True]",
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0' CELLPADDING='5'><TR><TD BORDER='0' PORT='caption'>1: </TD><TD PORT='0'><FONT FACE='Courier New'><B>A</B><SUB>0</SUB></FONT></TD>
+<TD PORT='1'><FONT FACE='Courier New'><B>T</B><SUB>1</SUB></FONT></TD>
+<TD PORT='2'><FONT FACE='Courier New'><B>G</B><SUB>2</SUB></FONT></TD>
+<TD PORT='7'><FONT FACE='Courier New'><B>C</B><SUB>7</SUB></FONT></TD>
+<TD>…</TD>
+<TD PORT='10'><FONT FACE='Courier New'><B>C</B><SUB>10</SUB></FONT></TD>
+<TD>…</TD>
+<TD PORT='13'><FONT FACE='Courier New'><B>G</B><SUB>13</SUB></FONT></TD>
+<TD>…</TD>
+<TD PORT='14'><FONT FACE='Courier New'><B>G</B><SUB>14</SUB></FONT></TD>
+<TD PORT='15'><FONT FACE='Courier New'><B>C</B><SUB>15</SUB></FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=1,
-		pos="128,45",
-		sequence=ATGTATAC,
+		pos="245,90",
+		sequence=ATGTATACATCACGGC,
 		shape=none,
-		start=0,
-		width=1.0556];
-	source:e -> 1.0:caption	[pos="e,90,45 54,45 65.375,45 70.685,45 78.553,45",
-		reference=False];
-	1.8	[end=9,
-		height=0.5,
-		highlights="[False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>1.8:&nbsp;</TD><TD><FONT FACE='Courier New'>AT</FONT></TD></TR></TABLE>>,
-		margin=0,
-		original_node=1,
-		pos="229,72",
-		sequence=AT,
-		shape=none,
-		start=8,
-		width=0.75];
-	1.0:e -> 1.8:caption	[pos="e,202.38,72 166,45 181.41,45 182.75,60.827 191.56,68.246",
-		reference=True,
-		style=dashed];
-	2.0	[end=1,
-		height=0.5,
-		highlights="[True, True]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>2.0:&nbsp;</TD><TD><FONT FACE='Courier New'><B>T</B><B>G</B></FONT></TD></TR></TABLE>>,
-		margin=0,
-		original_node=2,
-		pos="229,18",
-		sequence=TG,
-		shape=none,
-		start=0,
-		width=0.75];
-	1.0:e -> 2.0:caption	[pos="e,202.38,18 166,45 181.41,45 182.75,29.173 191.56,21.754",
-		reference=False];
-	1.10	[end=15,
-		height=0.5,
-		highlights="[True, True, True, True, True, True]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>1.10:&nbsp;</TD><TD><FONT FACE='Courier New'><B>C</B>&nbsp;…&nbsp;<B>C</B></FONT></TD></TR></TABLE>>,
-		margin=0,
-		original_node=1,
-		pos="333.38,45",
-		sequence=CACGGC,
-		shape=none,
-		start=10,
-		width=1.1493];
-	1.8:e -> 1.10:caption	[pos="e,292,45 256,72 271.31,72 272.56,56.173 281.27,48.754",
-		reference=True,
-		style=dashed];
-	2.0:e -> 1.10:caption	[pos="e,292,45 256,18 271.31,18 272.56,33.827 281.27,41.246",
-		reference=False];
+		width=4.8056];
+	source:e -> 1:caption	[constraint=False,
+		pos="e,72,90 54,90 56.75,90 58.791,90 60.61,90",
+		rank=same,
+		to_pos=0];
 	sink	[height=0.5,
 		label=end,
-		original_node=sink,
-		pos="437.75,45",
-		start=0,
+		pos="463,90",
 		width=0.75];
-	1.10:e -> sink:caption	[pos="e,410.5,45 374.75,45 382.63,45 391.08,45 399.12,45",
-		reference=False];
+	1:15 -> sink:w	[constraint=False,
+		from_pos=15,
+		pos="e,436,90 418,90 420.75,90 422.79,90 424.61,90",
+		rank=same];
+	2	[height=0.5,
+		highlights="[True, True]",
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>2: </TD><TD PORT='0'><FONT FACE='Courier New'><B>T</B></FONT></TD>
+<TD PORT='1'><FONT FACE='Courier New'><B>G</B></FONT></TD></TR></TABLE>>,
+		margin=0,
+		pos="210,18",
+		sequence=TG,
+		shape=none,
+		width=0.75];
+	1:7 -> 2:0	[from_pos=7,
+		pos="e,212,30.25 190.75,74.75 190.75,57.285 204.24,53.314 209.73,41.331",
+		to_pos=0];
+	2:1 -> 1:10	[from_pos=1,
+		pos="e,247.38,74.75 226.25,30.25 226.25,47.696 239.66,51.693 245.11,63.675",
+		to_pos=10];
 }

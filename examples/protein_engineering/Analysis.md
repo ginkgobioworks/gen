@@ -33,10 +33,14 @@ gen import --fasta P14779.fasta
 gen update --parts output/segments.fa --library output/layout.csv --path-name sp\|P14779\|CPXB_PRIM2 --start 0 --end 657
 ```
 
+![Recombination library](docs/figures/protein_figure_1.svg)
+
+VG can also be used to generate graphical representations, but overwrites the node identifiers. The identifiers can be restored by operating as follows:
 ```console
+vg convert --gfa-in library.gfa --gfa-trans translation_table.txt --vg-out | vg view --vg-in - --dot --color --simple-dot | dot -Tsvg -o library.svg
+
 IN='P450_chimera.svg'; cp $IN ${IN%.*}_fixed.${IN##*.} && while IFS=$'\t' read _ new old; do sed "s#font-size=\"14.00\">$old</text>#font-size=\"14.00\">$new</text>#g" ${IN%.*}_fixed.${IN##*.} > temp_file.html && mv temp_file.html ${IN%.*}_fixed.${IN##*.}; done < translation_table.txt
 ```
-
 
 ## Site Saturation Mutagenesis
 GB1 dataset: Adaptation in protein fitness landscapes is facilitated by indirect paths
