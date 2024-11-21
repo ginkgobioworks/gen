@@ -33,7 +33,7 @@ gen import --fasta P14779.fasta
 gen update --parts output/segments.fa --library output/layout.csv --path-name sp\|P14779\|CPXB_PRIM2 --start 0 --end 657
 ```
 
-![Recombination library](docs/figures/protein_figure_1.svg)
+![Recombination library](../../docs/figures/protein_figure_1.svg)
 
 VG can also be used to generate graphical representations, but overwrites the node identifiers. The identifiers can be restored by operating as follows:
 ```console
