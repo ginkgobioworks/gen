@@ -1,0 +1,78 @@
+strict digraph "" {
+	graph [bb="0,0,486.75,90",
+		overlap=scale,
+		rankdir=LR,
+		splines=true
+	];
+	node [label="\N"];
+	source	[end=-1,
+		height=0.5,
+		label=start,
+		original_node=source,
+		pos="27,45",
+		width=0.75];
+	1.0	[end=7,
+		height=0.5,
+		highlights="[True, True, True, True, True, True, True, True]",
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>1.0:&nbsp;</TD><TD><FONT FACE='Courier New'><B>A</B>&nbsp;…&nbsp;<B>C</B></FONT></TD></TR></TABLE>>,
+		margin=0,
+		original_node=1,
+		pos="128,45",
+		sequence=ATGTATAC,
+		shape=none,
+		start=0,
+		width=1.0556];
+	source:e -> 1.0:caption	[pos="e,90,45 54,45 65.375,45 70.685,45 78.553,45",
+		reference=False];
+	1.8	[end=9,
+		height=0.5,
+		highlights="[False, False]",
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>1.8:&nbsp;</TD><TD><FONT FACE='Courier New'>A&nbsp;…&nbsp;T</FONT></TD></TR></TABLE>>,
+		margin=0,
+		original_node=1,
+		pos="240,72",
+		sequence=AT,
+		shape=none,
+		start=8,
+		width=1.0556];
+	1.0:e -> 1.8:caption	[pos="e,202,72 166,45 181.31,45 182.56,60.827 191.27,68.246",
+		reference=True,
+		style=dashed];
+	2.0	[end=1,
+		height=0.5,
+		highlights="[True, True]",
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>2.0:&nbsp;</TD><TD><FONT FACE='Courier New'><B>T</B>&nbsp;…&nbsp;<B>G</B></FONT></TD></TR></TABLE>>,
+		margin=0,
+		original_node=2,
+		pos="240,18",
+		sequence=TG,
+		shape=none,
+		start=0,
+		width=1.0556];
+	1.0:e -> 2.0:caption	[pos="e,202,18 166,45 181.31,45 182.56,29.173 191.27,21.754",
+		reference=False];
+	1.10	[end=15,
+		height=0.5,
+		highlights="[True, True, True, True, True, True]",
+		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>1.10:&nbsp;</TD><TD><FONT FACE='Courier New'><B>C</B>&nbsp;…&nbsp;<B>C</B></FONT></TD></TR></TABLE>>,
+		margin=0,
+		original_node=1,
+		pos="355.38,45",
+		sequence=CACGGC,
+		shape=none,
+		start=10,
+		width=1.1493];
+	1.8:e -> 1.10:caption	[pos="e,314,45 278,72 293.31,72 294.56,56.173 303.27,48.754",
+		reference=True,
+		style=dashed];
+	2.0:e -> 1.10:caption	[pos="e,314,45 278,18 293.31,18 294.56,33.827 303.27,41.246",
+		reference=False];
+	sink	[height=0.5,
+		label=end,
+		original_node=sink,
+		pos="459.75,45",
+		start=0,
+		width=0.75];
+	1.10:e -> sink:caption	[pos="e,432.5,45 396.75,45 404.63,45 413.08,45 421.12,45",
+		reference=False];
+}

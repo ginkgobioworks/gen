@@ -31,7 +31,6 @@ gen init
 gen defaults --database test.db --collection protein
 gen import --fasta P14779.fasta
 gen update --parts output/segments.fa --library output/layout.csv --path-name sp\|P14779\|CPXB_PRIM2 --start 0 --end 657
-
 ```
 
 ```console
