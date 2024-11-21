@@ -74,15 +74,7 @@ pub fn update_with_gaf<'a, P>(
 {
     // Given a gaf, this will incorporate the alignment into the specified graph, creating new nodes.
 
-    let binding = gaf_path.clone();
-    let (mut session, operation) = operation_management::start_operation(
-        conn,
-        op_conn,
-        binding.as_ref().to_str().unwrap(),
-        FileTypes::GAF,
-        "insert_via_gaf",
-        collection_name,
-    );
+    let mut session = operation_management::start_operation(conn);
 
     let parent_sample = parent_sample.into();
     let sample_name = sample_name
@@ -168,7 +160,7 @@ pub fn update_with_gaf<'a, P>(
 
     let mut gaf_changes: HashMap<String, HashMap<String, (i64, Strand, i64)>> = HashMap::new();
 
-    if let Ok(lines) = read_lines(gaf_path) {
+    if let Ok(lines) = read_lines(&gaf_path) {
         for line in lines.map_while(Result::ok) {
             let entry = re.captures(&line).unwrap();
             let aln_path = &entry["path"];
@@ -365,10 +357,15 @@ pub fn update_with_gaf<'a, P>(
     operation_management::end_operation(
         conn,
         op_conn,
-        &operation,
         &mut session,
+        collection_name,
+        gaf_path.as_ref().to_str().unwrap(),
+        FileTypes::GAF,
+        "insert_via_gaf",
         &format!("{change_count} updates."),
-    );
+        None,
+    )
+    .unwrap();
 }
 
 #[cfg(test)]

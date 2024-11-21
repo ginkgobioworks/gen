@@ -1,23 +1,22 @@
 use std::collections::HashMap;
 use std::str;
 
+use crate::calculate_hash;
 use crate::models::file_types::FileTypes;
-use crate::models::operations::{FileAddition, Operation, OperationSummary};
 use crate::models::{
     block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
     collection::Collection,
     edge::Edge,
-    metadata,
     node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
     path::Path,
     sequence::Sequence,
     strand::Strand,
 };
-use crate::{calculate_hash, operation_management};
+use crate::operation_management::{end_operation, start_operation};
 use noodles::fasta;
 use rusqlite;
-use rusqlite::{session, Connection};
+use rusqlite::Connection;
 
 pub fn import_fasta(
     fasta: &String,
@@ -26,21 +25,9 @@ pub fn import_fasta(
     conn: &Connection,
     operation_conn: &Connection,
 ) {
-    let mut session = session::Session::new(conn).unwrap();
-    operation_management::attach_session(&mut session);
-    let change = FileAddition::create(operation_conn, fasta, FileTypes::Fasta);
+    let mut session = start_operation(conn);
 
     let mut reader = fasta::io::reader::Builder.build_from_path(fasta).unwrap();
-
-    let db_uuid = metadata::get_db_uuid(conn);
-
-    let operation = Operation::create(
-        operation_conn,
-        &db_uuid,
-        name.to_string(),
-        "fasta_addition",
-        change.id,
-    );
 
     let collection = if !Collection::exists(conn, name) {
         Collection::create(conn, name)
@@ -111,11 +98,20 @@ pub fn import_fasta(
     for (path_name, change_count) in summary.iter() {
         summary_str.push_str(&format!(" {path_name}: {change_count} changes.\n"));
     }
-    OperationSummary::create(operation_conn, operation.id, &summary_str);
+
+    end_operation(
+        conn,
+        operation_conn,
+        &mut session,
+        name,
+        fasta,
+        FileTypes::Fasta,
+        "fasta_addition",
+        &summary_str,
+        None,
+    )
+    .unwrap();
     println!("Created it");
-    let mut output = Vec::new();
-    session.changeset_strm(&mut output).unwrap();
-    operation_management::write_changeset(conn, &operation, &output);
 }
 
 #[cfg(test)]
