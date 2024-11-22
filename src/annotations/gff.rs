@@ -164,18 +164,18 @@ mod tests {
                 assert_eq!(record.source(), "gen-test");
                 assert_eq!(record.ty(), "Region");
                 // Full region annotation
-                // Original sequence has 34 bp
-                // The edit replaces (15, 25) with a 2 bp sequence
-                // New sequence length is 26
+                // Original sequence is on the full region, [0, 34) range (length 34)
+                // The edit replaces [15, 25) with a 2 bp sequence
+                // New sequence length is 34 - 8 = 26
                 assert_eq!(record.start().get(), 1);
                 assert_eq!(record.end().get(), 26);
             } else {
                 assert_eq!(record.reference_sequence_name(), "m123");
                 assert_eq!(record.source(), "gen-test");
                 assert_eq!(record.ty(), "Gene");
-                // Gene annotation, was on (5, 20)
-                // Replaced (15, 25) with a 2 bp sequence
-                // New gene annotation is (5, 15)
+                // Gene annotation, was on [5, 20)
+                // Replaced [15, 25) with a 2 bp sequence
+                // New gene annotation is [5, 15)
                 assert_eq!(record.start().get(), 5);
                 assert_eq!(record.end().get(), 15);
             }
