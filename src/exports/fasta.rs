@@ -1,11 +1,11 @@
 use noodles::fasta;
 use rusqlite;
-use rusqlite::{types::Value as SQLValue, Connection};
+use rusqlite::Connection;
 use std::fs::File;
 use std::path::PathBuf;
 
 use crate::models::block_group::BlockGroup;
-use crate::models::traits::*;
+use crate::models::sample::Sample;
 
 pub fn export_fasta(
     conn: &Connection,
@@ -13,23 +13,7 @@ pub fn export_fasta(
     sample_name: Option<&str>,
     filename: &PathBuf,
 ) {
-    let block_groups;
-    if let Some(sample_name) = sample_name {
-        block_groups = BlockGroup::query(
-            conn,
-            "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-            rusqlite::params!(
-                SQLValue::from(collection_name.to_string()),
-                SQLValue::from(sample_name.to_string()),
-            ),
-        );
-    } else {
-        block_groups = BlockGroup::query(
-            conn,
-            "select * from block_groups where collection_name = ?1 AND sample_name IS NULL;",
-            rusqlite::params!(SQLValue::from(collection_name.to_string())),
-        );
-    }
+    let block_groups = Sample::get_block_groups(conn, collection_name, sample_name);
 
     let file = File::create(filename).unwrap();
     let mut writer = fasta::io::Writer::new(file);
