@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::fs;
 use std::io::Write;
 use std::ops::Add;
-use tempdir::TempDir;
+use tempfile::tempdir;
 
 use crate::config::{get_or_create_gen_dir, BASE_DIR};
 use crate::graph::{GraphEdge, GraphNode};
@@ -54,7 +54,7 @@ pub fn get_operation_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Conn
 }
 
 pub fn setup_gen_dir() {
-    let tmp_dir = TempDir::new("gen").unwrap().into_path();
+    let tmp_dir = tempdir().unwrap().into_path();
     {
         BASE_DIR.with(|v| {
             let mut writer = v.write().unwrap();
