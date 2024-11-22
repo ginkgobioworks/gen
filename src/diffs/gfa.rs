@@ -1,0 +1,615 @@
+use itertools::Itertools;
+use rusqlite::Connection;
+use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::PathBuf;
+
+use crate::gfa::{path_line, write_links, write_segments, Link, Path as GFAPath, Segment};
+use crate::models::{block_group::BlockGroup, path::Path, sample::Sample};
+use crate::range::Range;
+
+pub fn gfa_sample_diff(
+    conn: &Connection,
+    collection_name: &str,
+    filename: &PathBuf,
+    from_sample_name: Option<&str>,
+    to_sample_name: &str,
+) {
+    // General note about how we encode segment IDs.  The node ID and the start coordinate in the
+    // sequence are all that's needed, because the end coordinate can be inferred from the length of
+    // the segment's sequence.  So the segment ID is of the form <node ID>.<start coordinate>
+
+    let source_block_groups = Sample::get_block_groups(conn, collection_name, from_sample_name);
+    let target_block_groups = Sample::get_block_groups(conn, collection_name, Some(to_sample_name));
+    let source_paths_by_name = source_block_groups
+        .iter()
+        .map(|bg| (bg.name.clone(), BlockGroup::get_current_path(conn, bg.id)))
+        .collect::<HashMap<String, Path>>();
+    let target_paths_by_name = target_block_groups
+        .iter()
+        .map(|bg| (bg.name.clone(), BlockGroup::get_current_path(conn, bg.id)))
+        .collect::<HashMap<String, Path>>();
+
+    let mut segments = HashSet::new();
+    let mut links = HashSet::new();
+    let mut paths = vec![];
+
+    for (target_name, target_path) in target_paths_by_name.iter() {
+        let source_path = source_paths_by_name.get(target_name).unwrap();
+        let source_sequence = source_path.sequence(conn);
+        let target_sequence = target_path.sequence(conn);
+
+        let mappings = source_path.find_block_mappings(conn, target_path);
+        if mappings.is_empty() {
+            continue;
+        }
+        let mut source_ranges = vec![];
+        let mut target_ranges = vec![];
+
+        let mut source_mapping_start = 0;
+        let mut target_mapping_start = 0;
+        for mapping in &mappings {
+            if mapping.source_range.start > source_mapping_start {
+                source_ranges.push(Range {
+                    start: source_mapping_start,
+                    end: mapping.source_range.start,
+                });
+            }
+            source_ranges.push(mapping.source_range.clone());
+            source_mapping_start = mapping.source_range.end;
+            if mapping.target_range.start > target_mapping_start {
+                target_ranges.push(Range {
+                    start: target_mapping_start,
+                    end: mapping.target_range.start,
+                });
+            }
+            target_ranges.push(mapping.target_range.clone());
+            target_mapping_start = mapping.target_range.end;
+        }
+
+        let source_len = source_sequence.len().try_into().unwrap();
+        if source_mapping_start < source_len {
+            source_ranges.push(Range {
+                start: source_mapping_start,
+                end: source_len,
+            });
+        }
+        let target_len = target_sequence.len().try_into().unwrap();
+        if target_mapping_start < target_len {
+            target_ranges.push(Range {
+                start: target_mapping_start,
+                end: target_len,
+            });
+        }
+
+        let mut source_segment_ids = vec![];
+        let mut source_strands = vec![];
+
+        let source_node_blocks = source_path.node_block_partition(conn, source_ranges);
+        for source_block in &source_node_blocks {
+            let start = usize::try_from(source_block.start).unwrap();
+            let end = usize::try_from(source_block.end).unwrap();
+            let segment = Segment {
+                sequence: source_sequence[start..end].to_string(),
+                node_id: source_block.node_id,
+                sequence_start: source_block.sequence_start,
+                strand: source_block.strand,
+            };
+            segments.insert(segment.clone());
+            source_segment_ids.push(segment.segment_id());
+            source_strands.push(source_block.strand);
+        }
+        for (block1, block2) in source_node_blocks.iter().tuple_windows() {
+            let source_segment = Segment {
+                sequence: "".to_string(),
+                node_id: block1.node_id,
+                sequence_start: block1.sequence_start,
+                strand: block1.strand,
+            };
+            let target_segment = Segment {
+                sequence: "".to_string(),
+                node_id: block2.node_id,
+                sequence_start: block2.sequence_start,
+                strand: block2.strand,
+            };
+
+            let link = Link {
+                source_segment_id: source_segment.segment_id(),
+                source_strand: block1.strand,
+                target_segment_id: target_segment.segment_id(),
+                target_strand: block2.strand,
+            };
+            links.insert(link);
+        }
+        let source_path_name = if from_sample_name.is_some() && from_sample_name.unwrap() != "" {
+            format!("{}.{}", from_sample_name.unwrap(), source_path.name)
+        } else {
+            source_path.name.clone()
+        };
+        let source_path = GFAPath {
+            name: source_path_name.clone(),
+            segment_ids: source_segment_ids,
+            node_strands: source_strands,
+        };
+        paths.push(source_path);
+
+        let target_node_blocks = target_path.node_block_partition(conn, target_ranges);
+        let mut target_segment_ids = vec![];
+        let mut target_strands = vec![];
+        for target_block in &target_node_blocks {
+            let start = usize::try_from(target_block.start).unwrap();
+            let end = usize::try_from(target_block.end).unwrap();
+            let segment = Segment {
+                sequence: target_sequence[start..end].to_string(),
+                node_id: target_block.node_id,
+                sequence_start: target_block.sequence_start,
+                strand: target_block.strand,
+            };
+            segments.insert(segment.clone());
+            target_segment_ids.push(segment.segment_id());
+            target_strands.push(target_block.strand);
+        }
+        for (block1, block2) in target_node_blocks.iter().tuple_windows() {
+            let source_segment = Segment {
+                sequence: "".to_string(),
+                node_id: block1.node_id,
+                sequence_start: block1.sequence_start,
+                strand: block1.strand,
+            };
+            let target_segment = Segment {
+                sequence: "".to_string(),
+                node_id: block2.node_id,
+                sequence_start: block2.sequence_start,
+                strand: block2.strand,
+            };
+            let link = Link {
+                source_segment_id: source_segment.segment_id(),
+                source_strand: block1.strand,
+                target_segment_id: target_segment.segment_id(),
+                target_strand: block2.strand,
+            };
+            links.insert(link);
+        }
+
+        let target_path_name = if !to_sample_name.is_empty() {
+            format!("{}.{}", to_sample_name, target_path.name)
+        } else {
+            target_path.name.clone()
+        };
+        let target_path = GFAPath {
+            name: target_path_name,
+            segment_ids: target_segment_ids,
+            node_strands: target_strands,
+        };
+        paths.push(target_path);
+    }
+
+    let file = File::create(filename).unwrap();
+    let mut writer = BufWriter::new(file);
+    write_segments(&mut writer, &segments.iter().cloned().collect());
+    write_links(&mut writer, &links.iter().cloned().collect());
+
+    for path in paths {
+        writer
+            .write_all(&path_line(&path).into_bytes())
+            .unwrap_or_else(|_| panic!("Error writing path {} to GFA stream", path.name));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    use crate::imports::gfa::import_gfa;
+    use crate::models::{
+        block_group::BlockGroup,
+        block_group_edge::BlockGroupEdge,
+        collection::Collection,
+        edge::Edge,
+        node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
+        sequence::Sequence,
+        strand::Strand,
+    };
+
+    use crate::test_helpers::get_connection;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_gfa_diff() {
+        // Sets up a basic graph and then exports it to a GFA file
+        let conn = get_connection(None);
+
+        let collection_name = "test collection";
+        Collection::create(&conn, collection_name);
+        let block_group = BlockGroup::create(&conn, collection_name, None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(&conn);
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTT")
+            .save(&conn);
+        let node1_id = Node::create(&conn, &sequence1.hash, None);
+        let node2_id = Node::create(&conn, &sequence2.hash, None);
+
+        let edge1 = Edge::create(
+            &conn,
+            PATH_START_NODE_ID,
+            0,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            &conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge3 = Edge::create(
+            &conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        BlockGroupEdge::bulk_create(&conn, block_group.id, &[edge1.id, edge2.id, edge3.id]);
+
+        let _path1 = Path::create(
+            &conn,
+            "parent",
+            block_group.id,
+            &[edge1.id, edge2.id, edge3.id],
+        );
+
+        // Set up child
+        let _child_sample = Sample::get_or_create_child(&conn, collection_name, "child", None);
+        let sequence3 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("CCCC")
+            .save(&conn);
+        let node3_id = Node::create(&conn, &sequence3.hash, None);
+        let edge4 = Edge::create(
+            &conn,
+            node1_id,
+            2,
+            Strand::Forward,
+            node3_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge5 = Edge::create(
+            &conn,
+            node3_id,
+            4,
+            Strand::Forward,
+            node1_id,
+            6,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let child_block_groups = Sample::get_block_groups(&conn, collection_name, Some("child"));
+        let child_block_group = child_block_groups.first().unwrap();
+        let original_child_path = BlockGroup::get_current_path(&conn, child_block_group.id);
+        let _child_path = original_child_path.new_path_with(&conn, 2, 6, &edge4, &edge5);
+        BlockGroupEdge::bulk_create(&conn, child_block_group.id, &[edge4.id, edge5.id]);
+
+        let temp_dir = tempdir().unwrap();
+        let gfa_path = temp_dir.path().join("parent-child-diff.gfa");
+        gfa_sample_diff(&conn, collection_name, &gfa_path, None, "child");
+
+        import_gfa(&gfa_path, "test collection 2", None, &conn);
+
+        let new_child_block_group = Collection::get_block_groups(&conn, "test collection 2")
+            .pop()
+            .unwrap();
+        let all_child_sequences =
+            BlockGroup::get_all_sequences(&conn, new_child_block_group.id, false);
+
+        // We've replaced the middle AAAA with CCCC, so expect that as the child sequence
+        assert_eq!(
+            all_child_sequences,
+            ["AAAAAAAATTTTTTTT", "AACCCCAATTTTTTTT"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<HashSet<String>>()
+        );
+
+        // Set up grandchild
+        let _grandchild_sample =
+            Sample::get_or_create_child(&conn, collection_name, "grandchild", Some("child"));
+        let sequence4 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("GGGG")
+            .save(&conn);
+        let node4_id = Node::create(&conn, &sequence4.hash, None);
+        let edge6 = Edge::create(
+            &conn,
+            node2_id,
+            2,
+            Strand::Forward,
+            node4_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge7 = Edge::create(
+            &conn,
+            node4_id,
+            4,
+            Strand::Forward,
+            node2_id,
+            6,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let grandchild_block_groups =
+            Sample::get_block_groups(&conn, collection_name, Some("grandchild"));
+        let grandchild_block_group = grandchild_block_groups.first().unwrap();
+        let original_grandchild_path =
+            BlockGroup::get_current_path(&conn, grandchild_block_group.id);
+        let _grandchild_path =
+            original_grandchild_path.new_path_with(&conn, 10, 14, &edge6, &edge7);
+        BlockGroupEdge::bulk_create(&conn, grandchild_block_group.id, &[edge6.id, edge7.id]);
+
+        let gfa_path = temp_dir.path().join("parent-grandchild-diff.gfa");
+        gfa_sample_diff(&conn, collection_name, &gfa_path, None, "grandchild");
+
+        import_gfa(&gfa_path, "test collection 3", None, &conn);
+
+        let new_grandchild_block_group = Collection::get_block_groups(&conn, "test collection 3")
+            .pop()
+            .unwrap();
+        let all_grandchild_sequences =
+            BlockGroup::get_all_sequences(&conn, new_grandchild_block_group.id, false);
+
+        // We've replaced the middle AAAA with CCCC and the middle TTTT with GGGG, so four possible sequences
+        assert_eq!(
+            all_grandchild_sequences,
+            [
+                "AAAAAAAATTTTTTTT",
+                "AACCCCAATTTTTTTT",
+                "AACCCCAATTGGGGTT",
+                "AAAAAAAATTGGGGTT"
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<HashSet<String>>()
+        );
+
+        let gfa_path = temp_dir.path().join("child-grandchild-diff.gfa");
+        gfa_sample_diff(
+            &conn,
+            collection_name,
+            &gfa_path,
+            Some("child"),
+            "grandchild",
+        );
+
+        import_gfa(&gfa_path, "test collection 4", None, &conn);
+
+        let new_grandchild_block_group = Collection::get_block_groups(&conn, "test collection 4")
+            .pop()
+            .unwrap();
+        let all_grandchild_sequences =
+            BlockGroup::get_all_sequences(&conn, new_grandchild_block_group.id, false);
+
+        assert_eq!(
+            all_grandchild_sequences,
+            ["AACCCCAATTTTTTTT", "AACCCCAATTGGGGTT"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<HashSet<String>>()
+        );
+    }
+
+    #[test]
+    fn test_gfa_diff_overlapping_inserts() {
+        // Sets up a basic graph and then exports it to a GFA file
+        let conn = get_connection(None);
+
+        let collection_name = "test collection";
+        Collection::create(&conn, collection_name);
+        let block_group = BlockGroup::create(&conn, collection_name, None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAAAAAAAAAA")
+            .save(&conn);
+        let node1_id = Node::create(&conn, &sequence1.hash, None);
+
+        let edge1 = Edge::create(
+            &conn,
+            PATH_START_NODE_ID,
+            0,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            &conn,
+            node1_id,
+            16,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        BlockGroupEdge::bulk_create(&conn, block_group.id, &[edge1.id, edge2.id]);
+
+        let _path1 = Path::create(&conn, "parent", block_group.id, &[edge1.id, edge2.id]);
+
+        // Set up child
+        let _child_sample = Sample::get_or_create_child(&conn, collection_name, "child", None);
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("CCCC")
+            .save(&conn);
+        let node2_id = Node::create(&conn, &sequence2.hash, None);
+        let edge3 = Edge::create(
+            &conn,
+            node1_id,
+            2,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge4 = Edge::create(
+            &conn,
+            node2_id,
+            4,
+            Strand::Forward,
+            node1_id,
+            6,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let child_block_groups = Sample::get_block_groups(&conn, collection_name, Some("child"));
+        let child_block_group = child_block_groups.first().unwrap();
+        let original_child_path = BlockGroup::get_current_path(&conn, child_block_group.id);
+        let _child_path = original_child_path.new_path_with(&conn, 2, 6, &edge3, &edge4);
+        BlockGroupEdge::bulk_create(&conn, child_block_group.id, &[edge3.id, edge4.id]);
+
+        let temp_dir = tempdir().unwrap();
+        let gfa_path = temp_dir.path().join("parent-child-diff.gfa");
+        gfa_sample_diff(&conn, collection_name, &gfa_path, None, "child");
+
+        import_gfa(&gfa_path, "test collection 2", None, &conn);
+
+        let new_child_block_group = Collection::get_block_groups(&conn, "test collection 2")
+            .pop()
+            .unwrap();
+        let all_child_sequences =
+            BlockGroup::get_all_sequences(&conn, new_child_block_group.id, false);
+
+        // We've replaced [2, 6) of AAAA with CCCC
+        assert_eq!(
+            all_child_sequences,
+            ["AAAAAAAAAAAAAAAA", "AACCCCAAAAAAAAAA"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<HashSet<String>>()
+        );
+
+        // Set up grandchild
+        let _grandchild_sample =
+            Sample::get_or_create_child(&conn, collection_name, "grandchild", Some("child"));
+        let sequence3 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("GGGG")
+            .save(&conn);
+        let node3_id = Node::create(&conn, &sequence3.hash, None);
+        let edge5 = Edge::create(
+            &conn,
+            node2_id,
+            2,
+            Strand::Forward,
+            node3_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge6 = Edge::create(
+            &conn,
+            node3_id,
+            4,
+            Strand::Forward,
+            node1_id,
+            10,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let grandchild_block_groups =
+            Sample::get_block_groups(&conn, collection_name, Some("grandchild"));
+        let grandchild_block_group = grandchild_block_groups.first().unwrap();
+        let original_grandchild_path =
+            BlockGroup::get_current_path(&conn, grandchild_block_group.id);
+        let _grandchild_path = original_grandchild_path.new_path_with(&conn, 4, 10, &edge5, &edge6);
+        BlockGroupEdge::bulk_create(&conn, grandchild_block_group.id, &[edge5.id, edge6.id]);
+
+        let gfa_path = temp_dir.path().join("parent-grandchild-diff.gfa");
+        gfa_sample_diff(&conn, collection_name, &gfa_path, None, "grandchild");
+
+        import_gfa(&gfa_path, "test collection 3", None, &conn);
+
+        let new_grandchild_block_group = Collection::get_block_groups(&conn, "test collection 3")
+            .pop()
+            .unwrap();
+        let all_grandchild_sequences =
+            BlockGroup::get_all_sequences(&conn, new_grandchild_block_group.id, false);
+
+        // Original is AAAAAAAAAAAAAAAA
+        // Grandchild is AACCGGGGAAAAAA
+        // Because the grandchild change overlaps with the child change, there are no other possibiiities
+        assert_eq!(
+            all_grandchild_sequences,
+            ["AAAAAAAAAAAAAAAA", "AACCGGGGAAAAAA"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<HashSet<String>>()
+        );
+
+        let gfa_path = temp_dir.path().join("child-grandchild-diff.gfa");
+        gfa_sample_diff(
+            &conn,
+            collection_name,
+            &gfa_path,
+            Some("child"),
+            "grandchild",
+        );
+
+        import_gfa(&gfa_path, "test collection 4", None, &conn);
+
+        let new_grandchild_block_group = Collection::get_block_groups(&conn, "test collection 4")
+            .pop()
+            .unwrap();
+        let all_grandchild_sequences =
+            BlockGroup::get_all_sequences(&conn, new_grandchild_block_group.id, false);
+
+        // Child is      AACCCCAAAAAAAAAA
+        // Grandchild is AACCGGGGAAAAAA
+        assert_eq!(
+            all_grandchild_sequences,
+            ["AACCCCAAAAAAAAAA", "AACCGGGGAAAAAA"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<HashSet<String>>()
+        );
+    }
+}
