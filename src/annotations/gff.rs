@@ -26,23 +26,23 @@ pub fn propagate_gff(
 
     let source_block_groups = Sample::get_block_groups(conn, collection_name, from_sample_name);
     let target_block_groups = Sample::get_block_groups(conn, collection_name, Some(to_sample_name));
-    let source_paths_by_name = source_block_groups
+    let source_paths_by_bg_name = source_block_groups
         .iter()
         .map(|bg| (bg.name.clone(), BlockGroup::get_current_path(conn, bg.id)))
         .collect::<HashMap<String, Path>>();
-    let target_paths_by_name = target_block_groups
+    let target_paths_by_bg_name = target_block_groups
         .iter()
         .map(|bg| (bg.name.clone(), BlockGroup::get_current_path(conn, bg.id)))
         .collect::<HashMap<String, Path>>();
 
-    let mut path_mappings_by_name = HashMap::new();
-    for (name, target_path) in target_paths_by_name.iter() {
-        let source_path = source_paths_by_name.get(name).unwrap();
+    let mut path_mappings_by_bg_name = HashMap::new();
+    for (name, target_path) in target_paths_by_bg_name.iter() {
+        let source_path = source_paths_by_bg_name.get(name).unwrap();
         let mapping = source_path.get_mapping_tree(conn, target_path);
-        path_mappings_by_name.insert(name, mapping);
+        path_mappings_by_bg_name.insert(name, mapping);
     }
 
-    let sequence_lengths_by_path_name = target_paths_by_name
+    let sequence_lengths_by_path_name = target_paths_by_bg_name
         .iter()
         .map(|(name, path)| (name.clone(), path.sequence(conn).len() as i64))
         .collect::<HashMap<String, i64>>();
@@ -55,7 +55,7 @@ pub fn propagate_gff(
             start: record.start().get() as i64,
             end: record.end().get() as i64,
         };
-        let mapping_tree = path_mappings_by_name.get(&path_name).unwrap();
+        let mapping_tree = path_mappings_by_bg_name.get(&path_name).unwrap();
         let sequence_length = sequence_lengths_by_path_name.get(&path_name).unwrap();
         let propagated_annotation =
             Path::propagate_annotation(annotation, mapping_tree, *sequence_length).unwrap();
