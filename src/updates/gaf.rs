@@ -358,7 +358,6 @@ pub fn update_with_gaf<'a, P>(
         conn,
         op_conn,
         &mut session,
-        collection_name,
         gaf_path.as_ref().to_str().unwrap(),
         FileTypes::GAF,
         "insert_via_gaf",

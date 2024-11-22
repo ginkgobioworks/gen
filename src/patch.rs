@@ -20,20 +20,20 @@ pub struct OperationPatch {
     changeset: Vec<u8>,
 }
 
-pub fn create_patch<W>(op_conn: &Connection, operations: &[i64], write_stream: &mut W)
+pub fn create_patch<W>(op_conn: &Connection, operations: &[String], write_stream: &mut W)
 where
     W: Write,
 {
     let mut patches = vec![];
     for operation in operations.iter() {
-        let operation = Operation::get_by_id(op_conn, *operation);
-        println!("Creating patch for Operation {id}", id = operation.id);
+        let operation = Operation::get_by_hash(op_conn, operation);
+        println!("Creating patch for Operation {id}", id = operation.hash);
         let dependency_path =
-            get_changeset_path(&operation).join(format!("{op_id}.dep", op_id = operation.id));
+            get_changeset_path(&operation).join(format!("{op_id}.dep", op_id = operation.hash));
         let dependencies: operation_management::DependencyModels =
             serde_json::from_reader(fs::File::open(dependency_path).unwrap()).unwrap();
         let change_path =
-            get_changeset_path(&operation).join(format!("{op_id}.cs", op_id = operation.id));
+            get_changeset_path(&operation).join(format!("{op_id}.cs", op_id = operation.hash));
         let mut file = fs::File::open(change_path).unwrap();
         let mut contents = vec![];
         file.read_to_end(&mut contents).unwrap();
@@ -103,14 +103,14 @@ mod tests {
         let operation_conn = &get_operation_connection(None);
         setup_db(operation_conn, &db_uuid);
         let collection = "test".to_string();
-        import_fasta(
+        let op_1 = import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &collection,
             false,
             conn,
             operation_conn,
         );
-        update_with_vcf(
+        let op_2 = update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
             &collection,
             "".to_string(),
@@ -120,7 +120,7 @@ mod tests {
             None,
         );
         let mut write_stream: Vec<u8> = Vec::new();
-        create_patch(operation_conn, &[1, 2], &mut write_stream);
+        create_patch(operation_conn, &[op_1.hash, op_2.hash], &mut write_stream);
         load_patches(&write_stream[..]);
     }
 
@@ -138,14 +138,14 @@ mod tests {
         setup_db(operation_conn, &db_uuid);
         setup_db(operation_conn2, &db_uuid2);
         let collection = "test".to_string();
-        import_fasta(
+        let op_1 = import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &collection,
             false,
             conn,
             operation_conn,
         );
-        update_with_vcf(
+        let op_2 = update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
             &collection,
             "".to_string(),
@@ -155,7 +155,7 @@ mod tests {
             None,
         );
         let mut write_stream: Vec<u8> = Vec::new();
-        create_patch(operation_conn, &[1, 2], &mut write_stream);
+        create_patch(operation_conn, &[op_1.hash, op_2.hash], &mut write_stream);
         let patches = load_patches(&write_stream[..]);
         apply_patches(conn2, operation_conn2, &patches);
         apply_patches(conn, operation_conn, &patches);

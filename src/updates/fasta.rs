@@ -130,7 +130,6 @@ pub fn update_with_fasta(
         conn,
         operation_conn,
         &mut session,
-        collection_name,
         fasta_file_path,
         FileTypes::Fasta,
         "fasta_update",

@@ -6,6 +6,7 @@ use crate::models::{
     block_group::{BlockGroup, BlockGroupData, PathCache, PathChange},
     file_types::FileTypes,
     node::Node,
+    operations::Operation,
     path::{Path, PathBlock},
     sample::Sample,
     sequence::Sequence,
@@ -172,7 +173,7 @@ pub fn update_with_vcf<'a>(
     conn: &Connection,
     operation_conn: &Connection,
     coordinate_frame: impl Into<Option<&'a str>>,
-) {
+) -> Operation {
     let coordinate_frame = coordinate_frame.into();
 
     let mut session = start_operation(conn);
@@ -458,14 +459,13 @@ pub fn update_with_vcf<'a>(
         conn,
         operation_conn,
         &mut session,
-        collection_name,
         vcf_path,
         FileTypes::VCF,
         "vcf_addition",
         &summary_str,
         None,
     )
-    .unwrap();
+    .unwrap()
 }
 
 #[cfg(test)]

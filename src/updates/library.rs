@@ -191,7 +191,6 @@ pub fn update_with_library(
         conn,
         operation_conn,
         &mut session,
-        collection_name,
         library_file_path,
         FileTypes::CSV,
         "library_csv_update",

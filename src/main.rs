@@ -39,19 +39,19 @@ fn get_default_collection(conn: &Connection) -> Option<String> {
     stmt.query_row((), |row| row.get(0)).unwrap()
 }
 
-fn parse_patch_operations(operations: &str) -> Vec<i64> {
+fn parse_patch_operations(operations: &str) -> Vec<String> {
     let mut results = vec![];
     for operation in operations.split(",") {
-        if operation.contains("..") {
-            let mut it = operation.split("..");
-            let start = it.next().unwrap().parse::<i64>().unwrap();
-            let end = it.next().unwrap().parse::<i64>().unwrap();
-            for i in start..end + 1 {
-                results.push(i)
-            }
-        } else {
-            results.push(operation.parse::<i64>().unwrap());
-        }
+        // if operation.contains("..") {
+        //     let mut it = operation.split("..");
+        //     let start = it.next().unwrap().parse::<i64>().unwrap();
+        //     let end = it.next().unwrap().parse::<i64>().unwrap();
+        //     for i in start..end + 1 {
+        //         results.push(i)
+        //     }
+        // } else {
+        results.push(operation.to_string());
+        // }
     }
     results
 }
@@ -182,15 +182,15 @@ enum Commands {
         /// The branch identifier to migrate to
         #[arg(short, long)]
         branch: Option<String>,
-        /// The operation id to move to
+        /// The operation hash to move to
         #[clap(index = 1)]
-        id: Option<i64>,
+        hash: Option<String>,
     },
     /// Reset a branch to a previous operation
     Reset {
-        /// The operation id to reset to
+        /// The operation hash to reset to
         #[clap(index = 1)]
-        id: i64,
+        hash: String,
     },
     /// View operations carried out against a database
     Operations {
@@ -200,9 +200,9 @@ enum Commands {
     },
     /// Apply an operation to a branch
     Apply {
-        /// The operation id to apply
+        /// The operation hash to apply
         #[clap(index = 1)]
-        id: i64,
+        hash: String,
     },
     /// Export sequence data
     Export {
@@ -434,14 +434,14 @@ fn main() {
                 col2 = "Summary"
             );
             for op in operations.iter() {
-                if op.id == current_op {
+                if op.hash == current_op {
                     indicator = ">";
                 } else {
                     indicator = "";
                 }
                 println!(
                     "{indicator:<3}{col1:>3}   {col2:<70}",
-                    col1 = op.id,
+                    col1 = op.hash,
                     col2 = op.change_type
                 );
             }
@@ -508,7 +508,10 @@ fn main() {
                     println!(
                         "{indicator:<3}{col1:<30}   {col2:<20}",
                         col1 = branch.name,
-                        col2 = branch.current_operation_id.unwrap_or(-1)
+                        col2 = branch
+                            .current_operation_hash
+                            .clone()
+                            .unwrap_or(String::new())
                     );
                 }
             } else if *merge {
@@ -529,14 +532,14 @@ fn main() {
                 println!("No options selected.");
             }
         }
-        Some(Commands::Apply { id }) => {
-            operation_management::apply(&conn, &operation_conn, *id, None);
+        Some(Commands::Apply { hash }) => {
+            operation_management::apply(&conn, &operation_conn, hash, None);
         }
-        Some(Commands::Checkout { branch, id }) => {
-            operation_management::checkout(&conn, &operation_conn, &db_uuid, branch, *id);
+        Some(Commands::Checkout { branch, hash }) => {
+            operation_management::checkout(&conn, &operation_conn, &db_uuid, branch, hash.clone());
         }
-        Some(Commands::Reset { id }) => {
-            operation_management::reset(&conn, &operation_conn, &db_uuid, *id);
+        Some(Commands::Reset { hash }) => {
+            operation_management::reset(&conn, &operation_conn, &db_uuid, hash);
         }
         Some(Commands::Export {
             name,

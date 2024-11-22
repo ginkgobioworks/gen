@@ -9,6 +9,7 @@ use crate::models::{
     collection::Collection,
     edge::Edge,
     node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
+    operations::Operation,
     path::Path,
     sequence::Sequence,
     strand::Strand,
@@ -24,7 +25,7 @@ pub fn import_fasta(
     shallow: bool,
     conn: &Connection,
     operation_conn: &Connection,
-) {
+) -> Operation {
     let mut session = start_operation(conn);
 
     let mut reader = fasta::io::reader::Builder.build_from_path(fasta).unwrap();
@@ -99,11 +100,10 @@ pub fn import_fasta(
         summary_str.push_str(&format!(" {path_name}: {change_count} changes.\n"));
     }
 
-    end_operation(
+    let op = end_operation(
         conn,
         operation_conn,
         &mut session,
-        name,
         fasta,
         FileTypes::Fasta,
         "fasta_addition",
@@ -112,6 +112,7 @@ pub fn import_fasta(
     )
     .unwrap();
     println!("Created it");
+    op
 }
 
 #[cfg(test)]
