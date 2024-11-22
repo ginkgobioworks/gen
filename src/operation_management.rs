@@ -1,16 +1,3 @@
-use std::collections::{HashMap, HashSet};
-use std::io::{Read, Write};
-use std::{fs, path::PathBuf, str};
-
-use fallible_streaming_iterator::FallibleStreamingIterator;
-use itertools::Itertools;
-use petgraph::Direction;
-use rusqlite;
-use rusqlite::session::ChangesetIter;
-use rusqlite::types::{FromSql, Value};
-use rusqlite::{session, Connection};
-use serde::{Deserialize, Serialize};
-
 use crate::config::get_changeset_path;
 use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group::BlockGroup;
@@ -28,6 +15,18 @@ use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 use crate::models::traits::*;
+use fallible_streaming_iterator::FallibleStreamingIterator;
+use itertools::Itertools;
+use petgraph::Direction;
+use rusqlite;
+use rusqlite::session::ChangesetIter;
+use rusqlite::types::{FromSql, Value};
+use rusqlite::{session, Connection};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::collections::{HashMap, HashSet};
+use std::io::{Read, Write};
+use std::{fs, path::PathBuf, str};
 /* General information
 
 Changesets from sqlite will be created in the order that operations are applied in the database,
@@ -255,7 +254,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
     serde_json::to_vec(&s).unwrap()
 }
 
-pub fn write_changeset(conn: &Connection, operation: &Operation, changes: &[u8]) {
+pub fn write_changeset(operation: &Operation, changes: &[u8], dependencies: &[u8]) {
     let change_path =
         get_changeset_path(operation).join(format!("{op_id}.cs", op_id = operation.id));
     let dependency_path =
@@ -263,9 +262,7 @@ pub fn write_changeset(conn: &Connection, operation: &Operation, changes: &[u8])
 
     let mut dependency_file = fs::File::create_new(&dependency_path)
         .unwrap_or_else(|_| panic!("Unable to open {dependency_path:?}"));
-    dependency_file
-        .write_all(&get_changeset_dependencies(conn, changes))
-        .unwrap();
+    dependency_file.write_all(dependencies).unwrap();
 
     let mut file = fs::File::create_new(&change_path)
         .unwrap_or_else(|_| panic!("Unable to open {change_path:?}"));
@@ -751,36 +748,38 @@ pub fn reset(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_i
     OperationState::set_operation(operation_conn, db_uuid, op_id);
 }
 
-pub fn apply(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_id: i64) {
-    let mut session = session::Session::new(conn).unwrap();
-    attach_session(&mut session);
-    let change = FileAddition::create(operation_conn, &format!("{op_id}.cs"), FileTypes::Changeset);
-    apply_changeset(conn, &Operation::get_by_id(operation_conn, op_id));
-    let operation = Operation::create(
+pub fn apply<'a>(
+    conn: &Connection,
+    operation_conn: &Connection,
+    op_id: i64,
+    force_hash: impl Into<Option<&'a str>>,
+) {
+    let mut session = start_operation(conn);
+    let operation = Operation::get_by_id(operation_conn, op_id);
+    apply_changeset(conn, &operation);
+    end_operation(
+        conn,
         operation_conn,
-        db_uuid,
+        &mut session,
         None,
+        &format!("{op_id}.cs"),
+        FileTypes::Changeset,
         "changeset_application",
-        change.id,
-    );
-
-    OperationSummary::create(
-        operation_conn,
-        operation.id,
         &format!("Applied changeset {op_id}."),
-    );
-    let mut output = Vec::new();
-    session.changeset_strm(&mut output).unwrap();
-    write_changeset(conn, &operation, &output);
+        force_hash,
+    )
+    .unwrap();
 }
 
-pub fn merge(
+pub fn merge<'a>(
     conn: &Connection,
     operation_conn: &Connection,
     db_uuid: &str,
     source_branch: i64,
     other_branch: i64,
+    force_hash: impl Into<Option<&'a str>>,
 ) {
+    let hash_prefix = force_hash.into();
     let current_branch =
         OperationState::get_current_branch(operation_conn, db_uuid).expect("No current branch.");
     if source_branch != current_branch {
@@ -793,9 +792,18 @@ pub fn merge(
         .position(|op| !current_operations.contains(op))
         .expect("No common operations between two branches.");
     if first_different_op < other_operations.len() {
-        for operation in other_operations[first_different_op..].iter() {
+        for (index, operation) in other_operations[first_different_op..].iter().enumerate() {
             println!("Applying operation {op_id}", op_id = operation.id);
-            apply(conn, operation_conn, db_uuid, operation.id);
+            if let Some(hash) = hash_prefix {
+                apply(
+                    conn,
+                    operation_conn,
+                    operation.id,
+                    format!("{hash}-{index}").as_str(),
+                );
+            } else {
+                apply(conn, operation_conn, operation.id, None);
+            }
         }
     }
 }
@@ -827,39 +835,70 @@ pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Opera
     }
 }
 
-pub fn start_operation<'a>(
-    conn: &'a Connection,
-    operation_conn: &'a Connection,
-    file_path: &'a str,
-    file_type: FileTypes,
-    operation_description: &'a str,
-    name: &'a str,
-) -> (session::Session<'a>, Operation) {
+pub fn start_operation(conn: &Connection) -> session::Session {
     let mut session = session::Session::new(conn).unwrap();
     attach_session(&mut session);
-    let change = FileAddition::create(operation_conn, file_path, file_type);
-    let db_uuid = metadata::get_db_uuid(conn);
-    let operation = Operation::create(
-        operation_conn,
-        &db_uuid,
-        name.to_string(),
-        operation_description,
-        change.id,
-    );
-    (session, operation)
+    session
 }
 
-pub fn end_operation(
+#[allow(clippy::too_many_arguments)]
+pub fn end_operation<'a>(
     conn: &Connection,
     operation_conn: &Connection,
-    operation: &Operation,
     session: &mut session::Session,
+    collection_name: impl Into<Option<&'a str>>,
+    file_path: &str,
+    file_type: FileTypes,
+    operation_description: &'a str,
     summary_str: &str,
-) {
-    OperationSummary::create(operation_conn, operation.id, summary_str);
+    force_hash: impl Into<Option<&'a str>>,
+) -> Result<Operation, &'static str> {
+    let collection_name = collection_name.into();
+    let db_uuid = metadata::get_db_uuid(conn);
+    // determine if this operation has already happened
     let mut output = Vec::new();
     session.changeset_strm(&mut output).unwrap();
-    write_changeset(conn, operation, &output);
+
+    let dependencies = get_changeset_dependencies(conn, &output);
+
+    let hash = if let Some(hash) = force_hash.into() {
+        hash.to_string()
+    } else {
+        let mut hasher = Sha256::new();
+        hasher.update(&output[..]);
+        hasher.update(&dependencies[..]);
+        format!("{:x}", hasher.finalize())
+    };
+
+    operation_conn
+        .execute("SAVEPOINT new_operation;", [])
+        .unwrap();
+
+    let change = FileAddition::create(operation_conn, file_path, file_type);
+
+    match Operation::create(
+        operation_conn,
+        &db_uuid,
+        collection_name,
+        operation_description,
+        change.id,
+        &hash,
+    ) {
+        Ok(operation) => {
+            OperationSummary::create(operation_conn, operation.id, summary_str);
+            write_changeset(&operation, &output, &dependencies);
+            operation_conn
+                .execute("RELEASE SAVEPOINT new_operation;", [])
+                .unwrap();
+            Ok(operation)
+        }
+        Err(_) => {
+            operation_conn
+                .execute("ROLLBACK TRANSACTION TO SAVEPOINT new_operation;", [])
+                .unwrap();
+            Err("Operation already exists.")
+        }
+    }
 }
 
 pub fn attach_session(session: &mut session::Session) {
@@ -922,21 +961,30 @@ mod tests {
         get_connection, get_operation_connection, setup_block_group, setup_gen_dir,
     };
     use crate::updates::vcf::update_with_vcf;
-    use rusqlite::{session::Session, types::Value};
+    use rusqlite::types::Value;
     use std::path::{Path, PathBuf};
 
-    fn create_operation(
+    fn create_operation<'a>(
         conn: &Connection,
         op_conn: &Connection,
         file_path: &str,
         file_type: FileTypes,
         description: &str,
-        name: &str,
+        hash: impl Into<Option<&'a str>>,
     ) -> Operation {
-        let (mut session, op) =
-            start_operation(conn, op_conn, file_path, file_type, description, name);
-        end_operation(conn, op_conn, &op, &mut session, "test operation");
-        op
+        let mut session = start_operation(conn);
+        end_operation(
+            conn,
+            op_conn,
+            &mut session,
+            None,
+            file_path,
+            file_type,
+            description,
+            "test operation",
+            hash.into(),
+        )
+        .unwrap()
     }
 
     #[cfg(test)]
@@ -957,16 +1005,16 @@ mod tests {
                 op_conn,
                 "foo",
                 FileTypes::Fasta,
-                "blah",
                 "fasta_addition",
+                "op-1",
             );
             let op_2 = create_operation(
                 conn,
                 op_conn,
                 "foo",
                 FileTypes::Fasta,
-                "blah",
                 "fasta_addition",
+                "op-2",
             );
 
             let branch_1 = Branch::create(op_conn, db_uuid, "branch-1");
@@ -977,16 +1025,16 @@ mod tests {
                 op_conn,
                 "foo",
                 FileTypes::Fasta,
-                "blah",
                 "vcf_addition",
+                "op-3",
             );
             let op_4 = create_operation(
                 conn,
                 op_conn,
                 "foo",
                 FileTypes::Fasta,
-                "blah",
                 "vcf_addition",
+                "op-4",
             );
             checkout(conn, op_conn, db_uuid, &Some("branch-2".to_string()), None);
             let op_5 = create_operation(
@@ -994,20 +1042,27 @@ mod tests {
                 op_conn,
                 "foo",
                 FileTypes::Fasta,
-                "blah",
                 "vcf_addition",
+                "op-5",
             );
             let op_6 = create_operation(
                 conn,
                 op_conn,
                 "foo",
                 FileTypes::Fasta,
-                "blah",
                 "vcf_addition",
+                "op-6",
             );
 
             checkout(conn, op_conn, db_uuid, &Some("branch-1".to_string()), None);
-            merge(conn, op_conn, db_uuid, branch_1.id, branch_2.id);
+            merge(
+                conn,
+                op_conn,
+                db_uuid,
+                branch_1.id,
+                branch_2.id,
+                "merge-test",
+            );
 
             let b1_ops = Branch::get_operations(op_conn, branch_1.id)
                 .iter()
@@ -1034,7 +1089,8 @@ mod tests {
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, &db_uuid);
         let change = FileAddition::create(op_conn, "test", FileTypes::Fasta);
-        let operation = Operation::create(op_conn, &db_uuid, "test".to_string(), "test", change.id);
+        let operation =
+            Operation::create(op_conn, &db_uuid, "test", "test", change.id, "some-hash").unwrap();
         OperationState::set_operation(op_conn, &db_uuid, operation.id);
         assert_eq!(OperationState::get_operation(op_conn, &db_uuid).unwrap(), 1);
     }
@@ -1062,8 +1118,7 @@ mod tests {
             .save(conn);
         let existing_node_id = Node::create(conn, existing_seq.hash.as_str(), None);
 
-        let mut session = Session::new(conn).unwrap();
-        attach_session(&mut session);
+        let mut session = start_operation(conn);
 
         let random_seq = Sequence::new()
             .sequence_type("DNA")
@@ -1083,11 +1138,18 @@ mod tests {
             0,
         );
         BlockGroupEdge::bulk_create(conn, bg_id, &[new_edge.id]);
-        let mut output = Vec::new();
-        session.changeset_strm(&mut output).unwrap();
-        let change = FileAddition::create(op_conn, "test", FileTypes::Fasta);
-        let operation = Operation::create(op_conn, &db_uuid, "test".to_string(), "test", change.id);
-        write_changeset(conn, &operation, &output);
+        let operation = end_operation(
+            conn,
+            op_conn,
+            &mut session,
+            "test",
+            "test",
+            FileTypes::Fasta,
+            "test",
+            "test",
+            None,
+        )
+        .unwrap();
 
         let dependency_path =
             get_changeset_path(&operation).join(format!("{op_id}.dep", op_id = operation.id));
@@ -1313,7 +1375,7 @@ mod tests {
         );
 
         // apply changes from branch-1, it will be operation id 2
-        apply(conn, operation_conn, &db_uuid, 2);
+        apply(conn, operation_conn, 2, None);
 
         let foo_bg_id = BlockGroup::get_id(conn, &collection, Some("foo"), "m123");
         let patch_2_seqs = HashSet::from_iter(vec![
@@ -1503,56 +1565,46 @@ mod tests {
     fn test_reset_hides_operations() {
         setup_gen_dir();
         let fasta_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
-        let vcf_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.vcf");
         let conn = &mut get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let operation_conn = &get_operation_connection(None);
         setup_db(operation_conn, &db_uuid);
-        let collection = "test".to_string();
 
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
-            &collection,
+            "test-1",
             false,
             conn,
             operation_conn,
         );
 
-        update_with_vcf(
-            &vcf_path.to_str().unwrap().to_string(),
-            &collection,
-            "".to_string(),
-            "".to_string(),
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            "test-2",
+            false,
             conn,
             operation_conn,
-            None,
         );
-        update_with_vcf(
-            &vcf_path.to_str().unwrap().to_string(),
-            &collection,
-            "".to_string(),
-            "".to_string(),
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            "test-3",
+            false,
             conn,
             operation_conn,
-            None,
         );
-        update_with_vcf(
-            &vcf_path.to_str().unwrap().to_string(),
-            &collection,
-            "".to_string(),
-            "".to_string(),
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            "test-4",
+            false,
             conn,
             operation_conn,
-            None,
         );
-        update_with_vcf(
-            &vcf_path.to_str().unwrap().to_string(),
-            &collection,
-            "".to_string(),
-            "".to_string(),
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            "test-5",
+            false,
             conn,
             operation_conn,
-            None,
         );
 
         let branch_id = OperationState::get_current_branch(operation_conn, &db_uuid).unwrap();
@@ -1590,114 +1642,94 @@ mod tests {
         // We want to make sure if we reset branch a to 3 that branch b will still show its operations
         setup_gen_dir();
         let fasta_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
-        let vcf_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.vcf");
         let conn = &mut get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let operation_conn = &get_operation_connection(None);
         setup_db(operation_conn, &db_uuid);
-        let collection = "test".to_string();
 
         let main_branch = Branch::get_by_name(operation_conn, &db_uuid, "main").unwrap();
 
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
-            &collection,
+            "test-1",
             false,
             conn,
             operation_conn,
         );
 
-        update_with_vcf(
-            &vcf_path.to_str().unwrap().to_string(),
-            &collection,
-            "".to_string(),
-            "".to_string(),
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            "test-2",
+            false,
             conn,
             operation_conn,
-            None,
         );
 
         let branch_a = Branch::create(operation_conn, &db_uuid, "branch-a");
         OperationState::set_branch(operation_conn, &db_uuid, "branch-a");
-        update_with_vcf(
-            &vcf_path.to_str().unwrap().to_string(),
-            &collection,
-            "".to_string(),
-            "".to_string(),
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            "test-3",
+            false,
             conn,
             operation_conn,
-            None,
         );
-        update_with_vcf(
-            &vcf_path.to_str().unwrap().to_string(),
-            &collection,
-            "".to_string(),
-            "".to_string(),
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            "test-4",
+            false,
             conn,
             operation_conn,
-            None,
         );
-        update_with_vcf(
-            &vcf_path.to_str().unwrap().to_string(),
-            &collection,
-            "".to_string(),
-            "".to_string(),
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            "test-5",
+            false,
             conn,
             operation_conn,
-            None,
         );
         OperationState::set_branch(operation_conn, &db_uuid, "main");
         OperationState::set_operation(operation_conn, &db_uuid, 2);
-        update_with_vcf(
-            &vcf_path.to_str().unwrap().to_string(),
-            &collection,
-            "".to_string(),
-            "".to_string(),
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            "test-6",
+            false,
             conn,
             operation_conn,
-            None,
         );
-        update_with_vcf(
-            &vcf_path.to_str().unwrap().to_string(),
-            &collection,
-            "".to_string(),
-            "".to_string(),
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            "test-7",
+            false,
             conn,
             operation_conn,
-            None,
         );
-        update_with_vcf(
-            &vcf_path.to_str().unwrap().to_string(),
-            &collection,
-            "".to_string(),
-            "".to_string(),
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            "test-8",
+            false,
             conn,
             operation_conn,
-            None,
         );
         OperationState::set_branch(operation_conn, &db_uuid, "branch-a");
         OperationState::set_operation(operation_conn, &db_uuid, 5);
         let branch_b = Branch::create(operation_conn, &db_uuid, "branch-b");
         OperationState::set_branch(operation_conn, &db_uuid, "branch-b");
-        update_with_vcf(
-            &vcf_path.to_str().unwrap().to_string(),
-            &collection,
-            "".to_string(),
-            "".to_string(),
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            "test-9",
+            false,
             conn,
             operation_conn,
-            None,
         );
         OperationState::set_branch(operation_conn, &db_uuid, "branch-a");
         OperationState::set_operation(operation_conn, &db_uuid, 5);
-        update_with_vcf(
-            &vcf_path.to_str().unwrap().to_string(),
-            &collection,
-            "".to_string(),
-            "".to_string(),
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            "test-10",
+            false,
             conn,
             operation_conn,
-            None,
         );
 
         assert_eq!(

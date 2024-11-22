@@ -490,13 +490,14 @@ fn main() {
                     &db_uuid,
                     current_branch,
                     other_branch.id,
+                    None,
                 );
             } else {
                 println!("No options selected.");
             }
         }
         Some(Commands::Apply { id }) => {
-            operation_management::apply(&conn, &operation_conn, &db_uuid, *id);
+            operation_management::apply(&conn, &operation_conn, *id, None);
         }
         Some(Commands::Checkout { branch, id }) => {
             operation_management::checkout(&conn, &operation_conn, &db_uuid, branch, *id);

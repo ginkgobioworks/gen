@@ -28,14 +28,7 @@ pub fn update_with_fasta(
     end_coordinate: i64,
     fasta_file_path: &str,
 ) -> io::Result<()> {
-    let (mut session, operation) = operation_management::start_operation(
-        conn,
-        operation_conn,
-        fasta_file_path,
-        FileTypes::Fasta,
-        "fasta_update",
-        collection_name,
-    );
+    let mut session = operation_management::start_operation(conn);
 
     let mut fasta_reader = fasta::io::reader::Builder.build_from_path(fasta_file_path)?;
 
@@ -136,10 +129,15 @@ pub fn update_with_fasta(
     operation_management::end_operation(
         conn,
         operation_conn,
-        &operation,
         &mut session,
+        collection_name,
+        fasta_file_path,
+        FileTypes::Fasta,
+        "fasta_update",
         &summary_str,
-    );
+        None,
+    )
+    .unwrap();
 
     println!("Updated with fasta file: {}", fasta_file_path);
 
