@@ -1,4 +1,4 @@
-use crate::graph::{GraphEdge, GraphNode};
+use crate::gfa::{path_line, write_links, write_segments, Link, Path as GFAPath, Segment};
 use crate::models::{
     block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
@@ -12,7 +12,7 @@ use crate::models::{
 };
 use itertools::Itertools;
 use petgraph::prelude::DiGraphMap;
-use rusqlite::Connection;
+use rusqlite::{types::Value as SQLValue, Connection};
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -62,75 +62,47 @@ pub fn export_gfa(
     let file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(file);
 
-    write_segments(&mut writer, &blocks);
-    write_links(&mut writer, &graph);
-    write_paths(&mut writer, conn, collection_name, &blocks);
-}
-
-fn write_segments(writer: &mut BufWriter<File>, blocks: &Vec<GroupBlock>) {
-    for block in blocks {
-        if Node::is_terminal(block.node_id) {
-            continue;
-        }
-        writer
-            .write_all(&segment_line(&block.sequence(), block.node_id, block.start).into_bytes())
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Error writing segment with sequence {} to GFA stream",
-                    block.sequence(),
-                )
+    let mut segments = vec![];
+    for block in &blocks {
+        if !Node::is_terminal(block.node_id) {
+            segments.push(Segment {
+                sequence: block.sequence(),
+                node_id: block.node_id,
+                sequence_start: block.start,
+                // NOTE: We can't easily get the value for strand, but it doesn't matter
+                // because this value is only used for writing segments
+                strand: Strand::Forward,
             });
+        }
     }
-}
+    write_segments(&mut writer, &segments);
 
-fn segment_line(sequence: &str, node_id: i64, sequence_start: i64) -> String {
-    // NOTE: We encode the node ID and start coordinate in the segment ID
-    format!("S\t{}.{}\t{}\t*\n", node_id, sequence_start, sequence,)
-}
-
-fn write_links(writer: &mut BufWriter<File>, graph: &DiGraphMap<GraphNode, GraphEdge>) {
+    let mut links = vec![];
     for (source, target, edge_info) in graph.all_edges() {
-        if Node::is_terminal(source.node_id) || Node::is_terminal(target.node_id) {
-            continue;
-        }
-        writer
-            .write_all(
-                &link_line(
-                    source.node_id,
-                    source.sequence_start,
-                    edge_info.source_strand,
-                    target.node_id,
-                    target.sequence_start,
-                    edge_info.target_strand,
-                )
-                .into_bytes(),
-            )
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Error writing link from segment {:?} to {:?} to GFA stream",
-                    source, target,
-                )
-            });
-    }
-}
+        if !Node::is_terminal(source.node_id) && !Node::is_terminal(target.node_id) {
+            let source_segment = Segment {
+                sequence: "".to_string(),
+                node_id: source.node_id,
+                sequence_start: source.sequence_start,
+                strand: edge_info.source_strand,
+            };
+            let target_segment = Segment {
+                sequence: "".to_string(),
+                node_id: target.node_id,
+                sequence_start: target.sequence_start,
+                strand: edge_info.target_strand,
+            };
 
-fn link_line(
-    source_node_id: i64,
-    source_coordinate: i64,
-    source_strand: Strand,
-    target_node_id: i64,
-    target_coordinate: i64,
-    target_strand: Strand,
-) -> String {
-    format!(
-        "L\t{}.{}\t{}\t{}.{}\t{}\t0M\n",
-        source_node_id,
-        source_coordinate,
-        source_strand,
-        target_node_id,
-        target_coordinate,
-        target_strand
-    )
+            links.push(Link {
+                source_segment_id: source_segment.segment_id(),
+                source_strand: edge_info.source_strand,
+                target_segment_id: target_segment.segment_id(),
+                target_strand: edge_info.target_strand,
+            });
+        }
+    }
+    write_links(&mut writer, &links);
+    write_paths(&mut writer, conn, collection_name, &blocks);
 }
 
 // NOTE: A path is an immutable list of edges, but the sequence between the target of one edge and
@@ -207,20 +179,15 @@ fn write_paths(
         } else {
             path.name
         };
+        let path = GFAPath {
+            name: full_path_name.clone(),
+            segment_ids: graph_segment_ids,
+            node_strands,
+        };
         writer
-            .write_all(&path_line(&full_path_name, &graph_segment_ids, &node_strands).into_bytes())
+            .write_all(&path_line(&path).into_bytes())
             .unwrap_or_else(|_| panic!("Error writing path {} to GFA stream", full_path_name));
     }
-}
-
-fn path_line(path_name: &str, segment_ids: &[String], node_strands: &[Strand]) -> String {
-    let segments = segment_ids
-        .iter()
-        .zip(node_strands.iter())
-        .map(|(segment_id, node_strand)| format!("{}{}", segment_id, node_strand))
-        .collect::<Vec<String>>()
-        .join(",");
-    format!("P\t{}\t{}\t*\n", path_name, segments)
 }
 
 #[cfg(test)]
@@ -236,6 +203,7 @@ mod tests {
         node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
         path::PathBlock,
         sequence::Sequence,
+        strand::Strand,
     };
 
     use crate::test_helpers::{get_connection, setup_block_group, setup_gen_dir};
