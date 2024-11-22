@@ -430,7 +430,6 @@ impl Branch {
                     .collect::<Vec<String>>(),
             );
 
-            println!("g is {graph:?}");
             // remove all nodes not in our branch operations. We do this here because upstream operations
             // may be created in a different branch_id but shared with this branch.
             for node in graph.node_ids.clone().keys() {

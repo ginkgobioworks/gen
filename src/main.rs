@@ -16,6 +16,7 @@ use gen::updates::fasta::update_with_fasta;
 use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::update_with_vcf;
+use itertools::Itertools;
 use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
 use std::fs::File;
@@ -39,19 +40,72 @@ fn get_default_collection(conn: &Connection) -> Option<String> {
     stmt.query_row((), |row| row.get(0)).unwrap()
 }
 
-fn parse_patch_operations(operations: &str) -> Vec<String> {
+fn parse_patch_operations(
+    branch_operations: &[Operation],
+    head_hash: &str,
+    operations: &str,
+) -> Vec<String> {
     let mut results = vec![];
+    let (head_pos, _) = branch_operations
+        .iter()
+        .find_position(|op| op.hash == head_hash)
+        .expect("Current head position is not in branch.");
     for operation in operations.split(",") {
-        // if operation.contains("..") {
-        //     let mut it = operation.split("..");
-        //     let start = it.next().unwrap().parse::<i64>().unwrap();
-        //     let end = it.next().unwrap().parse::<i64>().unwrap();
-        //     for i in start..end + 1 {
-        //         results.push(i)
-        //     }
-        // } else {
-        results.push(operation.to_string());
-        // }
+        if operation.contains("..") {
+            let mut it = operation.split("..");
+            let start = it.next().unwrap().parse::<String>().unwrap();
+            let end = it.next().unwrap().parse::<String>().unwrap();
+
+            let start_hash = if start.starts_with("HEAD") {
+                if start.contains("~") {
+                    let mut it = start.rsplit("~");
+                    let count = it.next().unwrap().parse::<usize>().unwrap();
+                    branch_operations[head_pos - count].hash.clone()
+                } else {
+                    branch_operations[head_pos].hash.clone()
+                }
+            } else {
+                start
+            };
+
+            let end_hash = if end.starts_with("HEAD") {
+                if end.contains("~") {
+                    let mut it = end.rsplit("~");
+                    let count = it.next().unwrap().parse::<usize>().unwrap();
+                    branch_operations[head_pos - count].hash.clone()
+                } else {
+                    branch_operations[head_pos].hash.clone()
+                }
+            } else {
+                end
+            };
+            let start_pos = branch_operations
+                .iter()
+                .position(|op| op.hash.starts_with(start_hash.as_str()))
+                .unwrap_or_else(|| panic!("Unable to find starting hash {start_hash:?}"));
+            let end_pos = branch_operations
+                .iter()
+                .position(|op| op.hash.starts_with(end_hash.as_str()))
+                .unwrap_or_else(|| panic!("Unable to find end hash {end_hash:?}"));
+            results.extend(
+                branch_operations[start_pos..end_pos + 1]
+                    .iter()
+                    .map(|op| op.hash.clone()),
+            );
+        } else {
+            let hash = if operation.starts_with("HEAD") {
+                if operation.contains("~") {
+                    let mut it = operation.rsplit("~");
+                    let count = it.next().unwrap().parse::<usize>().unwrap();
+                    branch_operations[head_pos - count].hash.clone()
+                } else {
+                    branch_operations[head_pos].hash.clone()
+                }
+            } else {
+                operation.to_string()
+            };
+            results.push(hash);
+        }
     }
     results
 }
@@ -142,6 +196,9 @@ enum Commands {
     },
     #[command(name = "patch-create")]
     PatchCreate {
+        /// To create a patch against a non-checked out branch.
+        #[arg(short, long)]
+        branch: Option<String>,
         /// The patch name
         #[arg(short, long)]
         name: String,
@@ -568,8 +625,26 @@ fn main() {
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
         }
-        Some(Commands::PatchCreate { name, operation }) => {
-            let operations = parse_patch_operations(operation);
+        Some(Commands::PatchCreate {
+            name,
+            operation,
+            branch,
+        }) => {
+            let branch = if let Some(branch_name) = branch {
+                Branch::get_by_name(&operation_conn, &db_uuid, branch_name)
+                    .unwrap_or_else(|| panic!("No branch with name {branch_name} found."))
+            } else {
+                let current_branch_id =
+                    OperationState::get_current_branch(&operation_conn, &db_uuid)
+                        .expect("No current branch is checked out.");
+                Branch::get_by_id(&operation_conn, current_branch_id).unwrap()
+            };
+            let branch_ops = Branch::get_operations(&operation_conn, branch.id);
+            let operations = parse_patch_operations(
+                &branch_ops,
+                &branch.current_operation_hash.unwrap(),
+                operation,
+            );
             let mut f = File::create(format!("{name}.gz")).unwrap();
             patch::create_patch(&operation_conn, &operations, &mut f);
         }
