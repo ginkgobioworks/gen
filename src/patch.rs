@@ -1,6 +1,8 @@
 use crate::config::get_changeset_path;
+use crate::models::metadata::get_db_uuid;
 use crate::models::operations::Operation;
 use crate::operation_management;
+use crate::operation_management::{apply_changeset, write_changeset};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::{Compression, Decompress};
@@ -12,9 +14,9 @@ use std::path::Path;
 use std::{fs, path};
 
 #[derive(Serialize, Deserialize, Debug)]
-struct OperationPatch {
-    operation_id: i64,
-    dependencies: operation_management::DependencyModels,
+pub struct OperationPatch {
+    operation: Operation,
+    dependencies: Vec<u8>,
     changeset: Vec<u8>,
 }
 
@@ -25,6 +27,7 @@ where
     let mut patches = vec![];
     for operation in operations.iter() {
         let operation = Operation::get_by_id(op_conn, *operation);
+        println!("Creating patch for Operation {id}", id = operation.id);
         let dependency_path =
             get_changeset_path(&operation).join(format!("{op_id}.dep", op_id = operation.id));
         let dependencies: operation_management::DependencyModels =
@@ -35,14 +38,14 @@ where
         let mut contents = vec![];
         file.read_to_end(&mut contents).unwrap();
         patches.push(OperationPatch {
-            operation_id: operation.id,
-            dependencies,
+            operation,
+            dependencies: serde_json::to_vec(&dependencies).unwrap(),
             changeset: contents,
         })
     }
     let to_compress = serde_json::to_vec(&patches).unwrap();
     let mut e = GzEncoder::new(Vec::new(), Compression::default());
-    let _ = e.write(&to_compress).unwrap();
+    e.write_all(&to_compress).unwrap();
     let compressed = e.finish().unwrap();
     write_stream.write_all(&compressed).unwrap();
 }
@@ -52,10 +55,32 @@ where
     R: Read,
 {
     let mut d = GzDecoder::new(reader);
-    let mut s = String::new();
-    d.read_to_string(&mut s).unwrap();
-    let patches: Vec<OperationPatch> = serde_json::from_str(&s).unwrap();
+    let mut s = Vec::new();
+    d.read_to_end(&mut s).unwrap();
+    let patches: Vec<OperationPatch> = serde_json::from_slice(&s[..]).unwrap();
     patches
+}
+
+pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[OperationPatch]) {
+    let db_uuid = get_db_uuid(conn);
+    for patch in patches.iter() {
+        let op_info = &patch.operation;
+        match Operation::create(
+            op_conn,
+            &db_uuid,
+            &op_info.change_type,
+            op_info.change_id,
+            &op_info.hash,
+        ) {
+            Ok(new_op) => {
+                write_changeset(&new_op, &patch.changeset, &patch.dependencies[..]);
+                apply_changeset(conn, &new_op);
+            }
+            Err(e) => {
+                println!("Operation already applied, skipping. {e:?}");
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -97,5 +122,42 @@ mod tests {
         let mut write_stream: Vec<u8> = Vec::new();
         create_patch(operation_conn, &[1, 2], &mut write_stream);
         load_patches(&write_stream[..]);
+    }
+
+    #[test]
+    fn test_cross_db_patches() {
+        setup_gen_dir();
+        let vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.vcf");
+        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
+        let conn = &mut get_connection(None);
+        let conn2 = &mut get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let db_uuid2 = metadata::get_db_uuid(conn2);
+        let operation_conn = &get_operation_connection(None);
+        let operation_conn2 = &get_operation_connection(None);
+        setup_db(operation_conn, &db_uuid);
+        setup_db(operation_conn2, &db_uuid2);
+        let collection = "test".to_string();
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            operation_conn,
+        );
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+            None,
+        );
+        let mut write_stream: Vec<u8> = Vec::new();
+        create_patch(operation_conn, &[1, 2], &mut write_stream);
+        let patches = load_patches(&write_stream[..]);
+        apply_patches(conn2, operation_conn2, &patches);
+        apply_patches(conn, operation_conn, &patches);
     }
 }

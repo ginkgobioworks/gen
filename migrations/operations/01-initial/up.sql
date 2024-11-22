@@ -18,7 +18,6 @@ CREATE TABLE operation (
   hash TEXT NOT NULL,
   parent_id INTEGER,
   branch_id INTEGER NOT NULL,
-  collection_name TEXT,
   change_type TEXT NOT NULL,
   change_id INTEGER NOT NULL,
   FOREIGN KEY(parent_id) REFERENCES operation(id)

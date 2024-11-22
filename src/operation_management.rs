@@ -879,7 +879,6 @@ pub fn end_operation<'a>(
     match Operation::create(
         operation_conn,
         &db_uuid,
-        collection_name,
         operation_description,
         change.id,
         &hash,
@@ -1068,7 +1067,7 @@ mod tests {
         setup_db(op_conn, &db_uuid);
         let change = FileAddition::create(op_conn, "test", FileTypes::Fasta);
         let operation =
-            Operation::create(op_conn, &db_uuid, "test", "test", change.id, "some-hash").unwrap();
+            Operation::create(op_conn, &db_uuid, "test", change.id, "some-hash").unwrap();
         OperationState::set_operation(op_conn, &db_uuid, operation.id);
         assert_eq!(OperationState::get_operation(op_conn, &db_uuid).unwrap(), 1);
     }

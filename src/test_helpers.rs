@@ -207,25 +207,25 @@ pub fn get_sample_bg<'a>(conn: &Connection, sample_name: impl Into<Option<&'a st
     results.pop().unwrap()
 }
 
-fn create_operation<'a>(
-        conn: &Connection,
-        op_conn: &Connection,
-        file_path: &str,
-        file_type: FileTypes,
-        description: &str,
-        hash: impl Into<Option<&'a str>>,
-    ) -> Operation {
-        let mut session = start_operation(conn);
-        end_operation(
-            conn,
-            op_conn,
-            &mut session,
-            None,
-            file_path,
-            file_type,
-            description,
-            "test operation",
-            hash.into(),
-        )
-        .unwrap()
-    }
+pub fn create_operation<'a>(
+    conn: &Connection,
+    op_conn: &Connection,
+    file_path: &str,
+    file_type: FileTypes,
+    description: &str,
+    hash: impl Into<Option<&'a str>>,
+) -> Operation {
+    let mut session = start_operation(conn);
+    end_operation(
+        conn,
+        op_conn,
+        &mut session,
+        None,
+        file_path,
+        file_type,
+        description,
+        "test operation",
+        hash.into(),
+    )
+    .unwrap()
+}

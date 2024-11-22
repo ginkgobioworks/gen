@@ -11,6 +11,7 @@ use gen::imports::gfa::import_gfa;
 use gen::models::metadata;
 use gen::models::operations::{setup_db, Branch, Operation, OperationState};
 use gen::operation_management;
+use gen::patch;
 use gen::updates::fasta::update_with_fasta;
 use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
 use gen::updates::library::update_with_library;
@@ -36,6 +37,23 @@ fn get_default_collection(conn: &Connection) -> Option<String> {
         .prepare("select collection_name from defaults where id = 1")
         .unwrap();
     stmt.query_row((), |row| row.get(0)).unwrap()
+}
+
+fn parse_patch_operations(operations: &str) -> Vec<i64> {
+    let mut results = vec![];
+    for operation in operations.split(",") {
+        if operation.contains("..") {
+            let mut it = operation.split("..");
+            let start = it.next().unwrap().parse::<i64>().unwrap();
+            let end = it.next().unwrap().parse::<i64>().unwrap();
+            for i in start..end + 1 {
+                results.push(i)
+            }
+        } else {
+            results.push(operation.parse::<i64>().unwrap());
+        }
+    }
+    results
 }
 
 #[derive(Subcommand)]
@@ -121,6 +139,21 @@ enum Commands {
         /// If specified, the newly created sample will inherit this sample's existing graph
         #[arg(short, long)]
         parent_sample: Option<String>,
+    },
+    #[command(name = "patch-create")]
+    PatchCreate {
+        /// The patch name
+        #[arg(short, long)]
+        name: String,
+        /// The operation(s) to create a patch from. For a range, use 1..3 and for multiple use commas.
+        #[clap(index = 1)]
+        operation: String,
+    },
+    #[command(name = "patch-apply")]
+    PatchApply {
+        /// The patch file
+        #[clap(index = 1)]
+        patch: String,
     },
     /// Initialize a gen repository
     Init {},
@@ -531,6 +564,16 @@ fn main() {
             }
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
+        }
+        Some(Commands::PatchCreate { name, operation }) => {
+            let operations = parse_patch_operations(operation);
+            let mut f = File::create(format!("{name}.gz")).unwrap();
+            patch::create_patch(&operation_conn, &operations, &mut f);
+        }
+        Some(Commands::PatchApply { patch }) => {
+            let mut f = File::open(patch).unwrap();
+            let patches = patch::load_patches(&mut f);
+            patch::apply_patches(&conn, &operation_conn, &patches);
         }
         None => {}
         // these will never be handled by this method as we search for them earlier.
