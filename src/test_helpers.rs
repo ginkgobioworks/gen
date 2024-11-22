@@ -1,6 +1,6 @@
 use intervaltree::IntervalTree;
 use petgraph::graphmap::DiGraphMap;
-use rusqlite::{types::Value, Connection};
+use rusqlite::Connection;
 use std::fmt::Debug;
 use std::fs;
 use std::io::Write;
@@ -16,9 +16,9 @@ use crate::models::collection::Collection;
 use crate::models::edge::Edge;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::path::Path;
+use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
-use crate::models::traits::*;
 
 pub fn get_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Connection {
     let path: Option<&str> = db_path.into();
@@ -190,16 +190,12 @@ where
     assert_eq!(v2, expected);
 }
 
-pub fn get_sample_bg<'a>(conn: &Connection, sample_name: impl Into<Option<&'a str>>) -> BlockGroup {
+pub fn get_sample_bg<'a>(
+    conn: &Connection,
+    collection_name: &str,
+    sample_name: impl Into<Option<&'a str>>,
+) -> BlockGroup {
     let sample_name = sample_name.into();
-    let mut results;
-    if let Some(name) = sample_name {
-        let query = "select * from block_groups where sample_name = ?1";
-        let params = rusqlite::params!(Value::from(name.to_string()));
-        results = BlockGroup::query(conn, query, params);
-    } else {
-        let query = "select * from block_groups where sample_name is null";
-        results = BlockGroup::query(conn, query, rusqlite::params!());
-    }
+    let mut results = Sample::get_block_groups(conn, collection_name, sample_name);
     results.pop().unwrap()
 }
