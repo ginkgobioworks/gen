@@ -1043,7 +1043,10 @@ mod tests {
                 branch_1.id,
                 branch_2.id,
                 "merge-test",
-            );
+            )
+            .iter()
+            .map(|op| op.hash.clone())
+            .collect::<Vec<String>>();
 
             let b1_ops = Branch::get_operations(op_conn, branch_1.id)
                 .iter()
@@ -1054,11 +1057,19 @@ mod tests {
                 .iter()
                 .map(|f| f.hash.clone())
                 .collect::<Vec<String>>();
-            panic!("fix me");
-            // assert_eq!(
-            //     b1_ops,
-            //     vec![op_1.hash, op_2.hash, op_3.hash, op_4.hash, op_6.hash + 1, op_6.hash + 2]
-            // );
+
+            assert_eq!(
+                b1_ops,
+                vec![
+                    op_1.hash.clone(),
+                    op_2.hash.clone(),
+                    op_3.hash.clone(),
+                    op_4.hash.clone()
+                ]
+                .into_iter()
+                .chain(new_operations.into_iter())
+                .collect::<Vec<String>>()
+            );
             assert_eq!(b2_ops, vec![op_1.hash, op_2.hash, op_5.hash, op_6.hash]);
         }
     }
@@ -1272,7 +1283,7 @@ mod tests {
         setup_db(operation_conn, &db_uuid);
         let collection = "test".to_string();
 
-        import_fasta(
+        let _op_1 = import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &collection,
             false,
@@ -1290,7 +1301,7 @@ mod tests {
             None,
         );
 
-        update_with_vcf(
+        let op_2 = update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
             &collection,
             "".to_string(),
@@ -1330,7 +1341,7 @@ mod tests {
             &Some("branch-2".to_string()),
             None,
         );
-        update_with_vcf(
+        let _op_3 = update_with_vcf(
             &vcf2_path.to_str().unwrap().to_string(),
             &collection,
             "".to_string(),
@@ -1359,7 +1370,7 @@ mod tests {
         );
 
         // apply changes from branch-1, it will be operation id 2
-        apply(conn, operation_conn, "op-2", None);
+        apply(conn, operation_conn, &op_2.hash, None);
 
         let foo_bg_id = BlockGroup::get_id(conn, &collection, Some("foo"), "m123");
         let patch_2_seqs = HashSet::from_iter(vec![

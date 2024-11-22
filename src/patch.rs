@@ -5,13 +5,11 @@ use crate::operation_management;
 use crate::operation_management::{apply_changeset, write_changeset};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::{Compression, Decompress};
+use flate2::Compression;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{Read, Write};
-use std::path::Path;
-use std::{fs, path};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OperationPatch {
@@ -31,10 +29,10 @@ where
         let dependency_path =
             get_changeset_path(&operation).join(format!("{op_id}.dep", op_id = operation.hash));
         let dependencies: operation_management::DependencyModels =
-            serde_json::from_reader(fs::File::open(dependency_path).unwrap()).unwrap();
+            serde_json::from_reader(File::open(dependency_path).unwrap()).unwrap();
         let change_path =
             get_changeset_path(&operation).join(format!("{op_id}.cs", op_id = operation.hash));
-        let mut file = fs::File::open(change_path).unwrap();
+        let mut file = File::open(change_path).unwrap();
         let mut contents = vec![];
         file.read_to_end(&mut contents).unwrap();
         patches.push(OperationPatch {
@@ -76,8 +74,18 @@ pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[Operati
                 write_changeset(&new_op, &patch.changeset, &patch.dependencies[..]);
                 apply_changeset(conn, &new_op);
             }
+            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+                if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                    println!(
+                        "Operation already applied, skipping {hash:?}.",
+                        hash = op_info.hash
+                    );
+                } else {
+                    panic!("something bad happened querying the database {details:?}");
+                }
+            }
             Err(e) => {
-                println!("Operation already applied, skipping. {e:?}");
+                panic!("something bad happened querying the database {e:?}");
             }
         }
     }
@@ -131,8 +139,8 @@ mod tests {
         let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
         let conn = &mut get_connection(None);
         let conn2 = &mut get_connection(None);
-        let db_uuid = metadata::get_db_uuid(conn);
-        let db_uuid2 = metadata::get_db_uuid(conn2);
+        let db_uuid = get_db_uuid(conn);
+        let db_uuid2 = get_db_uuid(conn2);
         let operation_conn = &get_operation_connection(None);
         let operation_conn2 = &get_operation_connection(None);
         setup_db(operation_conn, &db_uuid);

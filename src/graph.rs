@@ -32,6 +32,7 @@ pub struct GraphEdge {
     pub target_strand: Strand,
 }
 
+#[derive(Debug)]
 pub struct OperationGraph {
     pub graph: DiGraphMap<usize, ()>,
     max_node_id: usize,
@@ -58,16 +59,17 @@ impl OperationGraph {
     pub fn add_node(&mut self, hash_id: &str) -> usize {
         let node_id = *self.node_ids.entry(hash_id.to_string()).or_insert_with(|| {
             let node_id = self.max_node_id;
-            self.max_node_id += 1;
             self.reverse_map.insert(node_id, hash_id.to_string());
+            self.graph.add_node(node_id);
+            self.max_node_id += 1;
             node_id
         });
-        self.graph.add_node(node_id);
         node_id
     }
 
     pub fn remove_node(&mut self, hash_id: &str) {
         if let Some(node_index) = self.node_ids.remove(hash_id) {
+            self.graph.remove_node(node_index);
             self.reverse_map.remove(&node_index).unwrap();
         }
     }

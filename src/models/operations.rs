@@ -1,7 +1,7 @@
 use crate::graph::{all_simple_paths, OperationGraph};
 use crate::models::file_types::FileTypes;
 use crate::models::traits::*;
-use petgraph::graphmap::{DiGraphMap, UnGraphMap};
+use petgraph::graphmap::UnGraphMap;
 use petgraph::visit::{Dfs, Reversed};
 use petgraph::Direction;
 use rusqlite::types::Value;
@@ -58,8 +58,7 @@ impl Operation {
             Value::from(change_id),
             Value::from(current_op.clone()),
             Value::from(current_branch_id),
-        ]))
-        .unwrap();
+        ]))?;
         let operation = Operation {
             hash: hash.to_string(),
             db_uuid: db_uuid.to_string(),
@@ -431,6 +430,7 @@ impl Branch {
                     .collect::<Vec<String>>(),
             );
 
+            println!("g is {graph:?}");
             // remove all nodes not in our branch operations. We do this here because upstream operations
             // may be created in a different branch_id but shared with this branch.
             for node in graph.node_ids.clone().keys() {
@@ -560,24 +560,21 @@ pub fn setup_db(conn: &Connection, db_uuid: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::imports::fasta::import_fasta;
     use crate::models::metadata;
     use crate::operation_management;
     use crate::test_helpers::{
         create_operation, get_connection, get_operation_connection, keys_match, setup_gen_dir,
     };
-    use std::path::PathBuf;
 
     #[test]
     fn test_gets_operations_of_branch() {
         setup_gen_dir();
-        let db_uuid = "something";
+        let conn = &get_connection(None);
+        let db_uuid = &metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, db_uuid);
 
-        let change = FileAddition::create(op_conn, "foo", FileTypes::Fasta);
-        let _ =
-            Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-1-hash").unwrap();
+        create_operation(conn, op_conn, "test.fasta", FileTypes::Fasta, "foo", "op-1");
         // operations will be made in ascending order.
         // The branch topology is as follows. () indicate where a branch starts
         //
@@ -601,44 +598,61 @@ mod tests {
         let branch_1 = Branch::create(op_conn, db_uuid, "branch-1");
         let branch_2 = Branch::create(op_conn, db_uuid, "branch-2");
         OperationState::set_branch(op_conn, db_uuid, "branch-1");
-        let _ =
-            Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-2-hash").unwrap();
-        let _ =
-            Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-3-hash").unwrap();
+        create_operation(conn, op_conn, "test.fasta", FileTypes::Fasta, "foo", "op-2");
+        create_operation(conn, op_conn, "test.fasta", FileTypes::Fasta, "foo", "op-3");
         let branch_1_sub_1 = Branch::create(op_conn, db_uuid, "branch-1-sub-1");
         OperationState::set_branch(op_conn, db_uuid, "branch-1-sub-1");
-        let _ =
-            Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-4-hash").unwrap();
-        let _ =
-            Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-5-hash").unwrap();
+        create_operation(conn, op_conn, "test.fasta", FileTypes::Fasta, "foo", "op-4");
+        create_operation(conn, op_conn, "test.fasta", FileTypes::Fasta, "foo", "op-5");
 
         // TODO: We should merge the set branch/operation stuff, now that operations track branches we likely don't need set_branch
         OperationState::set_branch(op_conn, db_uuid, "branch-2");
-        OperationState::set_operation(op_conn, db_uuid, "op-1-hash");
-        let _ =
-            Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-6-hash").unwrap();
+        OperationState::set_operation(op_conn, db_uuid, "op-1");
+        create_operation(conn, op_conn, "test.fasta", FileTypes::Fasta, "foo", "op-6");
         let branch_2_midpoint =
-            Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-7-hash").unwrap();
-        let _ =
-            Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-8-hash").unwrap();
+            create_operation(conn, op_conn, "test.fasta", FileTypes::Fasta, "foo", "op-7");
+        create_operation(conn, op_conn, "test.fasta", FileTypes::Fasta, "foo", "op-8");
 
         let branch_2_sub_1 = Branch::create(op_conn, db_uuid, "branch-2-sub-1");
         OperationState::set_branch(op_conn, db_uuid, "branch-2-sub-1");
-        let _ =
-            Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-9-hash").unwrap();
-        let _ =
-            Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-10-hash").unwrap();
-        let _ =
-            Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-11-hash").unwrap();
+        create_operation(conn, op_conn, "test.fasta", FileTypes::Fasta, "foo", "op-9");
+        create_operation(
+            conn,
+            op_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-10",
+        );
+        create_operation(
+            conn,
+            op_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-11",
+        );
 
         OperationState::set_operation(op_conn, db_uuid, &branch_2_midpoint.hash);
         OperationState::set_branch(op_conn, db_uuid, &branch_2.name);
         let branch_2_midpoint_1 = Branch::create(op_conn, db_uuid, "branch-2-midpoint-1");
         OperationState::set_branch(op_conn, db_uuid, &branch_2_midpoint_1.name);
-        let _ =
-            Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-12-hash").unwrap();
-        let _ =
-            Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-13-hash").unwrap();
+        create_operation(
+            conn,
+            op_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-12",
+        );
+        create_operation(
+            conn,
+            op_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-13",
+        );
 
         let ops = Branch::get_operations(op_conn, branch_2_midpoint_1.id)
             .iter()
@@ -714,7 +728,8 @@ mod tests {
     #[test]
     fn test_graph_representation() {
         setup_gen_dir();
-        let db_uuid = "something";
+        let conn = &get_connection(None);
+        let db_uuid = &metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, db_uuid);
 
@@ -772,8 +787,8 @@ mod tests {
     #[test]
     fn test_path_between() {
         setup_gen_dir();
-        let db_uuid = "something";
         let conn = &get_connection(None);
+        let db_uuid = &metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, db_uuid);
 
@@ -837,8 +852,8 @@ mod tests {
         // and create a new operation from that point on the same branch.
 
         setup_gen_dir();
-        let db_uuid = "something";
         let conn = &get_connection(None);
+        let db_uuid = &metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, db_uuid);
 
@@ -858,7 +873,7 @@ mod tests {
 
         setup_gen_dir();
         let conn = &get_connection(None);
-        let db_uuid = "something";
+        let db_uuid = &metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, db_uuid);
 
@@ -881,7 +896,7 @@ mod tests {
         setup_gen_dir();
         let conn = &get_connection(None);
         let db_uuid = &metadata::get_db_uuid(conn);
-        let op_conn = &get_operation_connection("t.db");
+        let op_conn = &get_operation_connection(None);
         setup_db(op_conn, db_uuid);
 
         let op_1 = create_operation(conn, op_conn, "test.fasta", FileTypes::Fasta, "foo", "op-1");
@@ -906,7 +921,8 @@ mod tests {
     #[test]
     fn test_sets_start_operation_hash_on_first_change() {
         setup_gen_dir();
-        let db_uuid = "something";
+        let conn = &get_connection(None);
+        let db_uuid = &metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection("t3.db");
         setup_db(op_conn, db_uuid);
 
