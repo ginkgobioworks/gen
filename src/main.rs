@@ -16,6 +16,7 @@ use gen::updates::fasta::update_with_fasta;
 use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::update_with_vcf;
+use itertools::Itertools;
 use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
 use std::fs::File;
@@ -39,18 +40,71 @@ fn get_default_collection(conn: &Connection) -> Option<String> {
     stmt.query_row((), |row| row.get(0)).unwrap()
 }
 
-fn parse_patch_operations(operations: &str) -> Vec<i64> {
+fn parse_patch_operations(
+    branch_operations: &[Operation],
+    head_hash: &str,
+    operations: &str,
+) -> Vec<String> {
     let mut results = vec![];
+    let (head_pos, _) = branch_operations
+        .iter()
+        .find_position(|op| op.hash == head_hash)
+        .expect("Current head position is not in branch.");
     for operation in operations.split(",") {
         if operation.contains("..") {
             let mut it = operation.split("..");
-            let start = it.next().unwrap().parse::<i64>().unwrap();
-            let end = it.next().unwrap().parse::<i64>().unwrap();
-            for i in start..end + 1 {
-                results.push(i)
-            }
+            let start = it.next().unwrap().parse::<String>().unwrap();
+            let end = it.next().unwrap().parse::<String>().unwrap();
+
+            let start_hash = if start.starts_with("HEAD") {
+                if start.contains("~") {
+                    let mut it = start.rsplit("~");
+                    let count = it.next().unwrap().parse::<usize>().unwrap();
+                    branch_operations[head_pos - count].hash.clone()
+                } else {
+                    branch_operations[head_pos].hash.clone()
+                }
+            } else {
+                start
+            };
+
+            let end_hash = if end.starts_with("HEAD") {
+                if end.contains("~") {
+                    let mut it = end.rsplit("~");
+                    let count = it.next().unwrap().parse::<usize>().unwrap();
+                    branch_operations[head_pos - count].hash.clone()
+                } else {
+                    branch_operations[head_pos].hash.clone()
+                }
+            } else {
+                end
+            };
+            let start_pos = branch_operations
+                .iter()
+                .position(|op| op.hash.starts_with(start_hash.as_str()))
+                .unwrap_or_else(|| panic!("Unable to find starting hash {start_hash:?}"));
+            let end_pos = branch_operations
+                .iter()
+                .position(|op| op.hash.starts_with(end_hash.as_str()))
+                .unwrap_or_else(|| panic!("Unable to find end hash {end_hash:?}"));
+            results.extend(
+                branch_operations[start_pos..end_pos + 1]
+                    .iter()
+                    .map(|op| op.hash.clone()),
+            );
         } else {
-            results.push(operation.parse::<i64>().unwrap());
+            let hash = if operation.starts_with("HEAD") {
+                if operation.contains("~") {
+                    let mut it = operation.rsplit("~");
+                    let count = it.next().unwrap().parse::<usize>().unwrap();
+                    branch_operations[head_pos - count].hash.clone()
+                } else {
+                    branch_operations[head_pos].hash.clone()
+                }
+            } else {
+                operation.to_string()
+            };
+            results.push(hash);
         }
     }
     results
@@ -142,6 +196,9 @@ enum Commands {
     },
     #[command(name = "patch-create")]
     PatchCreate {
+        /// To create a patch against a non-checked out branch.
+        #[arg(short, long)]
+        branch: Option<String>,
         /// The patch name
         #[arg(short, long)]
         name: String,
@@ -182,15 +239,15 @@ enum Commands {
         /// The branch identifier to migrate to
         #[arg(short, long)]
         branch: Option<String>,
-        /// The operation id to move to
+        /// The operation hash to move to
         #[clap(index = 1)]
-        id: Option<i64>,
+        hash: Option<String>,
     },
     /// Reset a branch to a previous operation
     Reset {
-        /// The operation id to reset to
+        /// The operation hash to reset to
         #[clap(index = 1)]
-        id: i64,
+        hash: String,
     },
     /// View operations carried out against a database
     Operations {
@@ -200,9 +257,9 @@ enum Commands {
     },
     /// Apply an operation to a branch
     Apply {
-        /// The operation id to apply
+        /// The operation hash to apply
         #[clap(index = 1)]
-        id: i64,
+        hash: String,
     },
     /// Export sequence data
     Export {
@@ -434,14 +491,14 @@ fn main() {
                 col2 = "Summary"
             );
             for op in operations.iter() {
-                if op.id == current_op {
+                if op.hash == current_op {
                     indicator = ">";
                 } else {
                     indicator = "";
                 }
                 println!(
                     "{indicator:<3}{col1:>3}   {col2:<70}",
-                    col1 = op.id,
+                    col1 = op.hash,
                     col2 = op.change_type
                 );
             }
@@ -508,7 +565,10 @@ fn main() {
                     println!(
                         "{indicator:<3}{col1:<30}   {col2:<20}",
                         col1 = branch.name,
-                        col2 = branch.current_operation_id.unwrap_or(-1)
+                        col2 = branch
+                            .current_operation_hash
+                            .clone()
+                            .unwrap_or(String::new())
                     );
                 }
             } else if *merge {
@@ -529,14 +589,14 @@ fn main() {
                 println!("No options selected.");
             }
         }
-        Some(Commands::Apply { id }) => {
-            operation_management::apply(&conn, &operation_conn, *id, None);
+        Some(Commands::Apply { hash }) => {
+            operation_management::apply(&conn, &operation_conn, hash, None);
         }
-        Some(Commands::Checkout { branch, id }) => {
-            operation_management::checkout(&conn, &operation_conn, &db_uuid, branch, *id);
+        Some(Commands::Checkout { branch, hash }) => {
+            operation_management::checkout(&conn, &operation_conn, &db_uuid, branch, hash.clone());
         }
-        Some(Commands::Reset { id }) => {
-            operation_management::reset(&conn, &operation_conn, &db_uuid, *id);
+        Some(Commands::Reset { hash }) => {
+            operation_management::reset(&conn, &operation_conn, &db_uuid, hash);
         }
         Some(Commands::Export {
             name,
@@ -565,8 +625,26 @@ fn main() {
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
         }
-        Some(Commands::PatchCreate { name, operation }) => {
-            let operations = parse_patch_operations(operation);
+        Some(Commands::PatchCreate {
+            name,
+            operation,
+            branch,
+        }) => {
+            let branch = if let Some(branch_name) = branch {
+                Branch::get_by_name(&operation_conn, &db_uuid, branch_name)
+                    .unwrap_or_else(|| panic!("No branch with name {branch_name} found."))
+            } else {
+                let current_branch_id =
+                    OperationState::get_current_branch(&operation_conn, &db_uuid)
+                        .expect("No current branch is checked out.");
+                Branch::get_by_id(&operation_conn, current_branch_id).unwrap()
+            };
+            let branch_ops = Branch::get_operations(&operation_conn, branch.id);
+            let operations = parse_patch_operations(
+                &branch_ops,
+                &branch.current_operation_hash.unwrap(),
+                operation,
+            );
             let mut f = File::create(format!("{name}.gz")).unwrap();
             patch::create_patch(&operation_conn, &operations, &mut f);
         }

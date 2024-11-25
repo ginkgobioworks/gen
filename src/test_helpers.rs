@@ -1,8 +1,10 @@
 use intervaltree::IntervalTree;
 use petgraph::graphmap::DiGraphMap;
 use rusqlite::{types::Value, Connection};
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs;
+use std::hash::Hash;
 use std::io::Write;
 use std::ops::Add;
 use tempdir::TempDir;
@@ -220,7 +222,6 @@ pub fn create_operation<'a>(
         conn,
         op_conn,
         &mut session,
-        None,
         file_path,
         file_type,
         description,
@@ -228,4 +229,8 @@ pub fn create_operation<'a>(
         hash.into(),
     )
     .unwrap()
+}
+
+pub fn keys_match<T: Eq + Hash, U, V>(map1: &HashMap<T, U>, map2: &HashMap<T, V>) -> bool {
+    map1.len() == map2.len() && map1.keys().all(|k| map2.contains_key(k))
 }
