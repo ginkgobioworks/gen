@@ -119,12 +119,13 @@ impl Path {
 
             if edge1.target_coordinate >= edge2.source_coordinate {
                 panic!(
-                    "Edges {} and {} go into and out of the same node at the same coordinate ({})",
-                    edge1.id, edge2.id, edge1.target_coordinate
+                    "Source coordinate {} for edge {} is before target coordinate {} for edge {}",
+                    edge2.source_coordinate, edge2.id, edge1.target_coordinate, edge1.id
                 );
             }
         }
 
+        // An edge shouldn't start and end at the same coordinate on the same node
         for edge_id in edge_ids {
             let edge = edges_by_id.get(edge_id).unwrap();
             if edge.source_node_id == edge.target_node_id
@@ -2859,7 +2860,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    // Panic message is something like "Edges 1 and 2 go into and out of the same node at the same coordinate (0)"
+    // Panic message is something like "Source coordinate 2 for edge 2 is before target coordinate 4 for edge 1"
     fn test_consecutive_edges_must_have_different_coordinates_on_a_node() {
         let conn = &mut get_connection(None);
         Collection::create(conn, "test collection");
@@ -2875,7 +2876,7 @@ mod tests {
             -123,
             Strand::Forward,
             node1_id,
-            0,
+            4,
             Strand::Forward,
             0,
             0,
@@ -2885,11 +2886,11 @@ mod tests {
             .sequence("AAAAAAAA")
             .save(conn);
         let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
-        // Source coordinate on node 1 is same as target coordinate on node1 for edge1
+        // Source coordinate on node 1 is before target coordinate on node1 for edge1
         let edge2 = Edge::create(
             conn,
             node1_id,
-            0,
+            2,
             Strand::Forward,
             node2_id,
             0,
@@ -2899,6 +2900,36 @@ mod tests {
         );
 
         let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
+        let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
+    }
+
+    #[test]
+    #[should_panic]
+    // Panic message is something like: "Edge 1 goes into and out of the same node at the same coordinate"
+    fn test_edge_does_not_start_and_end_on_same_bp() {
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            node1_id,
+            2,
+            Strand::Forward,
+            node1_id,
+            2,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let edge_ids = vec![edge1.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
         let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
