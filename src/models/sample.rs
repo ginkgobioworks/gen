@@ -51,19 +51,7 @@ impl Sample {
         name: impl Into<Option<&'a str>>,
     ) -> DiGraphMap<GraphNode, GraphEdge> {
         let name = name.into();
-        let block_groups = if let Some(sample) = name {
-            BlockGroup::query(
-                conn,
-                "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-                params!(collection.to_string(), sample.to_string()),
-            )
-        } else {
-            BlockGroup::query(
-                conn,
-                "select * from block_groups where collection_name = ?1 AND sample_name is null;",
-                params!(collection.to_string()),
-            )
-        };
+        let block_groups = Sample::get_block_groups(conn, collection, name);
         let mut sample_graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
         for bg in block_groups {
             let graph = BlockGroup::get_graph(conn, bg.id);
