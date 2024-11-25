@@ -67,7 +67,14 @@ impl OperationGraph {
         node_id
     }
 
-    pub fn remove_node(&mut self, hash_id: &str) {
+    pub fn remove_node(&mut self, node_id: usize) {
+        self.graph.remove_node(node_id);
+        if let Some(key) = self.reverse_map.remove(&node_id) {
+            self.node_ids.remove(&key).unwrap();
+        }
+    }
+
+    pub fn remove_key(&mut self, hash_id: &str) {
         if let Some(node_index) = self.node_ids.remove(hash_id) {
             self.graph.remove_node(node_index);
             self.reverse_map.remove(&node_index).unwrap();

@@ -400,7 +400,7 @@ impl Branch {
         let mut operations: Vec<Operation> = vec![];
         let masked_operations = Branch::get_masked_operations(conn, branch_id);
         for op in masked_operations.iter() {
-            graph.remove_node(op);
+            graph.remove_key(op);
         }
 
         if let Some(creation_hash) = branch.start_operation_hash {
@@ -432,9 +432,9 @@ impl Branch {
 
             // remove all nodes not in our branch operations. We do this here because upstream operations
             // may be created in a different branch_id but shared with this branch.
-            for node in graph.node_ids.clone().keys() {
-                if !branch_operations.contains(node) {
-                    graph.remove_node(node);
+            for hash in graph.node_ids.clone().keys() {
+                if !branch_operations.contains(hash) {
+                    graph.remove_key(hash);
                 }
             }
 
