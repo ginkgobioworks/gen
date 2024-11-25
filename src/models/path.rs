@@ -745,12 +745,7 @@ mod tests {
         let edge_ids = vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path = Path::create(
-            conn,
-            "chr1",
-            block_group.id,
-            &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
-        );
+        let path = Path::create(conn, "chr1", block_group.id, &edge_ids);
         assert_eq!(path.sequence(conn), "ATCGATCGAAAAAAACCCCCCCGGGGGGG");
     }
 
@@ -838,12 +833,7 @@ mod tests {
         let edge_ids = vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path = Path::create(
-            conn,
-            "chr1",
-            block_group.id,
-            &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
-        );
+        let path = Path::create(conn, "chr1", block_group.id, &edge_ids);
         assert_eq!(path.sequence(conn), "CCCCCCCGGGGGGGTTTTTTTCGATCGAT");
     }
 
@@ -938,12 +928,7 @@ mod tests {
         let edge_ids = vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path = Path::create(
-            conn,
-            "chr1",
-            block_group.id,
-            &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
-        );
+        let path = Path::create(conn, "chr1", block_group.id, &edge_ids);
         let tree = path.intervaltree(conn);
         let blocks1: Vec<NodeIntervalBlock> = tree.query_point(2).map(|x| x.value).collect();
         assert_eq!(blocks1.len(), 1);
@@ -1019,7 +1004,7 @@ mod tests {
         let edge_ids = vec![edge1.id, edge2.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+        let path = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
         let mappings = path.find_block_mappings(conn, &path);
         assert_eq!(mappings.len(), 1);
@@ -1076,7 +1061,7 @@ mod tests {
         let edge_ids = vec![edge1.id, edge2.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+        let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
@@ -1109,7 +1094,7 @@ mod tests {
         let edge_ids = vec![edge3.id, edge4.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path2 = Path::create(conn, "chr2", block_group.id, &[edge3.id, edge4.id]);
+        let path2 = Path::create(conn, "chr2", block_group.id, &edge_ids);
 
         let mappings = path1.find_block_mappings(conn, &path2);
         assert_eq!(mappings.len(), 0);
@@ -1164,7 +1149,7 @@ mod tests {
         let edge_ids = vec![edge1.id, edge2.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+        let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
@@ -1276,7 +1261,7 @@ mod tests {
         let edge_ids = vec![edge1.id, edge2.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+        let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
@@ -1383,7 +1368,7 @@ mod tests {
         let edge_ids = vec![edge1.id, edge2.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+        let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
@@ -1489,7 +1474,7 @@ mod tests {
         let edge_ids = vec![edge1.id, edge2.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+        let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
         let edge4 = Edge::create(
             conn,
@@ -1944,7 +1929,7 @@ mod tests {
         let edge_ids = vec![edge1.id, edge2.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+        let path = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
         let annotation = Annotation {
             name: "foo".to_string(),
@@ -2004,7 +1989,7 @@ mod tests {
         let edge_ids = vec![edge1.id, edge2.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+        let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
@@ -2037,7 +2022,7 @@ mod tests {
         let edge_ids = vec![edge3.id, edge4.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path2 = Path::create(conn, "chr2", block_group.id, &[edge3.id, edge4.id]);
+        let path2 = Path::create(conn, "chr2", block_group.id, &edge_ids);
 
         let annotation = Annotation {
             name: "foo".to_string(),
@@ -2097,7 +2082,7 @@ mod tests {
         let edge_ids = vec![edge1.id, edge2.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+        let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
@@ -2212,7 +2197,7 @@ mod tests {
         let edge_ids = vec![edge1.id, edge2.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+        let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
@@ -2320,7 +2305,7 @@ mod tests {
         let edge_ids = vec![edge1.id, edge2.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+        let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
@@ -2573,12 +2558,7 @@ mod tests {
         let edge_ids = vec![edge1.id, edge2.id, edge3.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path1 = Path::create(
-            conn,
-            "chr1",
-            block_group.id,
-            &[edge1.id, edge2.id, edge3.id],
-        );
+        let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
         let edge4 = Edge::create(
             conn,
@@ -2672,12 +2652,7 @@ mod tests {
         let edge_ids = vec![edge1.id, edge2.id, edge3.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let path1 = Path::create(
-            conn,
-            "chr1",
-            block_group.id,
-            &[edge1.id, edge2.id, edge3.id],
-        );
+        let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
         assert_eq!(path1.sequence(conn), "ATCGATCGAAAAAAAA");
 
         let sequence3 = Sequence::new()
