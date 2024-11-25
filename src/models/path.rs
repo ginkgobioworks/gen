@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::block_group::NodeIntervalBlock;
 use crate::models::{
+    block_group_edge::BlockGroupEdge,
     edge::Edge,
     node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
     path_edge::PathEdge,
@@ -84,7 +85,62 @@ pub struct Annotation {
 }
 
 impl Path {
+    pub fn validate_edges(conn: &Connection, edge_ids: &[i64], block_group_id: i64) {
+        let edge_id_set = edge_ids.iter().collect::<HashSet<_>>();
+
+        // No duplicate edges allowed
+        if edge_id_set.len() != edge_ids.len() {
+            panic!("Duplicate edge IDs in path creation");
+        }
+
+        // All path edges must be in the path's block group
+        let edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
+        let bg_edge_ids = edges.iter().map(|edge| &edge.id).collect::<HashSet<&_>>();
+        if !edge_id_set.is_subset(&bg_edge_ids) {
+            panic!("Not all edges are in the block group ({})", block_group_id);
+        }
+
+        let edges_by_id = edges
+            .iter()
+            .map(|edge| (edge.id, edge))
+            .collect::<HashMap<_, _>>();
+
+        // Two consecutive edges must share a node
+        // Two consecutive edges must not go into and out of a node at the same coordinate
+        for (edge1_id, edge2_id) in edge_ids.iter().tuple_windows() {
+            let edge1 = edges_by_id.get(edge1_id).unwrap();
+            let edge2 = edges_by_id.get(edge2_id).unwrap();
+            if edge1.target_node_id != edge2.source_node_id {
+                panic!(
+                    "Edges {} and {} don't share the same node ({} vs. {})",
+                    edge1.id, edge2.id, edge1.target_node_id, edge2.source_node_id
+                );
+            }
+
+            if edge1.target_coordinate >= edge2.source_coordinate {
+                panic!(
+                    "Edges {} and {} go into and out of the same node at the same coordinate ({})",
+                    edge1.id, edge2.id, edge1.target_coordinate
+                );
+            }
+        }
+
+        for edge_id in edge_ids {
+            let edge = edges_by_id.get(edge_id).unwrap();
+            if edge.source_node_id == edge.target_node_id
+                && edge.source_coordinate == edge.target_coordinate
+            {
+                panic!(
+                    "Edge {} goes into and out of the same node at the same coordinate",
+                    edge.id
+                );
+            }
+        }
+    }
+
     pub fn create(conn: &Connection, name: &str, block_group_id: i64, edge_ids: &[i64]) -> Path {
+        Path::validate_edges(conn, edge_ids, block_group_id);
+
         // TODO: Should we do something if edge_ids don't match here? Suppose we have a path
         // for a block group with edges 1,2,3. And then the same path is added again with edges
         // 5,6,7, should this be an error? Should we just keep adding edges?
@@ -685,6 +741,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path = Path::create(
             conn,
             "chr1",
@@ -774,6 +833,9 @@ mod tests {
             0,
             0,
         );
+
+        let edge_ids = vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
         let path = Path::create(
             conn,
@@ -872,6 +934,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path = Path::create(
             conn,
             "chr1",
@@ -950,6 +1015,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
 
         let mappings = path.find_block_mappings(conn, &path);
@@ -1004,6 +1072,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
 
         let sequence2 = Sequence::new()
@@ -1033,6 +1104,9 @@ mod tests {
             0,
             0,
         );
+
+        let edge_ids = vec![edge3.id, edge4.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
         let path2 = Path::create(conn, "chr2", block_group.id, &[edge3.id, edge4.id]);
 
@@ -1086,6 +1160,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
 
         let sequence2 = Sequence::new()
@@ -1126,6 +1203,9 @@ mod tests {
             0,
             0,
         );
+
+        let edge_ids = vec![edge3.id, edge4.id, edge5.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
         let path2 = Path::create(
             conn,
@@ -1192,6 +1272,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
 
         let sequence2 = Sequence::new()
@@ -1221,6 +1304,9 @@ mod tests {
             0,
             0,
         );
+
+        let edge_ids = vec![edge1.id, edge2.id, edge4.id, edge5.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
         let path2 = Path::create(
             conn,
@@ -1293,6 +1379,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
 
         let sequence2 = Sequence::new()
@@ -1322,6 +1411,9 @@ mod tests {
             0,
             0,
         );
+
+        let edge_ids = vec![edge1.id, edge2.id, edge4.id, edge5.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
         let path2 = Path::create(
             conn,
@@ -1393,6 +1485,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
 
         let edge4 = Edge::create(
@@ -1406,6 +1501,9 @@ mod tests {
             0,
             0,
         );
+
+        let edge_ids = vec![edge1.id, edge2.id, edge4.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
         let path2 = Path::create(
             conn,
@@ -1495,6 +1593,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id, edge3.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path1 = Path::create(
             conn,
             "chr1",
@@ -1529,6 +1630,9 @@ mod tests {
             0,
             0,
         );
+
+        let edge_ids = vec![edge1.id, edge3.id, edge4.id, edge5.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
         let path2 = Path::create(
             conn,
@@ -1618,6 +1722,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id, edge3.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path1 = Path::create(
             conn,
             "chr1",
@@ -1652,6 +1759,9 @@ mod tests {
             0,
             0,
         );
+
+        let edge_ids = vec![edge1.id, edge3.id, edge4.id, edge5.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
         let path2 = Path::create(
             conn,
@@ -1740,6 +1850,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id, edge3.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path1 = Path::create(
             conn,
             "chr1",
@@ -1758,6 +1871,9 @@ mod tests {
             0,
             0,
         );
+
+        let edge_ids = vec![edge1.id, edge3.id, edge4.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
         let path2 = Path::create(
             conn,
@@ -1824,6 +1940,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
 
         let annotation = Annotation {
@@ -1881,6 +2000,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
 
         let sequence2 = Sequence::new()
@@ -1910,6 +2032,9 @@ mod tests {
             0,
             0,
         );
+
+        let edge_ids = vec![edge3.id, edge4.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
         let path2 = Path::create(conn, "chr2", block_group.id, &[edge3.id, edge4.id]);
 
@@ -1968,6 +2093,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
 
         let sequence2 = Sequence::new()
@@ -2008,6 +2136,9 @@ mod tests {
             0,
             0,
         );
+
+        let edge_ids = vec![edge3.id, edge4.id, edge5.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
         let path2 = Path::create(
             conn,
@@ -2077,6 +2208,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
 
         let sequence2 = Sequence::new()
@@ -2106,6 +2240,9 @@ mod tests {
             0,
             0,
         );
+
+        let edge_ids = vec![edge1.id, edge2.id, edge4.id, edge5.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
         let path2 = Path::create(
             conn,
@@ -2179,6 +2316,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path1 = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
 
         let sequence2 = Sequence::new()
@@ -2208,6 +2348,9 @@ mod tests {
             0,
             0,
         );
+
+        let edge_ids = vec![edge1.id, edge2.id, edge4.id, edge5.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
         let path2 = Path::create(
             conn,
@@ -2297,6 +2440,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id, edge3.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path1 = Path::create(
             conn,
             "chr1",
@@ -2331,6 +2477,9 @@ mod tests {
             0,
             0,
         );
+
+        let edge_ids = vec![edge1.id, edge3.id, edge4.id, edge5.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
         let path2 = Path::create(
             conn,
@@ -2420,6 +2569,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id, edge3.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path1 = Path::create(
             conn,
             "chr1",
@@ -2438,6 +2590,9 @@ mod tests {
             0,
             0,
         );
+
+        let edge_ids = vec![edge1.id, edge3.id, edge4.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
         let path2 = Path::create(
             conn,
@@ -2513,6 +2668,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge1.id, edge2.id, edge3.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path1 = Path::create(
             conn,
             "chr1",
@@ -2549,6 +2707,9 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge4.id, edge5.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path2 = path1.new_path_with(conn, 4, 11, &edge4, &edge5);
         assert_eq!(path2.sequence(conn), "ATCGCCCCCCCCAAAAA");
 
@@ -2575,7 +2736,171 @@ mod tests {
             0,
         );
 
+        let edge_ids = vec![edge6.id, edge7.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
         let path3 = path1.new_path_with(conn, 4, 7, &edge6, &edge7);
         assert_eq!(path3.sequence(conn), "ATCGCCCCCCCCGAAAAAAAA");
+    }
+
+    #[test]
+    #[should_panic(expected = "Duplicate edge IDs in path creation")]
+    fn test_no_duplicate_edges() {
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -123,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let edge_ids = vec![edge1.id, edge1.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
+        let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
+    }
+
+    #[test]
+    #[should_panic(expected = "Not all edges are in the block group")]
+    fn test_edges_must_be_in_path_block_group() {
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -123,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let edge_ids = vec![edge1.id, edge2.id];
+
+        let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
+    }
+
+    #[test]
+    #[should_panic]
+    // Panic message is something like "Edges 1 and 2 don't share the same node (3 vs. 4)"
+    fn test_consecutive_edges_must_share_a_node() {
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -123,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        let edge2 = Edge::create(
+            conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
+        let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
+    }
+
+    #[test]
+    #[should_panic]
+    // Panic message is something like "Edges 1 and 2 go into and out of the same node at the same coordinate (0)"
+    fn test_consecutive_edges_must_have_different_coordinates_on_a_node() {
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -123,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        // Source coordinate on node 1 is same as target coordinate on node1 for edge1
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            0,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
+        let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
     }
 }
