@@ -7,12 +7,12 @@ We start by setting up a new gen repository and a default database and collectio
 specifying which database file and collection to use in the `gen import` and `gen update` commands.
 
 ```console
-bvh@mbp:~$ gen init
+$ gen init
 
 Gen repository initialized.
 ```
 ``` console
-bvh@mbp:~$ gen defaults --database insulin.db --collection plasmids
+$ gen defaults --database insulin.db --collection plasmids
 
 Default database set to insulin.db
 Default collection set to plasmids
@@ -20,7 +20,7 @@ Default collection set to plasmids
 
 Next, we import our base vector from a fasta file.
 ``` console
-bvh@mbp:~$ gen import --fasta puc19.fa
+$ gen import --fasta puc19.fa
 
 Created it
 ```
@@ -29,7 +29,7 @@ By importing the sequence we have created one new block group and one new path. 
 the source node to the start of the imported sequence node, and from the end of the imported sequence node to the sink
 node. We can verify this by querying the database _(todo: implement this functionality in gen)_.
 ```console
-bvh@mbp:~$ sqlite3 --header insulin.db
+$ sqlite3 --header insulin.db
 
 SQLite version 3.39.5 2022-10-14 20:58:05
 Enter ".help" for usage hints.
@@ -95,7 +95,7 @@ by commas. We can then run the update operation using the following command:
 
 
 ```console
-bvh@mbp:~$ gen update --path-name M77789.2 --start 106 --end 539 --library design.csv --parts parts.fa
+$ gen update --path-name M77789.2 --start 106 --end 539 --library design.csv --parts parts.fa
 ```
 
 This update operation did not create new block groups or paths, it only created new edges in the existing block group.
@@ -108,25 +108,25 @@ We start by exporting our block group to a GFA file that can be used by graph ha
 specific sample, but in this case we just have one block group and it is not associated with any sample.
 
 ```console
-bvh@mbp:~$ gen export --gfa library.gfa
+$ gen export --gfa library.gfa
 ```
 
 We will use the vg tools using Docker, which we will start as follows to automatically download the vg Docker image, and
 bind the current working directory to the /data directory in the Docker container.
 
 ```console
-bvh@mbp:~$ docker run --volume $PWD:/data --workdir /data --interactive -t quay.io/vgteam/vg:v1.60.0
+$ docker run --volume $PWD:/data --workdir /data --interactive -t quay.io/vgteam/vg:v1.60.0
 ```
 
 Once we're inside the container, we still have to install the graphviz suite to render our images to SVG format.
 
 ```console
-root@e97629b542ca:/vg# apt install -y graphviz
+# apt install -y graphviz
 ```
 
 Then we run `vg view` and pipe its output to the `dot` program, which was installed as part of graphviz.
 ```console
-root@e97629b542ca:/vg# vg view --gfa-in library.gfa --dot --color --simple-dot | dot -Tsvg -o library.svg
+# vg view --gfa-in library.gfa --dot --color --simple-dot | dot -Tsvg -o library.svg
 ```
 
 This results in the following image, in which the new nodes are highlighted in red. Nodes 1, 4, 5, 11 and 12 are the promoters;
@@ -138,8 +138,8 @@ Note that VG uses its own numbering for the nodes. To find out which gen nodes t
 series of commands instead:
 
 ```console
-root@e97629b542ca:/vg# vg convert --gfa-in library.gfa --gfa-trans translation_table.txt --vg-out | vg view --vg-in - --dot --color --simple-dot | dot -Tsvg -o library.svg 
-root@e97629b542ca:/vg# cp library.svg library_fixed.svg && while IFS=$'\t' read _ new old; do sed "s#font-size=\"14.00\">$old</text>#font-size=\"14.00\">$new</text>#g" library_fixed.svg > temp_file.html && mv temp_file.html library_fixed.svg; done < translation_table.txt
+# vg convert --gfa-in library.gfa --gfa-trans translation_table.txt --vg-out | vg view --vg-in - --dot --color --simple-dot | dot -Tsvg -o library.svg 
+# IN='library.svg'; cp $IN ${IN%.*}_fixed.${IN##*.} && while IFS=$'\t' read _ new old; do sed "s#font-size=\"14.00\">$old</text>#font-size=\"14.00\">$new</text>#g" ${IN%.*}_fixed.${IN##*.} > temp_file.html && mv temp_file.html ${IN%.*}_fixed.${IN##*.}; done < translation_table.txt
 ```
 
 This results in the following output, where the nodes are referred to by their gen identifier in the block graph model

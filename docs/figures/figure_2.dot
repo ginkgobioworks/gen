@@ -3,50 +3,30 @@ strict digraph "" {
 		splines=true
 	];
 	node [label="\N"];
-	source	[end=-1,
-		label=start,
-		original_node=source];
-	1.0	[end=7,
-		highlights="[True, True, True, True, True, True, True, True]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>1.0:&nbsp;</TD><TD><FONT FACE='Courier New'><B>A</B><B>T</B><B>G</B><B>T</B><B>A</B><B>T</B><B>A</B><B>C</B></FONT></TD></TR></TABLE>>,
+	subgraph cluster_1 {
+		graph [label="",
+			rank=same,
+			style=invis
+		];
+		1.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>7</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>1:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'><B>A</B><B>T</B><B>G</B><B>T</B><B>A</B><B>T</B><B>A</B><B>C</B></FONT></TD></TR></TABLE>>,
+			margin=0,
+			shape=none];
+		1.8	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>8</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>9</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>1:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>AT</FONT></TD></TR></TABLE>>,
+			margin=0,
+			shape=none];
+		1.10	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>10</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>15</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>1:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'><B>C</B><B>A</B><B>C</B><B>G</B><B>G</B><B>C</B></FONT></TD></TR></TABLE>>,
+			margin=0,
+			shape=none];
+	}
+	source	[label=start];
+	source:e -> 1.0:caption:w;
+	1.0:seq:e -> 1.8:caption:w	[style=dashed];
+	2.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>1</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>2:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'><B>T</B><B>G</B></FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=1,
-		sequence=ATGTATAC,
-		shape=none,
-		start=0];
-	source:e -> 1.0:caption	[reference=False];
-	sink	[label=end,
-		original_node=sink,
-		start=0];
-	1.8	[end=9,
-		highlights="[False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>1.8:&nbsp;</TD><TD><FONT FACE='Courier New'>AT</FONT></TD></TR></TABLE>>,
-		margin=0,
-		original_node=1,
-		sequence=AT,
-		shape=none,
-		start=8];
-	1.0:e -> 1.8:caption	[reference=True,
-		style=dashed];
-	2.0	[end=1,
-		highlights="[True, True]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>2.0:&nbsp;</TD><TD><FONT FACE='Courier New'><B>T</B><B>G</B></FONT></TD></TR></TABLE>>,
-		margin=0,
-		original_node=2,
-		sequence=TG,
-		shape=none,
-		start=0];
-	1.0:e -> 2.0:caption	[reference=False];
-	1.10	[end=15,
-		highlights="[True, True, True, True, True, True]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>1.10:&nbsp;</TD><TD><FONT FACE='Courier New'><B>C</B><B>A</B><B>C</B><B>G</B><B>G</B><B>C</B></FONT></TD></TR></TABLE>>,
-		margin=0,
-		original_node=1,
-		sequence=CACGGC,
-		shape=none,
-		start=10];
-	1.8:e -> 1.10:caption	[reference=True,
-		style=dashed];
-	1.10:e -> sink:caption	[reference=False];
-	2.0:e -> 1.10:caption	[reference=False];
+		shape=none];
+	1.0:seq:e -> 2.0:caption:w;
+	1.8:seq:e -> 1.10:caption:w	[style=dashed];
+	sink	[label=end];
+	1.10:seq:e -> sink:w;
+	2.0:seq:e -> 1.10:caption:w;
 }

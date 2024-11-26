@@ -1,56 +1,29 @@
 strict digraph "" {
-	graph [bb="0,0,490,108",
-		rankdir=TD,
+	graph [rankdir=TD,
 		splines=true
 	];
 	node [label="\N"];
-	source	[height=0.5,
-		label=start,
-		pos="27,90",
-		width=0.75];
-	1	[height=0.5,
-		highlights="[True, True, True, True, True, True, True, True, False, False, True, True, True, True, True, True]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0' CELLPADDING='5'><TR><TD BORDER='0' PORT='caption'>1: </TD><TD PORT='0'><FONT FACE='Courier New'><B>A</B><SUB>0</SUB></FONT></TD>
+	source	[label=start];
+	1	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0' CELLPADDING='5'><TR><TD BORDER='0' PORT='caption'>1: </TD><TD PORT='0'><FONT FACE='Courier New'><B>A</B><SUB>0</SUB></FONT></TD>
 <TD PORT='1'><FONT FACE='Courier New'><B>T</B><SUB>1</SUB></FONT></TD>
 <TD PORT='2'><FONT FACE='Courier New'><B>G</B><SUB>2</SUB></FONT></TD>
+<TD>…</TD>
 <TD PORT='7'><FONT FACE='Courier New'><B>C</B><SUB>7</SUB></FONT></TD>
 <TD>…</TD>
 <TD PORT='10'><FONT FACE='Courier New'><B>C</B><SUB>10</SUB></FONT></TD>
 <TD>…</TD>
 <TD PORT='13'><FONT FACE='Courier New'><B>G</B><SUB>13</SUB></FONT></TD>
-<TD>…</TD>
 <TD PORT='14'><FONT FACE='Courier New'><B>G</B><SUB>14</SUB></FONT></TD>
 <TD PORT='15'><FONT FACE='Courier New'><B>C</B><SUB>15</SUB></FONT></TD></TR></TABLE>>,
 		margin=0,
-		pos="245,90",
-		sequence=ATGTATACATCACGGC,
-		shape=none,
-		width=4.8056];
-	source:e -> 1:caption	[constraint=False,
-		pos="e,72,90 54,90 56.75,90 58.791,90 60.61,90",
-		rank=same,
-		to_pos=0];
-	sink	[height=0.5,
-		label=end,
-		pos="463,90",
-		width=0.75];
-	1:15 -> sink:w	[constraint=False,
-		from_pos=15,
-		pos="e,436,90 418,90 420.75,90 422.79,90 424.61,90",
-		rank=same];
-	2	[height=0.5,
-		highlights="[True, True]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>2: </TD><TD PORT='0'><FONT FACE='Courier New'><B>T</B></FONT></TD>
+		shape=none];
+	source:e -> 1:caption	[constraint=False];
+	2	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>2: </TD><TD PORT='0'><FONT FACE='Courier New'><B>T</B></FONT></TD>
 <TD PORT='1'><FONT FACE='Courier New'><B>G</B></FONT></TD></TR></TABLE>>,
 		margin=0,
-		pos="210,18",
-		sequence=TG,
-		shape=none,
-		width=0.75];
-	1:7 -> 2:0	[from_pos=7,
-		pos="e,212,30.25 190.75,74.75 190.75,57.285 204.24,53.314 209.73,41.331",
-		to_pos=0];
-	2:1 -> 1:10	[from_pos=1,
-		pos="e,247.38,74.75 226.25,30.25 226.25,47.696 239.66,51.693 245.11,63.675",
-		to_pos=10];
+		shape=none];
+	1:7 -> 2:0;
+	sink	[label=sink];
+	1:15 -> sink:w	[constraint=False];
+	2:1 -> 1:10;
 }

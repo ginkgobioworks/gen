@@ -1,457 +1,164 @@
 strict digraph "" {
 	graph [rankdir=LR,
-		splines=false
+		splines=polyline
 	];
 	node [label="\N"];
-	source	[end=-1,
-		label=start,
-		original_node=source];
-	4.0	[end=63,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>4.0:&nbsp;</TD><TD><FONT FACE='Courier New'>MTI…ACD</FONT></TD></TR></TABLE>>,
+	subgraph cluster_3 {
+		graph [label="",
+			rank=same,
+			style=invis
+		];
+		3.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>656</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>3:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>MTI…PLA</FONT></TD></TR></TABLE>>,
+			margin=0,
+			shape=none];
+		3.657	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>657</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>1048</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>3:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>KMH…WAG</FONT></TD></TR></TABLE>>,
+			margin=0,
+			shape=none];
+	}
+	source	[label=start];
+	source:e -> 3.0:caption:w;
+	4.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>63</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>4:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>MTI…ACD</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=4,
-		sequence=MTIKEMPQPKTFGELKNLPLLNTDKPVQALMKIADELGEIFKFEAPGRVTRYLSSQRLIKEACD,
-		shape=none,
-		start=0];
-	source:e -> 4.0:caption	[reference=False];
-	12.0	[end=64,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>12.0:&nbsp;</TD><TD><FONT FACE='Courier New'>MKQ…VCD</FONT></TD></TR></TABLE>>,
+		shape=none];
+	source:e -> 4.0:caption:w;
+	12.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>64</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>12:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>MKQ…VCD</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=12,
-		sequence=MKQASAIPQPKTYGPLKNLPHLEKEQLSQSLWRIADELGPIFRFDFPGVSSVFVSGHNLVAEVCD,
-		shape=none,
-		start=0];
-	source:e -> 12.0:caption	[reference=False];
-	20.0	[end=64,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>20.0:&nbsp;</TD><TD><FONT FACE='Courier New'>MKE…VCD</FONT></TD></TR></TABLE>>,
+		shape=none];
+	source:e -> 12.0:caption:w;
+	20.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>64</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>20:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>MKE…VCD</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=20,
-		sequence=MKETSPIPQPKTFGPLGNLPLIDKDKPTLSLIKLAEEQGPIFQIHTPAGTTIVVSGHELVKEVCD,
-		shape=none,
-		start=0];
-	source:e -> 20.0:caption	[reference=False];
-	sink	[label=end,
-		original_node=sink,
-		start=0];
-	3.657	[end=1048,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>3.657:&nbsp;</TD><TD><FONT FACE='Courier New'>KMH…WAG</FONT></TD></TR></TABLE>>,
+		shape=none];
+	source:e -> 20.0:caption:w;
+	3.0:seq:e -> 3.657:caption:w	[style=dashed];
+	sink	[label=end];
+	3.657:seq:e -> sink:w;
+	5.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>57</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>5:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>ESR…MVD</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=3,
-		sequence=KMHGAFSTNVVASKELQQPGSARSTRHLEIELPKEASYQEGDHLGVIPRNYEGIVNRVTARFGLDASQQIRLEAEEEKLAHLPLAKTVSVEELLQYVELQDPVTRTQLRAMAAKTVCPPHKVELEALLEKQAYKEQVLAKRLTMLELLEKYPACEMKFSEFIALLPSIRPRYYSISSSPRVDEKQASITVSVVSGEAWSGYGEYKGIASNYLAELQEGDTITCFISTPQSEFTLPKDPETPLIMVGPGTGVAPFRGFVQARKQLKEQGQSLGEAHLYFGCRSPHEDYLYQEELENAQSEGIITLHTAFSRMPNQPKTYVQHVMEQDGKKLIELLDQGAHFYICGDGSQMAPAVEATLMKSYADVHQVSEADARLWLQQLEEKGRYAKDVWAG,
-		shape=none,
-		start=657];
-	3.657:e -> sink:caption	[reference=False];
-	5.0	[end=57,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>5.0:&nbsp;</TD><TD><FONT FACE='Courier New'>ESR…MVD</FONT></TD></TR></TABLE>>,
+		shape=none];
+	4.0:seq:e -> 5.0:caption:w;
+	13.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>57</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>13:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>EKR…MLD</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=5,
-		sequence=ESRFDKNLSQALKFVRDFAGDGLFTSWTHEKNWKKAHNILLPSFSQQAMKGYHAMMVD,
-		shape=none,
-		start=0];
-	4.0:e -> 5.0:caption	[reference=False];
-	13.0	[end=57,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>13.0:&nbsp;</TD><TD><FONT FACE='Courier New'>EKR…MLD</FONT></TD></TR></TABLE>>,
+		shape=none];
+	4.0:seq:e -> 13.0:caption:w;
+	21.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>57</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>21:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>EER…MVD</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=13,
-		sequence=EKRFDKNLGKGLQKVREFGGDGLFTSWTHEPNWQKAHRILLPSFSQKAMKGYHSMMLD,
-		shape=none,
-		start=0];
-	4.0:e -> 13.0:caption	[reference=False];
-	21.0	[end=57,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>21.0:&nbsp;</TD><TD><FONT FACE='Courier New'>EER…MVD</FONT></TD></TR></TABLE>>,
+		shape=none];
+	4.0:seq:e -> 21.0:caption:w;
+	6.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>43</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>6:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>IAV…NSF</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=21,
-		sequence=EERFDKSIEGALEKVRAFSGDGLFTSWTHEPNWRKAHNILMPTFSQRAMKDYHEKMVD,
-		shape=none,
-		start=0];
-	4.0:e -> 21.0:caption	[reference=False];
-	6.0	[end=43,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>6.0:&nbsp;</TD><TD><FONT FACE='Courier New'>IAV…NSF</FONT></TD></TR></TABLE>>,
+		shape=none];
+	5.0:seq:e -> 6.0:caption:w;
+	14.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>43</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>14:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>IAT…NSF</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=6,
-		sequence=IAVQLVQKWERLNADEHIEVPEDMTRLTLDTIGLCGFNYRFNSF,
-		shape=none,
-		start=0];
-	5.0:e -> 6.0:caption	[reference=False];
-	14.0	[end=43,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>14.0:&nbsp;</TD><TD><FONT FACE='Courier New'>IAT…NSF</FONT></TD></TR></TABLE>>,
+		shape=none];
+	5.0:seq:e -> 14.0:caption:w;
+	22.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>43</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>22:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>IAV…NSY</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=14,
-		sequence=IATQLIQKWSRLNPNEEIDVADDMTRLTLDTIGLCGFNYRFNSF,
-		shape=none,
-		start=0];
-	5.0:e -> 14.0:caption	[reference=False];
-	22.0	[end=43,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>22.0:&nbsp;</TD><TD><FONT FACE='Courier New'>IAV…NSY</FONT></TD></TR></TABLE>>,
+		shape=none];
+	5.0:seq:e -> 22.0:caption:w;
+	7.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>49</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>7:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>YRD…NDL</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=22,
-		sequence=IAVQLIQKWARLNPNEAVDVPGDMTRLTLDTIGLCGFNYRFNSY,
-		shape=none,
-		start=0];
-	5.0:e -> 22.0:caption	[reference=False];
-	7.0	[end=49,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>7.0:&nbsp;</TD><TD><FONT FACE='Courier New'>YRD…NDL</FONT></TD></TR></TABLE>>,
+		shape=none];
+	6.0:seq:e -> 7.0:caption:w;
+	15.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>49</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>15:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>YRD…NSL</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=7,
-		sequence=YRDQPHPFITSMVRALDEAMNKLQRANPDDPAYDENKRQFQEDIKVMNDL,
-		shape=none,
-		start=0];
-	6.0:e -> 7.0:caption	[reference=False];
-	15.0	[end=49,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>15.0:&nbsp;</TD><TD><FONT FACE='Courier New'>YRD…NSL</FONT></TD></TR></TABLE>>,
+		shape=none];
+	6.0:seq:e -> 15.0:caption:w;
+	23.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>49</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>23:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>YRE…FSL</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=15,
-		sequence=YRDSQHPFITSMLRALKEAMNQSKRLGLQDKMMVKTKLQFQKDIEVMNSL,
-		shape=none,
-		start=0];
-	6.0:e -> 15.0:caption	[reference=False];
-	23.0	[end=49,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>23.0:&nbsp;</TD><TD><FONT FACE='Courier New'>YRE…FSL</FONT></TD></TR></TABLE>>,
+		shape=none];
+	6.0:seq:e -> 23.0:caption:w;
+	8.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>51</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>8:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>VDK…GHE</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=23,
-		sequence=YRETPHPFINSMVRALDEAMHQMQRLDVQDKLMVRTKRQFRYDIQTMFSL,
-		shape=none,
-		start=0];
-	6.0:e -> 23.0:caption	[reference=False];
-	8.0	[end=51,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>8.0:&nbsp;</TD><TD><FONT FACE='Courier New'>VDK…GHE</FONT></TD></TR></TABLE>>,
+		shape=none];
+	7.0:seq:e -> 8.0:caption:w;
+	16.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>52</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>16:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>VDR…GHE</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=8,
-		sequence=VDKIIADRKASGEQSDDLLTHMLNGKDPETGEPLDDENIRYQIITFLIAGHE,
-		shape=none,
-		start=0];
-	7.0:e -> 8.0:caption	[reference=False];
-	16.0	[end=52,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>16.0:&nbsp;</TD><TD><FONT FACE='Courier New'>VDR…GHE</FONT></TD></TR></TABLE>>,
+		shape=none];
+	7.0:seq:e -> 16.0:caption:w;
+	24.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>52</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>24:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>VDS…GHE</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=16,
-		sequence=VDRMIAERKANPDENIKDLLSLMLYAKDPVTGETLDDENIRYQIITFLIAGHE,
-		shape=none,
-		start=0];
-	7.0:e -> 16.0:caption	[reference=False];
-	24.0	[end=52,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>24.0:&nbsp;</TD><TD><FONT FACE='Courier New'>VDS…GHE</FONT></TD></TR></TABLE>>,
+		shape=none];
+	7.0:seq:e -> 24.0:caption:w;
+	9.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>59</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>9:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>TTS…WPT</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=24,
-		sequence=VDSIIAERRANGDQDEKDLLARMLNVEDPETGEKLDDENIRFQIITFLIAGHE,
-		shape=none,
-		start=0];
-	7.0:e -> 24.0:caption	[reference=False];
-	9.0	[end=59,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>9.0:&nbsp;</TD><TD><FONT FACE='Courier New'>TTS…WPT</FONT></TD></TR></TABLE>>,
+		shape=none];
+	8.0:seq:e -> 9.0:caption:w;
+	17.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>59</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>17:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>TTS…YPT</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=9,
-		sequence=TTSGLLSFALYFLVKNPHVLQKAAEEAARVLVDPVPSYKQVKQLKYVGMVLNEALRLWPT,
-		shape=none,
-		start=0];
-	8.0:e -> 9.0:caption	[reference=False];
-	17.0	[end=59,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>17.0:&nbsp;</TD><TD><FONT FACE='Courier New'>TTS…YPT</FONT></TD></TR></TABLE>>,
+		shape=none];
+	8.0:seq:e -> 17.0:caption:w;
+	25.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>59</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>25:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>TTS…WPT</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=17,
-		sequence=TTSGLLSFAIYCLLTHPEKLKKAQEEADRVLTDDTPEYKQIQQLKYIRMVLNETLRLYPT,
-		shape=none,
-		start=0];
-	8.0:e -> 17.0:caption	[reference=False];
-	25.0	[end=59,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>25.0:&nbsp;</TD><TD><FONT FACE='Courier New'>TTS…WPT</FONT></TD></TR></TABLE>>,
+		shape=none];
+	8.0:seq:e -> 25.0:caption:w;
+	10.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>75</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>10:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>APA…IGQ</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=25,
-		sequence=TTSGLLSFATYFLLKHPDKLKKAYEEVDRVLTDAAPTYKQVLELTYIRMILNESLRLWPT,
-		shape=none,
-		start=0];
-	8.0:e -> 25.0:caption	[reference=False];
-	10.0	[end=75,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>10.0:&nbsp;</TD><TD><FONT FACE='Courier New'>APA…IGQ</FONT></TD></TR></TABLE>>,
+		shape=none];
+	9.0:seq:e -> 10.0:caption:w;
+	18.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>75</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>18:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>APA…IGM</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=10,
-		sequence=APAFSLYAKEDTVLGGEYPLEKGDELMVLIPQLHRDKTIWGDDVEEFRPERFENPSAIPQHAFKPFGNGQRACIGQ,
-		shape=none,
-		start=0];
-	9.0:e -> 10.0:caption	[reference=False];
-	18.0	[end=75,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>18.0:&nbsp;</TD><TD><FONT FACE='Courier New'>APA…IGM</FONT></TD></TR></TABLE>>,
+		shape=none];
+	9.0:seq:e -> 18.0:caption:w;
+	26.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>75</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>26:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>APA…IGM</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=18,
-		sequence=APAFSLYAKEDTVLGGEYPISKGQPVTVLIPKLHRDQNAWGPDAEDFRPERFEDPSSIPHHAYKPFGNGQRACIGM,
-		shape=none,
-		start=0];
-	9.0:e -> 18.0:caption	[reference=False];
-	26.0	[end=75,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>26.0:&nbsp;</TD><TD><FONT FACE='Courier New'>APA…IGM</FONT></TD></TR></TABLE>>,
+		shape=none];
+	9.0:seq:e -> 26.0:caption:w;
+	11.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>644</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>11:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>QFA…WAG</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=26,
-		sequence=APAFSLYPKEDTVIGGKFPITTNDRISVLIPQLHRDRDAWGKDAEEFRPERFEHQDQVPHHAYKPFGNGQRACIGM,
-		shape=none,
-		start=0];
-	9.0:e -> 26.0:caption	[reference=False];
-	11.0	[end=644,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>11.0:&nbsp;</TD><TD><FONT FACE='Courier New'>QFA…WAG</FONT></TD></TR></TABLE>>,
+		shape=none];
+	10.0:seq:e -> 11.0:caption:w;
+	19.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>647</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>19:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>QFA…TGM</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=11,
-		sequence=QFALHEATLVLGMMLKHFDFEDHTNYELDIKETLTLKPEGFVVKAKSKKIPLGGIPSPSTEQSAKKVRKKAENAHNTPLLVLYGSNMGTAEGTARDLADIAMSKGFAPQVATLDSHAGNLPREGAVLIVTASYNGHPPDNAKQFVDWLDQASADEVKGVRYSVFGCGDKNWATTYQKVPAFIDETLAAKGAENIADRGEADASDDFEGTYEEWREHMWSDVAAYFNLDIENSEDNKSTLSLQFVDSAADMPLAKMHGAFSTNVVASKELQQPGSARSTRHLEIELPKEASYQEGDHLGVIPRNYEGIVNRVTARFGLDASQQIRLEAEEEKLAHLPLAKTVSVEELLQYVELQDPVTRTQLRAMAAKTVCPPHKVELEALLEKQAYKEQVLAKRLTMLELLEKYPACEMKFSEFIALLPSIRPRYYSISSSPRVDEKQASITVSVVSGEAWSGYGEYKGIASNYLAELQEGDTITCFISTPQSEFTLPKDPETPLIMVGPGTGVAPFRGFVQARKQLKEQGQSLGEAHLYFGCRSPHEDYLYQEELENAQSEGIITLHTAFSRMPNQPKTYVQHVMEQDGKKLIELLDQGAHFYICGDGSQMAPAVEATLMKSYADVHQVSEADARLWLQQLEEKGRYAKDVWAG,
-		shape=none,
-		start=0];
-	10.0:e -> 11.0:caption	[reference=False];
-	19.0	[end=647,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>19.0:&nbsp;</TD><TD><FONT FACE='Courier New'>QFA…TGM</FONT></TD></TR></TABLE>>,
+		shape=none];
+	10.0:seq:e -> 19.0:caption:w;
+	27.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>654</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>27:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>QFA…AGI</FONT></TD></TR></TABLE>>,
 		margin=0,
-		original_node=19,
-		sequence=QFALQEATMVLGLVLKHFELINHTGYELKIKEALTIKPDDFKITVKPRKTAAINVQRKEQADIKAETKPKETKPKHGTPLLVLFGSNLGTAEGIAGELAAQGRQMGFTAETAPLDDYIGKLPEEGAVVIVTASYNGAPPDNAAGFVEWLKELEEGQLKGVSYAVFGCGNRSWASTYQRIPRLIDDMMKAKGASRLTAIGEGDAADDFESHRESWENRFWKETMDAFDINEIAQKEDRPSLSITFLSEATETPVAKAYGAFEGIVLENRELQTAASTRSTRHIELEIPAGKTYKEGDHIGILPKNSRELVQRVLSRFGLQSNHVIKVSGSAHMAHLPMDRPIKVVDLLSSYVELQEPASRLQLRELASYTVCPPHQKELEQLVSDDGIYKEQVLAKRLTMLDFLEDYPACEMPFERFLALLPSLKPRYYSISSSPKVHANIVSMTVGVVKASAWSGRGEYRGVASNYLAELNTGDAAACFIRTPQSGFQMPNDPETPMIMVGPGTGIAPFRGFIQARSVLKKEGSTLGEALLYFGCRRPDHDDLYREELDQAEQDGLVTIRRCYSRVENEPKGYVQHLLKQDTQKLMTLIEKGAHIYVCGDGSQMAPDVERTLRLAYEAEKAASQEESAVWLQKLQDQRRYVKDVWTGM,
-		shape=none,
-		start=0];
-	10.0:e -> 19.0:caption	[reference=False];
-	27.0	[end=654,
-		highlights="[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, \
-False, False, False, False, False, False, False, False, False]",
-		label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>27.0:&nbsp;</TD><TD><FONT FACE='Courier New'>QFA…AGI</FONT></TD></TR></TABLE>>,
-		margin=0,
-		original_node=27,
-		sequence=QFALHEATLVLGMILKYFTLIDHENYELDIKQTLTLKPGDFHISVQSRHQEAIHADVQAAEKAAPDEQKEKTEAKGASVIGLNNRPLLVLYGSDTGTAEGVARELADTASLHGVRTKTAPLNDRIGKLPKEGAVVIVTSSYNGKPPSNAGQFVQWLQEIKPGELEGVHYAVFGCGDHNWASTYQYVPRFIDEQLAEKGATRFSARGEGDVSGDFEGQLDEWKKSMWADAIKAFGLELNENADKERSTLSLQFVRGLGESPLARSYEASHASIAENRELQSADSDRSTRHIEIALPPDVEYQEGDHLGVLPKNSQTNVSRILHRFGLKGTDQVTLSASGRSAGHLPLGRPVSLHDLLSYSVEVQEAATRAQIRELASFTVCPPHRRELEELSAEGVYQEQILKKRISMLDLLEKYEACDMPFERFLELLRPLKPRYYSISSSPRVNPRQASITVGVVRGPAWSGRGEYRGVASNDLAERQAGDDVVMFIRTPESRFQLPKDPETPIIMVGPGTGVAPFRGFLQARDVLKREGKTLGEAHLYFGCRNDRDFIYRDELERFEKDGIVTVHTAFSRKEGMPKTYVQHLMADQADTLISILDRGGRLYVCGDGSKMAPDVEAALQKAYQAVHGTGEQEAQNWLRHLQDTGMYAKDVWAGI,
-		shape=none,
-		start=0];
-	10.0:e -> 27.0:caption	[reference=False];
-	11.0:e -> 3.657:caption	[reference=False];
-	12.0:e -> 5.0:caption	[reference=False];
-	12.0:e -> 13.0:caption	[reference=False];
-	12.0:e -> 21.0:caption	[reference=False];
-	13.0:e -> 6.0:caption	[reference=False];
-	13.0:e -> 14.0:caption	[reference=False];
-	13.0:e -> 22.0:caption	[reference=False];
-	14.0:e -> 7.0:caption	[reference=False];
-	14.0:e -> 15.0:caption	[reference=False];
-	14.0:e -> 23.0:caption	[reference=False];
-	15.0:e -> 8.0:caption	[reference=False];
-	15.0:e -> 16.0:caption	[reference=False];
-	15.0:e -> 24.0:caption	[reference=False];
-	16.0:e -> 9.0:caption	[reference=False];
-	16.0:e -> 17.0:caption	[reference=False];
-	16.0:e -> 25.0:caption	[reference=False];
-	17.0:e -> 10.0:caption	[reference=False];
-	17.0:e -> 18.0:caption	[reference=False];
-	17.0:e -> 26.0:caption	[reference=False];
-	18.0:e -> 11.0:caption	[reference=False];
-	18.0:e -> 19.0:caption	[reference=False];
-	18.0:e -> 27.0:caption	[reference=False];
-	19.0:e -> 3.657:caption	[reference=False];
-	20.0:e -> 5.0:caption	[reference=False];
-	20.0:e -> 13.0:caption	[reference=False];
-	20.0:e -> 21.0:caption	[reference=False];
-	21.0:e -> 6.0:caption	[reference=False];
-	21.0:e -> 14.0:caption	[reference=False];
-	21.0:e -> 22.0:caption	[reference=False];
-	22.0:e -> 7.0:caption	[reference=False];
-	22.0:e -> 15.0:caption	[reference=False];
-	22.0:e -> 23.0:caption	[reference=False];
-	23.0:e -> 8.0:caption	[reference=False];
-	23.0:e -> 16.0:caption	[reference=False];
-	23.0:e -> 24.0:caption	[reference=False];
-	24.0:e -> 9.0:caption	[reference=False];
-	24.0:e -> 17.0:caption	[reference=False];
-	24.0:e -> 25.0:caption	[reference=False];
-	25.0:e -> 10.0:caption	[reference=False];
-	25.0:e -> 18.0:caption	[reference=False];
-	25.0:e -> 26.0:caption	[reference=False];
-	26.0:e -> 11.0:caption	[reference=False];
-	26.0:e -> 19.0:caption	[reference=False];
-	26.0:e -> 27.0:caption	[reference=False];
-	27.0:e -> 3.657:caption	[reference=False];
+		shape=none];
+	10.0:seq:e -> 27.0:caption:w;
+	11.0:seq:e -> 3.657:caption:w;
+	12.0:seq:e -> 5.0:caption:w;
+	12.0:seq:e -> 13.0:caption:w;
+	12.0:seq:e -> 21.0:caption:w;
+	13.0:seq:e -> 6.0:caption:w;
+	13.0:seq:e -> 14.0:caption:w;
+	13.0:seq:e -> 22.0:caption:w;
+	14.0:seq:e -> 7.0:caption:w;
+	14.0:seq:e -> 15.0:caption:w;
+	14.0:seq:e -> 23.0:caption:w;
+	15.0:seq:e -> 8.0:caption:w;
+	15.0:seq:e -> 16.0:caption:w;
+	15.0:seq:e -> 24.0:caption:w;
+	16.0:seq:e -> 9.0:caption:w;
+	16.0:seq:e -> 17.0:caption:w;
+	16.0:seq:e -> 25.0:caption:w;
+	17.0:seq:e -> 10.0:caption:w;
+	17.0:seq:e -> 18.0:caption:w;
+	17.0:seq:e -> 26.0:caption:w;
+	18.0:seq:e -> 11.0:caption:w;
+	18.0:seq:e -> 19.0:caption:w;
+	18.0:seq:e -> 27.0:caption:w;
+	19.0:seq:e -> 3.657:caption:w;
+	20.0:seq:e -> 5.0:caption:w;
+	20.0:seq:e -> 13.0:caption:w;
+	20.0:seq:e -> 21.0:caption:w;
+	21.0:seq:e -> 6.0:caption:w;
+	21.0:seq:e -> 14.0:caption:w;
+	21.0:seq:e -> 22.0:caption:w;
+	22.0:seq:e -> 7.0:caption:w;
+	22.0:seq:e -> 15.0:caption:w;
+	22.0:seq:e -> 23.0:caption:w;
+	23.0:seq:e -> 8.0:caption:w;
+	23.0:seq:e -> 16.0:caption:w;
+	23.0:seq:e -> 24.0:caption:w;
+	24.0:seq:e -> 9.0:caption:w;
+	24.0:seq:e -> 17.0:caption:w;
+	24.0:seq:e -> 25.0:caption:w;
+	25.0:seq:e -> 10.0:caption:w;
+	25.0:seq:e -> 18.0:caption:w;
+	25.0:seq:e -> 26.0:caption:w;
+	26.0:seq:e -> 11.0:caption:w;
+	26.0:seq:e -> 19.0:caption:w;
+	26.0:seq:e -> 27.0:caption:w;
+	27.0:seq:e -> 3.657:caption:w;
 }

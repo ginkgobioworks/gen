@@ -1,9 +1,9 @@
 # Tracking protein variant libraries
 ## Site-directed Homologous Recombination
 
-This example recreates a protein engineering library made through site-directed, homologous recombination guided by structure-based computation (SCHEMA) ([Otey 2006](doi.org/10.1371/journal.pbio.0040112)). Starting from three existing cytochrome P450 proteins, approximately 3,000 artifical (chimeric) proteins were constructed and tested.
+This example recreates a protein engineering library made through site-directed, homologous recombination guided by structure-based computation (SCHEMA) ([Otey 2006](doi.org/10.1371/journal.pbio.0040112)). Starting from three existing cytochrome P450 proteins, approximately 3,000 artifical (chimeric) proteins were constructed and tested. The authors describe it as follows: 
 
-"We generated an artificial family of cytochromes P450 by recombining fragments of the genes encoding the heme-binding domains of three bacterial P450s, CYP102A1 (also known as P450BM3), CYP102A2, and CYP102A3 (abbreviated A1, A2, and A3), which share ̃65% amino acid identity [...] The final design has crossovers located after residues Glu64, Ile122, Tyr166, Val216, Thr268, Ala328, and Gln404, based on the numbering of the A1 sequence"
+> _"We generated an artificial family of cytochromes P450 by recombining fragments of the genes encoding the heme-binding domains of three bacterial P450s, CYP102A1 (also known as P450BM3), CYP102A2, and CYP102A3 (abbreviated A1, A2, and A3), which share ̃65% amino acid identity [...] The final design has crossovers located after residues Glu64, Ile122, Tyr166, Val216, Thr268, Ala328, and Gln404, based on the numbering of the A1 sequence"_
 
 First we download the sequences of the parent proteins and combine them into one fasta file:
 
@@ -33,21 +33,43 @@ gen import --fasta P14779.fasta
 gen update --parts output/segments.fa --library output/layout.csv --path-name sp\|P14779\|CPXB_PRIM2 --start 0 --end 657
 ```
 
+This results in a graph with a segment topology as shown below. Note that for clarity, we ommited the region that was replaced.
+Currently it is still present in the graph as stored in the database, this will probably change in the future.
 ![Recombination library](../../docs/figures/protein_figure_1.svg)
 
-VG can also be used to generate graphical representations, but overwrites the node identifiers. The identifiers can be restored by operating as follows:
+The figure above was generated using [this Python notebook](../../docs/figures/generate_dot_files.ipynb), alternatively
+you can use VG to generate a graphical representation. To do this, we export the graph to a GFA file, which can then be 
+read by VG. One challenge is that VG overwrites our node identifiers. These can be restored by operating as follows:
 ```console
-gen export 
-vg convert --gfa-in library.gfa --gfa-trans translation_table.txt --vg-out | vg view --vg-in - --dot --color --simple-dot | dot -Tsvg -o library.svg
+> gen export --gfa P450_chimera.gfa
+> docker run --volume $PWD:/data --workdir /data --interactive -t quay.io/vgteam/vg:v1.60.0
+[...]
 
-IN='P450_chimera.svg'; cp $IN ${IN%.*}_fixed.${IN##*.} && while IFS=$'\t' read _ new old; do sed "s#font-size=\"14.00\">$old</text>#font-size=\"14.00\">$new</text>#g" ${IN%.*}_fixed.${IN##*.} > temp_file.html && mv temp_file.html ${IN%.*}_fixed.${IN##*.}; done < translation_table.txt
+```
+And then once you're insde the Docker container:
+```console
+# apt update
+# apt install -y graphviz
+# vg convert --gfa-in P450_chimera.gfa --gfa-trans translation_table.txt --vg-out | vg view --vg-in - --dot --color --simple-dot | dot -Tsvg -o P450_chimera.svg
+# IN='P450_chimera.svg'; cp $IN ${IN%.*}_fixed.${IN##*.} && while IFS=$'\t' read _ new old; do sed "s#font-size=\"14.00\">$old</text>#font-size=\"14.00\">$new</text>#g" ${IN%.*}_fixed.${IN##*.} > temp_file.html && mv temp_file.html ${IN%.*}_fixed.${IN##*.}; done < translation_table.txt
 ```
 
+This results in the following image:
+![Recombination library - VG](P450_chimera_fixed.svg)
+
+Now that we have our protein graph ready, we can use it to design a corresponding DNA graph with the same topology. 
+
 ## Site Saturation Mutagenesis
+```console
+$ wget https://www.rcsb.org/fasta/entry/1PGA -O GB1.fa
+```
+
 GB1 dataset: Adaptation in protein fitness landscapes is facilitated by indirect paths
  https://doi.org/10.7554/eLife.16965
 
 "In this study, we investigated the fitness landscape of all variants (204 = 160,000) at four amino acid sites (V39, D40, G41 and V54) in an epistatic region of protein G domain B1 (GB1, 56 amino acids in total)"
+
+
 
 There's also the 2014 publication _A Comprehensive Biophysical Description of Pairwise Epistasis throughout an Entire Protein Domain_ by Olson et al. (doi: [10.1016/j.cub.2014.09.072](https://doi.org/10.1016/j.cub.2014.09.072)) but that's more DMS
 

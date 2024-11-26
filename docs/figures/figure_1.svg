@@ -57,20 +57,8 @@
 <path fill="none" stroke="black" d="M54,-90C56.73,-90 58.76,-90 60.56,-90"/>
 <polygon fill="black" stroke="black" points="60.36,-93.5 70.36,-90 60.36,-86.5 60.36,-93.5"/>
 </g>
-<!-- sink -->
-<g id="node3" class="node">
-<title>sink</title>
-<ellipse fill="none" stroke="black" cx="363" cy="-90" rx="27" ry="18"/>
-<text text-anchor="middle" x="363" y="-84.95" font-family="Times,serif" font-size="14.00">end</text>
-</g>
-<!-- 1&#45;&gt;sink -->
-<g id="edge2" class="edge">
-<title>1:15&#45;&gt;sink:w</title>
-<path fill="none" stroke="black" d="M318.12,-90C320.86,-90 322.88,-90 324.69,-90"/>
-<polygon fill="black" stroke="black" points="324.49,-93.5 334.49,-90 324.49,-86.5 324.49,-93.5"/>
-</g>
 <!-- 2 -->
-<g id="node4" class="node">
+<g id="node3" class="node">
 <title>2</title>
 <text text-anchor="start" x="187.62" y="-12.95" font-family="Times,serif" font-size="14.00">2: </text>
 <polygon fill="none" stroke="black" points="203.88,-6.75 203.88,-29.25 218.12,-29.25 218.12,-6.75 203.88,-6.75"/>
@@ -79,10 +67,22 @@
 <text text-anchor="start" x="221.12" y="-13.95" font-family="Courier New" font-weight="bold" font-size="14.00">G</text>
 </g>
 <!-- 1&#45;&gt;2 -->
-<g id="edge3" class="edge">
+<g id="edge2" class="edge">
 <title>1:7&#45;&gt;2:0</title>
 <path fill="none" stroke="black" d="M197,-77.75C197,-60.04 206.07,-54.33 209.61,-41.3"/>
 <polygon fill="black" stroke="black" points="213.03,-42.11 210.81,-31.75 206.09,-41.24 213.03,-42.11"/>
+</g>
+<!-- sink -->
+<g id="node4" class="node">
+<title>sink</title>
+<ellipse fill="none" stroke="black" cx="363" cy="-90" rx="27" ry="18"/>
+<text text-anchor="middle" x="363" y="-84.95" font-family="Times,serif" font-size="14.00">sink</text>
+</g>
+<!-- 1&#45;&gt;sink -->
+<g id="edge3" class="edge">
+<title>1:15&#45;&gt;sink:w</title>
+<path fill="none" stroke="black" d="M318.12,-90C320.86,-90 322.88,-90 324.69,-90"/>
+<polygon fill="black" stroke="black" points="324.49,-93.5 334.49,-90 324.49,-86.5 324.49,-93.5"/>
 </g>
 <!-- 2&#45;&gt;1 -->
 <g id="edge4" class="edge">
