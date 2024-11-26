@@ -7,12 +7,12 @@ use crate::models::{
     node::Node,
     path::Path,
     path_edge::PathEdge,
+    sample::Sample,
     strand::Strand,
-    traits::*,
 };
 use itertools::Itertools;
 use petgraph::prelude::DiGraphMap;
-use rusqlite::{types::Value as SQLValue, Connection};
+use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -31,22 +31,14 @@ pub fn export_gfa(
 
     let mut edge_set = HashSet::new();
     if let Some(sample) = sample_name {
-        let block_groups = BlockGroup::query(
-            conn,
-            "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-            rusqlite::params!(
-                SQLValue::from(collection_name.to_string()),
-                SQLValue::from(sample.clone()),
-            ),
-        );
-        if block_groups.is_empty() {
+        let sample_block_groups = Sample::get_block_groups(conn, collection_name, Some(&sample));
+        if sample_block_groups.is_empty() {
             panic!(
                 "No block groups found for collection {} and sample {}",
                 collection_name, sample
             );
         }
-
-        let block_group_id = block_groups[0].id;
+        let block_group_id = sample_block_groups[0].id;
         let block_group_edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
         edge_set.extend(block_group_edges);
     } else {

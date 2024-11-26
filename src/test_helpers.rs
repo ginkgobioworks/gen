@@ -7,7 +7,7 @@ use std::fs;
 use std::hash::Hash;
 use std::io::Write;
 use std::ops::Add;
-use tempdir::TempDir;
+use tempfile::tempdir;
 
 use crate::config::{get_or_create_gen_dir, BASE_DIR};
 use crate::graph::{GraphEdge, GraphNode};
@@ -20,6 +20,7 @@ use crate::models::file_types::FileTypes;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::operations::Operation;
 use crate::models::path::Path;
+use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 use crate::models::traits::*;
@@ -59,7 +60,7 @@ pub fn get_operation_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Conn
 }
 
 pub fn setup_gen_dir() {
-    let tmp_dir = TempDir::new("gen").unwrap().into_path();
+    let tmp_dir = tempdir().unwrap().into_path();
     {
         BASE_DIR.with(|v| {
             let mut writer = v.write().unwrap();
@@ -195,17 +196,13 @@ where
     assert_eq!(v2, expected);
 }
 
-pub fn get_sample_bg<'a>(conn: &Connection, sample_name: impl Into<Option<&'a str>>) -> BlockGroup {
+pub fn get_sample_bg<'a>(
+    conn: &Connection,
+    collection_name: &str,
+    sample_name: impl Into<Option<&'a str>>,
+) -> BlockGroup {
     let sample_name = sample_name.into();
-    let mut results;
-    if let Some(name) = sample_name {
-        let query = "select * from block_groups where sample_name = ?1";
-        let params = rusqlite::params!(Value::from(name.to_string()));
-        results = BlockGroup::query(conn, query, params);
-    } else {
-        let query = "select * from block_groups where sample_name is null";
-        results = BlockGroup::query(conn, query, rusqlite::params!());
-    }
+    let mut results = Sample::get_block_groups(conn, collection_name, sample_name);
     results.pop().unwrap()
 }
 

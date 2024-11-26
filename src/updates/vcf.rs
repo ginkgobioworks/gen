@@ -993,19 +993,19 @@ mod tests {
         );
 
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, None).id, true),
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, None).id, true),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, "f1").id, true),
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, "f1").id, true),
             HashSet::from_iter(vec!["ATCTCGATCGATCGCGGGAACACACAGAGA".to_string()])
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, "f2").id, true),
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, "f2").id, true),
             HashSet::from_iter(vec!["ATCTGGATCGATCGCGGAATCAGAACACACAGGA".to_string()])
         );
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, "f3").id, true),
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, "f3").id, true),
             HashSet::from_iter(vec!["ATCGGGATCGATCGCTCAGAACACACAGGA".to_string()])
         );
     }
