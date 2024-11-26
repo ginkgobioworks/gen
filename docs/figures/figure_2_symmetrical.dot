@@ -4,19 +4,19 @@ strict digraph "" {
 	];
 	node [label="\N"];
 	source	[label=start];
-	1.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>7</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>1:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'><B>A</B><B>T</B><B>G</B><B>T</B><B>A</B><B>T</B><B>A</B><B>C</B></FONT></TD></TR></TABLE>>,
+	1.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>7</FONT></TD></TR><TR><TD BORDER='0' PORT='caption' ALIGN='right'>1:</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'><B>ATGTATAC</B></FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
 	source:e -> 1.0:caption:w;
-	1.8	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>8</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>9</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>1:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>AT</FONT></TD></TR></TABLE>>,
+	1.8	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>8</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>9</FONT></TD></TR><TR><TD BORDER='0' PORT='caption' ALIGN='right'>1:</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'>AT</FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
 	1.0:seq:e -> 1.8:caption:w	[style=dashed];
-	2.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>1</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>2:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'><B>T</B><B>G</B></FONT></TD></TR></TABLE>>,
+	2.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>0</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>1</FONT></TD></TR><TR><TD BORDER='0' PORT='caption' ALIGN='right'>2:</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'><B>TG</B></FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
 	1.0:seq:e -> 2.0:caption:w;
-	1.10	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>10</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>15</FONT></TD></TR><TR><TD BORDER='0' PORT='caption'>1:&nbsp;</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'><B>C</B><B>A</B><B>C</B><B>G</B><B>G</B><B>C</B></FONT></TD></TR></TABLE>>,
+	1.10	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0'></TD><TD BORDER='0' ALIGN='LEFT'><FONT POINT-SIZE='8'>10</FONT></TD><TD BORDER='0' ALIGN='RIGHT'><FONT POINT-SIZE='8'>15</FONT></TD></TR><TR><TD BORDER='0' PORT='caption' ALIGN='right'>1:</TD><TD PORT='seq' COLSPAN='2'><FONT FACE='Courier New'><B>CACGGC</B></FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
 	1.8:seq:e -> 1.10:caption:w	[style=dashed];

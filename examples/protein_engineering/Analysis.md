@@ -1,9 +1,15 @@
 # Tracking protein variant libraries
 ## Site-directed Homologous Recombination
 
-This example recreates a protein engineering library made through site-directed, homologous recombination guided by structure-based computation (SCHEMA) ([Otey 2006](doi.org/10.1371/journal.pbio.0040112)). Starting from three existing cytochrome P450 proteins, approximately 3,000 artifical (chimeric) proteins were constructed and tested. The authors describe it as follows: 
+This example recreates a protein engineering library made through site-directed, homologous recombination guided by
+structure-based computation (SCHEMA) ([Otey 2006](doi.org/10.1371/journal.pbio.0040112)). Starting from three existing
+cytochrome P450 proteins, approximately 3,000 artifical (chimeric) proteins were constructed and tested. The authors
+describe it as follows: 
 
-> _"We generated an artificial family of cytochromes P450 by recombining fragments of the genes encoding the heme-binding domains of three bacterial P450s, CYP102A1 (also known as P450BM3), CYP102A2, and CYP102A3 (abbreviated A1, A2, and A3), which share ̃65% amino acid identity [...] The final design has crossovers located after residues Glu64, Ile122, Tyr166, Val216, Thr268, Ala328, and Gln404, based on the numbering of the A1 sequence"_
+> _"We generated an artificial family of cytochromes P450 by recombining fragments of the genes encoding the
+> heme-binding domains of three bacterial P450s, CYP102A1 (also known as P450BM3), CYP102A2, and CYP102A3 (abbreviated
+> A1, A2, and A3), which share ̃65% amino acid identity [...] The final design has crossovers located after residues
+> Glu64, Ile122, Tyr166, Val216, Thr268, Ala328, and Gln404, based on the numbering of the A1 sequence"_
 
 First we download the sequences of the parent proteins and combine them into one fasta file:
 
@@ -12,33 +18,41 @@ wget https://rest.uniprot.org/uniprotkb/P14779.fasta https://rest.uniprot.org/un
 cat O08336.fasta O08394.fasta P14779.fasta > parents.fa
 ```
 
-Next we create multiple sequence alignment using the Muscle application, for example through Docker:
+Next we create multiple sequence alignment using the Muscle application, which you can run for example through Docker:
 
 ```console
  docker run --rm --volume $PWD:/data --workdir /data pegi3s/muscle -in parents.fa -out parents_aligned.fa
 ```
 
-With this alignment, we can then translate the crossover points from the A1 reference frame to all other proteins. The msa_crossover.py Python script performs those calculations, creates the protein segments, and saves them to disk in a format readable by the gen update command.
+With this alignment, we can then translate the crossover points from the A1 reference frame to all other proteins. The
+msa_crossover.py Python script performs those calculations, creates the protein segments, and saves them to disk in a
+format readable by the gen update command. In the future this functionality may be incorporated in the gen client
+directly.
 
 ```console
 python msa_crossover.py parents_aligned.fa 64 122 166 216 268 328 404
 ```
 
-The default output of this script is a directory called 'output' that contains the files 'layout.csv' and 'segments.fa'. We now set up our gen repository, import one of the parents to have a starting point, and then perform an update operation.
+The default output of this script is a directory called 'output' that contains the files 'layout.csv' and 'segments.fa'.
+We now set up our gen repository, create a new branch and switch into it. Then we import one of the parents to have a 
+starting point, and perform an update operation. Remember to wrap the molecule name in quotes because of the | symbols.
 
 ```console
 gen init
-gen defaults --database test.db --collection protein
+gen defaults --database protein_engineering.db --collection protein
+gen branch --create ex1
+gen branch --checkout ex1
 gen import --fasta P14779.fasta
-gen update --parts output/segments.fa --library output/layout.csv --path-name sp\|P14779\|CPXB_PRIM2 --start 0 --end 657
+gen update --path-name "sp|P14779|CPXB_PRIM2"  --start 0 --end 657 --parts output/segments.fa --library output/layout.csv
 ```
 
-This results in a graph with a segment topology as shown below. Note that for clarity, we ommited the region that was replaced.
-Currently it is still present in the graph as stored in the database, this will probably change in the future.
-![Recombination library](../../docs/figures/protein_figure_1.svg)
+This results in a graph with a segment topology as shown below. Each segment is shown as a rectangle containing an
+abridged version of its sequence. The node ID from which a segment was derived is indicated on the left side of each
+segment, and the linear coordinates within that node are listed above each segment. Segments derived from the same
+original node are connected via a dashed line. ![Recombination library](../../docs/figures/protein_figure_1.svg)
 
 The figure above was generated using [this Python notebook](../../docs/figures/generate_dot_files.ipynb), alternatively
-you can use VG to generate a graphical representation. To do this, we export the graph to a GFA file, which can then be 
+you can use VG to generate a graphical representation. To do this, we export the graph to a GFA file, which can then be
 read by VG. One challenge is that VG overwrites our node identifiers. These can be restored by operating as follows:
 ```console
 > gen export --gfa P450_chimera.gfa
@@ -46,7 +60,7 @@ read by VG. One challenge is that VG overwrites our node identifiers. These can 
 [...]
 
 ```
-And then once you're insde the Docker container:
+And then once you're inside the Docker container:
 ```console
 # apt update
 # apt install -y graphviz
@@ -54,32 +68,60 @@ And then once you're insde the Docker container:
 # IN='P450_chimera.svg'; cp $IN ${IN%.*}_fixed.${IN##*.} && while IFS=$'\t' read _ new old; do sed "s#font-size=\"14.00\">$old</text>#font-size=\"14.00\">$new</text>#g" ${IN%.*}_fixed.${IN##*.} > temp_file.html && mv temp_file.html ${IN%.*}_fixed.${IN##*.}; done < translation_table.txt
 ```
 
-This results in the following image:
-![Recombination library - VG](P450_chimera_fixed.svg)
+This results in the following image: ![Recombination library - VG](P450_chimera_fixed.svg)
 
-Now that we have our protein graph ready, we can use it to design a corresponding DNA graph with the same topology. 
+Now that we have our protein graph ready, we can use it to design a corresponding DNA graph with the same topology, for
+example. 
 
 ## Site Saturation Mutagenesis
+In the next example we will demonstrate the representation of a Site Saturation Mutagenesis library in gen by recreating
+an experiment described in ([Wu 2016](https://doi.org/10.7554/eLife.16965)):
+
+> _"In this study, we investigated the fitness landscape of all variants (20^4 = 160,000) at four amino acid sites (V39,
+> D40, G41 and V54) in an epistatic region of protein G domain B1 (GB1, 56 amino acids in total)"_
+
+We start by switching back to the main branch and creating a new experimental branch. Then we download the reference 
+sequence of the B1 domain of immunoglobulin G-binding protein G found in _Streptococcus_, and import it into our new 
+branch. We conclude by listing the branches of our repository, which shows that we have so far run 3 operations in the 
+repository overall, with operation 3 taking place in branch `ex2`: 
+
 ```console
+$ gen branch --checkout main
+$ gen branch --create ex2
+$ gen branch --checkout ex2
 $ wget https://www.rcsb.org/fasta/entry/1PGA -O GB1.fa
+$ gen import --fasta GB1.fa
+$ gen branch --list
+
+   Name                             Operation           
+   ex1                              2                   
+>  ex2                              3                   
+   main                             -1          
 ```
 
-GB1 dataset: Adaptation in protein fitness landscapes is facilitated by indirect paths
- https://doi.org/10.7554/eLife.16965
+To mutagenize the 4 different sites we will perform 4 separate update operations, all sharing the same parts and layout.
+The [parts file](saturation_parts.fa) defines a sequence of length 1 for every amino acid, and the [layout file](saturation_layout_single.csv) 
+is just one column that lists the same parts by name.
 
-"In this study, we investigated the fitness landscape of all variants (204 = 160,000) at four amino acid sites (V39, D40, G41 and V54) in an epistatic region of protein G domain B1 (GB1, 56 amino acids in total)"
+Note: the fasta file from which obtained the GB1 sequence has a non-compliant header that is cut off at the first space
+character, hence the name `1PGA_1|Chain` instead of `1PGA_1|Chain A|PROTEIN G|Streptococcus sp. GX7805`. The full protein
+sequence can be found at https://www.uniprot.org/uniprotkb/P06654/entry. TODO: extract the domain directly from P06654. 
 
 
+## Deep Mutational Scanning
 
-There's also the 2014 publication _A Comprehensive Biophysical Description of Pairwise Epistasis throughout an Entire Protein Domain_ by Olson et al. (doi: [10.1016/j.cub.2014.09.072](https://doi.org/10.1016/j.cub.2014.09.072)) but that's more DMS
+
+In the 2014 publication _A Comprehensive Biophysical Description of Pairwise Epistasis throughout an Entire
+Protein Domain_ by Olson et al. (doi: [10.1016/j.cub.2014.09.072](https://doi.org/10.1016/j.cub.2014.09.072)) but that's
+more DMS
+>  The 55-residue random region was split into 11 cassettes. Oligonucleotides were designed to randomize each codon singly or each codon pair within each cassette.
+
 
 ## Deep Diversification with Printed Oligonucleotides 
 AAV Dataset
 
-Bryant et al. Nature Methods 2021
-https://www.ncbi.nlm.nih.gov/bioproject/PRJNA673640/
-https://github.com/churchlab/Deep_diversification_AAV 
-https://github.com/google-research/google-research/tree/master/aav 
+Bryant et al. Nature Methods 2021 https://www.ncbi.nlm.nih.gov/bioproject/PRJNA673640/
+https://github.com/churchlab/Deep_diversification_AAV https://github.com/google-research/google-research/tree/master/aav 
 
 
 ## Natural Variants
@@ -117,6 +159,15 @@ TODO: demonstrate DNA <-> protein graph conversion (same topology)
 
 
 # Bibliography
-Otey, C. R., Landwehr, M., Endelman, J. B., Hiraga, K., Bloom, J. D., & Arnold, F. H. (2006). Structure-guided recombination creates an artificial family of cytochromes P450. PLoS biology, 4(5), e112. https://doi.org/10.1371/journal.pbio.0040112 
+Dewachter, L., Brooks, A.N., Noon, K. et al. Deep mutational scanning of essential bacterial proteins can guide
+antibiotic development. Nat Commun 14, 241 (2023). https://doi.org/10.1038/s41467-023-35940-3
 
-Dewachter, L., Brooks, A.N., Noon, K. et al. Deep mutational scanning of essential bacterial proteins can guide antibiotic development. Nat Commun 14, 241 (2023). https://doi.org/10.1038/s41467-023-35940-3
+Otey, C. R., Landwehr, M., Endelman, J. B., Hiraga, K., Bloom, J. D., & Arnold, F. H. (2006). Structure-guided
+recombination creates an artificial family of cytochromes P450. PLoS biology, 4(5), e112.
+https://doi.org/10.1371/journal.pbio.0040112 
+
+Wu, N. C., Dai, L., Olson, C. A., Lloyd-Smith, J. O., & Sun, R. (2016). Adaptation in protein fitness landscapes is
+facilitated by indirect paths. Elife, 5, e16965.  https://doi.org/10.7554/eLife.16965
+
+
+    

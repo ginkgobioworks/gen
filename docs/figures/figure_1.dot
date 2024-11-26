@@ -4,7 +4,7 @@ strict digraph "" {
 	];
 	node [label="\N"];
 	source	[label=start];
-	1	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>1: </TD><TD PORT='0'><FONT FACE='Courier New'><B>A</B></FONT></TD>
+	1	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption' ALIGN='right'>1:</TD><TD PORT='0'><FONT FACE='Courier New'><B>A</B></FONT></TD>
 <TD PORT='1'><FONT FACE='Courier New'><B>T</B></FONT></TD>
 <TD PORT='2'><FONT FACE='Courier New'><B>G</B></FONT></TD>
 <TD PORT='3'><FONT FACE='Courier New'><B>T</B></FONT></TD>
@@ -23,7 +23,7 @@ strict digraph "" {
 		margin=0,
 		shape=none];
 	source:e -> 1:caption	[constraint=False];
-	2	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption'>2: </TD><TD PORT='0'><FONT FACE='Courier New'><B>T</B></FONT></TD>
+	2	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption' ALIGN='right'>2:</TD><TD PORT='0'><FONT FACE='Courier New'><B>T</B></FONT></TD>
 <TD PORT='1'><FONT FACE='Courier New'><B>G</B></FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
