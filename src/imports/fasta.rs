@@ -207,17 +207,15 @@ mod tests {
             Node::query(conn, "select * from nodes;", rusqlite::params!()).len(),
             3
         );
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            &collection,
-            false,
-            conn,
-            op_conn,
-        )
-        .unwrap();
         assert_eq!(
-            Node::query(conn, "select * from nodes;", rusqlite::params!()).len(),
-            3
+            import_fasta(
+                &fasta_path.to_str().unwrap().to_string(),
+                &collection,
+                false,
+                conn,
+                op_conn,
+            ),
+            Err("No changes.")
         );
     }
 }

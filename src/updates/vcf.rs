@@ -734,18 +734,18 @@ mod tests {
         let nodes = Node::query(conn, "select * from nodes;", rusqlite::params!());
         assert_eq!(nodes.len(), 5);
 
-        update_with_vcf(
-            &vcf_path.to_str().unwrap().to_string(),
-            &collection,
-            "".to_string(),
-            "".to_string(),
-            conn,
-            op_conn,
-            None,
+        assert_eq!(
+            update_with_vcf(
+                &vcf_path.to_str().unwrap().to_string(),
+                &collection,
+                "".to_string(),
+                "".to_string(),
+                conn,
+                op_conn,
+                None,
+            ),
+            Err("No changes.")
         )
-        .unwrap();
-        let nodes = Node::query(conn, "select * from nodes;", rusqlite::params!());
-        assert_eq!(nodes.len(), 5);
     }
 
     #[test]
@@ -790,18 +790,18 @@ mod tests {
         let nodes = Node::query(conn, "select * from nodes;", rusqlite::params!());
         assert_eq!(nodes.len(), 8);
 
-        update_with_vcf(
-            &vcf_path.to_str().unwrap().to_string(),
-            &collection,
-            "".to_string(),
-            "".to_string(),
-            conn,
-            op_conn,
-            None,
+        assert_eq!(
+            update_with_vcf(
+                &vcf_path.to_str().unwrap().to_string(),
+                &collection,
+                "".to_string(),
+                "".to_string(),
+                conn,
+                op_conn,
+                None,
+            ),
+            Err("No changes.")
         )
-        .unwrap();
-        let nodes = Node::query(conn, "select * from nodes;", rusqlite::params!());
-        assert_eq!(nodes.len(), 8);
     }
 
     #[test]
