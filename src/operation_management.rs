@@ -887,13 +887,12 @@ pub fn end_operation<'a>(
 
     let dependencies = get_changeset_dependencies(conn, &output);
 
-    if output.is_empty() {
-        return Err("No changes.");
-    }
-
     let hash = if let Some(hash) = force_hash.into() {
         hash.to_string()
     } else {
+        if output.is_empty() {
+            return Err("No changes.");
+        }
         let mut hasher = Sha256::new();
         hasher.update(&output[..]);
         hasher.update(&dependencies[..]);
@@ -987,6 +986,86 @@ pub fn checkout(
         operation_conn,
         &Operation::get_by_hash(operation_conn, &dest_op_hash),
     );
+}
+
+pub fn parse_patch_operations(
+    branch_operations: &[Operation],
+    head_hash: &str,
+    operations: &str,
+) -> Vec<String> {
+    let mut results = vec![];
+    let (head_pos, _) = branch_operations
+        .iter()
+        .find_position(|op| op.hash == head_hash)
+        .expect("Current head position is not in branch.");
+    for operation in operations.split(",") {
+        if operation.contains("..") {
+            let mut it = operation.split("..");
+            let start = it.next().unwrap().parse::<String>().unwrap();
+            let end = it.next().unwrap().parse::<String>().unwrap();
+
+            let start_hash = if start.starts_with("HEAD") {
+                if start.contains("~") {
+                    let mut it = start.rsplit("~");
+                    let count = it.next().unwrap().parse::<usize>().unwrap();
+                    branch_operations[head_pos - count].hash.clone()
+                } else {
+                    branch_operations[head_pos].hash.clone()
+                }
+            } else {
+                start
+            };
+
+            let end_hash = if end.starts_with("HEAD") {
+                if end.contains("~") {
+                    let mut it = end.rsplit("~");
+                    let count = it.next().unwrap().parse::<usize>().unwrap();
+                    branch_operations[head_pos - count].hash.clone()
+                } else {
+                    branch_operations[head_pos].hash.clone()
+                }
+            } else {
+                end
+            };
+            let mut start_iter = branch_operations
+                .iter()
+                .positions(|op| op.hash.starts_with(start_hash.as_str()));
+            let start_pos = start_iter
+                .next()
+                .unwrap_or_else(|| panic!("Unable to find starting hash {start_hash:?}"));
+            let mut end_iter = branch_operations
+                .iter()
+                .positions(|op| op.hash.starts_with(end_hash.as_str()));
+            let end_pos = end_iter
+                .next()
+                .unwrap_or_else(|| panic!("Unable to find end hash {end_hash:?}"));
+            if start_iter.next().is_some() {
+                panic!("Start hash {start_hash} is ambiguous.");
+            }
+            if end_iter.next().is_some() {
+                panic!("Ending hash {end_hash} is ambiguous.");
+            }
+            results.extend(
+                branch_operations[start_pos..end_pos + 1]
+                    .iter()
+                    .map(|op| op.hash.clone()),
+            );
+        } else {
+            let hash = if operation.starts_with("HEAD") {
+                if operation.contains("~") {
+                    let mut it = operation.rsplit("~");
+                    let count = it.next().unwrap().parse::<usize>().unwrap();
+                    branch_operations[head_pos - count].hash.clone()
+                } else {
+                    branch_operations[head_pos].hash.clone()
+                }
+            } else {
+                operation.to_string()
+            };
+            results.push(hash);
+        }
+    }
+    results
 }
 
 #[cfg(test)]
@@ -1107,6 +1186,156 @@ mod tests {
                 .collect::<Vec<String>>()
             );
             assert_eq!(b2_ops, vec![op_1.hash, op_2.hash, op_5.hash, op_6.hash]);
+        }
+    }
+
+    #[cfg(test)]
+    mod parse_patch_operations {
+        use super::*;
+        use crate::operation_management::parse_patch_operations;
+
+        #[test]
+        fn test_head_shorthand() {
+            setup_gen_dir();
+            let conn = &get_connection(None);
+            let db_uuid = &metadata::get_db_uuid(conn);
+            let op_conn = &get_operation_connection(None);
+            setup_db(op_conn, db_uuid);
+
+            let op_1 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "fasta_addition",
+                "op-1",
+            );
+            let op_2 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "fasta_addition",
+                "op-2",
+            );
+            let op_3 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "vcf_addition",
+                "op-3",
+            );
+
+            let branch = Branch::get_by_name(op_conn, db_uuid, "main").unwrap();
+            let ops = Branch::get_operations(op_conn, branch.id);
+            assert_eq!(
+                parse_patch_operations(
+                    &ops,
+                    &branch.current_operation_hash.unwrap(),
+                    "HEAD~1..HEAD"
+                ),
+                vec![op_2.hash, op_3.hash]
+            );
+        }
+
+        #[test]
+        fn test_hash_shorthand() {
+            setup_gen_dir();
+            let conn = &get_connection(None);
+            let db_uuid = &metadata::get_db_uuid(conn);
+            let op_conn = &get_operation_connection(None);
+            setup_db(op_conn, db_uuid);
+
+            let op_1 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "fasta_addition",
+                "op-1-abc-123",
+            );
+            let op_2 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "fasta_addition",
+                "op-2-abc-123",
+            );
+            let op_3 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "vcf_addition",
+                "op-3-abc-13",
+            );
+
+            let branch = Branch::get_by_name(op_conn, db_uuid, "main").unwrap();
+            let ops = Branch::get_operations(op_conn, branch.id);
+            assert_eq!(
+                parse_patch_operations(
+                    &ops,
+                    &branch.current_operation_hash.unwrap(),
+                    &format!(
+                        "{op_2}..{op_3}",
+                        op_2 = &op_2.hash[..6],
+                        op_3 = &op_3.hash[..6]
+                    )
+                ),
+                vec![op_2.hash, op_3.hash]
+            );
+        }
+
+        #[test]
+        #[should_panic(expected = "Start hash op- is ambiguous.")]
+        fn test_error_on_ambiguous_hash_shorthand() {
+            setup_gen_dir();
+            let conn = &get_connection(None);
+            let db_uuid = &metadata::get_db_uuid(conn);
+            let op_conn = &get_operation_connection(None);
+            setup_db(op_conn, db_uuid);
+
+            let op_1 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "fasta_addition",
+                "op-1-abc-123",
+            );
+            let op_2 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "fasta_addition",
+                "op-2-abc-123",
+            );
+            let op_3 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "vcf_addition",
+                "op-3-abc-13",
+            );
+
+            let branch = Branch::get_by_name(op_conn, db_uuid, "main").unwrap();
+            let ops = Branch::get_operations(op_conn, branch.id);
+            assert_eq!(
+                parse_patch_operations(
+                    &ops,
+                    &branch.current_operation_hash.unwrap(),
+                    &format!(
+                        "{op_2}..{op_3}",
+                        op_2 = &op_2.hash[..3],
+                        op_3 = &op_3.hash[..3]
+                    )
+                ),
+                vec![op_2.hash, op_3.hash]
+            );
         }
     }
 
@@ -1348,7 +1577,8 @@ mod tests {
             conn,
             operation_conn,
             None,
-        );
+        )
+        .unwrap();
 
         let foo_bg_id = BlockGroup::get_id(conn, &collection, Some("foo"), "m123");
         let patch_1_seqs = HashSet::from_iter(vec![

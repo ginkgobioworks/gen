@@ -25,7 +25,7 @@ pub fn import_fasta(
     shallow: bool,
     conn: &Connection,
     operation_conn: &Connection,
-) -> Operation {
+) -> Result<Operation, &'static str> {
     let mut session = start_operation(conn);
 
     let mut reader = fasta::io::reader::Builder.build_from_path(fasta).unwrap();
@@ -100,7 +100,7 @@ pub fn import_fasta(
         summary_str.push_str(&format!(" {path_name}: {change_count} changes.\n"));
     }
 
-    let op = end_operation(
+    end_operation(
         conn,
         operation_conn,
         &mut session,
@@ -110,9 +110,6 @@ pub fn import_fasta(
         &summary_str,
         None,
     )
-    .unwrap();
-    println!("Created it");
-    op
 }
 
 #[cfg(test)]

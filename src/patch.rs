@@ -136,7 +136,8 @@ mod tests {
             false,
             conn,
             operation_conn,
-        );
+        )
+        .unwrap();
         let op_2 = update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
             &collection,
@@ -145,7 +146,8 @@ mod tests {
             conn,
             operation_conn,
             None,
-        );
+        )
+        .unwrap();
         let mut write_stream: Vec<u8> = Vec::new();
         create_patch(operation_conn, &[op_1.hash, op_2.hash], &mut write_stream);
         load_patches(&write_stream[..]);
@@ -171,7 +173,8 @@ mod tests {
             false,
             conn,
             operation_conn,
-        );
+        )
+        .unwrap();
         let op_2 = update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
             &collection,
@@ -180,7 +183,8 @@ mod tests {
             conn,
             operation_conn,
             None,
-        );
+        )
+        .unwrap();
         let mut write_stream: Vec<u8> = Vec::new();
         create_patch(operation_conn, &[op_1.hash, op_2.hash], &mut write_stream);
         let patches = load_patches(&write_stream[..]);
@@ -204,7 +208,8 @@ mod tests {
             false,
             conn,
             operation_conn,
-        );
+        )
+        .unwrap();
         let main_branch = Branch::get_by_name(operation_conn, db_uuid, "main").unwrap();
         let branch = Branch::create(operation_conn, db_uuid, "new-branch");
         OperationState::set_branch(operation_conn, db_uuid, "new-branch");
@@ -216,7 +221,8 @@ mod tests {
             conn,
             operation_conn,
             None,
-        );
+        )
+        .unwrap();
         let mut write_stream: Vec<u8> = Vec::new();
         create_patch(operation_conn, &[op_2.hash], &mut write_stream);
 

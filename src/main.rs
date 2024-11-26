@@ -11,6 +11,7 @@ use gen::imports::gfa::import_gfa;
 use gen::models::metadata;
 use gen::models::operations::{setup_db, Branch, Operation, OperationState};
 use gen::operation_management;
+use gen::operation_management::parse_patch_operations;
 use gen::patch;
 use gen::updates::fasta::update_with_fasta;
 use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
@@ -38,76 +39,6 @@ fn get_default_collection(conn: &Connection) -> Option<String> {
         .prepare("select collection_name from defaults where id = 1")
         .unwrap();
     stmt.query_row((), |row| row.get(0)).unwrap()
-}
-
-fn parse_patch_operations(
-    branch_operations: &[Operation],
-    head_hash: &str,
-    operations: &str,
-) -> Vec<String> {
-    let mut results = vec![];
-    let (head_pos, _) = branch_operations
-        .iter()
-        .find_position(|op| op.hash == head_hash)
-        .expect("Current head position is not in branch.");
-    for operation in operations.split(",") {
-        if operation.contains("..") {
-            let mut it = operation.split("..");
-            let start = it.next().unwrap().parse::<String>().unwrap();
-            let end = it.next().unwrap().parse::<String>().unwrap();
-
-            let start_hash = if start.starts_with("HEAD") {
-                if start.contains("~") {
-                    let mut it = start.rsplit("~");
-                    let count = it.next().unwrap().parse::<usize>().unwrap();
-                    branch_operations[head_pos - count].hash.clone()
-                } else {
-                    branch_operations[head_pos].hash.clone()
-                }
-            } else {
-                start
-            };
-
-            let end_hash = if end.starts_with("HEAD") {
-                if end.contains("~") {
-                    let mut it = end.rsplit("~");
-                    let count = it.next().unwrap().parse::<usize>().unwrap();
-                    branch_operations[head_pos - count].hash.clone()
-                } else {
-                    branch_operations[head_pos].hash.clone()
-                }
-            } else {
-                end
-            };
-            let start_pos = branch_operations
-                .iter()
-                .position(|op| op.hash.starts_with(start_hash.as_str()))
-                .unwrap_or_else(|| panic!("Unable to find starting hash {start_hash:?}"));
-            let end_pos = branch_operations
-                .iter()
-                .position(|op| op.hash.starts_with(end_hash.as_str()))
-                .unwrap_or_else(|| panic!("Unable to find end hash {end_hash:?}"));
-            results.extend(
-                branch_operations[start_pos..end_pos + 1]
-                    .iter()
-                    .map(|op| op.hash.clone()),
-            );
-        } else {
-            let hash = if operation.starts_with("HEAD") {
-                if operation.contains("~") {
-                    let mut it = operation.rsplit("~");
-                    let count = it.next().unwrap().parse::<usize>().unwrap();
-                    branch_operations[head_pos - count].hash.clone()
-                } else {
-                    branch_operations[head_pos].hash.clone()
-                }
-            } else {
-                operation.to_string()
-            };
-            results.push(hash);
-        }
-    }
-    results
 }
 
 #[derive(Subcommand)]
@@ -360,13 +291,17 @@ fn main() {
                     .expect("No collection specified and default not setup.")
             });
             if fasta.is_some() {
-                import_fasta(
+                match import_fasta(
                     &fasta.clone().unwrap(),
                     name,
                     *shallow,
                     &conn,
                     &operation_conn,
-                );
+                ) {
+                    Ok(_) => println!("Fasta imported."),
+                    Err("No changes.") => println!("Fasta contents already exist."),
+                    Err(_) => panic!("Import failed."),
+                }
             } else if gfa.is_some() {
                 import_gfa(&PathBuf::from(gfa.clone().unwrap()), name, None, &conn);
             } else {

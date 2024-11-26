@@ -173,7 +173,7 @@ pub fn update_with_vcf<'a>(
     conn: &Connection,
     operation_conn: &Connection,
     coordinate_frame: impl Into<Option<&'a str>>,
-) -> Operation {
+) -> Result<Operation, &'static str> {
     let coordinate_frame = coordinate_frame.into();
 
     let mut session = start_operation(conn);
@@ -465,7 +465,6 @@ pub fn update_with_vcf<'a>(
         &summary_str,
         None,
     )
-    .unwrap()
 }
 
 #[cfg(test)]
@@ -710,7 +709,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
 
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
