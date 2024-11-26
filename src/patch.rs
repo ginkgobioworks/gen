@@ -96,7 +96,7 @@ pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[Operati
             &patch.summary.summary,
             None,
         ) {
-            Ok(new_op) => {
+            Ok(_new_op) => {
                 println!("Successfully applied operation.");
             }
             Err(e) => match e {
