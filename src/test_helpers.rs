@@ -1,6 +1,6 @@
 use intervaltree::IntervalTree;
 use petgraph::graphmap::DiGraphMap;
-use rusqlite::{types::Value, Connection};
+use rusqlite::Connection;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs;
@@ -23,7 +23,6 @@ use crate::models::path::Path;
 use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
-use crate::models::traits::*;
 use crate::operation_management::{end_operation, start_operation};
 
 pub fn get_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Connection {

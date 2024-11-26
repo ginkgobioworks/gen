@@ -14,6 +14,7 @@ pub mod models;
 pub mod operation_management;
 pub mod patch;
 pub mod range;
+#[cfg(test)]
 pub mod test_helpers;
 pub mod updates;
 

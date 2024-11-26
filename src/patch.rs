@@ -1,11 +1,9 @@
 use crate::config::get_changeset_path;
-use crate::models::metadata::get_db_uuid;
 use crate::models::operations::{FileAddition, Operation, OperationSummary};
 use crate::models::traits::Query;
 use crate::operation_management;
 use crate::operation_management::{
     apply_changeset, end_operation, load_changeset, load_changeset_dependencies, start_operation,
-    write_changeset,
 };
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -82,7 +80,7 @@ where
 pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[OperationPatch]) {
     for patch in patches.iter() {
         let op_info = &patch.operation;
-        let mut changeset = load_changeset(op_info);
+        let changeset = load_changeset(op_info);
         let input: &mut dyn Read = &mut changeset.as_slice();
         let mut iter = ChangesetIter::start_strm(&input).unwrap();
         let dependencies = load_changeset_dependencies(op_info);
@@ -114,7 +112,7 @@ pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[Operati
 mod tests {
     use super::*;
     use crate::imports::fasta::import_fasta;
-    use crate::models::metadata;
+    use crate::models::metadata::get_db_uuid;
     use crate::models::operations::{setup_db, Branch, OperationState};
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use crate::updates::vcf::update_with_vcf;
@@ -126,7 +124,7 @@ mod tests {
         let vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.vcf");
         let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
         let conn = &mut get_connection(None);
-        let db_uuid = metadata::get_db_uuid(conn);
+        let db_uuid = get_db_uuid(conn);
         let operation_conn = &get_operation_connection(None);
         setup_db(operation_conn, &db_uuid);
         let collection = "test".to_string();

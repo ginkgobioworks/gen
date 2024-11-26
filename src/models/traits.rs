@@ -1,5 +1,4 @@
-use rusqlite::types::Value;
-use rusqlite::{params_from_iter, Connection, Params, Result, Row};
+use rusqlite::{Connection, Params, Result, Row};
 
 pub trait Query {
     type Model;

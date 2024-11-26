@@ -769,7 +769,7 @@ pub fn apply<'a>(
 ) -> Operation {
     let mut session = start_operation(conn);
     let operation = Operation::get_by_hash(operation_conn, op_hash);
-    let mut changeset = load_changeset(&operation);
+    let changeset = load_changeset(&operation);
     let input: &mut dyn Read = &mut changeset.as_slice();
     let mut iter = ChangesetIter::start_strm(&input).unwrap();
     let dependencies = load_changeset_dependencies(&operation);
@@ -852,7 +852,7 @@ pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Opera
             Direction::Outgoing => {
                 println!("Applying operation {next_op}");
                 let op_to_apply = Operation::get_by_hash(operation_conn, next_op);
-                let mut changeset = load_changeset(&op_to_apply);
+                let changeset = load_changeset(&op_to_apply);
                 let input: &mut dyn Read = &mut changeset.as_slice();
                 let mut iter = ChangesetIter::start_strm(&input).unwrap();
                 let dependencies = load_changeset_dependencies(&op_to_apply);
