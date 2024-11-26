@@ -1060,7 +1060,16 @@ pub fn parse_patch_operations(
                     branch_operations[head_pos].hash.clone()
                 }
             } else {
-                operation.to_string()
+                let mut iter = branch_operations
+                    .iter()
+                    .positions(|op| op.hash.starts_with(operation));
+                let pos = iter
+                    .next()
+                    .unwrap_or_else(|| panic!("Unable to find starting hash {operation:?}"));
+                if iter.next().is_some() {
+                    panic!("Hash {operation:?} is ambiguous.");
+                }
+                branch_operations[pos].hash.clone()
             };
             results.push(hash);
         }
@@ -1274,17 +1283,23 @@ mod tests {
 
             let branch = Branch::get_by_name(op_conn, db_uuid, "main").unwrap();
             let ops = Branch::get_operations(op_conn, branch.id);
+            let head_hash = branch.current_operation_hash.unwrap();
             assert_eq!(
                 parse_patch_operations(
                     &ops,
-                    &branch.current_operation_hash.unwrap(),
+                    &head_hash,
                     &format!(
                         "{op_2}..{op_3}",
                         op_2 = &op_2.hash[..6],
                         op_3 = &op_3.hash[..6]
                     )
                 ),
-                vec![op_2.hash, op_3.hash]
+                vec![op_2.hash.clone(), op_3.hash]
+            );
+
+            assert_eq!(
+                parse_patch_operations(&ops, &head_hash, &op_2.hash[..6]),
+                vec![op_2.hash]
             );
         }
 
