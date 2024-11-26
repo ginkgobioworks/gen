@@ -5,7 +5,7 @@ use interavl::IntervalTree as IT2;
 use intervaltree::IntervalTree;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
-use rusqlite::{params_from_iter, types::Value as SQLValue, Connection, Row};
+use rusqlite::{params, params_from_iter, types::Value as SQLValue, Connection, Row};
 use serde::{Deserialize, Serialize};
 
 use crate::graph::{
@@ -562,7 +562,7 @@ impl BlockGroup {
             match Accession::get(
                 conn,
                 "select * from accessions where name = ?1 AND path_id = ?2",
-                vec![
+                params![
                     SQLValue::from(accession_name.clone()),
                     SQLValue::from(path.id),
                 ],

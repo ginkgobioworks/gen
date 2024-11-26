@@ -270,12 +270,26 @@ pub fn write_changeset(operation: &Operation, changes: &[u8], dependencies: &[u8
     file.write_all(changes).unwrap()
 }
 
-pub fn apply_changeset(conn: &Connection, operation: &Operation) {
+pub fn load_changeset_dependencies(operation: &Operation) -> DependencyModels {
     let dependency_path =
         get_changeset_path(operation).join(format!("{op_id}.dep", op_id = operation.hash));
-    let dependencies: DependencyModels =
-        serde_json::from_reader(fs::File::open(dependency_path).unwrap()).unwrap();
+    serde_json::from_reader(fs::File::open(dependency_path).unwrap()).unwrap()
+}
 
+pub fn load_changeset(operation: &Operation) -> Vec<u8> {
+    let change_path =
+        get_changeset_path(operation).join(format!("{op_id}.cs", op_id = operation.hash));
+    let mut file = fs::File::open(change_path).unwrap();
+    let mut contents = vec![];
+    file.read_to_end(&mut contents).unwrap();
+    contents
+}
+
+pub fn apply_changeset(
+    conn: &Connection,
+    changeset: &mut ChangesetIter,
+    dependencies: &DependencyModels,
+) {
     for node in dependencies.nodes.iter() {
         if !Node::is_terminal(node.id) {
             assert!(Sequence::sequence_from_hash(conn, &node.sequence_hash).is_some());
@@ -354,19 +368,11 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
         dep_accession_map.insert(accession.id, new_accession.id);
     }
 
-    let change_path =
-        get_changeset_path(operation).join(format!("{op_id}.cs", op_id = operation.hash));
-    let mut file = fs::File::open(change_path).unwrap();
-    let mut contents = vec![];
-    file.read_to_end(&mut contents).unwrap();
     conn.pragma_update(None, "foreign_keys", "0").unwrap();
-
-    let input: &mut dyn Read = &mut contents.as_slice();
-    let mut iter = ChangesetIter::start_strm(&input).unwrap();
 
     let mut blockgroup_map: HashMap<i64, i64> = HashMap::new();
     let mut edge_map: HashMap<i64, EdgeData> = HashMap::new();
-    let mut node_map: HashMap<i64, String> = HashMap::new();
+    let mut node_map: HashMap<i64, (String, Option<String>)> = HashMap::new();
     let mut path_edges: HashMap<i64, Vec<(i64, i64)>> = HashMap::new();
     let mut insert_paths = vec![];
     let mut insert_accessions = vec![];
@@ -375,7 +381,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
     let mut accession_edge_map: HashMap<i64, AccessionEdgeData> = HashMap::new();
     let mut accession_path_edges: HashMap<i64, Vec<(i64, i64)>> = HashMap::new();
 
-    while let Some(item) = iter.next().unwrap() {
+    while let Some(item) = changeset.next().unwrap() {
         let op = item.op().unwrap();
         // info on indirect changes: https://www.sqlite.org/draft/session/sqlite3session_indirect.html
         if !op.indirect() {
@@ -445,9 +451,16 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                     let node_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     node_map.insert(
                         node_pk,
-                        str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
-                            .unwrap()
-                            .to_string(),
+                        (
+                            str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
+                                .unwrap()
+                                .to_string(),
+                            item.new_value(2)
+                                .unwrap()
+                                .as_str_or_null()
+                                .unwrap()
+                                .map(|s| s.to_string()),
+                        ),
                     );
                 }
                 "edges" => {
@@ -537,8 +550,8 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
     }
 
     let mut node_id_map: HashMap<i64, i64> = HashMap::new();
-    for (node_id, sequence_hash) in node_map {
-        let new_node_id = Node::create(conn, &sequence_hash, None);
+    for (node_id, (sequence_hash, node_hash)) in node_map {
+        let new_node_id = Node::create(conn, &sequence_hash, node_hash);
         node_id_map.insert(node_id, new_node_id);
     }
 
@@ -756,7 +769,11 @@ pub fn apply<'a>(
 ) -> Operation {
     let mut session = start_operation(conn);
     let operation = Operation::get_by_hash(operation_conn, op_hash);
-    apply_changeset(conn, &operation);
+    let mut changeset = load_changeset(&operation);
+    let input: &mut dyn Read = &mut changeset.as_slice();
+    let mut iter = ChangesetIter::start_strm(&input).unwrap();
+    let dependencies = load_changeset_dependencies(&operation);
+    apply_changeset(conn, &mut iter, &dependencies);
     end_operation(
         conn,
         operation_conn,
@@ -834,7 +851,12 @@ pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Opera
             }
             Direction::Outgoing => {
                 println!("Applying operation {next_op}");
-                apply_changeset(conn, &Operation::get_by_hash(operation_conn, next_op));
+                let op_to_apply = Operation::get_by_hash(operation_conn, next_op);
+                let mut changeset = load_changeset(&op_to_apply);
+                let input: &mut dyn Read = &mut changeset.as_slice();
+                let mut iter = ChangesetIter::start_strm(&input).unwrap();
+                let dependencies = load_changeset_dependencies(&op_to_apply);
+                apply_changeset(conn, &mut iter, &dependencies);
                 OperationState::set_operation(operation_conn, &operation.db_uuid, next_op);
             }
         }
@@ -864,6 +886,10 @@ pub fn end_operation<'a>(
     session.changeset_strm(&mut output).unwrap();
 
     let dependencies = get_changeset_dependencies(conn, &output);
+
+    if output.is_empty() {
+        return Err("No changes.");
+    }
 
     let hash = if let Some(hash) = force_hash.into() {
         hash.to_string()
@@ -895,11 +921,21 @@ pub fn end_operation<'a>(
                 .unwrap();
             Ok(operation)
         }
-        Err(_) => {
+        Err(rusqlite::Error::SqliteFailure(err, details)) => {
             operation_conn
                 .execute("ROLLBACK TRANSACTION TO SAVEPOINT new_operation;", [])
                 .unwrap();
-            Err("Operation already exists.")
+            if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                Err("Operation already exists.")
+            } else {
+                panic!("something bad happened querying the database {details:?}");
+            }
+        }
+        Err(e) => {
+            operation_conn
+                .execute("ROLLBACK TRANSACTION TO SAVEPOINT new_operation;", [])
+                .unwrap();
+            panic!("something bad happened querying the database {e:?}");
         }
     }
 }
@@ -1249,13 +1285,16 @@ mod tests {
         assert_eq!(sample_count, 0);
         assert_eq!(op_count, 2);
 
-        apply_changeset(
-            conn,
-            &Operation::get_by_hash(
-                operation_conn,
-                &OperationState::get_operation(operation_conn, &db_uuid).unwrap(),
-            ),
+        let op = Operation::get_by_hash(
+            operation_conn,
+            &OperationState::get_operation(operation_conn, &db_uuid).unwrap(),
         );
+        let mut changeset = load_changeset(&op);
+        let input: &mut dyn Read = &mut changeset.as_slice();
+        let mut iter = ChangesetIter::start_strm(&input).unwrap();
+        let dependencies = load_changeset_dependencies(&op);
+
+        apply_changeset(conn, &mut iter, &dependencies);
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();

@@ -185,10 +185,23 @@ impl Query for Operation {
     }
 }
 
+#[derive(Debug, Deserialize, Serialize)]
 pub struct FileAddition {
     pub id: i64,
     pub file_path: String,
     pub file_type: FileTypes,
+}
+
+impl Query for FileAddition {
+    type Model = FileAddition;
+
+    fn process_row(row: &Row) -> Self::Model {
+        Self::Model {
+            id: row.get(0).unwrap(),
+            file_path: row.get(1).unwrap(),
+            file_type: row.get(2).unwrap(),
+        }
+    }
 }
 
 impl FileAddition {
@@ -215,11 +228,23 @@ impl FileAddition {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct OperationSummary {
     pub id: i64,
     pub operation_hash: String,
     pub summary: String,
+}
+
+impl Query for OperationSummary {
+    type Model = OperationSummary;
+
+    fn process_row(row: &Row) -> Self::Model {
+        Self::Model {
+            id: row.get(0).unwrap(),
+            operation_hash: row.get(1).unwrap(),
+            summary: row.get(2).unwrap(),
+        }
+    }
 }
 
 impl OperationSummary {

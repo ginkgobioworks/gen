@@ -1,12 +1,18 @@
 use crate::config::get_changeset_path;
 use crate::models::metadata::get_db_uuid;
-use crate::models::operations::Operation;
+use crate::models::operations::{FileAddition, Operation, OperationSummary};
+use crate::models::traits::Query;
 use crate::operation_management;
-use crate::operation_management::{apply_changeset, write_changeset};
+use crate::operation_management::{
+    apply_changeset, end_operation, load_changeset, load_changeset_dependencies, start_operation,
+    write_changeset,
+};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use rusqlite::Connection;
+use rusqlite::session::ChangesetIter;
+use rusqlite::types::Value;
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{Read, Write};
@@ -14,6 +20,8 @@ use std::io::{Read, Write};
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OperationPatch {
     operation: Operation,
+    files: FileAddition,
+    summary: OperationSummary,
     dependencies: Vec<u8>,
     changeset: Vec<u8>,
 }
@@ -36,7 +44,19 @@ where
         let mut contents = vec![];
         file.read_to_end(&mut contents).unwrap();
         patches.push(OperationPatch {
-            operation,
+            operation: operation.clone(),
+            files: FileAddition::get(
+                op_conn,
+                "select * from file_addition where id = ?1",
+                params![Value::from(operation.change_id)],
+            )
+            .unwrap(),
+            summary: OperationSummary::get(
+                op_conn,
+                "select * from operation_summary where operation_hash = ?1",
+                params![Value::from(operation.hash.clone())],
+            )
+            .unwrap(),
             dependencies: serde_json::to_vec(&dependencies).unwrap(),
             changeset: contents,
         })
@@ -60,33 +80,32 @@ where
 }
 
 pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[OperationPatch]) {
-    let db_uuid = get_db_uuid(conn);
     for patch in patches.iter() {
         let op_info = &patch.operation;
-        match Operation::create(
+        let mut changeset = load_changeset(op_info);
+        let input: &mut dyn Read = &mut changeset.as_slice();
+        let mut iter = ChangesetIter::start_strm(&input).unwrap();
+        let dependencies = load_changeset_dependencies(op_info);
+        let mut session = start_operation(conn);
+        apply_changeset(conn, &mut iter, &dependencies);
+        match end_operation(
+            conn,
             op_conn,
-            &db_uuid,
+            &mut session,
+            &patch.files.file_path,
+            patch.files.file_type,
             &op_info.change_type,
-            op_info.change_id,
-            &op_info.hash,
+            &patch.summary.summary,
+            None,
         ) {
             Ok(new_op) => {
-                write_changeset(&new_op, &patch.changeset, &patch.dependencies[..]);
-                apply_changeset(conn, &new_op);
+                println!("Successfully applied operation as {new_op:?}.");
             }
-            Err(rusqlite::Error::SqliteFailure(err, details)) => {
-                if err.code == rusqlite::ErrorCode::ConstraintViolation {
-                    println!(
-                        "Operation already applied, skipping {hash:?}.",
-                        hash = op_info.hash
-                    );
-                } else {
-                    panic!("something bad happened querying the database {details:?}");
-                }
-            }
-            Err(e) => {
-                panic!("something bad happened querying the database {e:?}");
-            }
+            Err(e) => match e {
+                "Operation already exists." => println!("Operation already applied. Skipping."),
+                "No changes." => println!("No new changes present in operation. Skipping."),
+                _ => panic!("error is {e:?}"),
+            },
         }
     }
 }
@@ -96,7 +115,7 @@ mod tests {
     use super::*;
     use crate::imports::fasta::import_fasta;
     use crate::models::metadata;
-    use crate::models::operations::setup_db;
+    use crate::models::operations::{setup_db, Branch, OperationState};
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use crate::updates::vcf::update_with_vcf;
     use std::path::PathBuf;
@@ -167,5 +186,54 @@ mod tests {
         let patches = load_patches(&write_stream[..]);
         apply_patches(conn2, operation_conn2, &patches);
         apply_patches(conn, operation_conn, &patches);
+    }
+
+    #[test]
+    fn test_cross_branch_patches() {
+        setup_gen_dir();
+        let vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.vcf");
+        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
+        let conn = &mut get_connection(None);
+        let db_uuid = &get_db_uuid(conn);
+        let operation_conn = &get_operation_connection(None);
+        setup_db(operation_conn, db_uuid);
+        let collection = "test".to_string();
+        let op_1 = import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            operation_conn,
+        );
+        let main_branch = Branch::get_by_name(operation_conn, db_uuid, "main").unwrap();
+        let branch = Branch::create(operation_conn, db_uuid, "new-branch");
+        OperationState::set_branch(operation_conn, db_uuid, "new-branch");
+        let op_2 = update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+            None,
+        );
+        let mut write_stream: Vec<u8> = Vec::new();
+        create_patch(operation_conn, &[op_2.hash], &mut write_stream);
+
+        operation_management::checkout(
+            conn,
+            operation_conn,
+            db_uuid,
+            &Some("main".to_string()),
+            None,
+        );
+        let patches = load_patches(&write_stream[..]);
+        apply_patches(conn, operation_conn, &patches);
+        let branch_ops = Branch::get_operations(operation_conn, main_branch.id);
+        assert_eq!(branch_ops.len(), 2);
+        // ensure if we apply the operation again it'll be a no-op
+        apply_patches(conn, operation_conn, &patches);
+        let branch_ops = Branch::get_operations(operation_conn, main_branch.id);
+        assert_eq!(branch_ops.len(), 2);
     }
 }
