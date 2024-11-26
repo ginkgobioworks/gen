@@ -318,11 +318,17 @@ fn main() {
                 ) {
                     Ok(_) => println!("Fasta imported."),
                     Err("No changes.") => println!("Fasta contents already exist."),
-                    Err(_) => panic!("Import failed."),
+                    Err(_) => {
+                        conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
+                        operation_conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
+                        panic!("Import failed.");
+                    }
                 }
             } else if gfa.is_some() {
                 import_gfa(&PathBuf::from(gfa.clone().unwrap()), name, None, &conn);
             } else {
+                conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
+                operation_conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
                 panic!(
                     "ERROR: Import command attempted but no recognized file format was specified"
                 );
@@ -439,7 +445,7 @@ fn main() {
             );
             let mut indicator = "";
             println!(
-                "{indicator:<3}{col1:>3}   {col2:<70}",
+                "{indicator:<3}{col1:>64}   {col2:<70}",
                 col1 = "Id",
                 col2 = "Summary"
             );
@@ -450,7 +456,7 @@ fn main() {
                     indicator = "";
                 }
                 println!(
-                    "{indicator:<3}{col1:>3}   {col2:<70}",
+                    "{indicator:<3}{col1:>64}   {col2:<70}",
                     col1 = op.hash,
                     col2 = op.change_type
                 );
