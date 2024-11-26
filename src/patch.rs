@@ -97,7 +97,7 @@ pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[Operati
             None,
         ) {
             Ok(new_op) => {
-                println!("Successfully applied operation as {new_op:?}.");
+                println!("Successfully applied operation.");
             }
             Err(e) => match e {
                 "Operation already exists." => println!("Operation already applied. Skipping."),
