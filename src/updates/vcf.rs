@@ -504,7 +504,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
             &collection,
@@ -513,7 +514,8 @@ mod tests {
             conn,
             op_conn,
             None,
-        );
+        )
+        .unwrap();
         assert_eq!(
             BlockGroup::get_all_sequences(conn, 1, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
@@ -565,7 +567,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
             &collection,
@@ -574,7 +577,8 @@ mod tests {
             conn,
             op_conn,
             None,
-        );
+        )
+        .unwrap();
         assert_eq!(
             BlockGroup::get_all_sequences(conn, 1, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
@@ -615,7 +619,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
             &collection,
@@ -624,7 +629,8 @@ mod tests {
             conn,
             op_conn,
             None,
-        );
+        )
+        .unwrap();
 
         let missing_allele_bg = BlockGroup::query(
             conn,
@@ -666,7 +672,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
             &collection,
@@ -675,7 +682,8 @@ mod tests {
             conn,
             op_conn,
             None,
-        );
+        )
+        .unwrap();
         assert_eq!(
             BlockGroup::get_all_sequences(conn, 2, false),
             HashSet::from_iter(
@@ -720,7 +728,8 @@ mod tests {
             conn,
             op_conn,
             None,
-        );
+        )
+        .unwrap();
 
         let nodes = Node::query(conn, "select * from nodes;", rusqlite::params!());
         assert_eq!(nodes.len(), 5);
@@ -733,7 +742,8 @@ mod tests {
             conn,
             op_conn,
             None,
-        );
+        )
+        .unwrap();
         let nodes = Node::query(conn, "select * from nodes;", rusqlite::params!());
         assert_eq!(nodes.len(), 5);
     }
@@ -758,7 +768,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
 
         assert_eq!(
             Node::query(conn, "select * from nodes;", rusqlite::params!()).len(),
@@ -773,7 +784,8 @@ mod tests {
             conn,
             op_conn,
             None,
-        );
+        )
+        .unwrap();
 
         let nodes = Node::query(conn, "select * from nodes;", rusqlite::params!());
         assert_eq!(nodes.len(), 8);
@@ -786,7 +798,8 @@ mod tests {
             conn,
             op_conn,
             None,
-        );
+        )
+        .unwrap();
         let nodes = Node::query(conn, "select * from nodes;", rusqlite::params!());
         assert_eq!(nodes.len(), 8);
     }
@@ -812,7 +825,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
 
         let s = time::Instant::now();
         update_with_vcf(
@@ -823,7 +837,8 @@ mod tests {
             conn,
             op_conn,
             None,
-        );
+        )
+        .unwrap();
         assert!(s.elapsed().as_secs() < 20);
     }
 
@@ -847,7 +862,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
 
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
@@ -857,7 +873,8 @@ mod tests {
             conn,
             op_conn,
             None,
-        );
+        )
+        .unwrap();
         assert_eq!(
             Accession::query(
                 conn,
@@ -900,7 +917,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
 
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
@@ -910,7 +928,8 @@ mod tests {
             conn,
             op_conn,
             None,
-        );
+        )
+        .unwrap();
 
         assert_eq!(
             Accession::query(
@@ -934,7 +953,8 @@ mod tests {
             conn,
             op_conn,
             None,
-        );
+        )
+        .unwrap();
     }
 
     #[test]
@@ -960,7 +980,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
 
         update_with_vcf(
             &f0_path.to_str().unwrap().to_string(),
@@ -970,7 +991,8 @@ mod tests {
             conn,
             op_conn,
             None,
-        );
+        )
+        .unwrap();
 
         update_with_vcf(
             &f1_path.to_str().unwrap().to_string(),
@@ -980,7 +1002,8 @@ mod tests {
             conn,
             op_conn,
             "f1",
-        );
+        )
+        .unwrap();
 
         update_with_vcf(
             &f2_path.to_str().unwrap().to_string(),
@@ -990,7 +1013,8 @@ mod tests {
             conn,
             op_conn,
             "f2",
-        );
+        )
+        .unwrap();
 
         assert_eq!(
             BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, None).id, true),

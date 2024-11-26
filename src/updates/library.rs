@@ -229,7 +229,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
 
         let mut parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         parts_path.push("fixtures/parts.fa");

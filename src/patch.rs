@@ -200,7 +200,7 @@ mod tests {
         let operation_conn = &get_operation_connection(None);
         setup_db(operation_conn, db_uuid);
         let collection = "test".to_string();
-        let op_1 = import_fasta(
+        let _op_1 = import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &collection,
             false,
@@ -209,7 +209,7 @@ mod tests {
         )
         .unwrap();
         let main_branch = Branch::get_by_name(operation_conn, db_uuid, "main").unwrap();
-        let branch = Branch::create(operation_conn, db_uuid, "new-branch");
+        let _branch = Branch::create(operation_conn, db_uuid, "new-branch");
         OperationState::set_branch(operation_conn, db_uuid, "new-branch");
         let op_2 = update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),

@@ -62,7 +62,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
         let tmp_dir = tempfile::tempdir().unwrap().into_path();
         let filename = tmp_dir.join("out.fa");
         export_fasta(conn, &collection, None, &filename);
@@ -110,7 +111,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
         let _ = update_with_fasta(
             conn,
             op_conn,

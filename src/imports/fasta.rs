@@ -139,7 +139,8 @@ mod tests {
             false,
             &conn,
             op_conn,
-        );
+        )
+        .unwrap();
         assert_eq!(
             BlockGroup::get_all_sequences(&conn, 1, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
@@ -168,7 +169,8 @@ mod tests {
             true,
             &conn,
             op_conn,
-        );
+        )
+        .unwrap();
         assert_eq!(
             BlockGroup::get_all_sequences(&conn, 1, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
@@ -199,7 +201,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
         assert_eq!(
             Node::query(conn, "select * from nodes;", rusqlite::params!()).len(),
             3
@@ -210,7 +213,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
         assert_eq!(
             Node::query(conn, "select * from nodes;", rusqlite::params!()).len(),
             3

@@ -1211,7 +1211,7 @@ mod tests {
             let op_conn = &get_operation_connection(None);
             setup_db(op_conn, db_uuid);
 
-            let op_1 = create_operation(
+            let _op_1 = create_operation(
                 conn,
                 op_conn,
                 "foo",
@@ -1256,7 +1256,7 @@ mod tests {
             let op_conn = &get_operation_connection(None);
             setup_db(op_conn, db_uuid);
 
-            let op_1 = create_operation(
+            let _op_1 = create_operation(
                 conn,
                 op_conn,
                 "foo",
@@ -1312,7 +1312,7 @@ mod tests {
             let op_conn = &get_operation_connection(None);
             setup_db(op_conn, db_uuid);
 
-            let op_1 = create_operation(
+            let _op_1 = create_operation(
                 conn,
                 op_conn,
                 "foo",
@@ -1457,7 +1457,8 @@ mod tests {
             false,
             conn,
             operation_conn,
-        );
+        )
+        .unwrap();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
@@ -1479,7 +1480,8 @@ mod tests {
             conn,
             operation_conn,
             None,
-        );
+        )
+        .unwrap();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
@@ -1533,7 +1535,7 @@ mod tests {
             operation_conn,
             &OperationState::get_operation(operation_conn, &db_uuid).unwrap(),
         );
-        let mut changeset = load_changeset(&op);
+        let changeset = load_changeset(&op);
         let input: &mut dyn Read = &mut changeset.as_slice();
         let mut iter = ChangesetIter::start_strm(&input).unwrap();
         let dependencies = load_changeset_dependencies(&op);
@@ -1572,7 +1574,8 @@ mod tests {
             false,
             conn,
             operation_conn,
-        );
+        )
+        .unwrap();
 
         Branch::create(operation_conn, &db_uuid, "branch-1");
         Branch::create(operation_conn, &db_uuid, "branch-2");
@@ -1711,7 +1714,8 @@ mod tests {
             false,
             conn,
             operation_conn,
-        );
+        )
+        .unwrap();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
@@ -1744,7 +1748,8 @@ mod tests {
             conn,
             operation_conn,
             None,
-        );
+        )
+        .unwrap();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
@@ -1797,7 +1802,8 @@ mod tests {
             conn,
             operation_conn,
             None,
-        );
+        )
+        .unwrap();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();

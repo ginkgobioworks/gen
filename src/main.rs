@@ -369,7 +369,8 @@ fn main() {
                     end.unwrap(),
                     &parts.clone().unwrap(),
                     library_path,
-                );
+                )
+                .unwrap();
             } else if let Some(fasta_path) = fasta {
                 // NOTE: This has to go after library because the library update also uses a fasta
                 // file
@@ -383,7 +384,8 @@ fn main() {
                     start.unwrap(),
                     end.unwrap(),
                     fasta_path,
-                );
+                )
+                .unwrap();
             } else if let Some(vcf_path) = vcf {
                 update_with_vcf(
                     vcf_path,
@@ -393,7 +395,8 @@ fn main() {
                     &conn,
                     &operation_conn,
                     coordinate_frame.as_deref(),
-                );
+                )
+                .unwrap();
             } else {
                 panic!("Unknown file type provided for update.");
             }
