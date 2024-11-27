@@ -136,8 +136,7 @@ CREATE TABLE block_group_edges (
   FOREIGN KEY(block_group_id) REFERENCES block_groups(id),
   FOREIGN KEY(edge_id) REFERENCES edges(id)
 ) STRICT;
-CREATE UNIQUE INDEX block_group_edges_uidx ON block_group_edges(block_group_id, edge_id, chromosome_index) WHERE chromosome_index IS NOT NULL;
-CREATE UNIQUE INDEX block_group_edges_null_chromosome_index_uidx ON block_group_edges(block_group_id, edge_id) WHERE chromosome_index IS NULL;
+CREATE UNIQUE INDEX block_group_edges_uidx ON block_group_edges(block_group_id, edge_id, chromosome_index);
 
 INSERT INTO gen_metadata (db_uuid) values (lower(
     hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-' || '4' ||

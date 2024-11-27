@@ -452,9 +452,16 @@ pub fn apply_changeset(
                     let node_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     node_map.insert(
                         node_pk,
-                        str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
-                            .unwrap()
-                            .to_string(),
+                        (
+                            str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
+                                .unwrap()
+                                .to_string(),
+                            item.new_value(2)
+                                .unwrap()
+                                .as_str_or_null()
+                                .unwrap()
+                                .map(|s| s.to_string()),
+                        ),
                     );
                 }
                 "edges" => {
