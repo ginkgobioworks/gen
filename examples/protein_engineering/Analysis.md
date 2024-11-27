@@ -72,7 +72,7 @@ And then once you're inside the Docker container:
 # IN='P450_chimera.svg'; cp $IN ${IN%.*}_fixed.${IN##*.} && while IFS=$'\t' read _ new old; do sed "s#font-size=\"14.00\">$old</text>#font-size=\"14.00\">$new</text>#g" ${IN%.*}_fixed.${IN##*.} > temp_file.html && mv temp_file.html ${IN%.*}_fixed.${IN##*.}; done < translation_table.txt
 ```
 
-Note GFA export is currently broken
+BUG: GFA export is currently broken (no links are written, only segments and paths)
 
 This results in the following image: ![Recombination library - VG](P450_chimera_fixed.svg)
 
@@ -107,7 +107,23 @@ $ gen branch --list
 
 To mutagenize the 4 different sites we will perform 4 separate update operations, all sharing the same parts and layout.
 The [parts file](saturation_parts.fa) defines a sequence of length 1 for every amino acid, and the [layout file](saturation_layout_single.csv) 
-is just one column that lists the same parts by name.
+is just one column that lists the same parts by name. Please note that gen uses 0-based indexing, so residue 39 is passed
+as `--start 38`. 
+
+
+```console
+gen update --path-name "1PGA_1|Chain" --start 38 --end 39 --parts saturation_parts.fa --library saturation_layout_single.csv --new-sample gb1_mut1
+gen update --path-name "1PGA_1|Chain" --start 39 --end 40 --parts saturation_parts.fa --library saturation_layout_single.csv --new-sample gb1_mut2
+gen update --path-name "1PGA_1|Chain" --start 40 --end 41 --parts saturation_parts.fa --library saturation_layout_single.csv --new-sample gb1_mut3
+```
+
+*BUG: the above doesn't work yet (can't select the new sample by path name)*
+
+```console
+gen update --path-name "1PGA_1|Chain" --start 38 --end 41 --parts saturation_parts.fa --library saturation_layout_triple.csv --new-sample gb1_mut1
+```
+
+*BUG: the above also doesn't work (the reused parts don't get a new node, so you introduce cycles)*
 
 Note: the fasta file from which obtained the GB1 sequence has a non-compliant header that is cut off at the first space
 character, hence the name `1PGA_1|Chain` instead of `1PGA_1|Chain A|PROTEIN G|Streptococcus sp. GX7805`. The full protein
@@ -117,9 +133,10 @@ sequence can be found at https://www.uniprot.org/uniprotkb/P06654/entry. TODO: e
 ## Deep Mutational Scanning
 
 
-In the 2014 publication _A Comprehensive Biophysical Description of Pairwise Epistasis throughout an Entire
-Protein Domain_ by Olson et al. (doi: [10.1016/j.cub.2014.09.072](https://doi.org/10.1016/j.cub.2014.09.072)) but that's
-more DMS
+The publication _A Comprehensive Biophysical Description of Pairwise Epistasis throughout an Entire
+Protein Domain_ ([Olsen 2014](https://doi.org/10.1016/j.cub.2014.09.072)) studies the same GB1 protein, but mutagenises
+the entire region.
+
 >  The 55-residue random region was split into 11 cassettes. Oligonucleotides were designed to randomize each codon singly or each codon pair within each cassette.
 
 
