@@ -1,8 +1,10 @@
 use intervaltree::IntervalTree;
 use petgraph::graphmap::DiGraphMap;
 use rusqlite::Connection;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs;
+use std::hash::Hash;
 use std::io::Write;
 use std::ops::Add;
 use tempfile::tempdir;
@@ -14,11 +16,14 @@ use crate::models::block_group::BlockGroup;
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::collection::Collection;
 use crate::models::edge::Edge;
+use crate::models::file_types::FileTypes;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
+use crate::models::operations::Operation;
 use crate::models::path::Path;
 use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
+use crate::operation_management::{end_operation, start_operation};
 
 pub fn get_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Connection {
     let path: Option<&str> = db_path.into();
@@ -198,4 +203,30 @@ pub fn get_sample_bg<'a>(
     let sample_name = sample_name.into();
     let mut results = Sample::get_block_groups(conn, collection_name, sample_name);
     results.pop().unwrap()
+}
+
+pub fn create_operation<'a>(
+    conn: &Connection,
+    op_conn: &Connection,
+    file_path: &str,
+    file_type: FileTypes,
+    description: &str,
+    hash: impl Into<Option<&'a str>>,
+) -> Operation {
+    let mut session = start_operation(conn);
+    end_operation(
+        conn,
+        op_conn,
+        &mut session,
+        file_path,
+        file_type,
+        description,
+        "test operation",
+        hash.into(),
+    )
+    .unwrap()
+}
+
+pub fn keys_match<T: Eq + Hash, U, V>(map1: &HashMap<T, U>, map2: &HashMap<T, V>) -> bool {
+    map1.len() == map2.len() && map1.keys().all(|k| map2.contains_key(k))
 }

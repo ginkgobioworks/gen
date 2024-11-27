@@ -130,7 +130,6 @@ pub fn update_with_fasta(
         conn,
         operation_conn,
         &mut session,
-        collection_name,
         fasta_file_path,
         FileTypes::Fasta,
         "fasta_update",
@@ -179,7 +178,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
         let _ = update_with_fasta(
             conn,
             op_conn,
@@ -233,13 +233,14 @@ mod tests {
 
         let collection = "test".to_string();
 
-        import_fasta(
+        let _ = import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &collection,
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
         let _ = update_with_fasta(
             conn,
             op_conn,
@@ -311,7 +312,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
         let _ = update_with_fasta(
             conn,
             op_conn,
@@ -389,7 +391,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
         let _ = update_with_fasta(
             conn,
             op_conn,
@@ -461,7 +464,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
         let _ = update_with_fasta(
             conn,
             op_conn,
@@ -531,7 +535,8 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
         let _ = update_with_fasta(
             conn,
             op_conn,

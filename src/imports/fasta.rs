@@ -9,6 +9,7 @@ use crate::models::{
     collection::Collection,
     edge::Edge,
     node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
+    operations::Operation,
     path::Path,
     sequence::Sequence,
     strand::Strand,
@@ -24,7 +25,7 @@ pub fn import_fasta(
     shallow: bool,
     conn: &Connection,
     operation_conn: &Connection,
-) {
+) -> Result<Operation, &'static str> {
     let mut session = start_operation(conn);
 
     let mut reader = fasta::io::reader::Builder.build_from_path(fasta).unwrap();
@@ -103,15 +104,12 @@ pub fn import_fasta(
         conn,
         operation_conn,
         &mut session,
-        name,
         fasta,
         FileTypes::Fasta,
         "fasta_addition",
         &summary_str,
         None,
     )
-    .unwrap();
-    println!("Created it");
 }
 
 #[cfg(test)]
@@ -141,7 +139,8 @@ mod tests {
             false,
             &conn,
             op_conn,
-        );
+        )
+        .unwrap();
         assert_eq!(
             BlockGroup::get_all_sequences(&conn, 1, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
@@ -170,7 +169,8 @@ mod tests {
             true,
             &conn,
             op_conn,
-        );
+        )
+        .unwrap();
         assert_eq!(
             BlockGroup::get_all_sequences(&conn, 1, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
@@ -201,21 +201,21 @@ mod tests {
             false,
             conn,
             op_conn,
-        );
+        )
+        .unwrap();
         assert_eq!(
             Node::query(conn, "select * from nodes;", rusqlite::params!()).len(),
             3
         );
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            &collection,
-            false,
-            conn,
-            op_conn,
-        );
         assert_eq!(
-            Node::query(conn, "select * from nodes;", rusqlite::params!()).len(),
-            3
+            import_fasta(
+                &fasta_path.to_str().unwrap().to_string(),
+                &collection,
+                false,
+                conn,
+                op_conn,
+            ),
+            Err("No changes.")
         );
     }
 }

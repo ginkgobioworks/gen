@@ -12,10 +12,13 @@ use gen::imports::gfa::import_gfa;
 use gen::models::metadata;
 use gen::models::operations::{setup_db, Branch, Operation, OperationState};
 use gen::operation_management;
+use gen::operation_management::parse_patch_operations;
+use gen::patch;
 use gen::updates::fasta::update_with_fasta;
 use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::update_with_vcf;
+use itertools::Itertools;
 use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
 use std::fs::File;
@@ -123,6 +126,24 @@ enum Commands {
         #[arg(short, long)]
         parent_sample: Option<String>,
     },
+    #[command(name = "patch-create")]
+    PatchCreate {
+        /// To create a patch against a non-checked out branch.
+        #[arg(short, long)]
+        branch: Option<String>,
+        /// The patch name
+        #[arg(short, long)]
+        name: String,
+        /// The operation(s) to create a patch from. For a range, use 1..3 and for multiple use commas.
+        #[clap(index = 1)]
+        operation: String,
+    },
+    #[command(name = "patch-apply")]
+    PatchApply {
+        /// The patch file
+        #[clap(index = 1)]
+        patch: String,
+    },
     /// Initialize a gen repository
     Init {},
     /// Manage and create branches
@@ -150,15 +171,15 @@ enum Commands {
         /// The branch identifier to migrate to
         #[arg(short, long)]
         branch: Option<String>,
-        /// The operation id to move to
+        /// The operation hash to move to
         #[clap(index = 1)]
-        id: Option<i64>,
+        hash: Option<String>,
     },
     /// Reset a branch to a previous operation
     Reset {
-        /// The operation id to reset to
+        /// The operation hash to reset to
         #[clap(index = 1)]
-        id: i64,
+        hash: String,
     },
     /// View operations carried out against a database
     Operations {
@@ -168,9 +189,9 @@ enum Commands {
     },
     /// Apply an operation to a branch
     Apply {
-        /// The operation id to apply
+        /// The operation hash to apply
         #[clap(index = 1)]
-        id: i64,
+        hash: String,
     },
     /// Export sequence data
     Export {
@@ -288,16 +309,26 @@ fn main() {
                     .expect("No collection specified and default not setup.")
             });
             if fasta.is_some() {
-                import_fasta(
+                match import_fasta(
                     &fasta.clone().unwrap(),
                     name,
                     *shallow,
                     &conn,
                     &operation_conn,
-                );
+                ) {
+                    Ok(_) => println!("Fasta imported."),
+                    Err("No changes.") => println!("Fasta contents already exist."),
+                    Err(_) => {
+                        conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
+                        operation_conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
+                        panic!("Import failed.");
+                    }
+                }
             } else if gfa.is_some() {
                 import_gfa(&PathBuf::from(gfa.clone().unwrap()), name, None, &conn);
             } else {
+                conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
+                operation_conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
                 panic!(
                     "ERROR: Import command attempted but no recognized file format was specified"
                 );
@@ -338,7 +369,8 @@ fn main() {
                     end.unwrap(),
                     &parts.clone().unwrap(),
                     library_path,
-                );
+                )
+                .unwrap();
             } else if let Some(fasta_path) = fasta {
                 // NOTE: This has to go after library because the library update also uses a fasta
                 // file
@@ -352,7 +384,8 @@ fn main() {
                     start.unwrap(),
                     end.unwrap(),
                     fasta_path,
-                );
+                )
+                .unwrap();
             } else if let Some(vcf_path) = vcf {
                 update_with_vcf(
                     vcf_path,
@@ -362,7 +395,8 @@ fn main() {
                     &conn,
                     &operation_conn,
                     coordinate_frame.as_deref(),
-                );
+                )
+                .unwrap();
             } else {
                 panic!("Unknown file type provided for update.");
             }
@@ -414,19 +448,19 @@ fn main() {
             );
             let mut indicator = "";
             println!(
-                "{indicator:<3}{col1:>3}   {col2:<70}",
+                "{indicator:<3}{col1:>64}   {col2:<70}",
                 col1 = "Id",
                 col2 = "Summary"
             );
             for op in operations.iter() {
-                if op.id == current_op {
+                if op.hash == current_op {
                     indicator = ">";
                 } else {
                     indicator = "";
                 }
                 println!(
-                    "{indicator:<3}{col1:>3}   {col2:<70}",
-                    col1 = op.id,
+                    "{indicator:<3}{col1:>64}   {col2:<70}",
+                    col1 = op.hash,
                     col2 = op.change_type
                 );
             }
@@ -493,7 +527,10 @@ fn main() {
                     println!(
                         "{indicator:<3}{col1:<30}   {col2:<20}",
                         col1 = branch.name,
-                        col2 = branch.current_operation_id.unwrap_or(-1)
+                        col2 = branch
+                            .current_operation_hash
+                            .clone()
+                            .unwrap_or(String::new())
                     );
                 }
             } else if *merge {
@@ -514,14 +551,14 @@ fn main() {
                 println!("No options selected.");
             }
         }
-        Some(Commands::Apply { id }) => {
-            operation_management::apply(&conn, &operation_conn, *id, None);
+        Some(Commands::Apply { hash }) => {
+            operation_management::apply(&conn, &operation_conn, hash, None);
         }
-        Some(Commands::Checkout { branch, id }) => {
-            operation_management::checkout(&conn, &operation_conn, &db_uuid, branch, *id);
+        Some(Commands::Checkout { branch, hash }) => {
+            operation_management::checkout(&conn, &operation_conn, &db_uuid, branch, hash.clone());
         }
-        Some(Commands::Reset { id }) => {
-            operation_management::reset(&conn, &operation_conn, &db_uuid, *id);
+        Some(Commands::Reset { hash }) => {
+            operation_management::reset(&conn, &operation_conn, &db_uuid, hash);
         }
         Some(Commands::Export {
             name,
@@ -549,6 +586,34 @@ fn main() {
             }
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
+        }
+        Some(Commands::PatchCreate {
+            name,
+            operation,
+            branch,
+        }) => {
+            let branch = if let Some(branch_name) = branch {
+                Branch::get_by_name(&operation_conn, &db_uuid, branch_name)
+                    .unwrap_or_else(|| panic!("No branch with name {branch_name} found."))
+            } else {
+                let current_branch_id =
+                    OperationState::get_current_branch(&operation_conn, &db_uuid)
+                        .expect("No current branch is checked out.");
+                Branch::get_by_id(&operation_conn, current_branch_id).unwrap()
+            };
+            let branch_ops = Branch::get_operations(&operation_conn, branch.id);
+            let operations = parse_patch_operations(
+                &branch_ops,
+                &branch.current_operation_hash.unwrap(),
+                operation,
+            );
+            let mut f = File::create(format!("{name}.gz")).unwrap();
+            patch::create_patch(&operation_conn, &operations, &mut f);
+        }
+        Some(Commands::PatchApply { patch }) => {
+            let mut f = File::open(patch).unwrap();
+            let patches = patch::load_patches(&mut f);
+            patch::apply_patches(&conn, &operation_conn, &patches);
         }
         None => {}
         // these will never be handled by this method as we search for them earlier.

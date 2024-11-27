@@ -122,7 +122,8 @@ mod tests {
             false,
             &conn,
             op_conn,
-        );
+        )
+        .unwrap();
 
         let _ = update_with_fasta(
             &conn,

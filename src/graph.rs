@@ -1,9 +1,10 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::iter::from_fn;
 
 use crate::models::strand::Strand;
+use petgraph::graphmap::DiGraphMap;
 use petgraph::prelude::EdgeRef;
 use petgraph::visit::{GraphRef, IntoEdges, IntoNeighbors, IntoNeighborsDirected, NodeCount};
 use petgraph::Direction;
@@ -29,6 +30,70 @@ pub struct GraphEdge {
     pub phased: i64,
     pub source_strand: Strand,
     pub target_strand: Strand,
+}
+
+#[derive(Debug)]
+pub struct OperationGraph {
+    pub graph: DiGraphMap<usize, ()>,
+    max_node_id: usize,
+    pub node_ids: HashMap<String, usize>,
+    reverse_map: HashMap<usize, String>,
+}
+
+impl Default for OperationGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl OperationGraph {
+    pub fn new() -> Self {
+        OperationGraph {
+            graph: DiGraphMap::new(),
+            max_node_id: 0,
+            node_ids: HashMap::new(),
+            reverse_map: HashMap::new(),
+        }
+    }
+
+    pub fn add_node(&mut self, hash_id: &str) -> usize {
+        let node_id = *self.node_ids.entry(hash_id.to_string()).or_insert_with(|| {
+            let node_id = self.max_node_id;
+            self.reverse_map.insert(node_id, hash_id.to_string());
+            self.graph.add_node(node_id);
+            self.max_node_id += 1;
+            node_id
+        });
+        node_id
+    }
+
+    pub fn remove_node(&mut self, node_id: usize) {
+        self.graph.remove_node(node_id);
+        if let Some(key) = self.reverse_map.remove(&node_id) {
+            self.node_ids.remove(&key).unwrap();
+        }
+    }
+
+    pub fn remove_key(&mut self, hash_id: &str) {
+        if let Some(node_index) = self.node_ids.remove(hash_id) {
+            self.graph.remove_node(node_index);
+            self.reverse_map.remove(&node_index).unwrap();
+        }
+    }
+
+    pub fn get_node(&self, node_id: &str) -> usize {
+        self.node_ids[node_id]
+    }
+
+    pub fn get_key(&self, index: usize) -> String {
+        self.reverse_map[&index].clone()
+    }
+
+    pub fn add_edge(&mut self, src: &str, target: &str) {
+        let src_node_id = self.add_node(src);
+        let target_node_id = self.add_node(target);
+        self.graph.add_edge(src_node_id, target_node_id, ());
+    }
 }
 
 // hacked from https://docs.rs/petgraph/latest/src/petgraph/algo/simple_paths.rs.html#36-102 to support digraphmap

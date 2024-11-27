@@ -38,6 +38,11 @@ Operations are changes that have been made to the database. Commands such as `im
 To see all operations, `gen --db db_name.db operations` will list operations. The operation the database currently is on
 will be prefixed with a `>`.
 
+# Patches
+
+Like git, patches are the mechanism for bundling together pieces of work for distribution. Patches can be created via
+the `patch-create` command and applied via `patch-apply`.
+
 # Checkout
 
 Checkouts allow a user to migrate the database to different states. To move the database to a given operation, the

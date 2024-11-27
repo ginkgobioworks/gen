@@ -41,7 +41,7 @@ pub enum FileMode {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
-struct DependencyModels {
+pub struct DependencyModels {
     sequences: Vec<Sequence>,
     block_group: Vec<BlockGroup>,
     nodes: Vec<Node>,
@@ -256,9 +256,9 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
 
 pub fn write_changeset(operation: &Operation, changes: &[u8], dependencies: &[u8]) {
     let change_path =
-        get_changeset_path(operation).join(format!("{op_id}.cs", op_id = operation.id));
+        get_changeset_path(operation).join(format!("{op_id}.cs", op_id = operation.hash));
     let dependency_path =
-        get_changeset_path(operation).join(format!("{op_id}.dep", op_id = operation.id));
+        get_changeset_path(operation).join(format!("{op_id}.dep", op_id = operation.hash));
 
     let mut dependency_file = fs::File::create_new(&dependency_path)
         .unwrap_or_else(|_| panic!("Unable to open {dependency_path:?}"));
@@ -270,12 +270,26 @@ pub fn write_changeset(operation: &Operation, changes: &[u8], dependencies: &[u8
     file.write_all(changes).unwrap()
 }
 
-pub fn apply_changeset(conn: &Connection, operation: &Operation) {
+pub fn load_changeset_dependencies(operation: &Operation) -> DependencyModels {
     let dependency_path =
-        get_changeset_path(operation).join(format!("{op_id}.dep", op_id = operation.id));
-    let dependencies: DependencyModels =
-        serde_json::from_reader(fs::File::open(dependency_path).unwrap()).unwrap();
+        get_changeset_path(operation).join(format!("{op_id}.dep", op_id = operation.hash));
+    serde_json::from_reader(fs::File::open(dependency_path).unwrap()).unwrap()
+}
 
+pub fn load_changeset(operation: &Operation) -> Vec<u8> {
+    let change_path =
+        get_changeset_path(operation).join(format!("{op_id}.cs", op_id = operation.hash));
+    let mut file = fs::File::open(change_path).unwrap();
+    let mut contents = vec![];
+    file.read_to_end(&mut contents).unwrap();
+    contents
+}
+
+pub fn apply_changeset(
+    conn: &Connection,
+    changeset: &mut ChangesetIter,
+    dependencies: &DependencyModels,
+) {
     for node in dependencies.nodes.iter() {
         if !Node::is_terminal(node.id) {
             assert!(Sequence::sequence_from_hash(conn, &node.sequence_hash).is_some());
@@ -354,19 +368,11 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
         dep_accession_map.insert(accession.id, new_accession.id);
     }
 
-    let change_path =
-        get_changeset_path(operation).join(format!("{op_id}.cs", op_id = operation.id));
-    let mut file = fs::File::open(change_path).unwrap();
-    let mut contents = vec![];
-    file.read_to_end(&mut contents).unwrap();
     conn.pragma_update(None, "foreign_keys", "0").unwrap();
-
-    let input: &mut dyn Read = &mut contents.as_slice();
-    let mut iter = ChangesetIter::start_strm(&input).unwrap();
 
     let mut blockgroup_map: HashMap<i64, i64> = HashMap::new();
     let mut edge_map: HashMap<i64, EdgeData> = HashMap::new();
-    let mut node_map: HashMap<i64, String> = HashMap::new();
+    let mut node_map: HashMap<i64, (String, Option<String>)> = HashMap::new();
     let mut path_edges: HashMap<i64, Vec<(i64, i64)>> = HashMap::new();
     let mut insert_paths = vec![];
     let mut insert_accessions = vec![];
@@ -375,7 +381,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
     let mut accession_edge_map: HashMap<i64, AccessionEdgeData> = HashMap::new();
     let mut accession_path_edges: HashMap<i64, Vec<(i64, i64)>> = HashMap::new();
 
-    while let Some(item) = iter.next().unwrap() {
+    while let Some(item) = changeset.next().unwrap() {
         let op = item.op().unwrap();
         // info on indirect changes: https://www.sqlite.org/draft/session/sqlite3session_indirect.html
         if !op.indirect() {
@@ -445,9 +451,16 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
                     let node_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     node_map.insert(
                         node_pk,
-                        str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
-                            .unwrap()
-                            .to_string(),
+                        (
+                            str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
+                                .unwrap()
+                                .to_string(),
+                            item.new_value(2)
+                                .unwrap()
+                                .as_str_or_null()
+                                .unwrap()
+                                .map(|s| s.to_string()),
+                        ),
                     );
                 }
                 "edges" => {
@@ -537,8 +550,8 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
     }
 
     let mut node_id_map: HashMap<i64, i64> = HashMap::new();
-    for (node_id, sequence_hash) in node_map {
-        let new_node_id = Node::create(conn, &sequence_hash, None);
+    for (node_id, (sequence_hash, node_hash)) in node_map {
+        let new_node_id = Node::create(conn, &sequence_hash, node_hash);
         node_id_map.insert(node_id, new_node_id);
     }
 
@@ -689,7 +702,7 @@ pub fn apply_changeset(conn: &Connection, operation: &Operation) {
 
 pub fn revert_changeset(conn: &Connection, operation: &Operation) {
     let change_path =
-        get_changeset_path(operation).join(format!("{op_id}.cs", op_id = operation.id));
+        get_changeset_path(operation).join(format!("{op_id}.cs", op_id = operation.hash));
     let mut file = fs::File::open(change_path).unwrap();
     let mut contents = vec![];
     file.read_to_end(&mut contents).unwrap();
@@ -706,27 +719,27 @@ pub fn revert_changeset(conn: &Connection, operation: &Operation) {
     conn.pragma_update(None, "foreign_keys", "1").unwrap();
 }
 
-pub fn reset(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_id: i64) {
+pub fn reset(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_hash: &str) {
     let current_op = OperationState::get_operation(operation_conn, db_uuid).unwrap();
     let current_branch_id = OperationState::get_current_branch(operation_conn, db_uuid).unwrap();
     let current_branch = Branch::get_by_id(operation_conn, current_branch_id).unwrap();
-    let branch_operations: Vec<i64> = Branch::get_operations(operation_conn, current_branch_id)
+    let branch_operations: Vec<String> = Branch::get_operations(operation_conn, current_branch_id)
         .iter()
-        .map(|b| b.id)
+        .map(|b| b.hash.clone())
         .collect();
     if !branch_operations.contains(&current_op) {
-        panic!("{op_id} is not contained in this branch's operations.");
+        panic!("{op_hash} is not contained in this branch's operations.");
     }
     move_to(
         conn,
         operation_conn,
-        &Operation::get_by_id(operation_conn, op_id),
+        &Operation::get_by_hash(operation_conn, op_hash),
     );
 
     if current_branch.name != "main" {
         match operation_conn.execute(
-            "UPDATE branch SET start_operation_id = ?2 WHERE id = ?1",
-            (current_branch_id, op_id),
+            "UPDATE branch SET start_operation_hash = ?2 WHERE id = ?1",
+            (current_branch_id, op_hash.to_string()),
         ) {
             Ok(_) => {}
             Err(e) => {
@@ -738,37 +751,40 @@ pub fn reset(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_i
     // hide all child operations from this point
     for op in Operation::query(
         operation_conn,
-        "select * from operation where parent_id = ?1",
-        rusqlite::params!(Value::from(op_id)),
+        "select * from operation where parent_hash = ?1",
+        rusqlite::params!(Value::from(op_hash.to_string())),
     )
     .iter()
     {
-        Branch::mask_operation(operation_conn, current_branch_id, op.id);
+        Branch::mask_operation(operation_conn, current_branch_id, &op.hash);
     }
-    OperationState::set_operation(operation_conn, db_uuid, op_id);
+    OperationState::set_operation(operation_conn, db_uuid, op_hash);
 }
 
 pub fn apply<'a>(
     conn: &Connection,
     operation_conn: &Connection,
-    op_id: i64,
+    op_hash: &str,
     force_hash: impl Into<Option<&'a str>>,
-) {
+) -> Operation {
     let mut session = start_operation(conn);
-    let operation = Operation::get_by_id(operation_conn, op_id);
-    apply_changeset(conn, &operation);
+    let operation = Operation::get_by_hash(operation_conn, op_hash);
+    let changeset = load_changeset(&operation);
+    let input: &mut dyn Read = &mut changeset.as_slice();
+    let mut iter = ChangesetIter::start_strm(&input).unwrap();
+    let dependencies = load_changeset_dependencies(&operation);
+    apply_changeset(conn, &mut iter, &dependencies);
     end_operation(
         conn,
         operation_conn,
         &mut session,
-        None,
-        &format!("{op_id}.cs"),
+        &format!("{op_hash}.cs"),
         FileTypes::Changeset,
         "changeset_application",
-        &format!("Applied changeset {op_id}."),
+        &format!("Applied changeset {op_hash}."),
         force_hash,
     )
-    .unwrap();
+    .unwrap()
 }
 
 pub fn merge<'a>(
@@ -778,7 +794,8 @@ pub fn merge<'a>(
     source_branch: i64,
     other_branch: i64,
     force_hash: impl Into<Option<&'a str>>,
-) {
+) -> Vec<Operation> {
+    let mut new_operations: Vec<Operation> = vec![];
     let hash_prefix = force_hash.into();
     let current_branch =
         OperationState::get_current_branch(operation_conn, db_uuid).expect("No current branch.");
@@ -793,43 +810,54 @@ pub fn merge<'a>(
         .expect("No common operations between two branches.");
     if first_different_op < other_operations.len() {
         for (index, operation) in other_operations[first_different_op..].iter().enumerate() {
-            println!("Applying operation {op_id}", op_id = operation.id);
-            if let Some(hash) = hash_prefix {
+            println!("Applying operation {op_id}", op_id = operation.hash);
+            let new_op = if let Some(hash) = hash_prefix {
                 apply(
                     conn,
                     operation_conn,
-                    operation.id,
+                    &operation.hash,
                     format!("{hash}-{index}").as_str(),
-                );
+                )
             } else {
-                apply(conn, operation_conn, operation.id, None);
-            }
+                apply(conn, operation_conn, &operation.hash, None)
+            };
+            new_operations.push(new_op);
         }
     }
+    new_operations
 }
 
 pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Operation) {
-    let current_op_id = OperationState::get_operation(operation_conn, &operation.db_uuid).unwrap();
-    let op_id = operation.id;
-    if current_op_id == op_id {
+    let current_op_hash =
+        OperationState::get_operation(operation_conn, &operation.db_uuid).unwrap();
+    let op_hash = operation.hash.clone();
+    if current_op_hash == op_hash {
         return;
     }
-    let path = Operation::get_path_between(operation_conn, current_op_id, op_id);
+    let path = Operation::get_path_between(operation_conn, &current_op_hash, &op_hash);
     if path.is_empty() {
-        println!("No path exists from {current_op_id} to {op_id}.");
+        println!("No path exists from {current_op_hash} to {op_hash}.");
         return;
     }
-    for (operation_id, direction, next_op) in path.iter() {
+    for (operation_hash, direction, next_op) in path.iter() {
         match direction {
             Direction::Incoming => {
-                println!("Reverting operation {operation_id}");
-                revert_changeset(conn, &Operation::get_by_id(operation_conn, *operation_id));
-                OperationState::set_operation(operation_conn, &operation.db_uuid, *next_op);
+                println!("Reverting operation {operation_hash}");
+                revert_changeset(
+                    conn,
+                    &Operation::get_by_hash(operation_conn, operation_hash),
+                );
+                OperationState::set_operation(operation_conn, &operation.db_uuid, next_op);
             }
             Direction::Outgoing => {
                 println!("Applying operation {next_op}");
-                apply_changeset(conn, &Operation::get_by_id(operation_conn, *next_op));
-                OperationState::set_operation(operation_conn, &operation.db_uuid, *next_op);
+                let op_to_apply = Operation::get_by_hash(operation_conn, next_op);
+                let changeset = load_changeset(&op_to_apply);
+                let input: &mut dyn Read = &mut changeset.as_slice();
+                let mut iter = ChangesetIter::start_strm(&input).unwrap();
+                let dependencies = load_changeset_dependencies(&op_to_apply);
+                apply_changeset(conn, &mut iter, &dependencies);
+                OperationState::set_operation(operation_conn, &operation.db_uuid, next_op);
             }
         }
     }
@@ -846,14 +874,12 @@ pub fn end_operation<'a>(
     conn: &Connection,
     operation_conn: &Connection,
     session: &mut session::Session,
-    collection_name: impl Into<Option<&'a str>>,
     file_path: &str,
     file_type: FileTypes,
     operation_description: &'a str,
     summary_str: &str,
     force_hash: impl Into<Option<&'a str>>,
 ) -> Result<Operation, &'static str> {
-    let collection_name = collection_name.into();
     let db_uuid = metadata::get_db_uuid(conn);
     // determine if this operation has already happened
     let mut output = Vec::new();
@@ -864,6 +890,9 @@ pub fn end_operation<'a>(
     let hash = if let Some(hash) = force_hash.into() {
         hash.to_string()
     } else {
+        if output.is_empty() {
+            return Err("No changes.");
+        }
         let mut hasher = Sha256::new();
         hasher.update(&output[..]);
         hasher.update(&dependencies[..]);
@@ -879,24 +908,33 @@ pub fn end_operation<'a>(
     match Operation::create(
         operation_conn,
         &db_uuid,
-        collection_name,
         operation_description,
         change.id,
         &hash,
     ) {
         Ok(operation) => {
-            OperationSummary::create(operation_conn, operation.id, summary_str);
+            OperationSummary::create(operation_conn, &operation.hash, summary_str);
             write_changeset(&operation, &output, &dependencies);
             operation_conn
                 .execute("RELEASE SAVEPOINT new_operation;", [])
                 .unwrap();
             Ok(operation)
         }
-        Err(_) => {
+        Err(rusqlite::Error::SqliteFailure(err, details)) => {
             operation_conn
                 .execute("ROLLBACK TRANSACTION TO SAVEPOINT new_operation;", [])
                 .unwrap();
-            Err("Operation already exists.")
+            if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                Err("Operation already exists.")
+            } else {
+                panic!("something bad happened querying the database {details:?}");
+            }
+        }
+        Err(e) => {
+            operation_conn
+                .execute("ROLLBACK TRANSACTION TO SAVEPOINT new_operation;", [])
+                .unwrap();
+            panic!("something bad happened querying the database {e:?}");
         }
     }
 }
@@ -925,9 +963,9 @@ pub fn checkout(
     operation_conn: &Connection,
     db_uuid: &str,
     branch_name: &Option<String>,
-    operation_id: Option<i64>,
+    operation_hash: Option<String>,
 ) {
-    let mut dest_op_id = operation_id.unwrap_or(0);
+    let mut dest_op_hash = operation_hash.unwrap_or_default();
     if let Some(name) = branch_name {
         let current_branch = OperationState::get_current_branch(operation_conn, db_uuid)
             .expect("No current branch set");
@@ -936,18 +974,107 @@ pub fn checkout(
         if current_branch != branch.id {
             OperationState::set_branch(operation_conn, db_uuid, name);
         }
-        if dest_op_id == 0 {
-            dest_op_id = branch.current_operation_id.unwrap();
+        if dest_op_hash.is_empty() {
+            dest_op_hash = branch.current_operation_hash.unwrap();
         }
     }
-    if dest_op_id == 0 {
+    if dest_op_hash.is_empty() {
         panic!("No operation defined.");
     }
     move_to(
         conn,
         operation_conn,
-        &Operation::get_by_id(operation_conn, dest_op_id),
+        &Operation::get_by_hash(operation_conn, &dest_op_hash),
     );
+}
+
+pub fn parse_patch_operations(
+    branch_operations: &[Operation],
+    head_hash: &str,
+    operations: &str,
+) -> Vec<String> {
+    let mut results = vec![];
+    let (head_pos, _) = branch_operations
+        .iter()
+        .find_position(|op| op.hash == head_hash)
+        .expect("Current head position is not in branch.");
+    for operation in operations.split(",") {
+        if operation.contains("..") {
+            let mut it = operation.split("..");
+            let start = it.next().unwrap().parse::<String>().unwrap();
+            let end = it.next().unwrap().parse::<String>().unwrap();
+
+            let start_hash = if start.starts_with("HEAD") {
+                if start.contains("~") {
+                    let mut it = start.rsplit("~");
+                    let count = it.next().unwrap().parse::<usize>().unwrap();
+                    branch_operations[head_pos - count].hash.clone()
+                } else {
+                    branch_operations[head_pos].hash.clone()
+                }
+            } else {
+                start
+            };
+
+            let end_hash = if end.starts_with("HEAD") {
+                if end.contains("~") {
+                    let mut it = end.rsplit("~");
+                    let count = it.next().unwrap().parse::<usize>().unwrap();
+                    branch_operations[head_pos - count].hash.clone()
+                } else {
+                    branch_operations[head_pos].hash.clone()
+                }
+            } else {
+                end
+            };
+            let mut start_iter = branch_operations
+                .iter()
+                .positions(|op| op.hash.starts_with(start_hash.as_str()));
+            let start_pos = start_iter
+                .next()
+                .unwrap_or_else(|| panic!("Unable to find starting hash {start_hash:?}"));
+            let mut end_iter = branch_operations
+                .iter()
+                .positions(|op| op.hash.starts_with(end_hash.as_str()));
+            let end_pos = end_iter
+                .next()
+                .unwrap_or_else(|| panic!("Unable to find end hash {end_hash:?}"));
+            if start_iter.next().is_some() {
+                panic!("Start hash {start_hash} is ambiguous.");
+            }
+            if end_iter.next().is_some() {
+                panic!("Ending hash {end_hash} is ambiguous.");
+            }
+            results.extend(
+                branch_operations[start_pos..end_pos + 1]
+                    .iter()
+                    .map(|op| op.hash.clone()),
+            );
+        } else {
+            let hash = if operation.starts_with("HEAD") {
+                if operation.contains("~") {
+                    let mut it = operation.rsplit("~");
+                    let count = it.next().unwrap().parse::<usize>().unwrap();
+                    branch_operations[head_pos - count].hash.clone()
+                } else {
+                    branch_operations[head_pos].hash.clone()
+                }
+            } else {
+                let mut iter = branch_operations
+                    .iter()
+                    .positions(|op| op.hash.starts_with(operation));
+                let pos = iter
+                    .next()
+                    .unwrap_or_else(|| panic!("Unable to find starting hash {operation:?}"));
+                if iter.next().is_some() {
+                    panic!("Hash {operation:?} is ambiguous.");
+                }
+                branch_operations[pos].hash.clone()
+            };
+            results.push(hash);
+        }
+    }
+    results
 }
 
 #[cfg(test)]
@@ -958,34 +1085,12 @@ mod tests {
     use crate::models::operations::{setup_db, Branch, FileAddition, Operation, OperationState};
     use crate::models::{edge::Edge, metadata, node::Node, sample::Sample};
     use crate::test_helpers::{
-        get_connection, get_operation_connection, setup_block_group, setup_gen_dir,
+        create_operation, get_connection, get_operation_connection, setup_block_group,
+        setup_gen_dir,
     };
     use crate::updates::vcf::update_with_vcf;
     use rusqlite::types::Value;
     use std::path::{Path, PathBuf};
-
-    fn create_operation<'a>(
-        conn: &Connection,
-        op_conn: &Connection,
-        file_path: &str,
-        file_type: FileTypes,
-        description: &str,
-        hash: impl Into<Option<&'a str>>,
-    ) -> Operation {
-        let mut session = start_operation(conn);
-        end_operation(
-            conn,
-            op_conn,
-            &mut session,
-            None,
-            file_path,
-            file_type,
-            description,
-            "test operation",
-            hash.into(),
-        )
-        .unwrap()
-    }
 
     #[cfg(test)]
     mod merge {
@@ -1055,34 +1160,202 @@ mod tests {
             );
 
             checkout(conn, op_conn, db_uuid, &Some("branch-1".to_string()), None);
-            merge(
+            let new_operations = merge(
                 conn,
                 op_conn,
                 db_uuid,
                 branch_1.id,
                 branch_2.id,
                 "merge-test",
-            );
+            )
+            .iter()
+            .map(|op| op.hash.clone())
+            .collect::<Vec<String>>();
 
             let b1_ops = Branch::get_operations(op_conn, branch_1.id)
                 .iter()
-                .map(|f| f.id)
-                .collect::<Vec<i64>>();
+                .map(|f| f.hash.clone())
+                .collect::<Vec<String>>();
 
             let b2_ops = Branch::get_operations(op_conn, branch_2.id)
                 .iter()
-                .map(|f| f.id)
-                .collect::<Vec<i64>>();
+                .map(|f| f.hash.clone())
+                .collect::<Vec<String>>();
+
             assert_eq!(
                 b1_ops,
-                vec![op_1.id, op_2.id, op_3.id, op_4.id, op_6.id + 1, op_6.id + 2]
+                vec![
+                    op_1.hash.clone(),
+                    op_2.hash.clone(),
+                    op_3.hash.clone(),
+                    op_4.hash.clone()
+                ]
+                .into_iter()
+                .chain(new_operations.into_iter())
+                .collect::<Vec<String>>()
             );
-            assert_eq!(b2_ops, vec![op_1.id, op_2.id, op_5.id, op_6.id]);
+            assert_eq!(b2_ops, vec![op_1.hash, op_2.hash, op_5.hash, op_6.hash]);
+        }
+    }
+
+    #[cfg(test)]
+    mod parse_patch_operations {
+        use super::*;
+        use crate::operation_management::parse_patch_operations;
+
+        #[test]
+        fn test_head_shorthand() {
+            setup_gen_dir();
+            let conn = &get_connection(None);
+            let db_uuid = &metadata::get_db_uuid(conn);
+            let op_conn = &get_operation_connection(None);
+            setup_db(op_conn, db_uuid);
+
+            let _op_1 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "fasta_addition",
+                "op-1",
+            );
+            let op_2 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "fasta_addition",
+                "op-2",
+            );
+            let op_3 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "vcf_addition",
+                "op-3",
+            );
+
+            let branch = Branch::get_by_name(op_conn, db_uuid, "main").unwrap();
+            let ops = Branch::get_operations(op_conn, branch.id);
+            assert_eq!(
+                parse_patch_operations(
+                    &ops,
+                    &branch.current_operation_hash.unwrap(),
+                    "HEAD~1..HEAD"
+                ),
+                vec![op_2.hash, op_3.hash]
+            );
+        }
+
+        #[test]
+        fn test_hash_shorthand() {
+            setup_gen_dir();
+            let conn = &get_connection(None);
+            let db_uuid = &metadata::get_db_uuid(conn);
+            let op_conn = &get_operation_connection(None);
+            setup_db(op_conn, db_uuid);
+
+            let _op_1 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "fasta_addition",
+                "op-1-abc-123",
+            );
+            let op_2 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "fasta_addition",
+                "op-2-abc-123",
+            );
+            let op_3 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "vcf_addition",
+                "op-3-abc-13",
+            );
+
+            let branch = Branch::get_by_name(op_conn, db_uuid, "main").unwrap();
+            let ops = Branch::get_operations(op_conn, branch.id);
+            let head_hash = branch.current_operation_hash.unwrap();
+            assert_eq!(
+                parse_patch_operations(
+                    &ops,
+                    &head_hash,
+                    &format!(
+                        "{op_2}..{op_3}",
+                        op_2 = &op_2.hash[..6],
+                        op_3 = &op_3.hash[..6]
+                    )
+                ),
+                vec![op_2.hash.clone(), op_3.hash]
+            );
+
+            assert_eq!(
+                parse_patch_operations(&ops, &head_hash, &op_2.hash[..6]),
+                vec![op_2.hash]
+            );
+        }
+
+        #[test]
+        #[should_panic(expected = "Start hash op- is ambiguous.")]
+        fn test_error_on_ambiguous_hash_shorthand() {
+            setup_gen_dir();
+            let conn = &get_connection(None);
+            let db_uuid = &metadata::get_db_uuid(conn);
+            let op_conn = &get_operation_connection(None);
+            setup_db(op_conn, db_uuid);
+
+            let _op_1 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "fasta_addition",
+                "op-1-abc-123",
+            );
+            let op_2 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "fasta_addition",
+                "op-2-abc-123",
+            );
+            let op_3 = create_operation(
+                conn,
+                op_conn,
+                "foo",
+                FileTypes::Fasta,
+                "vcf_addition",
+                "op-3-abc-13",
+            );
+
+            let branch = Branch::get_by_name(op_conn, db_uuid, "main").unwrap();
+            let ops = Branch::get_operations(op_conn, branch.id);
+            assert_eq!(
+                parse_patch_operations(
+                    &ops,
+                    &branch.current_operation_hash.unwrap(),
+                    &format!(
+                        "{op_2}..{op_3}",
+                        op_2 = &op_2.hash[..3],
+                        op_3 = &op_3.hash[..3]
+                    )
+                ),
+                vec![op_2.hash, op_3.hash]
+            );
         }
     }
 
     #[test]
-    fn test_writes_operation_id() {
+    fn test_writes_operation_hash() {
         setup_gen_dir();
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
@@ -1090,9 +1363,12 @@ mod tests {
         setup_db(op_conn, &db_uuid);
         let change = FileAddition::create(op_conn, "test", FileTypes::Fasta);
         let operation =
-            Operation::create(op_conn, &db_uuid, "test", "test", change.id, "some-hash").unwrap();
-        OperationState::set_operation(op_conn, &db_uuid, operation.id);
-        assert_eq!(OperationState::get_operation(op_conn, &db_uuid).unwrap(), 1);
+            Operation::create(op_conn, &db_uuid, "test", change.id, "some-hash").unwrap();
+        OperationState::set_operation(op_conn, &db_uuid, &operation.hash);
+        assert_eq!(
+            OperationState::get_operation(op_conn, &db_uuid).unwrap(),
+            operation.hash
+        );
     }
 
     #[test]
@@ -1143,7 +1419,6 @@ mod tests {
             op_conn,
             &mut session,
             "test",
-            "test",
             FileTypes::Fasta,
             "test",
             "test",
@@ -1152,7 +1427,7 @@ mod tests {
         .unwrap();
 
         let dependency_path =
-            get_changeset_path(&operation).join(format!("{op_id}.dep", op_id = operation.id));
+            get_changeset_path(&operation).join(format!("{op_id}.dep", op_id = operation.hash));
         let dependencies: DependencyModels =
             serde_json::from_reader(fs::File::open(dependency_path).unwrap()).unwrap();
         assert_eq!(dependencies.sequences.len(), 1);
@@ -1182,7 +1457,8 @@ mod tests {
             false,
             conn,
             operation_conn,
-        );
+        )
+        .unwrap();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
@@ -1204,7 +1480,8 @@ mod tests {
             conn,
             operation_conn,
             None,
-        );
+        )
+        .unwrap();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
@@ -1234,9 +1511,9 @@ mod tests {
         // revert back to state 1 where vcf samples and blockpaths do not exist
         revert_changeset(
             conn,
-            &Operation::get_by_id(
+            &Operation::get_by_hash(
                 operation_conn,
-                OperationState::get_operation(operation_conn, &db_uuid).unwrap(),
+                &OperationState::get_operation(operation_conn, &db_uuid).unwrap(),
             ),
         );
 
@@ -1254,13 +1531,16 @@ mod tests {
         assert_eq!(sample_count, 0);
         assert_eq!(op_count, 2);
 
-        apply_changeset(
-            conn,
-            &Operation::get_by_id(
-                operation_conn,
-                OperationState::get_operation(operation_conn, &db_uuid).unwrap(),
-            ),
+        let op = Operation::get_by_hash(
+            operation_conn,
+            &OperationState::get_operation(operation_conn, &db_uuid).unwrap(),
         );
+        let changeset = load_changeset(&op);
+        let input: &mut dyn Read = &mut changeset.as_slice();
+        let mut iter = ChangesetIter::start_strm(&input).unwrap();
+        let dependencies = load_changeset_dependencies(&op);
+
+        apply_changeset(conn, &mut iter, &dependencies);
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
@@ -1288,13 +1568,14 @@ mod tests {
         setup_db(operation_conn, &db_uuid);
         let collection = "test".to_string();
 
-        import_fasta(
+        let _op_1 = import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &collection,
             false,
             conn,
             operation_conn,
-        );
+        )
+        .unwrap();
 
         Branch::create(operation_conn, &db_uuid, "branch-1");
         Branch::create(operation_conn, &db_uuid, "branch-2");
@@ -1306,7 +1587,7 @@ mod tests {
             None,
         );
 
-        update_with_vcf(
+        let op_2 = update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
             &collection,
             "".to_string(),
@@ -1314,7 +1595,8 @@ mod tests {
             conn,
             operation_conn,
             None,
-        );
+        )
+        .unwrap();
 
         let foo_bg_id = BlockGroup::get_id(conn, &collection, Some("foo"), "m123");
         let patch_1_seqs = HashSet::from_iter(vec![
@@ -1346,7 +1628,7 @@ mod tests {
             &Some("branch-2".to_string()),
             None,
         );
-        update_with_vcf(
+        let _op_3 = update_with_vcf(
             &vcf2_path.to_str().unwrap().to_string(),
             &collection,
             "".to_string(),
@@ -1375,7 +1657,7 @@ mod tests {
         );
 
         // apply changes from branch-1, it will be operation id 2
-        apply(conn, operation_conn, 2, None);
+        apply(conn, operation_conn, &op_2.hash, None);
 
         let foo_bg_id = BlockGroup::get_id(conn, &collection, Some("foo"), "m123");
         let patch_2_seqs = HashSet::from_iter(vec![
@@ -1432,7 +1714,8 @@ mod tests {
             false,
             conn,
             operation_conn,
-        );
+        )
+        .unwrap();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
@@ -1465,7 +1748,8 @@ mod tests {
             conn,
             operation_conn,
             None,
-        );
+        )
+        .unwrap();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
@@ -1518,7 +1802,8 @@ mod tests {
             conn,
             operation_conn,
             None,
-        );
+        )
+        .unwrap();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
@@ -1564,47 +1849,50 @@ mod tests {
     #[test]
     fn test_reset_hides_operations() {
         setup_gen_dir();
-        let fasta_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
         let conn = &mut get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let operation_conn = &get_operation_connection(None);
         setup_db(operation_conn, &db_uuid);
 
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            "test-1",
-            false,
+        let op_1 = create_operation(
             conn,
             operation_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-1",
         );
-
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            "test-2",
-            false,
+        let op_2 = create_operation(
             conn,
             operation_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-2",
         );
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            "test-3",
-            false,
+        let op_3 = create_operation(
             conn,
             operation_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-3",
         );
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            "test-4",
-            false,
+        let op_4 = create_operation(
             conn,
             operation_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-4",
         );
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            "test-5",
-            false,
+        let op_5 = create_operation(
             conn,
             operation_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-5",
         );
 
         let branch_id = OperationState::get_current_branch(operation_conn, &db_uuid).unwrap();
@@ -1613,22 +1901,28 @@ mod tests {
         assert_eq!(
             Branch::get_operations(operation_conn, branch_id)
                 .iter()
-                .map(|op| op.id)
-                .collect::<Vec<i64>>(),
-            vec![1, 2, 3, 4, 5]
+                .map(|op| op.hash.clone())
+                .collect::<Vec<String>>(),
+            vec![
+                op_1.hash.clone(),
+                op_2.hash.clone(),
+                op_3.hash.clone(),
+                op_4.hash,
+                op_5.hash
+            ]
         );
 
-        reset(conn, operation_conn, &db_uuid, 2);
+        reset(conn, operation_conn, &db_uuid, "op-2");
         assert_eq!(
             Branch::get_masked_operations(operation_conn, branch_id),
-            vec![3]
+            vec![op_3.hash]
         );
         assert_eq!(
             Branch::get_operations(operation_conn, branch_id)
                 .iter()
-                .map(|op| op.id)
-                .collect::<Vec<i64>>(),
-            vec![1, 2]
+                .map(|op| op.hash.clone())
+                .collect::<Vec<String>>(),
+            vec![op_1.hash.clone(), op_2.hash.clone()]
         );
     }
 
@@ -1641,7 +1935,6 @@ mod tests {
         //
         // We want to make sure if we reset branch a to 3 that branch b will still show its operations
         setup_gen_dir();
-        let fasta_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
         let conn = &mut get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let operation_conn = &get_operation_connection(None);
@@ -1649,135 +1942,177 @@ mod tests {
 
         let main_branch = Branch::get_by_name(operation_conn, &db_uuid, "main").unwrap();
 
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            "test-1",
-            false,
+        let op_1 = create_operation(
             conn,
             operation_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-1",
         );
-
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            "test-2",
-            false,
+        let op_2 = create_operation(
             conn,
             operation_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-2",
         );
 
         let branch_a = Branch::create(operation_conn, &db_uuid, "branch-a");
         OperationState::set_branch(operation_conn, &db_uuid, "branch-a");
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            "test-3",
-            false,
+        let op_3 = create_operation(
             conn,
             operation_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-3",
         );
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            "test-4",
-            false,
+        let op_4 = create_operation(
             conn,
             operation_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-4",
         );
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            "test-5",
-            false,
+        let op_5 = create_operation(
             conn,
             operation_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-5",
         );
         OperationState::set_branch(operation_conn, &db_uuid, "main");
-        OperationState::set_operation(operation_conn, &db_uuid, 2);
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            "test-6",
-            false,
+        OperationState::set_operation(operation_conn, &db_uuid, "op-2");
+        let op_6 = create_operation(
             conn,
             operation_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-6",
         );
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            "test-7",
-            false,
+        let op_7 = create_operation(
             conn,
             operation_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-7",
         );
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            "test-8",
-            false,
+        let op_8 = create_operation(
             conn,
             operation_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-8",
         );
         OperationState::set_branch(operation_conn, &db_uuid, "branch-a");
-        OperationState::set_operation(operation_conn, &db_uuid, 5);
+        OperationState::set_operation(operation_conn, &db_uuid, "op-5");
         let branch_b = Branch::create(operation_conn, &db_uuid, "branch-b");
         OperationState::set_branch(operation_conn, &db_uuid, "branch-b");
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            "test-9",
-            false,
+        let op_9 = create_operation(
             conn,
             operation_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-9",
         );
         OperationState::set_branch(operation_conn, &db_uuid, "branch-a");
-        OperationState::set_operation(operation_conn, &db_uuid, 5);
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            "test-10",
-            false,
+        OperationState::set_operation(operation_conn, &db_uuid, "op-5");
+        let op_10 = create_operation(
             conn,
             operation_conn,
+            "test.fasta",
+            FileTypes::Fasta,
+            "foo",
+            "op-10",
         );
 
         assert_eq!(
             Branch::get_operations(operation_conn, main_branch.id)
                 .iter()
-                .map(|op| op.id)
-                .collect::<Vec<i64>>(),
-            vec![1, 2, 6, 7, 8]
+                .map(|op| op.hash.clone())
+                .collect::<Vec<String>>(),
+            vec![
+                op_1.hash.clone(),
+                op_2.hash.clone(),
+                op_6.hash.clone(),
+                op_7.hash.clone(),
+                op_8.hash.clone()
+            ]
         );
         assert_eq!(
             Branch::get_operations(operation_conn, branch_a.id)
                 .iter()
-                .map(|op| op.id)
-                .collect::<Vec<i64>>(),
-            vec![1, 2, 3, 4, 5, 10]
+                .map(|op| op.hash.clone())
+                .collect::<Vec<String>>(),
+            vec![
+                op_1.hash.clone(),
+                op_2.hash.clone(),
+                op_3.hash.clone(),
+                op_4.hash.clone(),
+                op_5.hash.clone(),
+                op_10.hash.clone()
+            ]
         );
         assert_eq!(
             Branch::get_operations(operation_conn, branch_b.id)
                 .iter()
-                .map(|op| op.id)
-                .collect::<Vec<i64>>(),
-            vec![1, 2, 3, 4, 5, 9]
+                .map(|op| op.hash.clone())
+                .collect::<Vec<String>>(),
+            vec![
+                op_1.hash.clone(),
+                op_2.hash.clone(),
+                op_3.hash.clone(),
+                op_4.hash.clone(),
+                op_5.hash.clone(),
+                op_9.hash.clone()
+            ]
         );
-        reset(conn, operation_conn, &db_uuid, 2);
+        reset(conn, operation_conn, &db_uuid, "op-2");
         assert_eq!(
             Branch::get_masked_operations(operation_conn, branch_a.id),
-            vec![3, 6]
+            vec![op_3.hash.clone(), op_6.hash.clone()]
         );
         assert_eq!(
             Branch::get_operations(operation_conn, main_branch.id)
                 .iter()
-                .map(|op| op.id)
-                .collect::<Vec<i64>>(),
-            vec![1, 2, 6, 7, 8]
+                .map(|op| op.hash.clone())
+                .collect::<Vec<String>>(),
+            vec![
+                op_1.hash.clone(),
+                op_2.hash.clone(),
+                op_6.hash.clone(),
+                op_7.hash.clone(),
+                op_8.hash.clone()
+            ]
         );
         assert_eq!(
             Branch::get_operations(operation_conn, branch_a.id)
                 .iter()
-                .map(|op| op.id)
-                .collect::<Vec<i64>>(),
-            vec![1, 2]
+                .map(|op| op.hash.clone())
+                .collect::<Vec<String>>(),
+            vec![op_1.hash.clone(), op_2.hash.clone()]
         );
         assert_eq!(
             Branch::get_operations(operation_conn, branch_b.id)
                 .iter()
-                .map(|op| op.id)
-                .collect::<Vec<i64>>(),
-            vec![1, 2, 3, 4, 5, 9]
+                .map(|op| op.hash.clone())
+                .collect::<Vec<String>>(),
+            vec![
+                op_1.hash.clone(),
+                op_2.hash.clone(),
+                op_3.hash.clone(),
+                op_4.hash.clone(),
+                op_5.hash.clone(),
+                op_9.hash.clone()
+            ]
         );
     }
 }
