@@ -7,7 +7,6 @@ use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::path::{Path, PathBlock};
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
-use crate::test_helpers::save_graph;
 use gb_io::reader;
 use rusqlite::Connection;
 use std::io::Read;
@@ -122,7 +121,6 @@ where
                         }
                     }
                 }
-                save_graph(&BlockGroup::get_graph(conn, block_group.id), "gb.dot");
             }
             Err(e) => println!("Failed to parse {e:?}"),
         }
