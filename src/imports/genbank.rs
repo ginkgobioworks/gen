@@ -17,9 +17,9 @@ pub fn import_genbank<R>(conn: &Connection, data: R)
 where
     R: Read,
 {
-    let mut it = reader::SeqReader::new(data);
+    let reader = reader::SeqReader::new(data);
     let collection = Collection::create(conn, "");
-    for result in it {
+    for result in reader {
         match result {
             Ok(seq) => {
                 let mut seq_model = Sequence::new();
