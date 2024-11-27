@@ -112,6 +112,7 @@ pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[Operati
 mod tests {
     use super::*;
     use crate::imports::fasta::import_fasta;
+    use crate::models::block_group::BlockGroup;
     use crate::models::metadata::get_db_uuid;
     use crate::models::operations::{setup_db, Branch, OperationState};
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
@@ -188,6 +189,11 @@ mod tests {
         let patches = load_patches(&write_stream[..]);
         apply_patches(conn2, operation_conn2, &patches);
         apply_patches(conn, operation_conn, &patches);
+        for bg in BlockGroup::query(conn, "select * from block_groups;", params![]).iter() {
+            let seqs = BlockGroup::get_all_sequences(conn, bg.id, false);
+            assert!(!seqs.is_empty());
+            assert_eq!(seqs, BlockGroup::get_all_sequences(conn2, bg.id, false),)
+        }
     }
 
     #[test]
