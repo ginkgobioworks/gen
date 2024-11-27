@@ -2,7 +2,7 @@
 ## Site-directed Homologous Recombination
 
 This example recreates a protein engineering library made through site-directed, homologous recombination guided by
-structure-based computation (SCHEMA) ([Otey 2006](doi.org/10.1371/journal.pbio.0040112)). Starting from three existing
+structure-based computation (SCHEMA) ([Otey 2006](https://doi.org/10.1371/journal.pbio.0040112)). Starting from three existing
 cytochrome P450 proteins, approximately 3,000 artifical (chimeric) proteins were constructed and tested. The authors
 describe it as follows: 
 
@@ -35,15 +35,20 @@ python msa_crossover.py parents_aligned.fa 64 122 166 216 268 328 404
 
 The default output of this script is a directory called 'output' that contains the files 'layout.csv' and 'segments.fa'.
 We now set up our gen repository, create a new branch and switch into it. Then we import one of the parents to have a 
-starting point, and perform an update operation. Remember to wrap the molecule name in quotes because of the | symbols.
+starting point, and perform an update operation. The name of the target path is derived from the fasta file we just
+imported, and because it contains | (pipe) symbols we must wrap it in quotes to not confuse the shell. As start and end 
+coordinate we choose 0 and 657 because want to replace the entire 1049 residue protein with the combinatorial library.
+The parts and library files were obtained by running the msa_crossover.py script as shown above, and the resulting
+modifications will be stored as a new virtual sample called schema_library. Lastly, we export that sample to a GFA file.
 
 ```console
-gen init
-gen defaults --database protein_engineering.db --collection protein
-gen branch --create ex1
-gen branch --checkout ex1
-gen import --fasta P14779.fasta
-gen update --path-name "sp|P14779|CPXB_PRIM2"  --start 0 --end 657 --parts output/segments.fa --library output/layout.csv
+$ gen init
+$ gen defaults --database protein_engineering.db --collection protein
+$ gen branch --create ex1
+$ gen branch --checkout ex1
+$ gen import --fasta P14779.fasta
+$ gen update --path-name "sp|P14779|CPXB_PRIM2" --start 0 --end 1049 --parts output/segments.fa --library output/layout.csv --new-sample schema_library
+$ gen export --sample schema_library --gfa P450_chimera.gfa
 ```
 
 This results in a graph with a segment topology as shown below. Each segment is shown as a rectangle containing an
@@ -55,8 +60,7 @@ The figure above was generated using [this Python notebook](../../docs/figures/g
 you can use VG to generate a graphical representation. To do this, we export the graph to a GFA file, which can then be
 read by VG. One challenge is that VG overwrites our node identifiers. These can be restored by operating as follows:
 ```console
-> gen export --gfa P450_chimera.gfa
-> docker run --volume $PWD:/data --workdir /data --interactive -t quay.io/vgteam/vg:v1.60.0
+$ docker run --volume $PWD:/data --workdir /data --interactive -t quay.io/vgteam/vg:v1.60.0
 [...]
 
 ```
@@ -67,6 +71,8 @@ And then once you're inside the Docker container:
 # vg convert --gfa-in P450_chimera.gfa --gfa-trans translation_table.txt --vg-out | vg view --vg-in - --dot --color --simple-dot | dot -Tsvg -o P450_chimera.svg
 # IN='P450_chimera.svg'; cp $IN ${IN%.*}_fixed.${IN##*.} && while IFS=$'\t' read _ new old; do sed "s#font-size=\"14.00\">$old</text>#font-size=\"14.00\">$new</text>#g" ${IN%.*}_fixed.${IN##*.} > temp_file.html && mv temp_file.html ${IN%.*}_fixed.${IN##*.}; done < translation_table.txt
 ```
+
+Note GFA export is currently broken
 
 This results in the following image: ![Recombination library - VG](P450_chimera_fixed.svg)
 
