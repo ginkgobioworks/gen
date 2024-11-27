@@ -306,7 +306,12 @@ pub fn apply_changeset(
 
     let mut dep_node_map = HashMap::new();
     for node in dependencies.nodes.iter() {
-        let new_node_id = Node::create(conn, &node.sequence_hash.clone(), None);
+        let new_node_id = Node::create(
+            conn,
+            &node.sequence_hash.clone(),
+            None,
+            node.chromosome_index,
+        );
         dep_node_map.insert(&node.id, new_node_id);
     }
 
@@ -1402,7 +1407,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAATTTT")
             .save(conn);
-        let existing_node_id = Node::create(conn, existing_seq.hash.as_str(), None);
+        let existing_node_id = Node::create(conn, existing_seq.hash.as_str(), None, Some(0));
 
         let mut session = start_operation(conn);
 
@@ -1410,7 +1415,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCG")
             .save(conn);
-        let random_node_id = Node::create(conn, random_seq.hash.as_str(), None);
+        let random_node_id = Node::create(conn, random_seq.hash.as_str(), None, Some(0));
 
         let new_edge = Edge::create(
             conn,

@@ -257,6 +257,7 @@ pub fn update_with_gaf<'a, P>(
                             .get("right")
                             .unwrap_or(&(-1, Strand::Unknown, -1)),
                 ),
+                Some(0),
             );
 
             let mut new_edges = vec![];

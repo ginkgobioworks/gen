@@ -78,6 +78,7 @@ pub fn update_with_fasta(
             ref_end = seq.length,
             sequence_hash = seq.hash
         )),
+        Some(0),
     );
 
     let path_block = PathBlock {

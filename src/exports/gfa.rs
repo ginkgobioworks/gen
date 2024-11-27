@@ -264,10 +264,10 @@ mod tests {
             .sequence_type("DNA")
             .sequence("CCCC")
             .save(&conn);
-        let node1_id = Node::create(&conn, &sequence1.hash, None);
-        let node2_id = Node::create(&conn, &sequence2.hash, None);
-        let node3_id = Node::create(&conn, &sequence3.hash, None);
-        let node4_id = Node::create(&conn, &sequence4.hash, None);
+        let node1_id = Node::create(&conn, &sequence1.hash, None, Some(0));
+        let node2_id = Node::create(&conn, &sequence2.hash, None, Some(0));
+        let node3_id = Node::create(&conn, &sequence3.hash, None, Some(0));
+        let node4_id = Node::create(&conn, &sequence4.hash, None, Some(0));
 
         let edge1 = Edge::create(
             &conn,
@@ -452,7 +452,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,

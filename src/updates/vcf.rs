@@ -395,6 +395,11 @@ pub fn update_with_vcf<'a>(
                 }
             });
 
+            let chromosome_index = if vcf_entry.phased == 0 {
+                None
+            } else {
+                Some(vcf_entry.chromosome_index)
+            };
             let node_id = Node::create(
                 conn,
                 sequence.hash.as_str(),
@@ -403,6 +408,7 @@ pub fn update_with_vcf<'a>(
                     path_id = parent_path_id,
                     sequence_hash = sequence.hash
                 )),
+                chromosome_index,
             );
             let change = prepare_change(
                 vcf_entry.block_group_id,

@@ -23,9 +23,11 @@ CREATE TABLE nodes (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
   sequence_hash TEXT NOT NULL,
   hash TEXT,
+  chromosome_index INTEGER,
   FOREIGN KEY(sequence_hash) REFERENCES sequences(hash)
 ) STRICT;
-CREATE UNIQUE INDEX nodes_uidx ON nodes(hash);
+CREATE UNIQUE INDEX nodes_uidx ON nodes(hash, chromosome_index) where chromosome_index IS NOT NULL;
+CREATE UNIQUE INDEX nodes_null_chromosome_index_uidx ON nodes(hash) where chromosome_index IS NULL;
 
 CREATE TABLE block_groups (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,

@@ -79,6 +79,7 @@ pub fn update_with_library(
                 ref_end = seq.length,
                 sequence_hash = seq.hash
             )),
+            None,
         );
 
         node_ids_by_name.insert(name, node_id);
