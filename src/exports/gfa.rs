@@ -48,7 +48,7 @@ pub fn export_gfa(
         }
     }
 
-    let mut edges = edge_set.into_iter().collect();
+    let mut edges = edge_set.into_iter().collect::<Vec<_>>();
 
     let mut blocks = Edge::blocks_from_edges(conn, &edges);
     blocks.sort_by(|a, b| a.node_id.cmp(&b.node_id));
@@ -231,6 +231,7 @@ mod tests {
     use crate::imports::gfa::import_gfa;
     use crate::models::{
         block_group::{BlockGroup, PathChange},
+        block_group_edge::BlockGroupEdgeData,
         collection::Collection,
         node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
         path::PathBlock,
@@ -264,10 +265,10 @@ mod tests {
             .sequence_type("DNA")
             .sequence("CCCC")
             .save(&conn);
-        let node1_id = Node::create(&conn, &sequence1.hash, None, Some(0));
-        let node2_id = Node::create(&conn, &sequence2.hash, None, Some(0));
-        let node3_id = Node::create(&conn, &sequence3.hash, None, Some(0));
-        let node4_id = Node::create(&conn, &sequence4.hash, None, Some(0));
+        let node1_id = Node::create(&conn, &sequence1.hash, None);
+        let node2_id = Node::create(&conn, &sequence2.hash, None);
+        let node3_id = Node::create(&conn, &sequence3.hash, None);
+        let node4_id = Node::create(&conn, &sequence4.hash, None);
 
         let edge1 = Edge::create(
             &conn,
@@ -277,8 +278,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             &conn,
@@ -288,8 +287,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge3 = Edge::create(
             &conn,
@@ -299,8 +296,6 @@ mod tests {
             node3_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge4 = Edge::create(
             &conn,
@@ -310,8 +305,6 @@ mod tests {
             node4_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge5 = Edge::create(
             &conn,
@@ -321,15 +314,36 @@ mod tests {
             PATH_END_NODE_ID,
             0,
             Strand::Forward,
-            0,
-            0,
         );
 
-        BlockGroupEdge::bulk_create(
-            &conn,
-            block_group.id,
-            &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
-        );
+        let new_block_group_edges = vec![
+            BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: edge1.id,
+                chromosome_index: 0,
+            },
+            BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: edge2.id,
+                chromosome_index: 0,
+            },
+            BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: edge3.id,
+                chromosome_index: 0,
+            },
+            BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: edge4.id,
+                chromosome_index: 0,
+            },
+            BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: edge5.id,
+                chromosome_index: 0,
+            },
+        ];
+        BlockGroupEdge::bulk_create(&conn, &new_block_group_edges);
 
         Path::create(
             &conn,
@@ -452,7 +466,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -471,15 +485,15 @@ mod tests {
             end: 15,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
 
-        let edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
+        let augmented_edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
         let mut node_ids = HashSet::new();
         let mut edge_ids = HashSet::new();
-        for edge in edges {
+        for augmented_edge in augmented_edges {
+            let edge = &augmented_edge.edge;
             if !Node::is_terminal(edge.source_node_id) {
                 node_ids.insert(edge.source_node_id);
             }
@@ -519,10 +533,11 @@ mod tests {
             .pop()
             .unwrap();
 
-        let edges2 = BlockGroupEdge::edges_for_block_group(&conn, block_group2.id);
+        let augmented_edges2 = BlockGroupEdge::edges_for_block_group(&conn, block_group2.id);
         let mut node_ids2 = HashSet::new();
         let mut edge_ids2 = HashSet::new();
-        for edge in edges2 {
+        for augmented_edge in augmented_edges2 {
+            let edge = &augmented_edge.edge;
             if !Node::is_terminal(edge.source_node_id) {
                 node_ids2.insert(edge.source_node_id);
             }

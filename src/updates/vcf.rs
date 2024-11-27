@@ -149,7 +149,6 @@ fn prepare_change(
         end: ref_end,
         block: new_block,
         chromosome_index,
-        phased,
     }
 }
 
@@ -280,11 +279,7 @@ pub fn update_with_vcf<'a>(
                         let key = (sample_path, ref_accession.clone());
 
                         accession_cache.entry(key).or_insert_with(|| {
-                            (
-                                ref_start,
-                                ref_start + record.reference_bases().len() as i64,
-                                chromosome_index,
-                            )
+                            (ref_start, ref_start + record.reference_bases().len() as i64)
                         });
                     }
                 }
@@ -362,7 +357,6 @@ pub fn update_with_vcf<'a>(
                                             (
                                                 ref_start,
                                                 ref_start + record.reference_bases().len() as i64,
-                                                chromosome_index,
                                             )
                                         });
                                     }
@@ -395,11 +389,6 @@ pub fn update_with_vcf<'a>(
                 }
             });
 
-            let chromosome_index = if vcf_entry.phased == 0 {
-                None
-            } else {
-                Some(vcf_entry.chromosome_index)
-            };
             let node_id = Node::create(
                 conn,
                 sequence.hash.as_str(),
@@ -408,7 +397,6 @@ pub fn update_with_vcf<'a>(
                     path_id = parent_path_id,
                     sequence_hash = sequence.hash
                 )),
-                chromosome_index,
             );
             let change = prepare_change(
                 vcf_entry.block_group_id,
@@ -442,14 +430,13 @@ pub fn update_with_vcf<'a>(
             .entry(path.name)
             .or_insert(path_changes.len() as i64);
     }
-    for ((path, accession_name), (acc_start, acc_end, chromosome_index)) in accession_cache.iter() {
+    for ((path, accession_name), (acc_start, acc_end)) in accession_cache.iter() {
         BlockGroup::add_accession(
             conn,
             path,
             accession_name,
             *acc_start,
             *acc_end,
-            *chromosome_index as i64,
             &mut path_cache,
         );
     }

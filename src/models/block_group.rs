@@ -12,7 +12,7 @@ use crate::graph::{
     all_reachable_nodes, all_simple_paths, all_simple_paths_by_edge, GraphEdge, GraphNode,
 };
 use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
-use crate::models::block_group_edge::BlockGroupEdge;
+use crate::models::block_group_edge::{AugmentedEdgeData, BlockGroupEdge, BlockGroupEdgeData};
 use crate::models::edge::{Edge, EdgeData, GroupBlock};
 use crate::models::node::{PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::path::{Path, PathBlock, PathData};
@@ -44,7 +44,6 @@ pub struct PathChange {
     pub end: i64,
     pub block: PathBlock,
     pub chromosome_index: i64,
-    pub phased: i64,
 }
 
 pub struct PathCache<'a> {
@@ -184,11 +183,21 @@ impl BlockGroup {
             rusqlite::params!(SQLValue::from(source_block_group_id)),
         );
 
-        let edge_ids = BlockGroupEdge::edges_for_block_group(conn, source_block_group_id)
+        let augmented_edges = BlockGroupEdge::edges_for_block_group(conn, source_block_group_id);
+        let edge_ids = augmented_edges
             .iter()
-            .map(|edge| edge.id)
+            .map(|edge| edge.edge.id)
             .collect::<Vec<i64>>();
-        BlockGroupEdge::bulk_create(conn, target_block_group_id, &edge_ids);
+        let new_block_group_edges = edge_ids
+            .iter()
+            .enumerate()
+            .map(|(i, edge_id)| BlockGroupEdgeData {
+                block_group_id: target_block_group_id,
+                edge_id: *edge_id,
+                chromosome_index: augmented_edges[i].chromosome_index,
+            })
+            .collect::<Vec<_>>();
+        BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
 
         let mut path_map = HashMap::new();
 
@@ -443,7 +452,6 @@ impl BlockGroup {
         name: &str,
         start: i64,
         end: i64,
-        chromosome_index: i64,
         cache: &mut PathCache,
     ) -> Accession {
         let tree = PathCache::get_intervaltree(cache, path).unwrap();
@@ -463,7 +471,6 @@ impl BlockGroup {
             target_node_id: start_block.node_id,
             target_coordinate: start - start_block.start + start_block.sequence_start,
             target_strand: Strand::Forward,
-            chromosome_index,
         };
         let end_edge = AccessionEdgeData {
             source_node_id: end_block.node_id,
@@ -472,7 +479,6 @@ impl BlockGroup {
             target_node_id: PATH_END_NODE_ID,
             target_coordinate: -1,
             target_strand: Strand::Forward,
-            chromosome_index,
         };
         let accession =
             Accession::create(conn, name, path.id, None).expect("Unable to create accession.");
@@ -503,7 +509,6 @@ impl BlockGroup {
                     target_node_id: next_block.node_id,
                     target_coordinate: next_block.sequence_start,
                     target_strand: next_block.strand,
-                    chromosome_index,
                 })
             }
             path_edges.push(end_edge);
@@ -522,7 +527,7 @@ impl BlockGroup {
         cache: &mut PathCache,
         modify_blockgroup: bool,
     ) {
-        let mut new_edges_by_block_group = HashMap::<i64, Vec<EdgeData>>::new();
+        let mut new_augmented_edges_by_block_group = HashMap::<i64, Vec<AugmentedEdgeData>>::new();
         let mut new_accession_edges = HashMap::new();
         let mut tree_map = HashMap::new();
         for change in changes {
@@ -533,11 +538,15 @@ impl BlockGroup {
             } else {
                 PathCache::get_intervaltree(cache, &change.path).unwrap()
             };
-            let new_edges = BlockGroup::set_up_new_edges(change, tree);
-            new_edges_by_block_group
+            let new_augmented_edges = BlockGroup::set_up_new_edges(change, tree);
+            let new_edges = new_augmented_edges
+                .iter()
+                .map(|augmented_edge| augmented_edge.edge_data.clone())
+                .collect::<Vec<_>>();
+            new_augmented_edges_by_block_group
                 .entry(change.block_group_id)
-                .and_modify(|new_edge_data| new_edge_data.extend(new_edges.clone()))
-                .or_insert_with(|| new_edges.clone());
+                .and_modify(|new_edge_data| new_edge_data.extend(new_augmented_edges.clone()))
+                .or_insert_with(|| new_augmented_edges.clone());
             if let Some(accession) = &change.path_accession {
                 new_accession_edges
                     .entry((&change.path, accession))
@@ -550,12 +559,25 @@ impl BlockGroup {
 
         let mut edge_data_map = HashMap::new();
 
-        for (block_group_id, new_edges) in new_edges_by_block_group {
+        for (block_group_id, new_augmented_edges) in new_augmented_edges_by_block_group {
+            let new_edges = new_augmented_edges
+                .iter()
+                .map(|augmented_edge| augmented_edge.edge_data.clone())
+                .collect::<Vec<_>>();
             let edge_ids = Edge::bulk_create(conn, &new_edges);
             for (i, edge_data) in new_edges.iter().enumerate() {
                 edge_data_map.insert(edge_data.clone(), edge_ids[i]);
             }
-            BlockGroupEdge::bulk_create(conn, block_group_id, &edge_ids);
+            let new_block_group_edges = edge_ids
+                .iter()
+                .enumerate()
+                .map(|(i, edge_id)| BlockGroupEdgeData {
+                    block_group_id,
+                    edge_id: *edge_id,
+                    chromosome_index: new_augmented_edges[i].chromosome_index,
+                })
+                .collect::<Vec<_>>();
+            BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
         }
 
         for ((path, accession_name), path_edges) in new_accession_edges {
@@ -590,15 +612,28 @@ impl BlockGroup {
         change: &PathChange,
         tree: &IntervalTree<i64, NodeIntervalBlock>,
     ) {
-        let new_edges = BlockGroup::set_up_new_edges(change, tree);
+        let new_augmented_edges = BlockGroup::set_up_new_edges(change, tree);
+        let new_edges = new_augmented_edges
+            .iter()
+            .map(|augmented_edge| augmented_edge.edge_data.clone())
+            .collect::<Vec<_>>();
         let edge_ids = Edge::bulk_create(conn, &new_edges);
-        BlockGroupEdge::bulk_create(conn, change.block_group_id, &edge_ids);
+        let new_block_group_edges = edge_ids
+            .iter()
+            .enumerate()
+            .map(|(i, edge_id)| BlockGroupEdgeData {
+                block_group_id: change.block_group_id,
+                edge_id: *edge_id,
+                chromosome_index: new_augmented_edges[i].chromosome_index,
+            })
+            .collect::<Vec<_>>();
+        BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
     }
 
-    pub fn set_up_new_edges(
+    fn set_up_new_edges(
         change: &PathChange,
         tree: &IntervalTree<i64, NodeIntervalBlock>,
-    ) -> Vec<EdgeData> {
+    ) -> Vec<AugmentedEdgeData> {
         let start_blocks: Vec<&NodeIntervalBlock> =
             tree.query_point(change.start).map(|x| &x.value).collect();
         assert_eq!(start_blocks.len(), 1);
@@ -633,10 +668,12 @@ impl BlockGroup {
                 target_node_id: end_block.node_id,
                 target_coordinate: change.end - end_block.start + end_block.sequence_start,
                 target_strand: Strand::Forward,
-                chromosome_index: change.chromosome_index,
-                phased: change.phased,
             };
-            new_edges.push(new_edge);
+            let new_augmented_edge = AugmentedEdgeData {
+                edge_data: new_edge,
+                chromosome_index: change.chromosome_index,
+            };
+            new_edges.push(new_augmented_edge);
 
             // NOTE: If the deletion is happening at the very beginning of a path, we need to add
             // an edge from the dedicated start node to the end of the deletion, to indicate it's
@@ -649,10 +686,12 @@ impl BlockGroup {
                     target_node_id: end_block.node_id,
                     target_coordinate: change.end - end_block.start + end_block.sequence_start,
                     target_strand: Strand::Forward,
-                    chromosome_index: change.chromosome_index,
-                    phased: change.phased,
                 };
-                new_edges.push(new_beginning_edge);
+                let new_augmented_edge = AugmentedEdgeData {
+                    edge_data: new_beginning_edge,
+                    chromosome_index: change.chromosome_index,
+                };
+                new_edges.push(new_augmented_edge);
             }
         // NOTE: If the deletion is happening at the very end of a path, we might add an edge
         // from the beginning of the deletion to the dedicated end node, but in practice it
@@ -666,8 +705,10 @@ impl BlockGroup {
                 target_node_id: change.block.node_id,
                 target_coordinate: change.block.sequence_start,
                 target_strand: Strand::Forward,
+            };
+            let new_augmented_start_edge = AugmentedEdgeData {
+                edge_data: new_start_edge,
                 chromosome_index: change.chromosome_index,
-                phased: change.phased,
             };
             let new_end_edge = EdgeData {
                 source_node_id: change.block.node_id,
@@ -676,11 +717,13 @@ impl BlockGroup {
                 target_node_id: end_block.node_id,
                 target_coordinate: change.end - end_block.start + end_block.sequence_start,
                 target_strand: Strand::Forward,
-                chromosome_index: change.chromosome_index,
-                phased: change.phased,
             };
-            new_edges.push(new_start_edge);
-            new_edges.push(new_end_edge);
+            let new_augmented_end_edge = AugmentedEdgeData {
+                edge_data: new_end_edge,
+                chromosome_index: change.chromosome_index,
+            };
+            new_edges.push(new_augmented_start_edge);
+            new_edges.push(new_augmented_end_edge);
         }
 
         new_edges
@@ -869,7 +912,7 @@ mod tests {
         let (bg_1, path) = setup_block_group(conn);
         let mut path_cache = PathCache::new(conn);
         PathCache::lookup(&mut path_cache, bg_1, path.name.clone());
-        let acc_1 = BlockGroup::add_accession(conn, &path, "test", 3, 7, 0, &mut path_cache);
+        let acc_1 = BlockGroup::add_accession(conn, &path, "test", 3, 7, &mut path_cache);
         assert_eq!(
             Accession::query(
                 conn,
@@ -919,7 +962,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -938,7 +981,6 @@ mod tests {
             end: 15,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -956,7 +998,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
-        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None, Some(0));
+        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None);
         let deletion = PathBlock {
             id: 0,
             node_id: deletion_node_id,
@@ -976,7 +1018,6 @@ mod tests {
             end: 31,
             block: deletion,
             chromosome_index: 1,
-            phased: 0,
         };
         // take out an entire block.
         let tree = path.intervaltree(&conn);
@@ -1001,7 +1042,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1020,7 +1061,6 @@ mod tests {
             end: 15,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1043,7 +1083,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1062,7 +1102,6 @@ mod tests {
             end: 15,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1085,7 +1124,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1104,7 +1143,6 @@ mod tests {
             end: 17,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1127,7 +1165,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1146,7 +1184,6 @@ mod tests {
             end: 10,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1169,7 +1206,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1188,7 +1225,6 @@ mod tests {
             end: 9,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1211,7 +1247,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1230,7 +1266,6 @@ mod tests {
             end: 20,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1253,7 +1288,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1272,7 +1307,6 @@ mod tests {
             end: 25,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1295,7 +1329,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1314,7 +1348,6 @@ mod tests {
             end: 35,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1337,7 +1370,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
-        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None, Some(0));
+        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None);
         let deletion = PathBlock {
             id: 0,
             node_id: deletion_node_id,
@@ -1357,7 +1390,6 @@ mod tests {
             end: 31,
             block: deletion,
             chromosome_index: 1,
-            phased: 0,
         };
 
         // take out an entire block.
@@ -1381,7 +1413,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1400,7 +1432,6 @@ mod tests {
             end: 15,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1435,7 +1466,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1454,7 +1485,6 @@ mod tests {
             end: 0,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1478,7 +1508,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1497,7 +1527,6 @@ mod tests {
             end: 40,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1520,7 +1549,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1539,7 +1568,6 @@ mod tests {
             end: 11,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1562,7 +1590,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1581,7 +1609,6 @@ mod tests {
             end: 20,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1604,7 +1631,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
-        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None, Some(0));
+        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None);
         let deletion = PathBlock {
             id: 0,
             node_id: deletion_node_id,
@@ -1623,7 +1650,6 @@ mod tests {
             end: 1,
             block: deletion,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1646,7 +1672,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
-        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None, Some(0));
+        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None);
         let deletion = PathBlock {
             id: 0,
             node_id: deletion_node_id,
@@ -1665,7 +1691,6 @@ mod tests {
             end: 40,
             block: deletion,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1688,7 +1713,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
-        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None, Some(0));
+        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None);
         let deletion = PathBlock {
             id: 0,
             node_id: deletion_node_id,
@@ -1707,7 +1732,6 @@ mod tests {
             end: 12,
             block: deletion,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1730,7 +1754,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("")
             .save(&conn);
-        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None, Some(0));
+        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None);
         let deletion = PathBlock {
             id: 0,
             node_id: deletion_node_id,
@@ -1749,7 +1773,6 @@ mod tests {
             end: 20,
             block: deletion,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -1781,7 +1804,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(conn);
-        let insert_node_id = Node::create(conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1800,7 +1823,6 @@ mod tests {
             end: 15,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         let tree = path.intervaltree(conn);
         BlockGroup::insert_change(conn, &change, &tree);
@@ -1959,7 +1981,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(conn);
-        let insert_node_id = Node::create(conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -1978,7 +2000,6 @@ mod tests {
             end: 15,
             block: insert,
             chromosome_index: 0,
-            phased: 0,
         };
         // note we are making our change against the new blockgroup, and not the parent blockgroup
         let tree = BlockGroup::intervaltree_for(conn, new_bg_id, true);
@@ -2023,7 +2044,6 @@ mod tests {
             end: 15,
             block: insert,
             chromosome_index: 0,
-            phased: 0,
         };
         // take out an entire block.
         let tree = BlockGroup::intervaltree_for(conn, gc_bg_id, true);
@@ -2054,7 +2074,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(conn);
-        let insert_node_id = Node::create(conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -2073,7 +2093,6 @@ mod tests {
             end: 11,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         // note we are making our change against the new blockgroup, and not the parent blockgroup
         let tree = BlockGroup::intervaltree_for(conn, new_bg_id, true);
@@ -2107,12 +2126,8 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(conn);
-        let insert_node_id = Node::create(
-            conn,
-            insert_sequence.hash.as_str(),
-            "new-hash".to_string(),
-            Some(0),
-        );
+        let insert_node_id =
+            Node::create(conn, insert_sequence.hash.as_str(), "new-hash".to_string());
 
         let insert = PathBlock {
             id: 0,
@@ -2132,7 +2147,6 @@ mod tests {
             end: 24,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         // take out an entire block.
         let tree = BlockGroup::intervaltree_for(conn, gc_bg_id, true);
@@ -2170,7 +2184,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(conn);
-        let insert_node_id = Node::create(conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -2189,7 +2203,6 @@ mod tests {
             end: 12,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         // note we are making our change against the new blockgroup, and not the parent blockgroup
         let tree = BlockGroup::intervaltree_for(conn, new_bg_id, true);
@@ -2223,12 +2236,8 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(conn);
-        let insert_node_id = Node::create(
-            conn,
-            insert_sequence.hash.as_str(),
-            "new-hash".to_string(),
-            Some(0),
-        );
+        let insert_node_id =
+            Node::create(conn, insert_sequence.hash.as_str(), "new-hash".to_string());
 
         let insert = PathBlock {
             id: 0,
@@ -2248,7 +2257,6 @@ mod tests {
             end: 24,
             block: insert,
             chromosome_index: 1,
-            phased: 0,
         };
         // take out an entire block.
         let tree = BlockGroup::intervaltree_for(conn, gc_bg_id, true);

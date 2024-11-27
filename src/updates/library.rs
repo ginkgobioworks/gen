@@ -8,7 +8,7 @@ use std::io::BufReader;
 use std::str;
 
 use crate::models::block_group::BlockGroup;
-use crate::models::block_group_edge::BlockGroupEdge;
+use crate::models::block_group_edge::{BlockGroupEdge, BlockGroupEdgeData};
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::file_types::FileTypes;
 use crate::models::node::Node;
@@ -79,7 +79,6 @@ pub fn update_with_library(
                 ref_end = seq.length,
                 sequence_hash = seq.hash
             )),
-            None,
         );
 
         node_ids_by_name.insert(name, node_id);
@@ -139,8 +138,6 @@ pub fn update_with_library(
             target_node_id: **start_part,
             target_coordinate: 0,
             target_strand: Strand::Forward,
-            chromosome_index: 0,
-            phased: 0,
         };
         new_edges.insert(edge);
     }
@@ -155,8 +152,6 @@ pub fn update_with_library(
             target_node_id: end_block.node_id,
             target_coordinate: node_end_coordinate,
             target_strand: Strand::Forward,
-            chromosome_index: 0,
-            phased: 0,
         };
         new_edges.insert(edge);
     }
@@ -174,8 +169,6 @@ pub fn update_with_library(
                     target_node_id: **part2,
                     target_coordinate: 0,
                     target_strand: Strand::Forward,
-                    chromosome_index: 0,
-                    phased: 0,
                 };
                 new_edges.insert(edge);
             }
@@ -185,7 +178,15 @@ pub fn update_with_library(
     path_changes_count *= end_parts.len();
 
     let new_edge_ids = Edge::bulk_create(conn, &new_edges.iter().cloned().collect());
-    BlockGroupEdge::bulk_create(conn, path.block_group_id, &new_edge_ids);
+    let new_block_group_edges = new_edge_ids
+        .iter()
+        .map(|edge_id| BlockGroupEdgeData {
+            block_group_id: path.block_group_id,
+            edge_id: *edge_id,
+            chromosome_index: 0,
+        })
+        .collect::<Vec<_>>();
+    BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
 
     let summary_str = format!("{region_name}: {path_changes_count} changes.\n");
     operation_management::end_operation(

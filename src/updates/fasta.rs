@@ -78,7 +78,6 @@ pub fn update_with_fasta(
             ref_end = seq.length,
             sequence_hash = seq.hash
         )),
-        Some(0),
     );
 
     let path_block = PathBlock {
@@ -100,7 +99,6 @@ pub fn update_with_fasta(
         end: end_coordinate,
         block: path_block,
         chromosome_index: 0,
-        phased: 0,
     };
 
     let interval_tree = path.intervaltree(conn);

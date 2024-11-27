@@ -6,7 +6,7 @@ use std::path::Path as FilePath;
 use crate::gfa_reader::Gfa;
 use crate::models::{
     block_group::BlockGroup,
-    block_group_edge::BlockGroupEdge,
+    block_group_edge::{BlockGroupEdge, BlockGroupEdgeData},
     collection::Collection,
     edge::{Edge, EdgeData},
     node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
@@ -43,7 +43,7 @@ pub fn import_gfa<'a>(
             .sequence(input_sequence)
             .save(conn);
         sequences_by_segment_id.insert(&segment.id, sequence.clone());
-        let node_id = Node::create(conn, &sequence.hash, None, Some(0));
+        let node_id = Node::create(conn, &sequence.hash, None);
         node_ids_by_segment_id.insert(&segment.id, node_id);
     }
 
@@ -118,7 +118,15 @@ pub fn import_gfa<'a>(
     }
 
     let edge_ids = Edge::bulk_create(conn, &edges.into_iter().collect::<Vec<EdgeData>>());
-    BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+    let new_block_group_edges = edge_ids
+        .iter()
+        .map(|edge_id| BlockGroupEdgeData {
+            block_group_id: block_group.id,
+            edge_id: *edge_id,
+            chromosome_index: 0,
+        })
+        .collect::<Vec<_>>();
+    BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
 
     let saved_edges = Edge::bulk_load(conn, &edge_ids);
     let mut edge_ids_by_data = HashMap::new();
@@ -218,8 +226,6 @@ fn edge_data_from_fields(
         target_node_id,
         target_coordinate: 0,
         target_strand,
-        chromosome_index: 0,
-        phased: 0,
     }
 }
 

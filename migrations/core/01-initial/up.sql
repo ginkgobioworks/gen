@@ -23,11 +23,9 @@ CREATE TABLE nodes (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
   sequence_hash TEXT NOT NULL,
   hash TEXT,
-  chromosome_index INTEGER,
   FOREIGN KEY(sequence_hash) REFERENCES sequences(hash)
 ) STRICT;
-CREATE UNIQUE INDEX nodes_uidx ON nodes(hash, chromosome_index) where chromosome_index IS NOT NULL;
-CREATE UNIQUE INDEX nodes_null_chromosome_index_uidx ON nodes(hash) where chromosome_index IS NULL;
+CREATE UNIQUE INDEX nodes_uidx ON nodes(hash);
 
 CREATE TABLE block_groups (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -68,11 +66,10 @@ CREATE TABLE accession_edges (
   target_node_id INTEGER,
   target_coordinate INTEGER NOT NULL,
   target_strand TEXT NOT NULL,
-  chromosome_index INTEGER NOT NULL,
   FOREIGN KEY(source_node_id) REFERENCES nodes(id),
   FOREIGN KEY(target_node_id) REFERENCES nodes(id)
 ) STRICT;
-CREATE UNIQUE INDEX accession_edge_uidx ON accession_edges(source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index);
+CREATE UNIQUE INDEX accession_edge_uidx ON accession_edges(source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand);
 
 CREATE TABLE accession_paths (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -116,13 +113,10 @@ CREATE TABLE edges (
   target_node_id INTEGER,
   target_coordinate INTEGER NOT NULL,
   target_strand TEXT NOT NULL,
-  chromosome_index INTEGER NOT NULL,
-  phased INTEGER NOT NULL,
   FOREIGN KEY(source_node_id) REFERENCES nodes(id),
-  FOREIGN KEY(target_node_id) REFERENCES nodes(id),
-  constraint chk_phased check (phased in (0, 1))
+  FOREIGN KEY(target_node_id) REFERENCES nodes(id)
 ) STRICT;
-CREATE UNIQUE INDEX edge_uidx ON edges(source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased);
+CREATE UNIQUE INDEX edge_uidx ON edges(source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand);
 
 CREATE TABLE path_edges (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -138,10 +132,12 @@ CREATE TABLE block_group_edges (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
   block_group_id INTEGER NOT NULL,
   edge_id INTEGER NOT NULL,
+  chromosome_index INTEGER,
   FOREIGN KEY(block_group_id) REFERENCES block_groups(id),
   FOREIGN KEY(edge_id) REFERENCES edges(id)
 ) STRICT;
-CREATE UNIQUE INDEX block_group_edges_uidx ON block_group_edges(block_group_id, edge_id);
+CREATE UNIQUE INDEX block_group_edges_uidx ON block_group_edges(block_group_id, edge_id, chromosome_index) WHERE chromosome_index IS NOT NULL;
+CREATE UNIQUE INDEX block_group_edges_null_chromosome_index_uidx ON block_group_edges(block_group_id, edge_id) WHERE chromosome_index IS NULL;
 
 INSERT INTO gen_metadata (db_uuid) values (lower(
     hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-' || '4' ||

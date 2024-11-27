@@ -13,7 +13,6 @@ pub const PATH_END_NODE_ID: i64 = 2;
 pub struct Node {
     pub id: i64,
     pub sequence_hash: String,
-    pub chromosome_index: Option<i64>,
 }
 
 impl Query for Node {
@@ -22,7 +21,6 @@ impl Query for Node {
         Node {
             id: row.get(0).unwrap(),
             sequence_hash: row.get(1).unwrap(),
-            chromosome_index: row.get(3).unwrap(),
         }
     }
 }
@@ -32,18 +30,17 @@ impl Node {
         conn: &Connection,
         sequence_hash: &str,
         node_hash: impl Into<Option<String>>,
-        chromosome_index: Option<i64>,
     ) -> i64 {
         let node_hash = node_hash.into();
 
-        let insert_statement = "INSERT INTO nodes (sequence_hash, hash, chromosome_index) VALUES (?1, ?2, ?3) RETURNING (id);";
+        let insert_statement =
+            "INSERT INTO nodes (sequence_hash, hash) VALUES (?1, ?2) RETURNING (id);";
         let mut stmt = conn.prepare_cached(insert_statement).unwrap();
         let mut rows = stmt
             .query_map(
                 params_from_iter(vec![
                     SQLValue::from(sequence_hash.to_string()),
                     SQLValue::from(node_hash.clone()),
-                    SQLValue::from(chromosome_index),
                 ]),
                 |row| row.get(0),
             )

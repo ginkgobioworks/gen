@@ -1,7 +1,7 @@
 use crate::config::get_changeset_path;
 use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group::BlockGroup;
-use crate::models::block_group_edge::BlockGroupEdge;
+use crate::models::block_group_edge::{BlockGroupEdge, BlockGroupEdgeData};
 use crate::models::collection::Collection;
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::file_types::FileTypes;
@@ -306,12 +306,7 @@ pub fn apply_changeset(
 
     let mut dep_node_map = HashMap::new();
     for node in dependencies.nodes.iter() {
-        let new_node_id = Node::create(
-            conn,
-            &node.sequence_hash.clone(),
-            None,
-            node.chromosome_index,
-        );
+        let new_node_id = Node::create(conn, &node.sequence_hash.clone(), None);
         dep_node_map.insert(&node.id, new_node_id);
     }
 
@@ -457,16 +452,9 @@ pub fn apply_changeset(
                     let node_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     node_map.insert(
                         node_pk,
-                        (
-                            str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
-                                .unwrap()
-                                .to_string(),
-                            item.new_value(2)
-                                .unwrap()
-                                .as_str_or_null()
-                                .unwrap()
-                                .map(|s| s.to_string()),
-                        ),
+                        str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
+                            .unwrap()
+                            .to_string(),
                     );
                 }
                 "edges" => {
@@ -482,8 +470,6 @@ pub fn apply_changeset(
                             target_coordinate: item.new_value(5).unwrap().as_i64().unwrap(),
                             target_strand: Strand::column_result(item.new_value(6).unwrap())
                                 .unwrap(),
-                            chromosome_index: item.new_value(7).unwrap().as_i64().unwrap(),
-                            phased: item.new_value(8).unwrap().as_i64().unwrap(),
                         },
                     );
                 }
@@ -534,7 +520,6 @@ pub fn apply_changeset(
                             target_coordinate: item.new_value(5).unwrap().as_i64().unwrap(),
                             target_strand: Strand::column_result(item.new_value(6).unwrap())
                                 .unwrap(),
-                            chromosome_index: item.new_value(7).unwrap().as_i64().unwrap(),
                         },
                     );
                 }
@@ -582,8 +567,6 @@ pub fn apply_changeset(
                 target_node_id: *updated_target_node_id,
                 target_coordinate: edge.target_coordinate,
                 target_strand: edge.target_strand,
-                chromosome_index: edge.chromosome_index,
-                phased: edge.phased,
             },
         );
     }
@@ -622,7 +605,15 @@ pub fn apply_changeset(
             .push(*edge_id);
     }
     for (bg_id, edges) in block_group_edges.iter() {
-        BlockGroupEdge::bulk_create(conn, *bg_id, edges);
+        let new_block_group_edges = edges
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: *bg_id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+            })
+            .collect::<Vec<_>>();
+        BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
     }
 
     for path in insert_paths {
@@ -668,7 +659,6 @@ pub fn apply_changeset(
                 target_node_id: *updated_target_node_id,
                 target_coordinate: edge.target_coordinate,
                 target_strand: edge.target_strand,
-                chromosome_index: edge.chromosome_index,
             },
         );
     }
@@ -1407,7 +1397,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAATTTT")
             .save(conn);
-        let existing_node_id = Node::create(conn, existing_seq.hash.as_str(), None, Some(0));
+        let existing_node_id = Node::create(conn, existing_seq.hash.as_str(), None);
 
         let mut session = start_operation(conn);
 
@@ -1415,7 +1405,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCG")
             .save(conn);
-        let random_node_id = Node::create(conn, random_seq.hash.as_str(), None, Some(0));
+        let random_node_id = Node::create(conn, random_seq.hash.as_str(), None);
 
         let new_edge = Edge::create(
             conn,
@@ -1425,10 +1415,13 @@ mod tests {
             existing_node_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
-        BlockGroupEdge::bulk_create(conn, bg_id, &[new_edge.id]);
+        let block_group_edge = BlockGroupEdgeData {
+            block_group_id: bg_id,
+            edge_id: new_edge.id,
+            chromosome_index: 0,
+        };
+        BlockGroupEdge::bulk_create(conn, &[block_group_edge]);
         let operation = end_operation(
             conn,
             op_conn,

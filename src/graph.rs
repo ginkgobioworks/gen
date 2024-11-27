@@ -26,10 +26,9 @@ impl GraphNode {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct GraphEdge {
     pub edge_id: i64,
-    pub chromosome_index: i64,
-    pub phased: i64,
     pub source_strand: Strand,
     pub target_strand: Strand,
+    pub chromosome_index: i64,
 }
 
 #[derive(Debug)]

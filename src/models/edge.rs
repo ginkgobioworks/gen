@@ -8,6 +8,7 @@ use std::hash::{Hash, RandomState};
 use std::rc::Rc;
 
 use crate::graph::{GraphEdge, GraphNode};
+use crate::models::block_group_edge::AugmentedEdge;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::sequence::{cached_sequence, Sequence};
 use crate::models::strand::Strand;
@@ -22,8 +23,6 @@ pub struct Edge {
     pub target_node_id: i64,
     pub target_coordinate: i64,
     pub target_strand: Strand,
-    pub chromosome_index: i64,
-    pub phased: i64,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -34,8 +33,6 @@ pub struct EdgeData {
     pub target_node_id: i64,
     pub target_coordinate: i64,
     pub target_strand: Strand,
-    pub chromosome_index: i64,
-    pub phased: i64,
 }
 
 impl From<&Edge> for EdgeData {
@@ -47,8 +44,6 @@ impl From<&Edge> for EdgeData {
             target_node_id: item.target_node_id,
             target_coordinate: item.target_coordinate,
             target_strand: item.target_strand,
-            chromosome_index: item.chromosome_index,
-            phased: item.phased,
         }
     }
 }
@@ -113,8 +108,6 @@ impl Query for Edge {
             target_node_id: row.get(4).unwrap(),
             target_coordinate: row.get(5).unwrap(),
             target_strand: row.get(6).unwrap(),
-            chromosome_index: row.get(7).unwrap(),
-            phased: row.get(8).unwrap(),
         }
     }
 }
@@ -129,11 +122,9 @@ impl Edge {
         target_node_id: i64,
         target_coordinate: i64,
         target_strand: Strand,
-        chromosome_index: i64,
-        phased: i64,
     ) -> Edge {
-        let query = "INSERT INTO edges (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) RETURNING *";
-        let id_query = "select id from edges where source_node_id = ?1 and source_coordinate = ?2 and source_strand = ?3 and target_node_id = ?4 and target_coordinate = ?5 and target_strand = ?6 and chromosome_index = ?7 and phased = ?8;";
+        let query = "INSERT INTO edges (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand) VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING *";
+        let id_query = "select id from edges where source_node_id = ?1 and source_coordinate = ?2 and source_strand = ?3 and target_node_id = ?4 and target_coordinate = ?5 and target_strand = ?6;";
         let placeholders: Vec<Value> = vec![
             source_node_id.into(),
             source_coordinate.into(),
@@ -141,8 +132,6 @@ impl Edge {
             target_node_id.into(),
             target_coordinate.into(),
             target_strand.into(),
-            chromosome_index.into(),
-            phased.into(),
         ];
 
         let mut stmt = conn.prepare(query).unwrap();
@@ -155,8 +144,6 @@ impl Edge {
                 target_node_id: row.get(4)?,
                 target_coordinate: row.get(5)?,
                 target_strand: row.get(6)?,
-                chromosome_index: row.get(7)?,
-                phased: row.get(8)?,
             })
         }) {
             Ok(edge) => edge,
@@ -173,8 +160,6 @@ impl Edge {
                         target_node_id,
                         target_coordinate,
                         target_strand,
-                        chromosome_index,
-                        phased,
                     }
                 } else {
                     panic!("something bad happened querying the database")
@@ -195,8 +180,6 @@ impl Edge {
             target_node_id: row.get(4)?,
             target_coordinate: row.get(5)?,
             target_strand: row.get(6)?,
-            chromosome_index: row.get(7)?,
-            phased: row.get(8)?,
         })
     }
 
@@ -205,7 +188,7 @@ impl Edge {
             .iter()
             .map(|edge_id| Value::from(*edge_id))
             .collect::<Vec<_>>();
-        let query = "select id, source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased from edges where id in rarray(?1);";
+        let query = "select id, source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand from edges where id in rarray(?1);";
         Edge::query(conn, query, rusqlite::params!(Rc::new(query_edge_ids)))
     }
 
@@ -216,21 +199,19 @@ impl Edge {
             let source_strand = format!("\"{0}\"", edge.source_strand);
             let target_strand = format!("\"{0}\"", edge.target_strand);
             let edge_row = format!(
-                "({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7})",
+                "({0}, {1}, {2}, {3}, {4}, {5})",
                 edge.source_node_id,
                 edge.source_coordinate,
                 source_strand,
                 edge.target_node_id,
                 edge.target_coordinate,
                 target_strand,
-                edge.chromosome_index,
-                edge.phased
             );
             edge_rows.push(edge_row);
         }
         let formatted_edge_rows = edge_rows.join(", ");
 
-        let select_statement = format!("SELECT * FROM edges WHERE (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased) in ({0});", formatted_edge_rows);
+        let select_statement = format!("SELECT * FROM edges WHERE (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand) in ({0});", formatted_edge_rows);
         let existing_edges = Edge::query(conn, &select_statement, rusqlite::params!());
         for edge in existing_edges.iter() {
             edge_map.insert(EdgeData::from(edge), edge.id);
@@ -251,15 +232,13 @@ impl Edge {
             let source_strand = format!("\"{0}\"", edge.source_strand);
             let target_strand = format!("\"{0}\"", edge.target_strand);
             let edge_row = format!(
-                "({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7})",
+                "({0}, {1}, {2}, {3}, {4}, {5})",
                 edge.source_node_id,
                 edge.source_coordinate,
                 source_strand,
                 edge.target_node_id,
                 edge.target_coordinate,
                 target_strand,
-                edge.chromosome_index,
-                edge.phased
             );
             edge_rows_to_insert.push(edge_row);
         }
@@ -268,7 +247,7 @@ impl Edge {
             for chunk in edge_rows_to_insert.chunks(100000) {
                 let formatted_edge_rows_to_insert = chunk.join(", ");
 
-                let insert_statement = format!("INSERT INTO edges (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand, chromosome_index, phased) VALUES {0} RETURNING *;", formatted_edge_rows_to_insert);
+                let insert_statement = format!("INSERT INTO edges (source_node_id, source_coordinate, source_strand, target_node_id, target_coordinate, target_strand) VALUES {0} RETURNING *;", formatted_edge_rows_to_insert);
                 let mut stmt = conn.prepare(&insert_statement).unwrap();
                 let rows = stmt.query_map([], Edge::edge_from_row).unwrap();
                 for row in rows {
@@ -291,8 +270,6 @@ impl Edge {
             target_node_id: edge.target_node_id,
             target_coordinate: edge.target_coordinate,
             target_strand: edge.target_strand,
-            chromosome_index: edge.chromosome_index,
-            phased: edge.phased,
         }
     }
 
@@ -327,11 +304,11 @@ impl Edge {
             .collect::<Vec<i64>>()
     }
 
-    pub fn blocks_from_edges(conn: &Connection, edges: &Vec<Edge>) -> Vec<GroupBlock> {
+    pub fn blocks_from_edges(conn: &Connection, edges: &[AugmentedEdge]) -> Vec<GroupBlock> {
         let mut node_ids = HashSet::new();
         let mut edges_by_source_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
         let mut edges_by_target_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
-        for edge in edges {
+        for edge in edges.iter().map(|edge| &edge.edge) {
             if edge.source_node_id != PATH_START_NODE_ID {
                 node_ids.insert(edge.source_node_id);
                 edges_by_source_node_id
@@ -417,7 +394,7 @@ impl Edge {
     }
 
     pub fn build_graph(
-        edges: &Vec<Edge>,
+        edges: &Vec<AugmentedEdge>,
         blocks: &Vec<GroupBlock>,
     ) -> (DiGraphMap<GraphNode, GraphEdge>, HashMap<(i64, i64), Edge>) {
         let blocks_by_start = blocks
@@ -462,7 +439,8 @@ impl Edge {
                 sequence_end: block.end,
             });
         }
-        for edge in edges {
+        for augmented_edge in edges {
+            let edge = &augmented_edge.edge;
             let source_key = BlockKey {
                 node_id: edge.source_node_id,
                 coordinate: edge.source_coordinate,
@@ -490,11 +468,10 @@ impl Edge {
                             sequence_end: block_coordinates[target_id_value].1,
                         },
                         GraphEdge {
-                            chromosome_index: edge.chromosome_index,
-                            phased: edge.phased,
                             edge_id: edge.id,
                             source_strand: edge.source_strand,
                             target_strand: edge.target_strand,
+                            chromosome_index: augmented_edge.chromosome_index,
                         },
                     );
                     edges_by_node_pair.insert((*source_id_value, *target_id_value), edge.clone());
@@ -505,7 +482,7 @@ impl Edge {
         (graph, edges_by_node_pair)
     }
 
-    pub fn boundary_edges_from_sequences(blocks: &[GroupBlock]) -> Vec<Edge> {
+    pub fn boundary_edges_from_sequences(blocks: &[GroupBlock]) -> Vec<AugmentedEdge> {
         let node_blocks_by_id: HashMap<i64, Vec<&GroupBlock>> =
             blocks.iter().fold(HashMap::new(), |mut acc, block| {
                 acc.entry(block.node_id)
@@ -518,16 +495,17 @@ impl Edge {
             for (previous_block, next_block) in node_blocks.iter().tuple_windows() {
                 // NOTE: Most of this data is bogus, the Edge struct is just a convenient wrapper
                 // for the data we need to set up boundary edges in the block group graph
-                boundary_edges.push(Edge {
-                    id: -1,
-                    source_node_id: previous_block.node_id,
-                    source_coordinate: previous_block.end,
-                    source_strand: Strand::Forward,
-                    target_node_id: next_block.node_id,
-                    target_coordinate: next_block.start,
-                    target_strand: Strand::Forward,
+                boundary_edges.push(AugmentedEdge {
+                    edge: Edge {
+                        id: -1,
+                        source_node_id: previous_block.node_id,
+                        source_coordinate: previous_block.end,
+                        source_strand: Strand::Forward,
+                        target_node_id: next_block.node_id,
+                        target_coordinate: next_block.start,
+                        target_strand: Strand::Forward,
+                    },
                     chromosome_index: 0,
-                    phased: 0,
                 });
             }
         }
@@ -556,7 +534,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
-        let node1_id = Node::create(conn, sequence1.hash.as_str(), None, Some(0));
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
         let edge1 = EdgeData {
             source_node_id: PATH_START_NODE_ID,
             source_coordinate: -1,
@@ -564,14 +542,12 @@ mod tests {
             target_node_id: node1_id,
             target_coordinate: 1,
             target_strand: Strand::Forward,
-            chromosome_index: 0,
-            phased: 0,
         };
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
-        let node2_id = Node::create(conn, sequence2.hash.as_str(), None, Some(0));
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
         let edge2 = EdgeData {
             source_node_id: node1_id,
             source_coordinate: 2,
@@ -579,8 +555,6 @@ mod tests {
             target_node_id: node2_id,
             target_coordinate: 3,
             target_strand: Strand::Forward,
-            chromosome_index: 0,
-            phased: 0,
         };
         let edge3 = EdgeData {
             source_node_id: node2_id,
@@ -589,8 +563,6 @@ mod tests {
             target_node_id: PATH_END_NODE_ID,
             target_coordinate: -1,
             target_strand: Strand::Forward,
-            chromosome_index: 0,
-            phased: 0,
         };
 
         let edge_ids = Edge::bulk_create(conn, &vec![edge1, edge2, edge3]);
@@ -625,7 +597,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
-        let node1_id = Node::create(conn, sequence1.hash.as_str(), None, Some(0));
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
         let edge1 = EdgeData {
             source_node_id: PATH_START_NODE_ID,
             source_coordinate: -1,
@@ -633,14 +605,12 @@ mod tests {
             target_node_id: node1_id,
             target_coordinate: 1,
             target_strand: Strand::Forward,
-            chromosome_index: 0,
-            phased: 0,
         };
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
-        let node2_id = Node::create(conn, sequence2.hash.as_str(), None, Some(0));
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
         let edge2 = EdgeData {
             source_node_id: node1_id,
             source_coordinate: 2,
@@ -648,8 +618,6 @@ mod tests {
             target_node_id: node2_id,
             target_coordinate: 3,
             target_strand: Strand::Forward,
-            chromosome_index: 0,
-            phased: 0,
         };
         let edge3 = EdgeData {
             source_node_id: node2_id,
@@ -658,8 +626,6 @@ mod tests {
             target_node_id: PATH_END_NODE_ID,
             target_coordinate: -1,
             target_strand: Strand::Forward,
-            chromosome_index: 0,
-            phased: 0,
         };
 
         let edges = vec![edge2.clone(), edge3.clone()];
@@ -700,7 +666,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("ATCGATCG")
             .save(conn);
-        let node1_id = Node::create(conn, sequence1.hash.as_str(), None, Some(0));
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
         // NOTE: Create one edge ahead of time to confirm an existing row ID gets returned in the bulk create
         let existing_edge = Edge::create(
             conn,
@@ -710,8 +676,6 @@ mod tests {
             node1_id,
             1,
             Strand::Forward,
-            0,
-            0,
         );
         assert_eq!(existing_edge.source_node_id, PATH_START_NODE_ID);
         assert_eq!(existing_edge.source_coordinate, -1);
@@ -725,14 +689,12 @@ mod tests {
             target_node_id: node1_id,
             target_coordinate: 1,
             target_strand: Strand::Forward,
-            chromosome_index: 0,
-            phased: 0,
         };
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
-        let node2_id = Node::create(conn, sequence2.hash.as_str(), None, Some(0));
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
         let edge2 = EdgeData {
             source_node_id: node1_id,
             source_coordinate: 2,
@@ -740,8 +702,6 @@ mod tests {
             target_node_id: node2_id,
             target_coordinate: 3,
             target_strand: Strand::Forward,
-            chromosome_index: 0,
-            phased: 0,
         };
         let edge3 = EdgeData {
             source_node_id: node2_id,
@@ -750,8 +710,6 @@ mod tests {
             target_node_id: PATH_END_NODE_ID,
             target_coordinate: -1,
             target_strand: Strand::Forward,
-            chromosome_index: 0,
-            phased: 0,
         };
 
         let edge_ids = Edge::bulk_create(conn, &vec![edge1, edge2, edge3]);
@@ -800,7 +758,7 @@ mod tests {
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
         let insert = PathBlock {
             id: 0,
             node_id: insert_node_id,
@@ -818,8 +776,7 @@ mod tests {
             start: 7,
             end: 15,
             block: insert,
-            chromosome_index: 1,
-            phased: 0,
+            chromosome_index: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);
@@ -857,13 +814,13 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAAAAAAAA")
             .save(&conn);
-        let template_node_id = Node::create(&conn, template_sequence.hash.as_str(), None, Some(0));
+        let template_node_id = Node::create(&conn, template_sequence.hash.as_str(), None);
 
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
 
         let edge1 = Edge::create(
             &conn,
@@ -873,8 +830,6 @@ mod tests {
             insert_node_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             &conn,
@@ -884,8 +839,6 @@ mod tests {
             template_node_id,
             3,
             Strand::Forward,
-            0,
-            0,
         );
 
         let boundaries = Edge::get_block_boundaries(Some(&vec![&edge1]), Some(&vec![&edge2]), 10);
@@ -899,21 +852,19 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAAAAAAAA")
             .save(&conn);
-        let template1_node_id =
-            Node::create(&conn, template_sequence1.hash.as_str(), None, Some(0));
+        let template1_node_id = Node::create(&conn, template_sequence1.hash.as_str(), None);
 
         let template_sequence2 = Sequence::new()
             .sequence_type("DNA")
             .sequence("TTTTTTTTTT")
             .save(&conn);
-        let template2_node_id =
-            Node::create(&conn, template_sequence2.hash.as_str(), None, Some(0));
+        let template2_node_id = Node::create(&conn, template_sequence2.hash.as_str(), None);
 
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
             .sequence("NNNN")
             .save(&conn);
-        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None, Some(0));
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
 
         let edge1 = Edge::create(
             &conn,
@@ -923,8 +874,6 @@ mod tests {
             insert_node_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             &conn,
@@ -934,8 +883,6 @@ mod tests {
             template2_node_id,
             3,
             Strand::Forward,
-            0,
-            0,
         );
 
         let outgoing_boundaries = Edge::get_block_boundaries(Some(&vec![&edge1]), None, 10);
