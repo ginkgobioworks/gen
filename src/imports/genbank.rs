@@ -13,12 +13,12 @@ use rusqlite::Connection;
 use std::io::Read;
 use std::str;
 
-pub fn import_genbank<R>(conn: &Connection, data: R)
+pub fn import_genbank<'a, R>(conn: &Connection, data: R, collection: impl Into<Option<&'a str>>)
 where
     R: Read,
 {
     let reader = reader::SeqReader::new(data);
-    let collection = Collection::create(conn, "");
+    let collection = Collection::create(conn, collection.into().unwrap_or_default());
     let geneious_edit = Regex::new(r"Geneious type: Editing History (?P<edit_type>\w+)").unwrap();
     for result in reader {
         match result {
@@ -130,8 +130,8 @@ where
                                                 &feature
                                                     .qualifiers
                                                     .iter()
-                                                    .filter(|(k, v)| k == "Original_Bases")
-                                                    .map(|(k, v)| v.clone())
+                                                    .filter(|(k, _v)| k == "Original_Bases")
+                                                    .map(|(_k, v)| v.clone())
                                                     .collect::<Option<String>>()
                                                     .expect("Deleted sequence is not annotated."),
                                             );
@@ -151,7 +151,6 @@ where
                                                 )),
                                             );
                                             if matches!(feature.location, Location::Between(_, _)) {
-                                                println!("we are!! {l:?}", l = feature.location);
                                                 start += 1;
                                                 end -= 1;
                                             }
@@ -216,7 +215,7 @@ mod tests {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("fixtures/geneious_genbank/insertion.gb");
             let file = File::open(&path).unwrap();
-            import_genbank(conn, BufReader::new(file));
+            import_genbank(conn, BufReader::new(file), None);
             let f = reader::parse_file(&path).unwrap();
             let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             let seqs = BlockGroup::get_all_sequences(conn, 1, false);
@@ -239,7 +238,7 @@ mod tests {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("fixtures/geneious_genbank/deletion.gb");
             let file = File::open(&path).unwrap();
-            import_genbank(conn, BufReader::new(file));
+            import_genbank(conn, BufReader::new(file), None);
             let f = reader::parse_file(&path).unwrap();
             let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             let deleted: String = normalize_string(
@@ -279,7 +278,7 @@ mod tests {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("fixtures/geneious_genbank/deletion_and_insertion.gb");
             let file = File::open(&path).unwrap();
-            import_genbank(conn, BufReader::new(file));
+            import_genbank(conn, BufReader::new(file), None);
             let f = reader::parse_file(&path).unwrap();
             let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             let deleted: String = normalize_string(
@@ -322,7 +321,7 @@ mod tests {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("fixtures/geneious_genbank/substitution.gb");
             let file = File::open(&path).unwrap();
-            import_genbank(conn, BufReader::new(file));
+            import_genbank(conn, BufReader::new(file), None);
             let f = reader::parse_file(&path).unwrap();
             let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             let deleted: String = normalize_string(
