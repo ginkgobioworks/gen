@@ -99,6 +99,10 @@ where
     Ok(io::BufReader::new(file).lines())
 }
 
+pub fn normalize_string(s: &str) -> String {
+    s.chars().filter(|c| !c.is_whitespace()).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
