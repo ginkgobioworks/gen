@@ -87,6 +87,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
     let mut created_accession_edges = HashSet::new();
     let mut created_nodes = HashSet::new();
     let mut created_sequences: HashSet<String> = HashSet::new();
+
     while let Some(item) = iter.next().unwrap() {
         let op = item.op().unwrap();
         // info on indirect changes: https://www.sqlite.org/draft/session/sqlite3session_indirect.html
@@ -599,6 +600,26 @@ pub fn apply_changeset(
         edge_id_map.insert(sorted_edge_ids[index], *edge_id);
     }
 
+    let mut block_group_edges: HashMap<i64, Vec<i64>> = HashMap::new();
+
+    for (bg_id, edge_id) in insert_block_group_edges {
+        let new_bg_id = *dep_bg_map
+            .get(&bg_id)
+            .or(blockgroup_map.get(&bg_id).or(Some(&bg_id)))
+            .unwrap();
+        let edge_id = dep_edge_map
+            .get(&edge_id)
+            .or(edge_id_map.get(&edge_id).or(Some(&edge_id)))
+            .unwrap();
+        block_group_edges
+            .entry(new_bg_id)
+            .or_default()
+            .push(*edge_id);
+    }
+    for (bg_id, edges) in block_group_edges.iter() {
+        BlockGroupEdge::bulk_create(conn, *bg_id, edges);
+    }
+
     for path in insert_paths {
         let mut sorted_edges = vec![];
         for (_, edge_id) in path_edges
@@ -612,24 +633,13 @@ pub fn apply_changeset(
                 .unwrap_or(edge_id_map.get(edge_id).unwrap_or(edge_id));
             sorted_edges.push(*new_edge_id);
         }
-        Path::create(conn, &path.name, path.block_group_id, &sorted_edges);
-    }
-
-    let mut block_group_edges: HashMap<i64, Vec<i64>> = HashMap::new();
-
-    for (bg_id, edge_id) in insert_block_group_edges {
-        let bg_id = *dep_bg_map
-            .get(&bg_id)
-            .or(blockgroup_map.get(&bg_id).or(Some(&bg_id)))
+        let new_bg_id = *dep_bg_map
+            .get(&path.block_group_id)
+            .or(blockgroup_map
+                .get(&path.block_group_id)
+                .or(Some(&path.block_group_id)))
             .unwrap();
-        let edge_id = dep_edge_map
-            .get(&edge_id)
-            .or(edge_id_map.get(&edge_id).or(Some(&edge_id)))
-            .unwrap();
-        block_group_edges.entry(bg_id).or_default().push(*edge_id);
-    }
-    for (bg_id, edges) in block_group_edges.iter() {
-        BlockGroupEdge::bulk_create(conn, *bg_id, edges);
+        Path::create(conn, &path.name, new_bg_id, &sorted_edges);
     }
 
     let mut updated_accession_edge_map = HashMap::new();
