@@ -11,6 +11,7 @@ pub struct BlockGroupEdge {
     pub block_group_id: i64,
     pub edge_id: i64,
     pub chromosome_index: i64,
+    pub phased: i64,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -18,18 +19,21 @@ pub struct BlockGroupEdgeData {
     pub block_group_id: i64,
     pub edge_id: i64,
     pub chromosome_index: i64,
+    pub phased: i64,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct AugmentedEdge {
     pub edge: Edge,
     pub chromosome_index: i64,
+    pub phased: i64,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct AugmentedEdgeData {
     pub edge_data: EdgeData,
     pub chromosome_index: i64,
+    pub phased: i64,
 }
 
 impl Query for BlockGroupEdge {
@@ -40,6 +44,7 @@ impl Query for BlockGroupEdge {
             block_group_id: row.get(1).unwrap(),
             edge_id: row.get(2).unwrap(),
             chromosome_index: row.get(3).unwrap(),
+            phased: row.get(4).unwrap(),
         }
     }
 }
@@ -50,10 +55,11 @@ impl BlockGroupEdge {
             let mut rows_to_insert = vec![];
             for block_group_edge in chunk {
                 let row = format!(
-                    "({0}, {1}, {2})",
+                    "({0}, {1}, {2}, {3})",
                     block_group_edge.block_group_id,
                     block_group_edge.edge_id,
-                    block_group_edge.chromosome_index
+                    block_group_edge.chromosome_index,
+                    block_group_edge.phased,
                 );
                 rows_to_insert.push(row);
             }
@@ -61,7 +67,7 @@ impl BlockGroupEdge {
             let formatted_rows_to_insert = rows_to_insert.join(", ");
 
             let insert_statement = format!(
-                "INSERT OR IGNORE INTO block_group_edges (block_group_id, edge_id, chromosome_index) VALUES {0};",
+                "INSERT OR IGNORE INTO block_group_edges (block_group_id, edge_id, chromosome_index, phased) VALUES {0};",
                 formatted_rows_to_insert
             );
             let _ = conn.execute(&insert_statement, ());
@@ -80,8 +86,13 @@ impl BlockGroupEdge {
             .map(|block_group_edge| block_group_edge.edge_id)
             .collect::<Vec<i64>>();
         let chromosome_index_by_edge_id = block_group_edges
+            .clone()
             .into_iter()
             .map(|block_group_edge| (block_group_edge.edge_id, block_group_edge.chromosome_index))
+            .collect::<HashMap<i64, i64>>();
+        let phased_by_edge_id = block_group_edges
+            .into_iter()
+            .map(|block_group_edge| (block_group_edge.edge_id, block_group_edge.phased))
             .collect::<HashMap<i64, i64>>();
         let edges = Edge::bulk_load(conn, &edge_ids);
         edges
@@ -89,6 +100,7 @@ impl BlockGroupEdge {
             .map(|edge| AugmentedEdge {
                 edge: edge.clone(),
                 chromosome_index: *chromosome_index_by_edge_id.get(&edge.id).unwrap(),
+                phased: *phased_by_edge_id.get(&edge.id).unwrap(),
             })
             .collect()
     }

@@ -29,6 +29,7 @@ pub struct GraphEdge {
     pub source_strand: Strand,
     pub target_strand: Strand,
     pub chromosome_index: i64,
+    pub phased: i64,
 }
 
 #[derive(Debug)]

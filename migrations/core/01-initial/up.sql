@@ -133,10 +133,11 @@ CREATE TABLE block_group_edges (
   block_group_id INTEGER NOT NULL,
   edge_id INTEGER NOT NULL,
   chromosome_index INTEGER,
+  phased INTEGER NOT NULL,
   FOREIGN KEY(block_group_id) REFERENCES block_groups(id),
   FOREIGN KEY(edge_id) REFERENCES edges(id)
 ) STRICT;
-CREATE UNIQUE INDEX block_group_edges_uidx ON block_group_edges(block_group_id, edge_id, chromosome_index);
+CREATE UNIQUE INDEX block_group_edges_uidx ON block_group_edges(block_group_id, edge_id, chromosome_index, phased);
 
 INSERT INTO gen_metadata (db_uuid) values (lower(
     hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-' || '4' ||

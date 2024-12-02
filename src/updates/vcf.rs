@@ -149,6 +149,7 @@ fn prepare_change(
         end: ref_end,
         block: new_block,
         chromosome_index,
+        phased,
     }
 }
 

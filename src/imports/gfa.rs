@@ -124,6 +124,7 @@ pub fn import_gfa<'a>(
             block_group_id: block_group.id,
             edge_id: *edge_id,
             chromosome_index: 0,
+            phased: 0,
         })
         .collect::<Vec<_>>();
     BlockGroupEdge::bulk_create(conn, &new_block_group_edges);

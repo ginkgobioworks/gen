@@ -93,11 +93,13 @@ pub fn import_fasta(
                 block_group_id: block_group.id,
                 edge_id: edge_into.id,
                 chromosome_index: 0,
+                phased: 0,
             },
             BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id: edge_out_of.id,
                 chromosome_index: 0,
+                phased: 0,
             },
         ];
 

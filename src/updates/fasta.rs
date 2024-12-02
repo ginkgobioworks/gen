@@ -99,6 +99,7 @@ pub fn update_with_fasta(
         end: end_coordinate,
         block: path_block,
         chromosome_index: 0,
+        phased: 0,
     };
 
     let interval_tree = path.intervaltree(conn);

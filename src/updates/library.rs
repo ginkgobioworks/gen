@@ -184,6 +184,7 @@ pub fn update_with_library(
             block_group_id: path.block_group_id,
             edge_id: *edge_id,
             chromosome_index: 0,
+            phased: 0,
         })
         .collect::<Vec<_>>();
     BlockGroupEdge::bulk_create(conn, &new_block_group_edges);

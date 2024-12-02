@@ -321,26 +321,31 @@ mod tests {
                 block_group_id: block_group.id,
                 edge_id: edge1.id,
                 chromosome_index: 0,
+                phased: 0,
             },
             BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id: edge2.id,
                 chromosome_index: 0,
+                phased: 0,
             },
             BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id: edge3.id,
                 chromosome_index: 0,
+                phased: 0,
             },
             BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id: edge4.id,
                 chromosome_index: 0,
+                phased: 0,
             },
             BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id: edge5.id,
                 chromosome_index: 0,
+                phased: 0,
             },
         ];
         BlockGroupEdge::bulk_create(&conn, &new_block_group_edges);
@@ -485,6 +490,7 @@ mod tests {
             end: 15,
             block: insert,
             chromosome_index: 1,
+            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);

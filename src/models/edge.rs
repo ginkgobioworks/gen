@@ -472,6 +472,7 @@ impl Edge {
                             source_strand: edge.source_strand,
                             target_strand: edge.target_strand,
                             chromosome_index: augmented_edge.chromosome_index,
+                            phased: augmented_edge.phased,
                         },
                     );
                     edges_by_node_pair.insert((*source_id_value, *target_id_value), edge.clone());
@@ -506,6 +507,7 @@ impl Edge {
                         target_strand: Strand::Forward,
                     },
                     chromosome_index: 0,
+                    phased: 0,
                 });
             }
         }
@@ -777,6 +779,7 @@ mod tests {
             end: 15,
             block: insert,
             chromosome_index: 0,
+            phased: 0,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree);

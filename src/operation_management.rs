@@ -495,7 +495,8 @@ pub fn apply_changeset(
                     let bg_id = item.new_value(1).unwrap().as_i64().unwrap();
                     let edge_id = item.new_value(2).unwrap().as_i64().unwrap();
                     let chromosome_index = item.new_value(3).unwrap().as_i64().unwrap();
-                    insert_block_group_edges.push((bg_id, edge_id, chromosome_index));
+                    let phased = item.new_value(4).unwrap().as_i64().unwrap();
+                    insert_block_group_edges.push((bg_id, edge_id, chromosome_index, phased));
                 }
                 "collections" => {
                     Collection::create(
@@ -646,9 +647,9 @@ pub fn apply_changeset(
         Path::create(conn, &path.name, new_bg_id, &sorted_edges);
     }
 
-    let mut block_group_edges: HashMap<i64, Vec<(i64, i64)>> = HashMap::new();
+    let mut block_group_edges: HashMap<i64, Vec<(i64, i64, i64)>> = HashMap::new();
 
-    for (bg_id, edge_id, chromosome_index) in insert_block_group_edges {
+    for (bg_id, edge_id, chromosome_index, phased) in insert_block_group_edges {
         let bg_id = *dep_bg_map
             .get(&bg_id)
             .or(blockgroup_map.get(&bg_id).or(Some(&bg_id)))
@@ -660,7 +661,7 @@ pub fn apply_changeset(
         block_group_edges
             .entry(bg_id)
             .or_default()
-            .push((*edge_id, chromosome_index));
+            .push((*edge_id, chromosome_index, phased));
     }
 
     let mut updated_accession_edge_map = HashMap::new();
@@ -1445,6 +1446,7 @@ mod tests {
             block_group_id: bg_id,
             edge_id: new_edge.id,
             chromosome_index: 0,
+            phased: 0,
         };
         BlockGroupEdge::bulk_create(conn, &[block_group_edge]);
         let operation = end_operation(

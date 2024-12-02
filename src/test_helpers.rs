@@ -143,26 +143,31 @@ pub fn setup_block_group(conn: &Connection) -> (i64, Path) {
             block_group_id: block_group.id,
             edge_id: edge0.id,
             chromosome_index: 0,
+            phased: 0,
         },
         BlockGroupEdgeData {
             block_group_id: block_group.id,
             edge_id: edge1.id,
             chromosome_index: 0,
+            phased: 0,
         },
         BlockGroupEdgeData {
             block_group_id: block_group.id,
             edge_id: edge2.id,
             chromosome_index: 0,
+            phased: 0,
         },
         BlockGroupEdgeData {
             block_group_id: block_group.id,
             edge_id: edge3.id,
             chromosome_index: 0,
+            phased: 0,
         },
         BlockGroupEdgeData {
             block_group_id: block_group.id,
             edge_id: edge4.id,
             chromosome_index: 0,
+            phased: 0,
         },
     ];
     BlockGroupEdge::bulk_create(conn, &block_group_edges);

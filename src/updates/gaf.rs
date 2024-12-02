@@ -343,6 +343,7 @@ pub fn update_with_gaf<'a, P>(
                         block_group_id: bg.id,
                         edge_id: *edge_id,
                         chromosome_index: 0,
+                        phased: 0,
                     })
                     .collect::<Vec<_>>();
                 BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
