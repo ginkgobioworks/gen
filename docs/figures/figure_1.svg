@@ -76,7 +76,7 @@
 <g id="node4" class="node">
 <title>sink</title>
 <ellipse fill="none" stroke="black" cx="359" cy="-90" rx="27" ry="18"/>
-<text text-anchor="middle" x="359" y="-84.95" font-family="Times,serif" font-size="14.00">sink</text>
+<text text-anchor="middle" x="359" y="-84.95" font-family="Times,serif" font-size="14.00">end</text>
 </g>
 <!-- 1&#45;&gt;sink -->
 <g id="edge3" class="edge">

@@ -28,7 +28,7 @@ strict digraph "" {
 		margin=0,
 		shape=none];
 	1:7 -> 2:0;
-	sink	[label=sink];
+	sink	[label=end];
 	1:15 -> sink:w	[constraint=False];
 	2:1 -> 1:10;
 }
