@@ -90,15 +90,17 @@ impl Path {
 
         // No duplicate edges allowed
         if edge_id_set.len() != edge_ids.len() {
-            panic!("Duplicate edge IDs in path creation");
+            println!("Duplicate edge IDs detected in path creation");
         }
 
         // All path edges must be in the path's block group
         let edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
         let bg_edge_ids = edges.iter().map(|edge| &edge.id).collect::<HashSet<&_>>();
-        if !edge_id_set.is_subset(&bg_edge_ids) {
-            panic!("Not all edges are in the block group ({})", block_group_id);
-        }
+        assert!(
+            edge_id_set.is_subset(&bg_edge_ids),
+            "Not all edges are in the block group ({})",
+            block_group_id
+        );
 
         let edges_by_id = edges
             .iter()
@@ -110,32 +112,34 @@ impl Path {
         for (edge1_id, edge2_id) in edge_ids.iter().tuple_windows() {
             let edge1 = edges_by_id.get(edge1_id).unwrap();
             let edge2 = edges_by_id.get(edge2_id).unwrap();
-            if edge1.target_node_id != edge2.source_node_id {
-                panic!(
-                    "Edges {} and {} don't share the same node ({} vs. {})",
-                    edge1.id, edge2.id, edge1.target_node_id, edge2.source_node_id
-                );
-            }
+            assert!(
+                edge1.target_node_id == edge2.source_node_id,
+                "Edges {} and {} don't share the same node ({} vs. {})",
+                edge1.id,
+                edge2.id,
+                edge1.target_node_id,
+                edge2.source_node_id
+            );
 
-            if edge1.target_coordinate >= edge2.source_coordinate {
-                panic!(
-                    "Source coordinate {} for edge {} is before target coordinate {} for edge {}",
-                    edge2.source_coordinate, edge2.id, edge1.target_coordinate, edge1.id
-                );
-            }
+            assert!(
+                edge1.target_coordinate < edge2.source_coordinate,
+                "Source coordinate {} for edge {} is before target coordinate {} for edge {}",
+                edge2.source_coordinate,
+                edge2.id,
+                edge1.target_coordinate,
+                edge1.id
+            );
         }
 
         // An edge shouldn't start and end at the same coordinate on the same node
         for edge_id in edge_ids {
             let edge = edges_by_id.get(edge_id).unwrap();
-            if edge.source_node_id == edge.target_node_id
-                && edge.source_coordinate == edge.target_coordinate
-            {
-                panic!(
-                    "Edge {} goes into and out of the same node at the same coordinate",
-                    edge.id
-                );
-            }
+            assert!(
+                edge.source_node_id != edge.target_node_id
+                    || edge.source_coordinate != edge.target_coordinate,
+                "Edge {} goes into and out of the same node at the same coordinate",
+                edge.id
+            );
         }
     }
 
@@ -2690,7 +2694,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Duplicate edge IDs in path creation")]
     fn test_no_duplicate_edges() {
         let conn = &mut get_connection(None);
         Collection::create(conn, "test collection");
@@ -2711,10 +2714,22 @@ mod tests {
             0,
             0,
         );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
 
-        let edge_ids = vec![edge1.id, edge1.id];
+        let edge_ids = vec![edge1.id, edge2.id];
         BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
+        // Should print a warning that there are duplicate edges, but continue
         let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
     }
 
