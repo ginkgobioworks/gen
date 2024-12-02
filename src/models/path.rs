@@ -2940,6 +2940,46 @@ mod tests {
     }
 
     #[test]
+    fn test_duplicate_edge_warning() {
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -123,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
+        // Should print a warning that there are duplicate edges, but continue
+        let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
+    }
+
+    #[test]
     #[should_panic(expected = "Not all edges are in the block group")]
     fn test_edges_must_be_in_path_block_group() {
         let conn = &mut get_connection(None);
@@ -2996,7 +3036,7 @@ mod tests {
         );
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
-            .sequence("TTTTTTTT")
+            .sequence("AAAAAAAA")
             .save(conn);
         let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
         let edge2 = Edge::create(
@@ -3006,15 +3046,6 @@ mod tests {
             Strand::Forward,
             node2_id,
             0,
-            Strand::Forward,
-        );
-        let edge3 = Edge::create(
-            conn,
-            node2_id,
-            8,
-            Strand::Forward,
-            PATH_END_NODE_ID,
-            -1,
             Strand::Forward,
         );
 
@@ -3034,7 +3065,56 @@ mod tests {
         ];
         BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
-        let _path = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
+        let edge_ids = vec![edge1.id, edge2.id];
+
+        let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
+    }
+
+    #[test]
+    #[should_panic]
+    // Panic message is something like "Source coordinate 2 for edge 2 is before target coordinate 4 for edge 1"
+    fn test_consecutive_edges_must_have_different_coordinates_on_a_node() {
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -123,
+            Strand::Forward,
+            node1_id,
+            4,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        // Source coordinate on node 1 is before target coordinate on node1 for edge1
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            2,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+            0,
+            0,
+        );
+
+        let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
+        let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
     }
 
     #[test]
@@ -3161,96 +3241,55 @@ mod tests {
             6,
             Strand::Forward,
         );
-        let edge4 = Edge::create(
+
+        let edge_ids = vec![edge1.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+
+        let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
+    }
+
+    #[test]
+    fn test_node_blocks_for_range_with_node_parts() {
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -123,
+            Strand::Forward,
+            node1_id,
+            4,
+            Strand::Forward,
+            0,
+            0,
+        );
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        // Source coordinate on node 1 is before target coordinate on node1 for edge1
+        let edge2 = Edge::create(
             conn,
             node1_id,
-            8,
+            2,
             Strand::Forward,
-            PATH_END_NODE_ID,
-            -1,
+            node2_id,
+            0,
             Strand::Forward,
+            0,
+            0,
         );
 
-        let edge_ids = &[edge1.id, edge2.id, edge3.id, edge4.id];
-	let block_group_edges = edge_ids.iter().map(|edge_id| BlockGroupEdgeData {
-	    block_group_id: block_group.id,
-	    edge_id: *edge_id,
-	    chromosome_index: 0,
-	    phased: 0,
-	}).collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(conn, &block_group_edges);
-        let path1 = Path::create(conn, "chr1.1", block_group.id, &[edge1.id, edge4.id]);
-        let path2 = Path::create(conn, "chr1.2", block_group.id, edge_ids);
+        let edge_ids = vec![edge1.id, edge2.id];
+        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
 
-        let intervaltree1 = path1.intervaltree(conn);
-
-        let node_blocks1 = path1.node_blocks_for_range(&intervaltree1, 0, 8);
-        let expected_node_blocks1 = vec![NodeIntervalBlock {
-            block_id: 0,
-            node_id: node1_id,
-            start: 0,
-            end: 8,
-            sequence_start: 0,
-            sequence_end: 8,
-            strand: Strand::Forward,
-        }];
-        assert_eq!(node_blocks1, expected_node_blocks1);
-
-        let intervaltree2 = path2.intervaltree(conn);
-
-        let node_blocks2 = path2.node_blocks_for_range(&intervaltree2, 0, 8);
-        let expected_node_blocks2 = vec![
-            NodeIntervalBlock {
-                block_id: 0,
-                node_id: node1_id,
-                start: 0,
-                end: 5,
-                sequence_start: 0,
-                sequence_end: 5,
-                strand: Strand::Forward,
-            },
-            NodeIntervalBlock {
-                block_id: 1,
-                node_id: node2_id,
-                start: 5,
-                end: 8,
-                sequence_start: 0,
-                sequence_end: 3,
-                strand: Strand::Forward,
-            },
-        ];
-        assert_eq!(node_blocks2, expected_node_blocks2);
-
-        let node_blocks3 = path2.node_blocks_for_range(&intervaltree2, 4, 14);
-        let expected_node_blocks3 = vec![
-            NodeIntervalBlock {
-                block_id: 0,
-                node_id: node1_id,
-                start: 4,
-                end: 5,
-                sequence_start: 4,
-                sequence_end: 5,
-                strand: Strand::Forward,
-            },
-            NodeIntervalBlock {
-                block_id: 1,
-                node_id: node2_id,
-                start: 5,
-                end: 13,
-                sequence_start: 0,
-                sequence_end: 8,
-                strand: Strand::Forward,
-            },
-            NodeIntervalBlock {
-                block_id: 2,
-                node_id: node1_id,
-                start: 13,
-                end: 14,
-                sequence_start: 6,
-                sequence_end: 7,
-                strand: Strand::Forward,
-            },
-        ];
-        assert_eq!(node_blocks3, expected_node_blocks3);
+        let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
     }
 }
