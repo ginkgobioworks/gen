@@ -11,8 +11,7 @@ use crate::models::{
     strand::Strand,
 };
 use itertools::Itertools;
-use petgraph::prelude::DiGraphMap;
-use rusqlite::{types::Value as SQLValue, Connection};
+use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufWriter, Write};

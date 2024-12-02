@@ -310,9 +310,9 @@ mod tests {
 
         let child_block_groups = Sample::get_block_groups(&conn, collection_name, Some("child"));
         let child_block_group = child_block_groups.first().unwrap();
+        BlockGroupEdge::bulk_create(&conn, child_block_group.id, &[edge4.id, edge5.id]);
         let original_child_path = BlockGroup::get_current_path(&conn, child_block_group.id);
         let _child_path = original_child_path.new_path_with(&conn, 2, 6, &edge4, &edge5);
-        BlockGroupEdge::bulk_create(&conn, child_block_group.id, &[edge4.id, edge5.id]);
 
         let temp_dir = tempdir().unwrap();
         let gfa_path = temp_dir.path().join("parent-child-diff.gfa");
@@ -369,11 +369,11 @@ mod tests {
         let grandchild_block_groups =
             Sample::get_block_groups(&conn, collection_name, Some("grandchild"));
         let grandchild_block_group = grandchild_block_groups.first().unwrap();
+        BlockGroupEdge::bulk_create(&conn, grandchild_block_group.id, &[edge6.id, edge7.id]);
         let original_grandchild_path =
             BlockGroup::get_current_path(&conn, grandchild_block_group.id);
         let _grandchild_path =
             original_grandchild_path.new_path_with(&conn, 10, 14, &edge6, &edge7);
-        BlockGroupEdge::bulk_create(&conn, grandchild_block_group.id, &[edge6.id, edge7.id]);
 
         let gfa_path = temp_dir.path().join("parent-grandchild-diff.gfa");
         gfa_sample_diff(&conn, collection_name, &gfa_path, None, "grandchild");
@@ -499,9 +499,9 @@ mod tests {
 
         let child_block_groups = Sample::get_block_groups(&conn, collection_name, Some("child"));
         let child_block_group = child_block_groups.first().unwrap();
+        BlockGroupEdge::bulk_create(&conn, child_block_group.id, &[edge3.id, edge4.id]);
         let original_child_path = BlockGroup::get_current_path(&conn, child_block_group.id);
         let _child_path = original_child_path.new_path_with(&conn, 2, 6, &edge3, &edge4);
-        BlockGroupEdge::bulk_create(&conn, child_block_group.id, &[edge3.id, edge4.id]);
 
         let temp_dir = tempdir().unwrap();
         let gfa_path = temp_dir.path().join("parent-child-diff.gfa");
@@ -558,10 +558,10 @@ mod tests {
         let grandchild_block_groups =
             Sample::get_block_groups(&conn, collection_name, Some("grandchild"));
         let grandchild_block_group = grandchild_block_groups.first().unwrap();
+        BlockGroupEdge::bulk_create(&conn, grandchild_block_group.id, &[edge5.id, edge6.id]);
         let original_grandchild_path =
             BlockGroup::get_current_path(&conn, grandchild_block_group.id);
         let _grandchild_path = original_grandchild_path.new_path_with(&conn, 4, 10, &edge5, &edge6);
-        BlockGroupEdge::bulk_create(&conn, grandchild_block_group.id, &[edge5.id, edge6.id]);
 
         let gfa_path = temp_dir.path().join("parent-grandchild-diff.gfa");
         gfa_sample_diff(&conn, collection_name, &gfa_path, None, "grandchild");
