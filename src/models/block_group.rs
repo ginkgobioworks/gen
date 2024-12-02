@@ -473,6 +473,7 @@ impl BlockGroup {
             target_node_id: start_block.node_id,
             target_coordinate: start - start_block.start + start_block.sequence_start,
             target_strand: Strand::Forward,
+            chromosome_index: 0,
         };
         let end_edge = AccessionEdgeData {
             source_node_id: end_block.node_id,
@@ -481,6 +482,7 @@ impl BlockGroup {
             target_node_id: PATH_END_NODE_ID,
             target_coordinate: -1,
             target_strand: Strand::Forward,
+            chromosome_index: 0,
         };
         let accession =
             Accession::create(conn, name, path.id, None).expect("Unable to create accession.");
@@ -511,6 +513,7 @@ impl BlockGroup {
                     target_node_id: next_block.node_id,
                     target_coordinate: next_block.sequence_start,
                     target_strand: next_block.strand,
+                    chromosome_index: 0,
                 })
             }
             path_edges.push(end_edge);
@@ -541,10 +544,6 @@ impl BlockGroup {
                 PathCache::get_intervaltree(cache, &change.path).unwrap()
             };
             let new_augmented_edges = BlockGroup::set_up_new_edges(change, tree);
-            let new_edges = new_augmented_edges
-                .iter()
-                .map(|augmented_edge| augmented_edge.edge_data.clone())
-                .collect::<Vec<_>>();
             new_augmented_edges_by_block_group
                 .entry(change.block_group_id)
                 .and_modify(|new_edge_data| new_edge_data.extend(new_augmented_edges.clone()))
@@ -552,10 +551,10 @@ impl BlockGroup {
             if let Some(accession) = &change.path_accession {
                 new_accession_edges
                     .entry((&change.path, accession))
-                    .and_modify(|new_edge_data: &mut Vec<EdgeData>| {
-                        new_edge_data.extend(new_edges.clone())
+                    .and_modify(|new_edge_data: &mut Vec<AugmentedEdgeData>| {
+                        new_edge_data.extend(new_augmented_edges.clone())
                     })
-                    .or_insert_with(|| new_edges.clone());
+                    .or_insert_with(|| new_augmented_edges.clone());
             }
         }
 

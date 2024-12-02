@@ -529,6 +529,7 @@ pub fn apply_changeset(
                             target_coordinate: item.new_value(5).unwrap().as_i64().unwrap(),
                             target_strand: Strand::column_result(item.new_value(6).unwrap())
                                 .unwrap(),
+                            chromosome_index: item.new_value(7).unwrap().as_i64().unwrap(),
                         },
                     );
                 }
@@ -685,6 +686,7 @@ pub fn apply_changeset(
                 target_node_id: *updated_target_node_id,
                 target_coordinate: edge.target_coordinate,
                 target_strand: edge.target_strand,
+                chromosome_index: edge.chromosome_index,
             },
         );
     }
