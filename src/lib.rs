@@ -108,6 +108,24 @@ mod tests {
     use super::*;
     use crate::test_helpers::get_connection;
 
+    #[cfg(test)]
+    mod test_normalize_string {
+        use super::*;
+
+        #[test]
+        fn test_removes_whitespace() {
+            assert_eq!(normalize_string(" this has a space "), "thishasaspace")
+        }
+
+        #[test]
+        fn test_removes_newlines() {
+            assert_eq!(
+                normalize_string("\nthis\nhas\n\nnew\nlines"),
+                "thishasnewlines"
+            )
+        }
+    }
+
     #[test]
     fn it_hashes() {
         assert_eq!(
