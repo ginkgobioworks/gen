@@ -3,6 +3,7 @@ use rusqlite;
 use rusqlite::{types::Value as SQLValue, Connection};
 use std::{io, str};
 
+use crate::models::operations::OperationInfo;
 use crate::models::{
     block_group::{BlockGroup, PathChange},
     edge::Edge,
@@ -130,9 +131,11 @@ pub fn update_with_fasta(
         conn,
         operation_conn,
         &mut session,
-        fasta_file_path,
-        FileTypes::Fasta,
-        "fasta_update",
+        OperationInfo {
+            file_path: fasta_file_path.to_string(),
+            file_type: FileTypes::Fasta,
+            description: "fasta_update".to_string(),
+        },
         &summary_str,
         None,
     )

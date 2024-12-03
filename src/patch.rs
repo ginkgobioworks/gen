@@ -1,5 +1,5 @@
 use crate::config::get_changeset_path;
-use crate::models::operations::{FileAddition, Operation, OperationSummary};
+use crate::models::operations::{FileAddition, Operation, OperationInfo, OperationSummary};
 use crate::models::traits::Query;
 use crate::operation_management;
 use crate::operation_management::{
@@ -90,9 +90,11 @@ pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[Operati
             conn,
             op_conn,
             &mut session,
-            &patch.files.file_path,
-            patch.files.file_type,
-            &op_info.change_type,
+            OperationInfo {
+                file_path: patch.files.file_path.clone(),
+                file_type: patch.files.file_type,
+                description: op_info.change_type.clone(),
+            },
             &patch.summary.summary,
             None,
         ) {

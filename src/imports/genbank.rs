@@ -3,9 +3,11 @@ use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::collection::Collection;
 use crate::models::edge::Edge;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
+use crate::models::operations::{Operation, OperationInfo};
 use crate::models::path::{Path, PathBlock};
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
+use crate::operation_management::{end_operation, start_operation};
 use crate::{calculate_hash, normalize_string};
 use gb_io::{reader, seq::Location};
 use regex::Regex;
@@ -13,10 +15,17 @@ use rusqlite::Connection;
 use std::io::Read;
 use std::str;
 
-pub fn import_genbank<'a, R>(conn: &Connection, data: R, collection: impl Into<Option<&'a str>>)
+pub fn import_genbank<'a, R>(
+    conn: &Connection,
+    op_conn: &Connection,
+    data: R,
+    collection: impl Into<Option<&'a str>>,
+    operation_info: impl Into<Option<OperationInfo>>,
+) -> Result<Option<Operation>, &'static str>
 where
     R: Read,
 {
+    let mut session = start_operation(conn);
     let reader = reader::SeqReader::new(data);
     let collection = Collection::create(conn, collection.into().unwrap_or_default());
     let geneious_edit = Regex::new(r"Geneious type: Editing History (?P<edit_type>\w+)").unwrap();
@@ -189,6 +198,18 @@ where
             Err(e) => println!("Failed to parse {e:?}"),
         }
     }
+    if let Some(op_info) = operation_info.into() {
+        Ok(Some(end_operation(
+            conn,
+            op_conn,
+            &mut session,
+            op_info,
+            "something",
+            None,
+        )?))
+    } else {
+        Ok(None)
+    }
 }
 
 #[cfg(test)]
@@ -215,7 +236,7 @@ mod tests {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("fixtures/geneious_genbank/insertion.gb");
             let file = File::open(&path).unwrap();
-            import_genbank(conn, BufReader::new(file), None);
+            let _ = import_genbank(conn, op_conn, BufReader::new(file), None, None);
             let f = reader::parse_file(&path).unwrap();
             let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             let seqs = BlockGroup::get_all_sequences(conn, 1, false);
@@ -238,7 +259,7 @@ mod tests {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("fixtures/geneious_genbank/deletion.gb");
             let file = File::open(&path).unwrap();
-            import_genbank(conn, BufReader::new(file), None);
+            let _ = import_genbank(conn, op_conn, BufReader::new(file), None, None);
             let f = reader::parse_file(&path).unwrap();
             let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             let deleted: String = normalize_string(
@@ -278,7 +299,7 @@ mod tests {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("fixtures/geneious_genbank/deletion_and_insertion.gb");
             let file = File::open(&path).unwrap();
-            import_genbank(conn, BufReader::new(file), None);
+            let _ = import_genbank(conn, op_conn, BufReader::new(file), None, None);
             let f = reader::parse_file(&path).unwrap();
             let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             let deleted: String = normalize_string(
@@ -321,7 +342,7 @@ mod tests {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("fixtures/geneious_genbank/substitution.gb");
             let file = File::open(&path).unwrap();
-            import_genbank(conn, BufReader::new(file), None);
+            let _ = import_genbank(conn, op_conn, BufReader::new(file), None, None);
             let f = reader::parse_file(&path).unwrap();
             let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             let deleted: String = normalize_string(

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub enum FileTypes {
+    GenBank,
     Fasta,
     GFA,
     GAF,
@@ -15,6 +16,7 @@ pub enum FileTypes {
 impl ToSql for FileTypes {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
         let result = match self {
+            FileTypes::GenBank => "gb".into(),
             FileTypes::Fasta => "fasta".into(),
             FileTypes::GFA => "gfa".into(),
             FileTypes::VCF => "vcf".into(),
@@ -29,6 +31,7 @@ impl ToSql for FileTypes {
 impl From<FileTypes> for Value {
     fn from(value: FileTypes) -> Value {
         let result = match value {
+            FileTypes::GenBank => "gb",
             FileTypes::Fasta => "fasta",
             FileTypes::GFA => "gfa",
             FileTypes::VCF => "vcf",
@@ -43,6 +46,7 @@ impl From<FileTypes> for Value {
 impl FromSql for FileTypes {
     fn column_result(value: ValueRef) -> FromSqlResult<Self> {
         let result = match value.as_str() {
+            Ok("gb") => FileTypes::GenBank,
             Ok("fasta") => FileTypes::Fasta,
             Ok("gfa") => FileTypes::GFA,
             Ok("vcf") => FileTypes::VCF,

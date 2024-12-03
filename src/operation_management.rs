@@ -8,7 +8,7 @@ use crate::models::file_types::FileTypes;
 use crate::models::metadata;
 use crate::models::node::Node;
 use crate::models::operations::{
-    Branch, FileAddition, Operation, OperationState, OperationSummary,
+    Branch, FileAddition, Operation, OperationInfo, OperationState, OperationSummary,
 };
 use crate::models::path::Path;
 use crate::models::sample::Sample;
@@ -778,9 +778,11 @@ pub fn apply<'a>(
         conn,
         operation_conn,
         &mut session,
-        &format!("{op_hash}.cs"),
-        FileTypes::Changeset,
-        "changeset_application",
+        OperationInfo {
+            file_path: format!("{op_hash}.cs"),
+            file_type: FileTypes::Changeset,
+            description: "changeset_application".to_string(),
+        },
         &format!("Applied changeset {op_hash}."),
         force_hash,
     )
@@ -874,9 +876,7 @@ pub fn end_operation<'a>(
     conn: &Connection,
     operation_conn: &Connection,
     session: &mut session::Session,
-    file_path: &str,
-    file_type: FileTypes,
-    operation_description: &'a str,
+    operation_info: OperationInfo,
     summary_str: &str,
     force_hash: impl Into<Option<&'a str>>,
 ) -> Result<Operation, &'static str> {
@@ -903,12 +903,16 @@ pub fn end_operation<'a>(
         .execute("SAVEPOINT new_operation;", [])
         .unwrap();
 
-    let change = FileAddition::create(operation_conn, file_path, file_type);
+    let change = FileAddition::create(
+        operation_conn,
+        &operation_info.file_path,
+        operation_info.file_type,
+    );
 
     match Operation::create(
         operation_conn,
         &db_uuid,
-        operation_description,
+        &operation_info.description,
         change.id,
         &hash,
     ) {
@@ -1418,9 +1422,11 @@ mod tests {
             conn,
             op_conn,
             &mut session,
-            "test",
-            FileTypes::Fasta,
-            "test",
+            OperationInfo {
+                file_path: "test".to_string(),
+                file_type: FileTypes::Fasta,
+                description: "test".to_string(),
+            },
             "test",
             None,
         )

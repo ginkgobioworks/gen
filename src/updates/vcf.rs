@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::{io, str};
 
+use crate::models::operations::OperationInfo;
 use crate::models::{
     block_group::{BlockGroup, BlockGroupData, PathCache, PathChange},
     file_types::FileTypes,
@@ -459,9 +460,11 @@ pub fn update_with_vcf<'a>(
         conn,
         operation_conn,
         &mut session,
-        vcf_path,
-        FileTypes::VCF,
-        "vcf_addition",
+        OperationInfo {
+            file_path: vcf_path.to_string(),
+            file_type: FileTypes::VCF,
+            description: "vcf_addition".to_string(),
+        },
         &summary_str,
         None,
     )

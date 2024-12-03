@@ -3,6 +3,7 @@ use std::str;
 
 use crate::calculate_hash;
 use crate::models::file_types::FileTypes;
+use crate::models::operations::OperationInfo;
 use crate::models::{
     block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
@@ -104,9 +105,11 @@ pub fn import_fasta(
         conn,
         operation_conn,
         &mut session,
-        fasta,
-        FileTypes::Fasta,
-        "fasta_addition",
+        OperationInfo {
+            file_path: fasta.to_string(),
+            file_type: FileTypes::Fasta,
+            description: "fasta_addition".to_string(),
+        },
         &summary_str,
         None,
     )

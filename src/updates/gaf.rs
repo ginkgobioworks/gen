@@ -5,6 +5,7 @@ use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::file_types::FileTypes;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
+use crate::models::operations::OperationInfo;
 use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
@@ -358,9 +359,11 @@ pub fn update_with_gaf<'a, P>(
         conn,
         op_conn,
         &mut session,
-        gaf_path.as_ref().to_str().unwrap(),
-        FileTypes::GAF,
-        "insert_via_gaf",
+        OperationInfo {
+            file_path: gaf_path.as_ref().to_str().unwrap().to_string(),
+            file_type: FileTypes::GAF,
+            description: "insert_via_gaf".to_string(),
+        },
         &format!("{change_count} updates."),
         None,
     )
