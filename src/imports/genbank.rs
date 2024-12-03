@@ -33,8 +33,8 @@ pub fn import_genbank<'a, R>(
     op_conn: &Connection,
     data: R,
     collection: impl Into<Option<&'a str>>,
-    operation_info: impl Into<Option<OperationInfo>>,
-) -> Result<Option<Operation>, GenBankError>
+    operation_info: OperationInfo,
+) -> Result<Operation, GenBankError>
 where
     R: Read,
 {
@@ -213,23 +213,21 @@ where
             Err(e) => return Err(GenBankError::ParseError(format!("Failed to parse {}", e))),
         }
     }
-    if let Some(op_info) = operation_info.into() {
-        Ok(Some(end_operation(
-            conn,
-            op_conn,
-            &mut session,
-            op_info,
-            "something",
-            None,
-        )?))
-    } else {
-        Ok(None)
-    }
+    end_operation(
+        conn,
+        op_conn,
+        &mut session,
+        operation_info,
+        "something",
+        None,
+    )
+    .map_err(GenBankError::OperationError)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::file_types::FileTypes;
     use crate::models::metadata;
     use crate::models::operations::setup_db;
     use crate::test_helpers::{get_connection, get_operation_connection};
@@ -250,7 +248,11 @@ mod tests {
                 op_conn,
                 BufReader::new("this is not valid".as_bytes()),
                 None,
-                None
+                OperationInfo {
+                    file_path: "".to_string(),
+                    file_type: FileTypes::GenBank,
+                    description: "test".to_string(),
+                }
             ),
             Err(GenBankError::ParseError(
                 "Failed to parse Syntax error: Error Tag while parsing [this is not valid]"
@@ -272,7 +274,17 @@ mod tests {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("fixtures/geneious_genbank/insertion.gb");
             let file = File::open(&path).unwrap();
-            let _ = import_genbank(conn, op_conn, BufReader::new(file), None, None);
+            let _ = import_genbank(
+                conn,
+                op_conn,
+                BufReader::new(file),
+                None,
+                OperationInfo {
+                    file_path: "".to_string(),
+                    file_type: FileTypes::GenBank,
+                    description: "test".to_string(),
+                },
+            );
             let f = reader::parse_file(&path).unwrap();
             let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             let seqs = BlockGroup::get_all_sequences(conn, 1, false);
@@ -295,7 +307,17 @@ mod tests {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("fixtures/geneious_genbank/deletion.gb");
             let file = File::open(&path).unwrap();
-            let _ = import_genbank(conn, op_conn, BufReader::new(file), None, None);
+            let _ = import_genbank(
+                conn,
+                op_conn,
+                BufReader::new(file),
+                None,
+                OperationInfo {
+                    file_path: "".to_string(),
+                    file_type: FileTypes::GenBank,
+                    description: "test".to_string(),
+                },
+            );
             let f = reader::parse_file(&path).unwrap();
             let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             let deleted: String = normalize_string(
@@ -335,7 +357,17 @@ mod tests {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("fixtures/geneious_genbank/deletion_and_insertion.gb");
             let file = File::open(&path).unwrap();
-            let _ = import_genbank(conn, op_conn, BufReader::new(file), None, None);
+            let _ = import_genbank(
+                conn,
+                op_conn,
+                BufReader::new(file),
+                None,
+                OperationInfo {
+                    file_path: "".to_string(),
+                    file_type: FileTypes::GenBank,
+                    description: "test".to_string(),
+                },
+            );
             let f = reader::parse_file(&path).unwrap();
             let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             let deleted: String = normalize_string(
@@ -378,7 +410,17 @@ mod tests {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("fixtures/geneious_genbank/substitution.gb");
             let file = File::open(&path).unwrap();
-            let _ = import_genbank(conn, op_conn, BufReader::new(file), None, None);
+            let _ = import_genbank(
+                conn,
+                op_conn,
+                BufReader::new(file),
+                None,
+                OperationInfo {
+                    file_path: "".to_string(),
+                    file_type: FileTypes::GenBank,
+                    description: "test".to_string(),
+                },
+            );
             let f = reader::parse_file(&path).unwrap();
             let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             let deleted: String = normalize_string(
