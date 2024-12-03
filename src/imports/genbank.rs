@@ -261,6 +261,30 @@ mod tests {
         )
     }
 
+    #[test]
+    fn test_records_operation() {
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/geneious_genbank/insertion.gb");
+        let file = File::open(&path).unwrap();
+        let operation = import_genbank(
+            conn,
+            op_conn,
+            BufReader::new(file),
+            None,
+            OperationInfo {
+                file_path: path.to_str().unwrap().to_string(),
+                file_type: FileTypes::GenBank,
+                description: "test".to_string(),
+            },
+        )
+        .unwrap();
+        assert_eq!(Operation::get_by_hash(op_conn, &operation.hash), operation);
+    }
+
     #[cfg(test)]
     mod geneious_genbanks {
         use super::*;
