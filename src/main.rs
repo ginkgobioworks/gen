@@ -8,6 +8,7 @@ use gen::exports::fasta::export_fasta;
 use gen::exports::gfa::export_gfa;
 use gen::get_connection;
 use gen::imports::fasta::import_fasta;
+use gen::imports::genbank::import_genbank;
 use gen::imports::gfa::import_gfa;
 use gen::models::metadata;
 use gen::models::operations::{setup_db, Branch, Operation, OperationState};
@@ -22,6 +23,7 @@ use itertools::Itertools;
 use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
 use std::fs::File;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::{io, str};
 
@@ -55,6 +57,9 @@ enum Commands {
         /// Fasta file path
         #[arg(short, long)]
         fasta: Option<String>,
+        /// Genbank file path
+        #[arg(long)]
+        gb: Option<String>,
         /// GFA file path
         #[arg(short, long)]
         gfa: Option<String>,
@@ -298,6 +303,7 @@ fn main() {
     match &cli.command {
         Some(Commands::Import {
             fasta,
+            gb,
             gfa,
             name,
             shallow,
@@ -326,6 +332,10 @@ fn main() {
                 }
             } else if gfa.is_some() {
                 import_gfa(&PathBuf::from(gfa.clone().unwrap()), name, None, &conn);
+            } else if let Some(gb) = gb {
+                let f = File::open(gb).unwrap();
+                import_genbank(&conn, &f, name.deref());
+                println!("Genbank imported.");
             } else {
                 conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
                 operation_conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
