@@ -15,10 +15,17 @@ use crate::models::{
     sequence::Sequence,
     strand::Strand,
 };
-use crate::operation_management::{end_operation, start_operation};
+use crate::operation_management::{end_operation, start_operation, OperationError};
 use noodles::fasta;
 use rusqlite;
 use rusqlite::Connection;
+use thiserror::Error;
+
+#[derive(Debug, Error, PartialEq)]
+pub enum FastaError {
+    #[error("Operation Error: {0}")]
+    OperationError(#[from] OperationError),
+}
 
 pub fn import_fasta(
     fasta: &String,
@@ -26,7 +33,7 @@ pub fn import_fasta(
     shallow: bool,
     conn: &Connection,
     operation_conn: &Connection,
-) -> Result<Operation, &'static str> {
+) -> Result<Operation, FastaError> {
     let mut session = start_operation(conn);
 
     let mut reader = fasta::io::reader::Builder.build_from_path(fasta).unwrap();
@@ -113,6 +120,7 @@ pub fn import_fasta(
         &summary_str,
         None,
     )
+    .map_err(FastaError::OperationError)
 }
 
 #[cfg(test)]
@@ -218,7 +226,7 @@ mod tests {
                 conn,
                 op_conn,
             ),
-            Err("No changes.")
+            Err(FastaError::OperationError(OperationError::NoChanges))
         );
     }
 }

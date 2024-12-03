@@ -7,14 +7,14 @@ use gen::annotations::gff::propagate_gff;
 use gen::exports::fasta::export_fasta;
 use gen::exports::gfa::export_gfa;
 use gen::get_connection;
-use gen::imports::fasta::import_fasta;
+use gen::imports::fasta::{import_fasta, FastaError};
 use gen::imports::genbank::import_genbank;
 use gen::imports::gfa::import_gfa;
 use gen::models::file_types::FileTypes;
 use gen::models::metadata;
 use gen::models::operations::{setup_db, Branch, Operation, OperationInfo, OperationState};
 use gen::operation_management;
-use gen::operation_management::parse_patch_operations;
+use gen::operation_management::{parse_patch_operations, OperationError};
 use gen::patch;
 use gen::updates::fasta::update_with_fasta;
 use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
@@ -324,7 +324,9 @@ fn main() {
                     &operation_conn,
                 ) {
                     Ok(_) => println!("Fasta imported."),
-                    Err("No changes.") => println!("Fasta contents already exist."),
+                    Err(FastaError::OperationError(OperationError::NoChanges)) => {
+                        println!("Fasta contents already exist.")
+                    }
                     Err(_) => {
                         conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
                         operation_conn.execute("ROLLBACK TRANSACTION;", []).unwrap();

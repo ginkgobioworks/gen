@@ -7,13 +7,26 @@ use crate::models::operations::{Operation, OperationInfo};
 use crate::models::path::{Path, PathBlock};
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
-use crate::operation_management::{end_operation, start_operation};
+use crate::operation_management::{end_operation, start_operation, OperationError};
 use crate::{calculate_hash, normalize_string};
 use gb_io::{reader, seq::Location};
-use regex::Regex;
+use regex::{Error as RegexError, Regex};
 use rusqlite::Connection;
 use std::io::Read;
 use std::str;
+use thiserror::Error;
+
+#[derive(Debug, Error, PartialEq)]
+pub enum GenBankError {
+    #[error("Feature Location Error: {0}")]
+    LocationError(&'static str),
+    #[error("Parse Error: {0}")]
+    ParseError(String),
+    #[error("Operation Error: {0}")]
+    OperationError(#[from] OperationError),
+    #[error("Regex Error: {0}")]
+    Regex(#[from] RegexError),
+}
 
 pub fn import_genbank<'a, R>(
     conn: &Connection,
@@ -21,14 +34,14 @@ pub fn import_genbank<'a, R>(
     data: R,
     collection: impl Into<Option<&'a str>>,
     operation_info: impl Into<Option<OperationInfo>>,
-) -> Result<Option<Operation>, &'static str>
+) -> Result<Option<Operation>, GenBankError>
 where
     R: Read,
 {
     let mut session = start_operation(conn);
     let reader = reader::SeqReader::new(data);
     let collection = Collection::create(conn, collection.into().unwrap_or_default());
-    let geneious_edit = Regex::new(r"Geneious type: Editing History (?P<edit_type>\w+)").unwrap();
+    let geneious_edit = Regex::new(r"Geneious type: Editing History (?P<edit_type>\w+)")?;
     for result in reader {
         match result {
             Ok(seq) => {
@@ -91,7 +104,9 @@ where
                                 let geneious_mod = geneious_edit.captures(v);
                                 if let Some(edit) = geneious_mod {
                                     let (mut start, mut end) =
-                                        feature.location.find_bounds().unwrap();
+                                        feature.location.find_bounds().map_err(|_| {
+                                            GenBankError::LocationError("Ambiguous Bounds")
+                                        })?;
                                     match &edit["edit_type"] {
                                         "Insertion" => {
                                             // If there is an insertion, it means that the WT is missing
@@ -195,7 +210,7 @@ where
                     }
                 }
             }
-            Err(e) => println!("Failed to parse {e:?}"),
+            Err(e) => return Err(GenBankError::ParseError(format!("Failed to parse {}", e))),
         }
     }
     if let Some(op_info) = operation_info.into() {
@@ -222,6 +237,27 @@ mod tests {
     use std::fs::File;
     use std::io::BufReader;
     use std::path::PathBuf;
+
+    #[test]
+    fn test_error_on_invalid_file() {
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        assert_eq!(
+            import_genbank(
+                conn,
+                op_conn,
+                BufReader::new("this is not valid".as_bytes()),
+                None,
+                None
+            ),
+            Err(GenBankError::ParseError(
+                "Failed to parse Syntax error: Error Tag while parsing [this is not valid]"
+                    .to_string()
+            ))
+        )
+    }
 
     #[cfg(test)]
     mod geneious_genbanks {

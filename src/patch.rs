@@ -4,6 +4,7 @@ use crate::models::traits::Query;
 use crate::operation_management;
 use crate::operation_management::{
     apply_changeset, end_operation, load_changeset, load_changeset_dependencies, start_operation,
+    OperationError,
 };
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -102,9 +103,10 @@ pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[Operati
                 println!("Successfully applied operation.");
             }
             Err(e) => match e {
-                "Operation already exists." => println!("Operation already applied. Skipping."),
-                "No changes." => println!("No new changes present in operation. Skipping."),
-                _ => panic!("error is {e:?}"),
+                OperationError::OperationExists => println!("Operation already applied. Skipping."),
+                OperationError::NoChanges => {
+                    println!("No new changes present in operation. Skipping.")
+                }
             },
         }
     }

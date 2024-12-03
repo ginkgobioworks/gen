@@ -29,6 +29,7 @@ interavl = "0.2.0"
 regex = "1.11.1"
 flate2 = "1.0.35"
 gb-io = "0.7.1"
+thiserror = "1.0.69"
 
 [dev-dependencies]
 cargo-llvm-cov = "0.6.14"
