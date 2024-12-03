@@ -598,10 +598,10 @@ pub fn apply_changeset(
         edge_id_map.insert(sorted_edge_ids[index], *edge_id);
     }
 
-    let mut block_group_edges: HashMap<i64, Vec<i64>> = HashMap::new();
+    let mut block_group_edges: HashMap<i64, Vec<(i64, i64, i64)>> = HashMap::new();
 
-    for (bg_id, edge_id) in insert_block_group_edges {
-        let new_bg_id = *dep_bg_map
+    for (bg_id, edge_id, chromosome_index, phased) in insert_block_group_edges {
+        let bg_id = *dep_bg_map
             .get(&bg_id)
             .or(blockgroup_map.get(&bg_id).or(Some(&bg_id)))
             .unwrap();
@@ -610,17 +610,19 @@ pub fn apply_changeset(
             .or(edge_id_map.get(&edge_id).or(Some(&edge_id)))
             .unwrap();
         block_group_edges
-            .entry(new_bg_id)
+            .entry(bg_id)
             .or_default()
-            .push(*edge_id);
+            .push((*edge_id, chromosome_index, phased));
     }
+
     for (bg_id, edges) in block_group_edges.iter() {
         let new_block_group_edges = edges
             .iter()
-            .map(|edge_id| BlockGroupEdgeData {
+            .map(|(edge_id, chromosome_index, phased)| BlockGroupEdgeData {
                 block_group_id: *bg_id,
                 edge_id: *edge_id,
-                chromosome_index: 0,
+                chromosome_index: *chromosome_index,
+                phased: *phased,
             })
             .collect::<Vec<_>>();
         BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
@@ -646,23 +648,6 @@ pub fn apply_changeset(
                 .or(Some(&path.block_group_id)))
             .unwrap();
         Path::create(conn, &path.name, new_bg_id, &sorted_edges);
-    }
-
-    let mut block_group_edges: HashMap<i64, Vec<(i64, i64, i64)>> = HashMap::new();
-
-    for (bg_id, edge_id, chromosome_index, phased) in insert_block_group_edges {
-        let bg_id = *dep_bg_map
-            .get(&bg_id)
-            .or(blockgroup_map.get(&bg_id).or(Some(&bg_id)))
-            .unwrap();
-        let edge_id = dep_edge_map
-            .get(&edge_id)
-            .or(edge_id_map.get(&edge_id).or(Some(&edge_id)))
-            .unwrap();
-        block_group_edges
-            .entry(bg_id)
-            .or_default()
-            .push((*edge_id, chromosome_index, phased));
     }
 
     let mut updated_accession_edge_map = HashMap::new();
