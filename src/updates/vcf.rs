@@ -463,7 +463,7 @@ pub fn update_with_vcf<'a>(
         }
     }
 
-    Ok(end_operation(
+    end_operation(
         conn,
         operation_conn,
         &mut session,
@@ -474,7 +474,8 @@ pub fn update_with_vcf<'a>(
         },
         &summary_str,
         None,
-    )?)
+    )
+    .map_err(VcfError::OperationError)
 }
 
 #[cfg(test)]
