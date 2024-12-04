@@ -1,5 +1,6 @@
 strict digraph "" {
 	graph [rankdir=LR,
+		ranksep=0.5,
 		splines=true
 	];
 	node [label="\N"];
