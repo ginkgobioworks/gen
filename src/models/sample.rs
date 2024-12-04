@@ -121,4 +121,9 @@ impl Sample {
             )
         }
     }
+
+    pub fn get_all_names(conn: &Connection) -> Vec<String> {
+        let samples = Sample::query(conn, "select * from samples;", rusqlite::params!());
+        samples.iter().map(|s| s.name.clone()).collect()
+    }
 }
