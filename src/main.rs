@@ -712,8 +712,11 @@ fn main() {
             }
         }
         Some(Commands::ListGraphs { name, sample }) => {
-            let block_groups =
-                Sample::get_block_groups(&conn, name.as_deref().unwrap(), Some(sample));
+            let name = &name.clone().unwrap_or_else(|| {
+                get_default_collection(&operation_conn)
+                    .expect("No collection specified and default not setup.")
+            });
+            let block_groups = Sample::get_block_groups(&conn, name, Some(sample));
             for block_group in block_groups {
                 println!("{}", block_group.name);
             }
@@ -725,14 +728,13 @@ fn main() {
             start,
             end,
         }) => {
-            let block_group_id = BlockGroup::get_or_create_sample_block_group(
-                &conn,
-                name.as_deref().unwrap(),
-                sample,
-                graph,
-                None,
-            )
-            .unwrap();
+            let name = &name.clone().unwrap_or_else(|| {
+                get_default_collection(&operation_conn)
+                    .expect("No collection specified and default not setup.")
+            });
+            let block_group_id =
+                BlockGroup::get_or_create_sample_block_group(&conn, name, sample, graph, None)
+                    .unwrap();
             let path = BlockGroup::get_current_path(&conn, block_group_id);
             let sequence = path.sequence(&conn);
             let start_coordinate = start.unwrap_or(0);
