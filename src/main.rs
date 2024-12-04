@@ -10,9 +10,11 @@ use gen::get_connection;
 use gen::imports::fasta::{import_fasta, FastaError};
 use gen::imports::genbank::import_genbank;
 use gen::imports::gfa::import_gfa;
+use gen::models::block_group::BlockGroup;
 use gen::models::file_types::FileTypes;
 use gen::models::metadata;
 use gen::models::operations::{setup_db, Branch, Operation, OperationInfo, OperationState};
+use gen::models::sample::Sample;
 use gen::operation_management;
 use gen::operation_management::{parse_patch_operations, OperationError};
 use gen::patch;
@@ -239,6 +241,32 @@ enum Commands {
         /// The name of the output file
         #[arg(short, long)]
         output_gff: String,
+    },
+    ListSamples {},
+    ListGraphs {
+        /// The name of the collection to list graphs for
+        #[arg(short, long)]
+        name: Option<String>,
+        /// The name of the sample to list graphs for
+        #[arg(short, long)]
+        sample: String,
+    },
+    ShowSequence {
+        /// The name of the collection containing the sequence
+        #[arg(short, long)]
+        name: Option<String>,
+        /// The name of the sample containing the sequence
+        #[arg(short, long)]
+        sample: String,
+        /// The name of the graph to show the sequence for
+        #[arg(short, long)]
+        graph: String,
+        /// The start coordinate of the sequence
+        #[arg(long)]
+        start: Option<i64>,
+        /// The end coordinate of the sequence
+        #[arg(long)]
+        end: Option<i64>,
     },
 }
 
@@ -676,6 +704,43 @@ fn main() {
 
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
+        }
+        Some(Commands::ListSamples {}) => {
+            let sample_names = Sample::get_all_names(&conn);
+            for sample_name in sample_names {
+                println!("{}", sample_name);
+            }
+        }
+        Some(Commands::ListGraphs { name, sample }) => {
+            let block_groups =
+                Sample::get_block_groups(&conn, name.as_deref().unwrap(), Some(sample));
+            for block_group in block_groups {
+                println!("{}", block_group.name);
+            }
+        }
+        Some(Commands::ShowSequence {
+            name,
+            sample,
+            graph,
+            start,
+            end,
+        }) => {
+            let block_group_id = BlockGroup::get_or_create_sample_block_group(
+                &conn,
+                name.as_deref().unwrap(),
+                sample,
+                graph,
+                None,
+            )
+            .unwrap();
+            let path = BlockGroup::get_current_path(&conn, block_group_id);
+            let sequence = path.sequence(&conn);
+            let start_coordinate = start.unwrap_or(0);
+            let end_coordinate = end.unwrap_or(sequence.len() as i64);
+            println!(
+                "{}",
+                &sequence[start_coordinate as usize..end_coordinate as usize]
+            );
         }
     }
 }
