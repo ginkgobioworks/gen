@@ -230,7 +230,7 @@ mod tests {
     use crate::models::file_types::FileTypes;
     use crate::models::metadata;
     use crate::models::operations::setup_db;
-    use crate::test_helpers::{get_connection, get_operation_connection};
+    use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use std::collections::HashSet;
     use std::fs::File;
     use std::io::BufReader;
@@ -238,6 +238,7 @@ mod tests {
 
     #[test]
     fn test_error_on_invalid_file() {
+        setup_gen_dir();
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
@@ -263,6 +264,7 @@ mod tests {
 
     #[test]
     fn test_records_operation() {
+        setup_gen_dir();
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
@@ -290,6 +292,7 @@ mod tests {
         use super::*;
         #[test]
         fn test_parses_insertion() {
+            setup_gen_dir();
             // this file has an insertion from 1426-2220
             let conn = &get_connection(None);
             let db_uuid = metadata::get_db_uuid(conn);
@@ -323,6 +326,7 @@ mod tests {
 
         #[test]
         fn test_parses_deletion() {
+            setup_gen_dir();
             // this file has a deletion from 765-766
             let conn = &get_connection(None);
             let db_uuid = metadata::get_db_uuid(conn);
@@ -374,6 +378,7 @@ mod tests {
 
         #[test]
         fn test_parses_deletion_and_insertion() {
+            setup_gen_dir();
             let conn = &get_connection(None);
             let db_uuid = metadata::get_db_uuid(conn);
             let op_conn = &get_operation_connection(None);
@@ -425,6 +430,7 @@ mod tests {
 
         #[test]
         fn test_parses_substitution() {
+            setup_gen_dir();
             // replacing a sequence ends up with the same result as doing a compound delete + insert
             // in the above test.
             let conn = &get_connection(None);
