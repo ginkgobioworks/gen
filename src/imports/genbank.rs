@@ -280,10 +280,21 @@ mod tests {
     use crate::models::metadata;
     use crate::models::operations::setup_db;
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
+    use noodles::fasta;
     use std::collections::HashSet;
     use std::fs::File;
     use std::io::BufReader;
     use std::path::PathBuf;
+
+    fn get_unmodified_sequence() -> String {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/geneious_genbank/unmodified.fa");
+        let mut reader = fasta::io::reader::Builder.build_from_path(path).unwrap();
+        let mut records = reader.records();
+        let record = records.next().unwrap().unwrap();
+        let seq = record.sequence();
+        str::from_utf8(seq.as_ref()).unwrap().to_string()
+    }
 
     #[test]
     fn test_error_on_invalid_file() {
@@ -339,6 +350,9 @@ mod tests {
     #[cfg(test)]
     mod geneious_genbanks {
         use super::*;
+        use crate::graph::{GraphEdge, GraphNode};
+        use crate::test_helpers::save_graph;
+        use petgraph::prelude::DiGraphMap;
         #[test]
         fn test_parses_insertion() {
             setup_gen_dir();
@@ -551,35 +565,18 @@ mod tests {
                     description: "test".to_string(),
                 },
             );
-            // let f = reader::parse_file(&path).unwrap();
-            // let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
-            // let deleted: String = normalize_string(
-            //     "TACGCCCCGCCCTGCCACTCATCGCAGTACTGTTGTAATTC
-            //  ATTAAGCATTCTGCCGACATGGAAGCCATCACAAACGGCATGATGAACCTGAATCGCC
-            //  AGCGGCATCAGCACCTTGTCGCCTTGCGTATAATATTTGCCCATGGTGAAAACGGGGG
-            //  CGAAGAAGTTGTCCATATTGGCCACGTTTAAATCAAAACTGGTGAAACTCACCCAGGG
-            //  ATTGGCTGAGACGAAAAACATATTCTCAATAAACCCTTTAGGGAAATAGGCCAGGTTT
-            //  TCACCGTAACACGCCACATCTTGCGAATATATGTGTAGAAACTGCCGGAAATCGTCGT
-            //  GGTATTCACTCCAGAGCGATGAAAACGTTTCAGTTTGCTCATGGAAAACGGTGTAACA
-            //  AGGGTGAACACTATCCCATATCACCAGCTCACCGTCTTTCATTGCCATACGGAATTCC
-            //  GGATGAGCATTCATCAGGCGGGCAAGAATGTGAATAAAGGCCGGATAAAACTTGTGCT
-            //  TATTTTTCTTTACGGTCTTTAAAAAGGCCGTAATATCCAGCTGAACGGTCTGGTTATA
-            //  GGTACATTGAGCAACTGACTGAAATGCCTCAAAATGTTCTTTACGATGCCATTGGGAT
-            //  ATATCAACGGTGGTATATCCAGTGATTTTTTTCTC",
-            // );
-            // let seqs = BlockGroup::get_all_sequences(conn, 1, false);
-            // assert_eq!(
-            //     seqs,
-            //     HashSet::from_iter([
-            //         seq.clone(),
-            //         format!(
-            //             "{}{deleted}{}",
-            //             &seq[..766].to_string(),
-            //             &seq[1557..].to_string()
-            //         )
-            //         .to_string()
-            //     ])
-            // );
+            // there would be 4! sequences so we just check we have the fully changed and unchanged sequence
+            let f = reader::parse_file(&path).unwrap();
+            let mod_seq = str::from_utf8(&f[0].seq).unwrap().to_string();
+            let sequences: HashSet<String> = BlockGroup::get_all_sequences(conn, 1, false)
+                .iter()
+                .map(|s| s.to_lowercase())
+                .collect();
+            let g = BlockGroup::get_graph(conn, 1);
+            save_graph(&g, "mc.dot");
+            let unchanged_seq = get_unmodified_sequence();
+            assert!(sequences.contains(&mod_seq));
+            assert!(sequences.contains(&unchanged_seq));
         }
     }
 }
