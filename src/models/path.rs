@@ -293,7 +293,7 @@ impl Path {
         }
         let sequences_by_node_id = Node::get_sequences_by_node_ids(
             conn,
-            sequence_node_ids.into_iter().collect::<Vec<i64>>(),
+            &sequence_node_ids.into_iter().collect::<Vec<i64>>(),
         );
 
         let mut blocks = vec![];
