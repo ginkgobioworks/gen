@@ -350,9 +350,8 @@ mod tests {
     #[cfg(test)]
     mod geneious_genbanks {
         use super::*;
-        use crate::graph::{GraphEdge, GraphNode};
         use crate::test_helpers::save_graph;
-        use petgraph::prelude::DiGraphMap;
+
         #[test]
         fn test_parses_insertion() {
             setup_gen_dir();
