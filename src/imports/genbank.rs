@@ -3,23 +3,45 @@ use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::collection::Collection;
 use crate::models::edge::Edge;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
+use crate::models::operations::{Operation, OperationInfo};
 use crate::models::path::{Path, PathBlock};
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
+use crate::operation_management::{end_operation, start_operation, OperationError};
 use crate::{calculate_hash, normalize_string};
 use gb_io::{reader, seq::Location};
-use regex::Regex;
+use regex::{Error as RegexError, Regex};
 use rusqlite::Connection;
 use std::io::Read;
 use std::str;
+use thiserror::Error;
 
-pub fn import_genbank<'a, R>(conn: &Connection, data: R, collection: impl Into<Option<&'a str>>)
+#[derive(Debug, Error, PartialEq)]
+pub enum GenBankError {
+    #[error("Feature Location Error: {0}")]
+    LocationError(&'static str),
+    #[error("Parse Error: {0}")]
+    ParseError(String),
+    #[error("Operation Error: {0}")]
+    OperationError(#[from] OperationError),
+    #[error("Regex Error: {0}")]
+    Regex(#[from] RegexError),
+}
+
+pub fn import_genbank<'a, R>(
+    conn: &Connection,
+    op_conn: &Connection,
+    data: R,
+    collection: impl Into<Option<&'a str>>,
+    operation_info: OperationInfo,
+) -> Result<Operation, GenBankError>
 where
     R: Read,
 {
+    let mut session = start_operation(conn);
     let reader = reader::SeqReader::new(data);
     let collection = Collection::create(conn, collection.into().unwrap_or_default());
-    let geneious_edit = Regex::new(r"Geneious type: Editing History (?P<edit_type>\w+)").unwrap();
+    let geneious_edit = Regex::new(r"Geneious type: Editing History (?P<edit_type>\w+)")?;
     for result in reader {
         match result {
             Ok(seq) => {
@@ -82,7 +104,9 @@ where
                                 let geneious_mod = geneious_edit.captures(v);
                                 if let Some(edit) = geneious_mod {
                                     let (mut start, mut end) =
-                                        feature.location.find_bounds().unwrap();
+                                        feature.location.find_bounds().map_err(|_| {
+                                            GenBankError::LocationError("Ambiguous Bounds")
+                                        })?;
                                     match &edit["edit_type"] {
                                         "Insertion" => {
                                             // If there is an insertion, it means that the WT is missing
@@ -186,27 +210,90 @@ where
                     }
                 }
             }
-            Err(e) => println!("Failed to parse {e:?}"),
+            Err(e) => return Err(GenBankError::ParseError(format!("Failed to parse {}", e))),
         }
     }
+    let filename = operation_info.file_path.clone();
+    end_operation(
+        conn,
+        op_conn,
+        &mut session,
+        operation_info,
+        &format!("Genbank Import of {filename}",),
+        None,
+    )
+    .map_err(GenBankError::OperationError)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::file_types::FileTypes;
     use crate::models::metadata;
     use crate::models::operations::setup_db;
-    use crate::test_helpers::{get_connection, get_operation_connection};
+    use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use std::collections::HashSet;
     use std::fs::File;
     use std::io::BufReader;
     use std::path::PathBuf;
+
+    #[test]
+    fn test_error_on_invalid_file() {
+        setup_gen_dir();
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        assert_eq!(
+            import_genbank(
+                conn,
+                op_conn,
+                BufReader::new("this is not valid".as_bytes()),
+                None,
+                OperationInfo {
+                    file_path: "".to_string(),
+                    file_type: FileTypes::GenBank,
+                    description: "test".to_string(),
+                }
+            ),
+            Err(GenBankError::ParseError(
+                "Failed to parse Syntax error: Error Tag while parsing [this is not valid]"
+                    .to_string()
+            ))
+        )
+    }
+
+    #[test]
+    fn test_records_operation() {
+        setup_gen_dir();
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/geneious_genbank/insertion.gb");
+        let file = File::open(&path).unwrap();
+        let operation = import_genbank(
+            conn,
+            op_conn,
+            BufReader::new(file),
+            None,
+            OperationInfo {
+                file_path: path.to_str().unwrap().to_string(),
+                file_type: FileTypes::GenBank,
+                description: "test".to_string(),
+            },
+        )
+        .unwrap();
+        assert_eq!(Operation::get_by_hash(op_conn, &operation.hash), operation);
+    }
 
     #[cfg(test)]
     mod geneious_genbanks {
         use super::*;
         #[test]
         fn test_parses_insertion() {
+            setup_gen_dir();
             // this file has an insertion from 1426-2220
             let conn = &get_connection(None);
             let db_uuid = metadata::get_db_uuid(conn);
@@ -215,7 +302,17 @@ mod tests {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("fixtures/geneious_genbank/insertion.gb");
             let file = File::open(&path).unwrap();
-            import_genbank(conn, BufReader::new(file), None);
+            let _ = import_genbank(
+                conn,
+                op_conn,
+                BufReader::new(file),
+                None,
+                OperationInfo {
+                    file_path: "".to_string(),
+                    file_type: FileTypes::GenBank,
+                    description: "test".to_string(),
+                },
+            );
             let f = reader::parse_file(&path).unwrap();
             let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             let seqs = BlockGroup::get_all_sequences(conn, 1, false);
@@ -230,6 +327,7 @@ mod tests {
 
         #[test]
         fn test_parses_deletion() {
+            setup_gen_dir();
             // this file has a deletion from 765-766
             let conn = &get_connection(None);
             let db_uuid = metadata::get_db_uuid(conn);
@@ -238,7 +336,17 @@ mod tests {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("fixtures/geneious_genbank/deletion.gb");
             let file = File::open(&path).unwrap();
-            import_genbank(conn, BufReader::new(file), None);
+            let _ = import_genbank(
+                conn,
+                op_conn,
+                BufReader::new(file),
+                None,
+                OperationInfo {
+                    file_path: "".to_string(),
+                    file_type: FileTypes::GenBank,
+                    description: "test".to_string(),
+                },
+            );
             let f = reader::parse_file(&path).unwrap();
             let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             let deleted: String = normalize_string(
@@ -271,6 +379,7 @@ mod tests {
 
         #[test]
         fn test_parses_deletion_and_insertion() {
+            setup_gen_dir();
             let conn = &get_connection(None);
             let db_uuid = metadata::get_db_uuid(conn);
             let op_conn = &get_operation_connection(None);
@@ -278,7 +387,17 @@ mod tests {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("fixtures/geneious_genbank/deletion_and_insertion.gb");
             let file = File::open(&path).unwrap();
-            import_genbank(conn, BufReader::new(file), None);
+            let _ = import_genbank(
+                conn,
+                op_conn,
+                BufReader::new(file),
+                None,
+                OperationInfo {
+                    file_path: "".to_string(),
+                    file_type: FileTypes::GenBank,
+                    description: "test".to_string(),
+                },
+            );
             let f = reader::parse_file(&path).unwrap();
             let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             let deleted: String = normalize_string(
@@ -312,6 +431,7 @@ mod tests {
 
         #[test]
         fn test_parses_substitution() {
+            setup_gen_dir();
             // replacing a sequence ends up with the same result as doing a compound delete + insert
             // in the above test.
             let conn = &get_connection(None);
@@ -321,7 +441,17 @@ mod tests {
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("fixtures/geneious_genbank/substitution.gb");
             let file = File::open(&path).unwrap();
-            import_genbank(conn, BufReader::new(file), None);
+            let _ = import_genbank(
+                conn,
+                op_conn,
+                BufReader::new(file),
+                None,
+                OperationInfo {
+                    file_path: "".to_string(),
+                    file_type: FileTypes::GenBank,
+                    description: "test".to_string(),
+                },
+            );
             let f = reader::parse_file(&path).unwrap();
             let seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             let deleted: String = normalize_string(

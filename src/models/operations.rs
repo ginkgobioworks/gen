@@ -185,6 +185,12 @@ impl Query for Operation {
     }
 }
 
+pub struct OperationInfo {
+    pub file_path: String,
+    pub file_type: FileTypes,
+    pub description: String,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct FileAddition {
     pub id: i64,

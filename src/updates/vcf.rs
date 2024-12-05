@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::{io, str};
 
+use crate::models::operations::OperationInfo;
 use crate::models::{
     block_group::{BlockGroup, BlockGroupData, PathCache, PathChange},
     file_types::FileTypes,
@@ -13,7 +14,7 @@ use crate::models::{
     strand::Strand,
     traits::*,
 };
-use crate::operation_management::{end_operation, start_operation};
+use crate::operation_management::{end_operation, start_operation, OperationError};
 use crate::{calculate_hash, parse_genotype};
 use noodles::vcf;
 use noodles::vcf::variant::record::info::field::Value as InfoValue;
@@ -24,6 +25,7 @@ use noodles::vcf::variant::record::AlternateBases;
 use noodles::vcf::variant::Record;
 use rusqlite;
 use rusqlite::{types::Value as SQLValue, Connection};
+use thiserror::Error;
 
 #[derive(Debug)]
 struct BlockGroupCache<'a> {
@@ -165,6 +167,12 @@ struct VcfEntry<'a> {
     phased: i64,
 }
 
+#[derive(Error, Debug, PartialEq)]
+pub enum VcfError {
+    #[error("Operation Error: {0}")]
+    OperationError(#[from] OperationError),
+}
+
 pub fn update_with_vcf<'a>(
     vcf_path: &String,
     collection_name: &'a str,
@@ -173,7 +181,7 @@ pub fn update_with_vcf<'a>(
     conn: &Connection,
     operation_conn: &Connection,
     coordinate_frame: impl Into<Option<&'a str>>,
-) -> Result<Operation, &'static str> {
+) -> Result<Operation, VcfError> {
     let coordinate_frame = coordinate_frame.into();
 
     let mut session = start_operation(conn);
@@ -459,12 +467,15 @@ pub fn update_with_vcf<'a>(
         conn,
         operation_conn,
         &mut session,
-        vcf_path,
-        FileTypes::VCF,
-        "vcf_addition",
+        OperationInfo {
+            file_path: vcf_path.to_string(),
+            file_type: FileTypes::VCF,
+            description: "vcf_addition".to_string(),
+        },
         &summary_str,
         None,
     )
+    .map_err(VcfError::OperationError)
 }
 
 #[cfg(test)]
@@ -744,7 +755,7 @@ mod tests {
                 op_conn,
                 None,
             ),
-            Err("No changes.")
+            Err(VcfError::OperationError(OperationError::NoChanges))
         )
     }
 
@@ -800,7 +811,7 @@ mod tests {
                 op_conn,
                 None,
             ),
-            Err("No changes.")
+            Err(VcfError::OperationError(OperationError::NoChanges))
         )
     }
 

@@ -1,9 +1,10 @@
 use crate::config::get_changeset_path;
-use crate::models::operations::{FileAddition, Operation, OperationSummary};
+use crate::models::operations::{FileAddition, Operation, OperationInfo, OperationSummary};
 use crate::models::traits::Query;
 use crate::operation_management;
 use crate::operation_management::{
     apply_changeset, end_operation, load_changeset, load_changeset_dependencies, start_operation,
+    OperationError,
 };
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -90,9 +91,11 @@ pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[Operati
             conn,
             op_conn,
             &mut session,
-            &patch.files.file_path,
-            patch.files.file_type,
-            &op_info.change_type,
+            OperationInfo {
+                file_path: patch.files.file_path.clone(),
+                file_type: patch.files.file_type,
+                description: op_info.change_type.clone(),
+            },
             &patch.summary.summary,
             None,
         ) {
@@ -100,9 +103,10 @@ pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[Operati
                 println!("Successfully applied operation.");
             }
             Err(e) => match e {
-                "Operation already exists." => println!("Operation already applied. Skipping."),
-                "No changes." => println!("No new changes present in operation. Skipping."),
-                _ => panic!("error is {e:?}"),
+                OperationError::OperationExists => println!("Operation already applied. Skipping."),
+                OperationError::NoChanges => {
+                    println!("No new changes present in operation. Skipping.")
+                }
             },
         }
     }

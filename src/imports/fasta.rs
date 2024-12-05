@@ -3,6 +3,7 @@ use std::str;
 
 use crate::calculate_hash;
 use crate::models::file_types::FileTypes;
+use crate::models::operations::OperationInfo;
 use crate::models::{
     block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
@@ -14,10 +15,17 @@ use crate::models::{
     sequence::Sequence,
     strand::Strand,
 };
-use crate::operation_management::{end_operation, start_operation};
+use crate::operation_management::{end_operation, start_operation, OperationError};
 use noodles::fasta;
 use rusqlite;
 use rusqlite::Connection;
+use thiserror::Error;
+
+#[derive(Debug, Error, PartialEq)]
+pub enum FastaError {
+    #[error("Operation Error: {0}")]
+    OperationError(#[from] OperationError),
+}
 
 pub fn import_fasta(
     fasta: &String,
@@ -25,7 +33,7 @@ pub fn import_fasta(
     shallow: bool,
     conn: &Connection,
     operation_conn: &Connection,
-) -> Result<Operation, &'static str> {
+) -> Result<Operation, FastaError> {
     let mut session = start_operation(conn);
 
     let mut reader = fasta::io::reader::Builder.build_from_path(fasta).unwrap();
@@ -104,12 +112,15 @@ pub fn import_fasta(
         conn,
         operation_conn,
         &mut session,
-        fasta,
-        FileTypes::Fasta,
-        "fasta_addition",
+        OperationInfo {
+            file_path: fasta.to_string(),
+            file_type: FileTypes::Fasta,
+            description: "fasta_addition".to_string(),
+        },
         &summary_str,
         None,
     )
+    .map_err(FastaError::OperationError)
 }
 
 #[cfg(test)]
@@ -215,7 +226,7 @@ mod tests {
                 conn,
                 op_conn,
             ),
-            Err("No changes.")
+            Err(FastaError::OperationError(OperationError::NoChanges))
         );
     }
 }

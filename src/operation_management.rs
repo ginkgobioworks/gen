@@ -8,7 +8,7 @@ use crate::models::file_types::FileTypes;
 use crate::models::metadata;
 use crate::models::node::Node;
 use crate::models::operations::{
-    Branch, FileAddition, Operation, OperationState, OperationSummary,
+    Branch, FileAddition, Operation, OperationInfo, OperationState, OperationSummary,
 };
 use crate::models::path::Path;
 use crate::models::sample::Sample;
@@ -27,6 +27,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::{fs, path::PathBuf, str};
+use thiserror::Error;
 /* General information
 
 Changesets from sqlite will be created in the order that operations are applied in the database,
@@ -34,6 +35,14 @@ so given our foreign key setup, we would not expect out of order table/row creat
 groups will always appear before block group edges, etc.
 
  */
+
+#[derive(Debug, PartialEq, Eq, Error)]
+pub enum OperationError {
+    #[error("No Changes")]
+    NoChanges,
+    #[error("Operation Already Exists")]
+    OperationExists,
+}
 
 pub enum FileMode {
     Read,
@@ -788,9 +797,11 @@ pub fn apply<'a>(
         conn,
         operation_conn,
         &mut session,
-        &format!("{op_hash}.cs"),
-        FileTypes::Changeset,
-        "changeset_application",
+        OperationInfo {
+            file_path: format!("{op_hash}.cs"),
+            file_type: FileTypes::Changeset,
+            description: "changeset_application".to_string(),
+        },
         &format!("Applied changeset {op_hash}."),
         force_hash,
     )
@@ -884,12 +895,10 @@ pub fn end_operation<'a>(
     conn: &Connection,
     operation_conn: &Connection,
     session: &mut session::Session,
-    file_path: &str,
-    file_type: FileTypes,
-    operation_description: &'a str,
+    operation_info: OperationInfo,
     summary_str: &str,
     force_hash: impl Into<Option<&'a str>>,
-) -> Result<Operation, &'static str> {
+) -> Result<Operation, OperationError> {
     let db_uuid = metadata::get_db_uuid(conn);
     // determine if this operation has already happened
     let mut output = Vec::new();
@@ -901,7 +910,7 @@ pub fn end_operation<'a>(
         hash.to_string()
     } else {
         if output.is_empty() {
-            return Err("No changes.");
+            return Err(OperationError::NoChanges);
         }
         let mut hasher = Sha256::new();
         hasher.update(&output[..]);
@@ -913,12 +922,16 @@ pub fn end_operation<'a>(
         .execute("SAVEPOINT new_operation;", [])
         .unwrap();
 
-    let change = FileAddition::create(operation_conn, file_path, file_type);
+    let change = FileAddition::create(
+        operation_conn,
+        &operation_info.file_path,
+        operation_info.file_type,
+    );
 
     match Operation::create(
         operation_conn,
         &db_uuid,
-        operation_description,
+        &operation_info.description,
         change.id,
         &hash,
     ) {
@@ -935,7 +948,7 @@ pub fn end_operation<'a>(
                 .execute("ROLLBACK TRANSACTION TO SAVEPOINT new_operation;", [])
                 .unwrap();
             if err.code == rusqlite::ErrorCode::ConstraintViolation {
-                Err("Operation already exists.")
+                Err(OperationError::OperationExists)
             } else {
                 panic!("something bad happened querying the database {details:?}");
             }
@@ -1428,9 +1441,11 @@ mod tests {
             conn,
             op_conn,
             &mut session,
-            "test",
-            FileTypes::Fasta,
-            "test",
+            OperationInfo {
+                file_path: "test".to_string(),
+                file_type: FileTypes::Fasta,
+                description: "test".to_string(),
+            },
             "test",
             None,
         )
