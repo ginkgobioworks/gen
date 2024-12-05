@@ -6,7 +6,7 @@ use crate::models::file_types::FileTypes;
 use crate::models::operations::OperationInfo;
 use crate::models::{
     block_group::BlockGroup,
-    block_group_edge::BlockGroupEdge,
+    block_group_edge::{BlockGroupEdge, BlockGroupEdgeData},
     collection::Collection,
     edge::Edge,
     node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
@@ -85,8 +85,6 @@ pub fn import_fasta(
             node_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge_out_of = Edge::create(
             conn,
@@ -96,10 +94,24 @@ pub fn import_fasta(
             PATH_END_NODE_ID,
             0,
             Strand::Forward,
-            0,
-            0,
         );
-        BlockGroupEdge::bulk_create(conn, block_group.id, &[edge_into.id, edge_out_of.id]);
+
+        let new_block_group_edges = vec![
+            BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: edge_into.id,
+                chromosome_index: 0,
+                phased: 0,
+            },
+            BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: edge_out_of.id,
+                chromosome_index: 0,
+                phased: 0,
+            },
+        ];
+
+        BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
         let path = Path::create(conn, &name, block_group.id, &[edge_into.id, edge_out_of.id]);
         summary.entry(path.name).or_insert(sequence_length);
     }

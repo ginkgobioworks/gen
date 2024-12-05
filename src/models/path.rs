@@ -94,17 +94,20 @@ impl Path {
         }
 
         // All path edges must be in the path's block group
-        let edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
-        let bg_edge_ids = edges.iter().map(|edge| &edge.id).collect::<HashSet<&_>>();
+        let augmented_edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
+        let bg_edge_ids = augmented_edges
+            .iter()
+            .map(|augmented_edge| &augmented_edge.edge.id)
+            .collect::<HashSet<&_>>();
         assert!(
             edge_id_set.is_subset(&bg_edge_ids),
             "Not all edges are in the block group ({})",
             block_group_id
         );
 
-        let edges_by_id = edges
+        let edges_by_id = augmented_edges
             .iter()
-            .map(|edge| (edge.id, edge))
+            .map(|augmented_edge| (augmented_edge.edge.id, augmented_edge.edge.clone()))
             .collect::<HashMap<_, _>>();
 
         // Two consecutive edges must share a node
@@ -662,7 +665,9 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
-    use crate::models::{block_group::BlockGroup, collection::Collection};
+    use crate::models::{
+        block_group::BlockGroup, block_group_edge::BlockGroupEdgeData, collection::Collection,
+    };
     use crate::test_helpers::get_connection;
 
     #[test]
@@ -683,8 +688,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
@@ -699,8 +702,6 @@ mod tests {
             node2_id,
             1,
             Strand::Forward,
-            0,
-            0,
         );
         let sequence3 = Sequence::new()
             .sequence_type("DNA")
@@ -715,8 +716,6 @@ mod tests {
             node3_id,
             1,
             Strand::Forward,
-            0,
-            0,
         );
         let sequence4 = Sequence::new()
             .sequence_type("DNA")
@@ -731,8 +730,6 @@ mod tests {
             node4_id,
             1,
             Strand::Forward,
-            0,
-            0,
         );
         let edge5 = Edge::create(
             conn,
@@ -742,12 +739,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
         let edge_ids = vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path = Path::create(conn, "chr1", block_group.id, &edge_ids);
         assert_eq!(path.sequence(conn), "ATCGATCGAAAAAAACCCCCCCGGGGGGG");
@@ -771,8 +775,6 @@ mod tests {
             PATH_END_NODE_ID,
             0,
             Strand::Reverse,
-            0,
-            0,
         );
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
@@ -787,8 +789,6 @@ mod tests {
             node1_id,
             0,
             Strand::Reverse,
-            0,
-            0,
         );
         let sequence3 = Sequence::new()
             .sequence_type("DNA")
@@ -803,8 +803,6 @@ mod tests {
             node2_id,
             0,
             Strand::Reverse,
-            0,
-            0,
         );
         let sequence4 = Sequence::new()
             .sequence_type("DNA")
@@ -819,8 +817,6 @@ mod tests {
             node3_id,
             0,
             Strand::Reverse,
-            0,
-            0,
         );
         let edge1 = Edge::create(
             conn,
@@ -830,12 +826,19 @@ mod tests {
             node4_id,
             0,
             Strand::Reverse,
-            0,
-            0,
         );
 
         let edge_ids = vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path = Path::create(conn, "chr1", block_group.id, &edge_ids);
         assert_eq!(path.sequence(conn), "CCCCCCCGGGGGGGTTTTTTTCGATCGAT");
@@ -866,8 +869,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
@@ -882,8 +883,6 @@ mod tests {
             node2_id,
             1,
             Strand::Forward,
-            0,
-            0,
         );
         let sequence3 = Sequence::new()
             .sequence_type("DNA")
@@ -898,8 +897,6 @@ mod tests {
             node3_id,
             1,
             Strand::Forward,
-            0,
-            0,
         );
         let sequence4 = Sequence::new()
             .sequence_type("DNA")
@@ -914,8 +911,6 @@ mod tests {
             node4_id,
             1,
             Strand::Forward,
-            0,
-            0,
         );
         let edge5 = Edge::create(
             conn,
@@ -925,12 +920,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
         let edge_ids = vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path = Path::create(conn, "chr1", block_group.id, &edge_ids);
         let tree = path.intervaltree(conn);
@@ -990,8 +992,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -1001,12 +1001,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
         let edge_ids = vec![edge1.id, edge2.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
@@ -1047,8 +1054,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -1058,13 +1063,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
         let edge_ids = vec![edge1.id, edge2.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
-
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
         let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
         let sequence2 = Sequence::new()
@@ -1080,8 +1091,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge4 = Edge::create(
             conn,
@@ -1091,12 +1100,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
         let edge_ids = vec![edge3.id, edge4.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path2 = Path::create(conn, "chr2", block_group.id, &edge_ids);
 
@@ -1135,8 +1151,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -1146,12 +1160,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
         let edge_ids = vec![edge1.id, edge2.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
@@ -1168,8 +1189,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge4 = Edge::create(
             conn,
@@ -1179,8 +1198,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge5 = Edge::create(
             conn,
@@ -1190,12 +1207,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
         let edge_ids = vec![edge3.id, edge4.id, edge5.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path2 = Path::create(conn, "chr2", block_group.id, &edge_ids);
 
@@ -1242,8 +1266,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -1253,12 +1275,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
         let edge_ids = vec![edge1.id, edge2.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
@@ -1275,8 +1304,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge5 = Edge::create(
             conn,
@@ -1286,12 +1313,19 @@ mod tests {
             node1_id,
             4,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id, edge4.id, edge5.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge4.id, edge5.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path2 = Path::create(
             conn,
@@ -1349,8 +1383,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -1360,12 +1392,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge1.id, edge2.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
@@ -1382,8 +1421,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge5 = Edge::create(
             conn,
@@ -1393,12 +1430,19 @@ mod tests {
             node1_id,
             6,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id, edge4.id, edge5.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge4.id, edge5.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path2 = Path::create(
             conn,
@@ -1455,8 +1499,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -1466,12 +1508,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge1.id, edge2.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
@@ -1483,12 +1532,19 @@ mod tests {
             node1_id,
             6,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id, edge4.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge4.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path2 = Path::create(
             conn,
@@ -1552,8 +1608,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -1563,8 +1617,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge3 = Edge::create(
             conn,
@@ -1574,12 +1626,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id, edge3.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge1.id, edge2.id, edge3.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
@@ -1596,8 +1655,6 @@ mod tests {
             node3_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge5 = Edge::create(
             conn,
@@ -1607,12 +1664,19 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge3.id, edge4.id, edge5.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge4.id, edge5.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path2 = Path::create(
             conn,
@@ -1676,8 +1740,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -1687,8 +1749,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge3 = Edge::create(
             conn,
@@ -1698,12 +1758,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id, edge3.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge1.id, edge2.id, edge3.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
@@ -1720,8 +1787,6 @@ mod tests {
             node3_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge5 = Edge::create(
             conn,
@@ -1731,12 +1796,19 @@ mod tests {
             node2_id,
             4,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge3.id, edge4.id, edge5.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge4.id, edge5.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path2 = Path::create(
             conn,
@@ -1799,8 +1871,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -1810,8 +1880,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge3 = Edge::create(
             conn,
@@ -1821,12 +1889,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id, edge3.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge1.id, edge2.id, edge3.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
@@ -1838,12 +1913,19 @@ mod tests {
             node2_id,
             4,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge3.id, edge4.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge4.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path2 = Path::create(
             conn,
@@ -1895,8 +1977,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -1906,12 +1986,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge1.id, edge2.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
@@ -1955,8 +2042,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -1966,12 +2051,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge1.id, edge2.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
@@ -1988,8 +2080,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge4 = Edge::create(
             conn,
@@ -1999,12 +2089,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge3.id, edge4.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge3.id, edge4.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path2 = Path::create(conn, "chr2", block_group.id, &edge_ids);
 
@@ -2048,8 +2145,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -2059,12 +2154,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
         let edge_ids = vec![edge1.id, edge2.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
@@ -2081,8 +2183,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge4 = Edge::create(
             conn,
@@ -2092,8 +2192,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge5 = Edge::create(
             conn,
@@ -2103,12 +2201,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
         let edge_ids = vec![edge3.id, edge4.id, edge5.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path2 = Path::create(conn, "chr2", block_group.id, &edge_ids);
 
@@ -2158,8 +2263,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -2169,12 +2272,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
         let edge_ids = vec![edge1.id, edge2.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
@@ -2191,8 +2301,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge5 = Edge::create(
             conn,
@@ -2202,12 +2310,19 @@ mod tests {
             node1_id,
             4,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id, edge4.id, edge5.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge4.id, edge5.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path2 = Path::create(
             conn,
@@ -2266,8 +2381,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -2277,12 +2390,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge1.id, edge2.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
@@ -2299,8 +2419,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge5 = Edge::create(
             conn,
@@ -2310,12 +2428,19 @@ mod tests {
             node1_id,
             6,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id, edge4.id, edge5.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge4.id, edge5.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path2 = Path::create(
             conn,
@@ -2379,8 +2504,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -2390,8 +2513,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge3 = Edge::create(
             conn,
@@ -2401,12 +2522,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id, edge3.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge1.id, edge2.id, edge3.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
@@ -2423,8 +2551,6 @@ mod tests {
             node3_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge5 = Edge::create(
             conn,
@@ -2434,12 +2560,19 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge3.id, edge4.id, edge5.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge4.id, edge5.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path2 = Path::create(
             conn,
@@ -2503,8 +2636,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -2514,8 +2645,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge3 = Edge::create(
             conn,
@@ -2525,12 +2654,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id, edge3.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge1.id, edge2.id, edge3.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
 
@@ -2542,12 +2678,19 @@ mod tests {
             node2_id,
             4,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge3.id, edge4.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge4.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path2 = Path::create(
             conn,
@@ -2592,8 +2735,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
@@ -2608,8 +2749,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge3 = Edge::create(
             conn,
@@ -2619,12 +2758,19 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id, edge3.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge1.id, edge2.id, edge3.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path1 = Path::create(conn, "chr1", block_group.id, &edge_ids);
         assert_eq!(path1.sequence(conn), "ATCGATCGAAAAAAAA");
@@ -2642,8 +2788,6 @@ mod tests {
             node3_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge5 = Edge::create(
             conn,
@@ -2653,12 +2797,19 @@ mod tests {
             node2_id,
             3,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge4.id, edge5.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge4.id, edge5.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path2 = path1.new_path_with(conn, 4, 11, &edge4, &edge5);
         assert_eq!(path2.sequence(conn), "ATCGCCCCCCCCAAAAA");
@@ -2671,8 +2822,6 @@ mod tests {
             node3_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge7 = Edge::create(
             conn,
@@ -2682,12 +2831,19 @@ mod tests {
             node1_id,
             7,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge6.id, edge7.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let edge_ids = [edge6.id, edge7.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         let path3 = path1.new_path_with(conn, 4, 7, &edge6, &edge7);
         assert_eq!(path3.sequence(conn), "ATCGCCCCCCCCGAAAAAAAA");
@@ -2711,8 +2867,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -2722,15 +2876,26 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let block_group_edges = vec![
+            BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: edge1.id,
+                chromosome_index: 0,
+                phased: 0,
+            },
+            BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: edge2.id,
+                chromosome_index: 0,
+                phased: 0,
+            },
+        ];
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
         // Should print a warning that there are duplicate edges, but continue
-        let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
+        let _path = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
     }
 
     #[test]
@@ -2752,8 +2917,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             conn,
@@ -2763,12 +2926,9 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id];
-
+        let edge_ids = [edge1.id, edge2.id];
         let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
     }
 
@@ -2792,8 +2952,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
@@ -2808,14 +2966,25 @@ mod tests {
             PATH_END_NODE_ID,
             -1,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let block_group_edges = vec![
+            BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: edge1.id,
+                chromosome_index: 0,
+                phased: 0,
+            },
+            BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: edge2.id,
+                chromosome_index: 0,
+                phased: 0,
+            },
+        ];
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
-        let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
+        let _path = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
     }
 
     #[test]
@@ -2838,8 +3007,6 @@ mod tests {
             node1_id,
             4,
             Strand::Forward,
-            0,
-            0,
         );
         let sequence2 = Sequence::new()
             .sequence_type("DNA")
@@ -2855,14 +3022,25 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let block_group_edges = vec![
+            BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: edge1.id,
+                chromosome_index: 0,
+                phased: 0,
+            },
+            BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: edge2.id,
+                chromosome_index: 0,
+                phased: 0,
+            },
+        ];
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
-        let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
+        let _path = Path::create(conn, "chr1", block_group.id, &[edge1.id, edge2.id]);
     }
 
     #[test]
@@ -2885,13 +3063,16 @@ mod tests {
             node1_id,
             2,
             Strand::Forward,
-            0,
-            0,
         );
 
-        let edge_ids = vec![edge1.id];
-        BlockGroupEdge::bulk_create(conn, block_group.id, &edge_ids);
+        let block_group_edges = vec![BlockGroupEdgeData {
+            block_group_id: block_group.id,
+            edge_id: edge1.id,
+            chromosome_index: 0,
+            phased: 0,
+        }];
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
-        let _path = Path::create(conn, "chr1", block_group.id, &edge_ids);
+        let _path = Path::create(conn, "chr1", block_group.id, &[edge1.id]);
     }
 }

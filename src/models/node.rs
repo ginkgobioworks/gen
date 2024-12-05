@@ -32,6 +32,7 @@ impl Node {
         node_hash: impl Into<Option<String>>,
     ) -> i64 {
         let node_hash = node_hash.into();
+
         let insert_statement =
             "INSERT INTO nodes (sequence_hash, hash) VALUES (?1, ?2) RETURNING (id);";
         let mut stmt = conn.prepare_cached(insert_statement).unwrap();

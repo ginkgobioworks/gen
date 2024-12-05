@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
 
 use crate::models::block_group::BlockGroup;
-use crate::models::block_group_edge::BlockGroupEdge;
+use crate::models::block_group_edge::{BlockGroupEdge, BlockGroupEdgeData};
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::file_types::FileTypes;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
@@ -277,8 +277,6 @@ pub fn update_with_gaf<'a, P>(
                     target_node_id: seq_node,
                     target_coordinate: 0,
                     target_strand: Strand::Forward,
-                    chromosome_index: 0,
-                    phased: 0,
                 });
                 new_edges.push(EdgeData {
                     source_node_id: seq_node,
@@ -287,8 +285,6 @@ pub fn update_with_gaf<'a, P>(
                     target_node_id: node,
                     target_coordinate: pos,
                     target_strand: strand,
-                    chromosome_index: 0,
-                    phased: 0,
                 });
             } else if change.right.is_empty() {
                 // we are inserting at the far right side
@@ -301,8 +297,6 @@ pub fn update_with_gaf<'a, P>(
                     target_node_id: seq_node,
                     target_coordinate: 0,
                     target_strand: Strand::Forward,
-                    chromosome_index: 0,
-                    phased: 0,
                 });
                 new_edges.push(EdgeData {
                     source_node_id: seq_node,
@@ -311,8 +305,6 @@ pub fn update_with_gaf<'a, P>(
                     target_node_id: PATH_END_NODE_ID,
                     target_coordinate: 0,
                     target_strand: Strand::Forward,
-                    chromosome_index: 0,
-                    phased: 0,
                 });
             } else {
                 // normal insert
@@ -325,8 +317,6 @@ pub fn update_with_gaf<'a, P>(
                     target_node_id: seq_node,
                     target_coordinate: 0,
                     target_strand: Strand::Forward,
-                    chromosome_index: 0,
-                    phased: 0,
                 });
 
                 let (node, strand, pos) = path_changes["right"];
@@ -338,19 +328,26 @@ pub fn update_with_gaf<'a, P>(
                     target_node_id: node,
                     target_coordinate: pos,
                     target_strand: strand,
-                    chromosome_index: 0,
-                    phased: 0,
                 });
             }
 
-            let edges = Edge::bulk_create(conn, &new_edges);
+            let edge_ids = Edge::bulk_create(conn, &new_edges);
             let bgs = if let Some(sample) = sample_name.clone() {
                 BlockGroup::query(conn, "select distinct bg.* from block_groups bg left join block_group_edges bge on (bg.id = bge.block_group_id) left join edges e on (e.id = bge.edge_id and (e.source_node_id in rarray(?3) or e.target_node_id in rarray(?3))) where collection_name = ?1 and sample_name = ?2", params!(collection_name.to_string(), sample, Rc::new(bg_nodes)))
             } else {
                 BlockGroup::query(conn, "select distinct bg.* from block_groups bg left join block_group_edges bge on (bg.id = bge.block_group_id) left join edges e on (e.id = bge.edge_id and (e.source_node_id in rarray(?2) or e.target_node_id in rarray(?2))) where collection_name = ?1 and sample_name is null", params!(collection_name.to_string(), Rc::new(bg_nodes)))
             };
             for bg in bgs.iter() {
-                BlockGroupEdge::bulk_create(conn, bg.id, &edges);
+                let new_block_group_edges = edge_ids
+                    .iter()
+                    .map(|edge_id| BlockGroupEdgeData {
+                        block_group_id: bg.id,
+                        edge_id: *edge_id,
+                        chromosome_index: 0,
+                        phased: 0,
+                    })
+                    .collect::<Vec<_>>();
+                BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
             }
         }
     }

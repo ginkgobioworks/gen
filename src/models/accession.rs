@@ -1,4 +1,4 @@
-use crate::models::edge::EdgeData;
+use crate::models::block_group_edge::AugmentedEdgeData;
 use crate::models::strand::Strand;
 use crate::models::traits::*;
 use rusqlite::types::Value;
@@ -60,15 +60,15 @@ impl From<&AccessionEdge> for AccessionEdgeData {
     }
 }
 
-impl From<&EdgeData> for AccessionEdgeData {
-    fn from(item: &EdgeData) -> Self {
+impl From<&AugmentedEdgeData> for AccessionEdgeData {
+    fn from(item: &AugmentedEdgeData) -> Self {
         AccessionEdgeData {
-            source_node_id: item.source_node_id,
-            source_coordinate: item.source_coordinate,
-            source_strand: item.source_strand,
-            target_node_id: item.target_node_id,
-            target_coordinate: item.target_coordinate,
-            target_strand: item.target_strand,
+            source_node_id: item.edge_data.source_node_id,
+            source_coordinate: item.edge_data.source_coordinate,
+            source_strand: item.edge_data.source_strand,
+            target_node_id: item.edge_data.target_node_id,
+            target_coordinate: item.edge_data.target_coordinate,
+            target_strand: item.edge_data.target_strand,
             chromosome_index: item.chromosome_index,
         }
     }
@@ -158,7 +158,7 @@ impl AccessionEdge {
         }) {
             Ok(res) => res,
             Err(rusqlite::Error::SqliteFailure(_err, _details)) => {
-                conn.query_row("select id from accession_edges where source_node_id = ?1 source_coordinate = ?2 source_strand = ?3 target_node_id = ?4 target_coordinate = ?5 target_strand = ?6 chromosome_index = ?7", params_from_iter(&placeholders), |row| {
+                conn.query_row("select id from accession_edges where source_node_id = ?1 source_coordinate = ?2 source_strand = ?3 target_node_id = ?4 target_coordinate = ?5 target_strand = ?6 chromosome_index = ?7;", params_from_iter(&placeholders), |row| {
                     row.get(0)
                 }).unwrap()
             }

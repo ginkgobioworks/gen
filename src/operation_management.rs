@@ -1,7 +1,7 @@
 use crate::config::get_changeset_path;
 use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group::BlockGroup;
-use crate::models::block_group_edge::BlockGroupEdge;
+use crate::models::block_group_edge::{BlockGroupEdge, BlockGroupEdgeData};
 use crate::models::collection::Collection;
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::file_types::FileTypes;
@@ -486,8 +486,6 @@ pub fn apply_changeset(
                             target_coordinate: item.new_value(5).unwrap().as_i64().unwrap(),
                             target_strand: Strand::column_result(item.new_value(6).unwrap())
                                 .unwrap(),
-                            chromosome_index: item.new_value(7).unwrap().as_i64().unwrap(),
-                            phased: item.new_value(8).unwrap().as_i64().unwrap(),
                         },
                     );
                 }
@@ -505,7 +503,9 @@ pub fn apply_changeset(
                     // make sure blockgroup_map has blockgroups for bg ids made in external changes.
                     let bg_id = item.new_value(1).unwrap().as_i64().unwrap();
                     let edge_id = item.new_value(2).unwrap().as_i64().unwrap();
-                    insert_block_group_edges.push((bg_id, edge_id));
+                    let chromosome_index = item.new_value(3).unwrap().as_i64().unwrap();
+                    let phased = item.new_value(4).unwrap().as_i64().unwrap();
+                    insert_block_group_edges.push((bg_id, edge_id, chromosome_index, phased));
                 }
                 "collections" => {
                     Collection::create(
@@ -586,8 +586,6 @@ pub fn apply_changeset(
                 target_node_id: *updated_target_node_id,
                 target_coordinate: edge.target_coordinate,
                 target_strand: edge.target_strand,
-                chromosome_index: edge.chromosome_index,
-                phased: edge.phased,
             },
         );
     }
@@ -609,10 +607,10 @@ pub fn apply_changeset(
         edge_id_map.insert(sorted_edge_ids[index], *edge_id);
     }
 
-    let mut block_group_edges: HashMap<i64, Vec<i64>> = HashMap::new();
+    let mut block_group_edges: HashMap<i64, Vec<(i64, i64, i64)>> = HashMap::new();
 
-    for (bg_id, edge_id) in insert_block_group_edges {
-        let new_bg_id = *dep_bg_map
+    for (bg_id, edge_id, chromosome_index, phased) in insert_block_group_edges {
+        let bg_id = *dep_bg_map
             .get(&bg_id)
             .or(blockgroup_map.get(&bg_id).or(Some(&bg_id)))
             .unwrap();
@@ -621,12 +619,22 @@ pub fn apply_changeset(
             .or(edge_id_map.get(&edge_id).or(Some(&edge_id)))
             .unwrap();
         block_group_edges
-            .entry(new_bg_id)
+            .entry(bg_id)
             .or_default()
-            .push(*edge_id);
+            .push((*edge_id, chromosome_index, phased));
     }
+
     for (bg_id, edges) in block_group_edges.iter() {
-        BlockGroupEdge::bulk_create(conn, *bg_id, edges);
+        let new_block_group_edges = edges
+            .iter()
+            .map(|(edge_id, chromosome_index, phased)| BlockGroupEdgeData {
+                block_group_id: *bg_id,
+                edge_id: *edge_id,
+                chromosome_index: *chromosome_index,
+                phased: *phased,
+            })
+            .collect::<Vec<_>>();
+        BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
     }
 
     for path in insert_paths {
@@ -1433,10 +1441,14 @@ mod tests {
             existing_node_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
-        BlockGroupEdge::bulk_create(conn, bg_id, &[new_edge.id]);
+        let block_group_edge = BlockGroupEdgeData {
+            block_group_id: bg_id,
+            edge_id: new_edge.id,
+            chromosome_index: 0,
+            phased: 0,
+        };
+        BlockGroupEdge::bulk_create(conn, &[block_group_edge]);
         let operation = end_operation(
             conn,
             op_conn,
@@ -1484,7 +1496,12 @@ mod tests {
             operation_conn,
         )
         .unwrap();
+        let block_group_count =
+            BlockGroup::query(conn, "select * from block_groups", rusqlite::params!()).len();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let block_group_edge_count =
+            BlockGroupEdge::query(conn, "select * from block_group_edges", rusqlite::params!())
+                .len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
         let op_count = Operation::query(
@@ -1493,7 +1510,9 @@ mod tests {
             rusqlite::params!(),
         )
         .len();
+        assert_eq!(block_group_count, 1);
         assert_eq!(edge_count, 2);
+        assert_eq!(block_group_edge_count, 2);
         assert_eq!(node_count, 3);
         assert_eq!(sample_count, 0);
         assert_eq!(op_count, 1);
@@ -1507,7 +1526,12 @@ mod tests {
             None,
         )
         .unwrap();
+        let block_group_count =
+            BlockGroup::query(conn, "select * from block_groups", rusqlite::params!()).len();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let block_group_edge_count =
+            BlockGroupEdge::query(conn, "select * from block_group_edges", rusqlite::params!())
+                .len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
         let op_count = Operation::query(
@@ -1516,15 +1540,24 @@ mod tests {
             rusqlite::params!(),
         )
         .len();
-        // NOTE: The edge count is 10 because of the following:
+        // NOTE: 3 block groups get created with the update from vcf, corresponding to the unknown, G1, and foo samples
+        assert_eq!(block_group_count, 4);
+        // NOTE: The edge count is 6 because of the following:
         // * 1 edge from the source node to the node created by the fasta import
         // * 1 edge from the node created by the fasta import to the sink node
-        // * 4 edges to and from nodes representing the first alt sequence.  Topologically there are
-        // just 2 edges, but there is redundancy because of phasing.  The same edges are used
-        // by each new sample in the vcf.
-        // * 4 edges to and from nodes representing the second alt sequence.  (One sample uses the
-        // reference part instead of the alt sequence in this case.)
-        assert_eq!(edge_count, 10);
+        // * 2 edges to and from the node representing the first alt sequence
+        // * 2 edges to and from the node representing the second alt sequence
+        assert_eq!(edge_count, 6);
+        // NOTE: The block group edge count is 20 because of the following:
+        // * 4 edges (one per block group) from the virtual source node
+        // * 4 edges (one per block group) to the virtual sink node
+        // * 4 block group edges for the G1 sample (2 edges to and from the node representing the first alt sequence, with both the 0 and 1 chromosome indices for those edges, 2 * 2 = 4)
+        // * 8 block group edges for the foo sample (2 edges to and from the node representing the
+        // first alt sequence, with both the 0 and 1 chromosome indices for those edges, 2 * 2 = 4;
+        // 2 edges to and from the node representing the second alt sequence, with both the 0 and 1
+        // chromosome indices for those edges, 2 * 2 = 4)
+        // 4 + 4 + 4 + 8 = 20
+        assert_eq!(block_group_edge_count, 20);
         // NOTE: The node count is 6:
         // * 2 source and sink nodes
         // * 1 node created by the initial fasta import
@@ -1542,7 +1575,12 @@ mod tests {
             ),
         );
 
+        let block_group_count =
+            BlockGroup::query(conn, "select * from block_groups", rusqlite::params!()).len();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let block_group_edge_count =
+            BlockGroupEdge::query(conn, "select * from block_group_edges", rusqlite::params!())
+                .len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
         let op_count = Operation::query(
@@ -1551,7 +1589,9 @@ mod tests {
             rusqlite::params!(),
         )
         .len();
+        assert_eq!(block_group_count, 1);
         assert_eq!(edge_count, 2);
+        assert_eq!(block_group_edge_count, 2);
         assert_eq!(node_count, 3);
         assert_eq!(sample_count, 0);
         assert_eq!(op_count, 2);
@@ -1566,7 +1606,12 @@ mod tests {
         let dependencies = load_changeset_dependencies(&op);
 
         apply_changeset(conn, &mut iter, &dependencies);
+        let block_group_count =
+            BlockGroup::query(conn, "select * from block_groups", rusqlite::params!()).len();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let block_group_edge_count =
+            BlockGroupEdge::query(conn, "select * from block_group_edges", rusqlite::params!())
+                .len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
         let op_count = Operation::query(
@@ -1575,7 +1620,9 @@ mod tests {
             rusqlite::params!(),
         )
         .len();
-        assert_eq!(edge_count, 10);
+        assert_eq!(block_group_count, 4);
+        assert_eq!(edge_count, 6);
+        assert_eq!(block_group_edge_count, 20);
         assert_eq!(node_count, 5);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
@@ -1742,6 +1789,9 @@ mod tests {
         )
         .unwrap();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let block_group_edge_count =
+            BlockGroupEdge::query(conn, "select * from block_group_edges", rusqlite::params!())
+                .len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
         let op_count = Operation::query(
@@ -1751,6 +1801,7 @@ mod tests {
         )
         .len();
         assert_eq!(edge_count, 2);
+        assert_eq!(block_group_edge_count, 2);
         assert_eq!(node_count, 3);
         assert_eq!(sample_count, 0);
         assert_eq!(op_count, 1);
@@ -1776,6 +1827,9 @@ mod tests {
         )
         .unwrap();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let block_group_edge_count =
+            BlockGroupEdge::query(conn, "select * from block_group_edges", rusqlite::params!())
+                .len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
         let op_count = Operation::query(
@@ -1784,7 +1838,8 @@ mod tests {
             rusqlite::params!(),
         )
         .len();
-        assert_eq!(edge_count, 10);
+        assert_eq!(edge_count, 6);
+        assert_eq!(block_group_edge_count, 20);
         assert_eq!(node_count, 5);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
@@ -1805,6 +1860,9 @@ mod tests {
 
         // ensure branch 1 operations have been undone
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let block_group_edge_count =
+            BlockGroupEdge::query(conn, "select * from block_group_edges", rusqlite::params!())
+                .len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
         let op_count = Operation::query(
@@ -1814,6 +1872,7 @@ mod tests {
         )
         .len();
         assert_eq!(edge_count, 2);
+        assert_eq!(block_group_edge_count, 2);
         assert_eq!(node_count, 3);
         assert_eq!(sample_count, 0);
         assert_eq!(op_count, 2);
@@ -1830,6 +1889,9 @@ mod tests {
         )
         .unwrap();
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let block_group_edge_count =
+            BlockGroupEdge::query(conn, "select * from block_group_edges", rusqlite::params!())
+                .len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
         let op_count = Operation::query(
@@ -1838,7 +1900,8 @@ mod tests {
             rusqlite::params!(),
         )
         .len();
-        assert_eq!(edge_count, 6);
+        assert_eq!(edge_count, 4);
+        assert_eq!(block_group_edge_count, 8);
         assert_eq!(node_count, 4);
         assert_eq!(sample_count, 1);
         assert_eq!(op_count, 3);
@@ -1857,6 +1920,9 @@ mod tests {
         );
 
         let edge_count = Edge::query(conn, "select * from edges", rusqlite::params!()).len();
+        let block_group_edge_count =
+            BlockGroupEdge::query(conn, "select * from block_group_edges", rusqlite::params!())
+                .len();
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len();
         let sample_count = Sample::query(conn, "select * from samples", rusqlite::params!()).len();
         let op_count = Operation::query(
@@ -1865,7 +1931,8 @@ mod tests {
             rusqlite::params!(),
         )
         .len();
-        assert_eq!(edge_count, 10);
+        assert_eq!(edge_count, 6);
+        assert_eq!(block_group_edge_count, 20);
         assert_eq!(node_count, 5);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 3);

@@ -288,11 +288,7 @@ pub fn update_with_vcf<'a>(
                         let key = (sample_path, ref_accession.clone());
 
                         accession_cache.entry(key).or_insert_with(|| {
-                            (
-                                ref_start,
-                                ref_start + record.reference_bases().len() as i64,
-                                chromosome_index,
-                            )
+                            (ref_start, ref_start + record.reference_bases().len() as i64)
                         });
                     }
                 }
@@ -370,7 +366,6 @@ pub fn update_with_vcf<'a>(
                                             (
                                                 ref_start,
                                                 ref_start + record.reference_bases().len() as i64,
-                                                chromosome_index,
                                             )
                                         });
                                     }
@@ -444,14 +439,13 @@ pub fn update_with_vcf<'a>(
             .entry(path.name)
             .or_insert(path_changes.len() as i64);
     }
-    for ((path, accession_name), (acc_start, acc_end, chromosome_index)) in accession_cache.iter() {
+    for ((path, accession_name), (acc_start, acc_end)) in accession_cache.iter() {
         BlockGroup::add_accession(
             conn,
             path,
             accession_name,
             *acc_start,
             *acc_end,
-            *chromosome_index as i64,
             &mut path_cache,
         );
     }

@@ -13,7 +13,7 @@ use crate::config::{get_or_create_gen_dir, BASE_DIR};
 use crate::graph::{GraphEdge, GraphNode};
 use crate::migrations::{run_migrations, run_operation_migrations};
 use crate::models::block_group::BlockGroup;
-use crate::models::block_group_edge::BlockGroupEdge;
+use crate::models::block_group_edge::{BlockGroupEdge, BlockGroupEdgeData};
 use crate::models::collection::Collection;
 use crate::models::edge::Edge;
 use crate::models::file_types::FileTypes;
@@ -100,8 +100,6 @@ pub fn setup_block_group(conn: &Connection) -> (i64, Path) {
         a_node_id,
         0,
         Strand::Forward,
-        0,
-        0,
     );
     let edge1 = Edge::create(
         conn,
@@ -111,8 +109,6 @@ pub fn setup_block_group(conn: &Connection) -> (i64, Path) {
         t_node_id,
         0,
         Strand::Forward,
-        0,
-        0,
     );
     let edge2 = Edge::create(
         conn,
@@ -122,8 +118,6 @@ pub fn setup_block_group(conn: &Connection) -> (i64, Path) {
         c_node_id,
         0,
         Strand::Forward,
-        0,
-        0,
     );
     let edge3 = Edge::create(
         conn,
@@ -133,8 +127,6 @@ pub fn setup_block_group(conn: &Connection) -> (i64, Path) {
         g_node_id,
         0,
         Strand::Forward,
-        0,
-        0,
     );
     let edge4 = Edge::create(
         conn,
@@ -144,14 +136,42 @@ pub fn setup_block_group(conn: &Connection) -> (i64, Path) {
         PATH_END_NODE_ID,
         0,
         Strand::Forward,
-        0,
-        0,
     );
-    BlockGroupEdge::bulk_create(
-        conn,
-        block_group.id,
-        &[edge0.id, edge1.id, edge2.id, edge3.id, edge4.id],
-    );
+
+    let block_group_edges = vec![
+        BlockGroupEdgeData {
+            block_group_id: block_group.id,
+            edge_id: edge0.id,
+            chromosome_index: 0,
+            phased: 0,
+        },
+        BlockGroupEdgeData {
+            block_group_id: block_group.id,
+            edge_id: edge1.id,
+            chromosome_index: 0,
+            phased: 0,
+        },
+        BlockGroupEdgeData {
+            block_group_id: block_group.id,
+            edge_id: edge2.id,
+            chromosome_index: 0,
+            phased: 0,
+        },
+        BlockGroupEdgeData {
+            block_group_id: block_group.id,
+            edge_id: edge3.id,
+            chromosome_index: 0,
+            phased: 0,
+        },
+        BlockGroupEdgeData {
+            block_group_id: block_group.id,
+            edge_id: edge4.id,
+            chromosome_index: 0,
+            phased: 0,
+        },
+    ];
+    BlockGroupEdge::bulk_create(conn, &block_group_edges);
+
     let path = Path::create(
         conn,
         "chr1",

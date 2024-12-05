@@ -1,5 +1,5 @@
 use crate::models::block_group::{BlockGroup, PathChange};
-use crate::models::block_group_edge::BlockGroupEdge;
+use crate::models::block_group_edge::{BlockGroupEdge, BlockGroupEdgeData};
 use crate::models::collection::Collection;
 use crate::models::edge::Edge;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
@@ -75,8 +75,6 @@ where
                     node_id,
                     0,
                     Strand::Forward,
-                    0,
-                    0,
                 );
                 let edge_out_of = Edge::create(
                     conn,
@@ -86,10 +84,22 @@ where
                     PATH_END_NODE_ID,
                     0,
                     Strand::Forward,
-                    0,
-                    0,
                 );
-                BlockGroupEdge::bulk_create(conn, block_group.id, &[edge_into.id, edge_out_of.id]);
+                let new_block_group_edges = vec![
+                    BlockGroupEdgeData {
+                        block_group_id: block_group.id,
+                        edge_id: edge_into.id,
+                        chromosome_index: 0,
+                        phased: 0,
+                    },
+                    BlockGroupEdgeData {
+                        block_group_id: block_group.id,
+                        edge_id: edge_out_of.id,
+                        chromosome_index: 0,
+                        phased: 0,
+                    },
+                ];
+                BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
                 let path = Path::create(
                     conn,
                     contig,
