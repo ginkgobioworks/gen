@@ -213,12 +213,13 @@ where
             Err(e) => return Err(GenBankError::ParseError(format!("Failed to parse {}", e))),
         }
     }
+    let filename = operation_info.file_path.clone();
     end_operation(
         conn,
         op_conn,
         &mut session,
         operation_info,
-        "something",
+        &format!("Genbank Import of {filename}",),
         None,
     )
     .map_err(GenBankError::OperationError)
