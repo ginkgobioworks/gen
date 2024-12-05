@@ -70,8 +70,6 @@ fn get_path_nodes(
                     || (path_edges.contains(&(node.node_id, target_node.node_id)))
                 {
                     path_graph.add_edge(node, target_node, *weight);
-                } else {
-                    println!("invalid edge {_src_node:?} {target_node:?}");
                 }
             }
         }
@@ -219,8 +217,6 @@ pub fn export_genbank(
         }
         writer.write(&seq).unwrap();
     }
-
-    println!("Exported to file {}", filename.display());
 }
 
 #[cfg(test)]
@@ -240,6 +236,7 @@ mod tests {
 
     #[test]
     fn test_import_then_export_insertion() {
+        setup_gen_dir();
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
@@ -267,6 +264,7 @@ mod tests {
 
     #[test]
     fn test_import_then_export_replacement() {
+        setup_gen_dir();
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
