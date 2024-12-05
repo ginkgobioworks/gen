@@ -546,6 +546,7 @@ mod tests {
 
         #[test]
         fn test_parses_multiple_changes() {
+            setup_gen_dir();
             let conn = &get_connection(None);
             let db_uuid = metadata::get_db_uuid(conn);
             let op_conn = &get_operation_connection(None);
