@@ -350,7 +350,6 @@ mod tests {
     #[cfg(test)]
     mod geneious_genbanks {
         use super::*;
-        use crate::test_helpers::save_graph;
 
         #[test]
         fn test_parses_insertion() {
@@ -573,7 +572,6 @@ mod tests {
                 .map(|s| s.to_lowercase())
                 .collect();
             let g = BlockGroup::get_graph(conn, 1);
-            save_graph(&g, "mc.dot");
             let unchanged_seq = get_unmodified_sequence();
             assert!(sequences.contains(&mod_seq));
             assert!(sequences.contains(&unchanged_seq));
