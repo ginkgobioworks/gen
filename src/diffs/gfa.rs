@@ -205,7 +205,7 @@ mod tests {
     use crate::imports::gfa::import_gfa;
     use crate::models::{
         block_group::BlockGroup,
-        block_group_edge::BlockGroupEdge,
+        block_group_edge::{BlockGroupEdge, BlockGroupEdgeData},
         collection::Collection,
         edge::Edge,
         node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
@@ -243,8 +243,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             &conn,
@@ -254,8 +252,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge3 = Edge::create(
             &conn,
@@ -265,18 +261,21 @@ mod tests {
             PATH_END_NODE_ID,
             0,
             Strand::Forward,
-            0,
-            0,
         );
 
-        BlockGroupEdge::bulk_create(&conn, block_group.id, &[edge1.id, edge2.id, edge3.id]);
+        let edge_ids = [edge1.id, edge2.id, edge3.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|&edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
-        let _path1 = Path::create(
-            &conn,
-            "parent",
-            block_group.id,
-            &[edge1.id, edge2.id, edge3.id],
-        );
+        let _path1 = Path::create(&conn, "parent", block_group.id, &edge_ids);
 
         // Set up child
         let _child_sample = Sample::get_or_create_child(&conn, collection_name, "child", None);
@@ -293,8 +292,6 @@ mod tests {
             node3_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge5 = Edge::create(
             &conn,
@@ -304,13 +301,21 @@ mod tests {
             node1_id,
             6,
             Strand::Forward,
-            0,
-            0,
         );
 
         let child_block_groups = Sample::get_block_groups(&conn, collection_name, Some("child"));
         let child_block_group = child_block_groups.first().unwrap();
-        BlockGroupEdge::bulk_create(&conn, child_block_group.id, &[edge4.id, edge5.id]);
+        let child_edge_ids = [edge4.id, edge5.id];
+        let child_block_group_edges = child_edge_ids
+            .iter()
+            .map(|&edge_id| BlockGroupEdgeData {
+                block_group_id: child_block_group.id,
+                edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(&conn, &child_block_group_edges);
         let original_child_path = BlockGroup::get_current_path(&conn, child_block_group.id);
         let _child_path = original_child_path.new_path_with(&conn, 2, 6, &edge4, &edge5);
 
@@ -351,8 +356,6 @@ mod tests {
             node4_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge7 = Edge::create(
             &conn,
@@ -362,14 +365,22 @@ mod tests {
             node2_id,
             6,
             Strand::Forward,
-            0,
-            0,
         );
 
         let grandchild_block_groups =
             Sample::get_block_groups(&conn, collection_name, Some("grandchild"));
         let grandchild_block_group = grandchild_block_groups.first().unwrap();
-        BlockGroupEdge::bulk_create(&conn, grandchild_block_group.id, &[edge6.id, edge7.id]);
+        let grandchild_edge_ids = [edge6.id, edge7.id];
+        let grandchild_block_group_edges = grandchild_edge_ids
+            .iter()
+            .map(|&edge_id| BlockGroupEdgeData {
+                block_group_id: grandchild_block_group.id,
+                edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(&conn, &grandchild_block_group_edges);
         let original_grandchild_path =
             BlockGroup::get_current_path(&conn, grandchild_block_group.id);
         let _grandchild_path =
@@ -448,8 +459,6 @@ mod tests {
             node1_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge2 = Edge::create(
             &conn,
@@ -459,11 +468,19 @@ mod tests {
             PATH_END_NODE_ID,
             0,
             Strand::Forward,
-            0,
-            0,
         );
 
-        BlockGroupEdge::bulk_create(&conn, block_group.id, &[edge1.id, edge2.id]);
+        let edge_ids = [edge1.id, edge2.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|&edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
         let _path1 = Path::create(&conn, "parent", block_group.id, &[edge1.id, edge2.id]);
 
@@ -482,8 +499,6 @@ mod tests {
             node2_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge4 = Edge::create(
             &conn,
@@ -493,13 +508,21 @@ mod tests {
             node1_id,
             6,
             Strand::Forward,
-            0,
-            0,
         );
 
         let child_block_groups = Sample::get_block_groups(&conn, collection_name, Some("child"));
         let child_block_group = child_block_groups.first().unwrap();
-        BlockGroupEdge::bulk_create(&conn, child_block_group.id, &[edge3.id, edge4.id]);
+        let child_edge_ids = [edge3.id, edge4.id];
+        let child_block_group_edges = child_edge_ids
+            .iter()
+            .map(|&edge_id| BlockGroupEdgeData {
+                block_group_id: child_block_group.id,
+                edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(&conn, &child_block_group_edges);
         let original_child_path = BlockGroup::get_current_path(&conn, child_block_group.id);
         let _child_path = original_child_path.new_path_with(&conn, 2, 6, &edge3, &edge4);
 
@@ -540,8 +563,6 @@ mod tests {
             node3_id,
             0,
             Strand::Forward,
-            0,
-            0,
         );
         let edge6 = Edge::create(
             &conn,
@@ -551,14 +572,22 @@ mod tests {
             node1_id,
             10,
             Strand::Forward,
-            0,
-            0,
         );
 
         let grandchild_block_groups =
             Sample::get_block_groups(&conn, collection_name, Some("grandchild"));
         let grandchild_block_group = grandchild_block_groups.first().unwrap();
-        BlockGroupEdge::bulk_create(&conn, grandchild_block_group.id, &[edge5.id, edge6.id]);
+        let grandchild_edge_ids = [edge5.id, edge6.id];
+        let grandchild_block_group_edges = grandchild_edge_ids
+            .iter()
+            .map(|&edge_id| BlockGroupEdgeData {
+                block_group_id: grandchild_block_group.id,
+                edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(&conn, &grandchild_block_group_edges);
         let original_grandchild_path =
             BlockGroup::get_current_path(&conn, grandchild_block_group.id);
         let _grandchild_path = original_grandchild_path.new_path_with(&conn, 4, 10, &edge5, &edge6);
