@@ -3040,7 +3040,7 @@ mod tests {
             8,
             Strand::Forward,
             PATH_END_NODE_ID,
-            0,
+            -1,
             Strand::Forward,
         );
 
