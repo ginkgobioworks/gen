@@ -157,7 +157,7 @@ where
                     seq_model = seq_model.sequence_type(mol_type);
                 }
                 let sequence = seq_model.save(conn);
-                let node_id = Node::create(
+                let wt_node_id = Node::create(
                     conn,
                     &sequence.hash,
                     calculate_hash(&format!(
@@ -172,13 +172,13 @@ where
                     PATH_START_NODE_ID,
                     0,
                     Strand::Forward,
-                    node_id,
+                    wt_node_id,
                     0,
                     Strand::Forward,
                 );
                 let edge_out_of = Edge::create(
                     conn,
-                    node_id,
+                    wt_node_id,
                     sequence.length,
                     Strand::Forward,
                     PATH_END_NODE_ID,
@@ -211,48 +211,76 @@ where
                     let start = *start;
                     let end = *end;
                     let change_seq = match edit_type.as_str() {
-                        "Insertion" => Sequence::new()
-                            .sequence(new_seq)
-                            .name(&format!("Geneious type: Editing History {edit_type}"))
-                            .sequence_type("DNA")
-                            .save(conn),
-                        "Deletion" | "Replacement" => Sequence::new()
-                            .sequence(new_seq)
-                            .name(&format!("Geneious type: Editing History {edit_type}"))
-                            .sequence_type("DNA")
-                            .save(conn),
+                        "Insertion" => Some(
+                            Sequence::new()
+                                .sequence(new_seq)
+                                .name(&format!("Geneious type: Editing History {edit_type}"))
+                                .sequence_type("DNA")
+                                .save(conn),
+                        ),
+                        "Replacement" => Some(
+                            Sequence::new()
+                                .sequence(new_seq)
+                                .name(&format!("Geneious type: Editing History {edit_type}"))
+                                .sequence_type("DNA")
+                                .save(conn),
+                        ),
+                        "Deletion" => None,
                         _ => {
                             panic!("Unknown edit type");
                         }
                     };
-                    let change_node = Node::create(
-                        conn,
-                        &change_seq.hash,
-                        calculate_hash(&format!(
-                            "{parent_hash}:{start}-{end}->{new_hash}",
-                            parent_hash = &sequence.hash,
-                            new_hash = &change_seq.hash,
-                        )),
-                    );
-                    let change = PathChange {
-                        block_group_id: block_group.id,
-                        path: path.clone(),
-                        path_accession: None,
-                        start,
-                        end,
-                        block: PathBlock {
-                            id: 0,
-                            node_id: change_node,
-                            block_sequence: (**new_seq).clone(),
-                            sequence_start: 0,
-                            sequence_end: change_seq.length,
-                            path_start: start,
-                            // TODO -- do i do end + len or is this the position on path we are changing?
-                            path_end: end + change_seq.length,
-                            strand: Strand::Forward,
-                        },
-                        chromosome_index: 0,
-                        phased: 0,
+                    let change = if let Some(change_seq) = change_seq {
+                        let change_node = Node::create(
+                            conn,
+                            &change_seq.hash,
+                            calculate_hash(&format!(
+                                "{parent_hash}:{start}-{end}->{new_hash}",
+                                parent_hash = &sequence.hash,
+                                new_hash = &change_seq.hash,
+                            )),
+                        );
+                        PathChange {
+                            block_group_id: block_group.id,
+                            path: path.clone(),
+                            path_accession: None,
+                            start,
+                            end,
+                            block: PathBlock {
+                                id: 0,
+                                node_id: change_node,
+                                block_sequence: (**new_seq).clone(),
+                                sequence_start: 0,
+                                sequence_end: change_seq.length,
+                                path_start: start,
+                                // TODO -- do i do end + len or is this the position on path we are changing?
+                                path_end: end + change_seq.length,
+                                strand: Strand::Forward,
+                            },
+                            chromosome_index: 0,
+                            phased: 0,
+                        }
+                    } else {
+                        // it's a deletion
+                        PathChange {
+                            block_group_id: block_group.id,
+                            path: path.clone(),
+                            path_accession: None,
+                            start,
+                            end,
+                            block: PathBlock {
+                                id: 0,
+                                node_id: wt_node_id,
+                                block_sequence: "".to_string(),
+                                sequence_start: 0,
+                                sequence_end: 0,
+                                path_start: start,
+                                path_end: end,
+                                strand: Strand::Forward,
+                            },
+                            chromosome_index: 0,
+                            phased: 0,
+                        }
                     };
                     let tree = path.intervaltree(conn);
                     BlockGroup::insert_change(conn, &change, &tree);
@@ -571,7 +599,6 @@ mod tests {
                 .iter()
                 .map(|s| s.to_lowercase())
                 .collect();
-            let g = BlockGroup::get_graph(conn, 1);
             let unchanged_seq = get_unmodified_sequence();
             assert!(sequences.contains(&mod_seq));
             assert!(sequences.contains(&unchanged_seq));
