@@ -406,6 +406,7 @@ mod tests {
             op_conn,
             BufReader::new(file),
             None,
+            false,
             OperationInfo {
                 file_path: path.to_str().unwrap().to_string(),
                 file_type: FileTypes::GenBank,
@@ -434,6 +435,7 @@ mod tests {
             op_conn,
             BufReader::new(file),
             None,
+            false,
             OperationInfo {
                 file_path: path.to_str().unwrap().to_string(),
                 file_type: FileTypes::GenBank,
@@ -462,6 +464,7 @@ mod tests {
             op_conn,
             BufReader::new(file),
             None,
+            false,
             OperationInfo {
                 file_path: path.to_str().unwrap().to_string(),
                 file_type: FileTypes::GenBank,
@@ -472,6 +475,7 @@ mod tests {
         let tmp_dir = tempfile::tempdir().unwrap().into_path();
         let filename = tmp_dir.join("out.gb");
         export_genbank(conn, "", None, &filename);
+
         compare_genbanks(&path, &filename);
     }
 

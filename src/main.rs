@@ -83,6 +83,10 @@ enum Commands {
         /// A VCF file to incorporate
         #[arg(short, long)]
         vcf: Option<String>,
+        /// A GenBank file to update from
+        #[arg(long)]
+        gb: Option<String>,
+        /// If no genotype is provided, enter the genotype to assign variants
         /// If no genotype is provided, enter the genotype to assign variants
         #[arg(short, long)]
         genotype: Option<String>,
@@ -346,6 +350,7 @@ fn main() {
                     &operation_conn,
                     &f,
                     name.deref(),
+                    false,
                     OperationInfo {
                         file_path: gb.clone(),
                         file_type: FileTypes::GenBank,
@@ -367,6 +372,7 @@ fn main() {
             name,
             fasta,
             vcf,
+            gb,
             library,
             parts,
             genotype,
@@ -424,6 +430,20 @@ fn main() {
                     coordinate_frame.as_deref(),
                 )
                 .unwrap();
+            } else if let Some(gb_path) = gb {
+                let f = File::open(gb_path).unwrap();
+                let _ = import_genbank(
+                    &conn,
+                    &operation_conn,
+                    &f,
+                    name.deref(),
+                    true,
+                    OperationInfo {
+                        file_path: gb_path.clone(),
+                        file_type: FileTypes::GenBank,
+                        description: "Update from GenBank".to_string(),
+                    },
+                );
             } else {
                 panic!("Unknown file type provided for update.");
             }

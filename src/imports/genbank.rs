@@ -7,11 +7,12 @@ use crate::models::operations::{Operation, OperationInfo};
 use crate::models::path::{Path, PathBlock};
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
+use crate::models::traits::Query;
 use crate::operation_management::{end_operation, start_operation, OperationError};
 use crate::{calculate_hash, normalize_string};
 use gb_io::{reader, seq::Location};
 use regex::{Error as RegexError, Regex};
-use rusqlite::Connection;
+use rusqlite::{params, types::Value, Connection};
 use std::io::Read;
 use std::str;
 use thiserror::Error;
@@ -33,6 +34,7 @@ pub fn import_genbank<'a, R>(
     op_conn: &Connection,
     data: R,
     collection: impl Into<Option<&'a str>>,
+    update: bool,
     operation_info: OperationInfo,
 ) -> Result<Operation, GenBankError>
 where
@@ -166,36 +168,52 @@ where
                         hash = sequence.hash
                     )),
                 );
-                let block_group = BlockGroup::create(conn, &collection.name, None, contig);
-                let edge_into = Edge::create(
-                    conn,
-                    PATH_START_NODE_ID,
-                    0,
-                    Strand::Forward,
-                    wt_node_id,
-                    0,
-                    Strand::Forward,
-                    0,
-                    0,
-                );
-                let edge_out_of = Edge::create(
-                    conn,
-                    wt_node_id,
-                    sequence.length,
-                    Strand::Forward,
-                    PATH_END_NODE_ID,
-                    0,
-                    Strand::Forward,
-                    0,
-                    0,
-                );
-                BlockGroupEdge::bulk_create(conn, block_group.id, &[edge_into.id, edge_out_of.id]);
-                let path = Path::create(
-                    conn,
-                    contig,
-                    block_group.id,
-                    &[edge_into.id, edge_out_of.id],
-                );
+
+                let (path, block_group) = if update {
+                    let block_group = BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null AND name = ?2", params![Value::from(collection.name.clone()), Value::from(contig.clone())]).expect("No block group exists.");
+                    let paths = Path::query(
+                        conn,
+                        "select * from paths   where block_group_id = ?1 AND name = ?2",
+                        params![Value::from(block_group.id), Value::from(contig.clone())],
+                    );
+                    (paths[0].clone(), block_group)
+                } else {
+                    let block_group = BlockGroup::create(conn, &collection.name, None, contig);
+                    let edge_into = Edge::create(
+                        conn,
+                        PATH_START_NODE_ID,
+                        0,
+                        Strand::Forward,
+                        wt_node_id,
+                        0,
+                        Strand::Forward,
+                        0,
+                        0,
+                    );
+                    let edge_out_of = Edge::create(
+                        conn,
+                        wt_node_id,
+                        sequence.length,
+                        Strand::Forward,
+                        PATH_END_NODE_ID,
+                        0,
+                        Strand::Forward,
+                        0,
+                        0,
+                    );
+                    BlockGroupEdge::bulk_create(
+                        conn,
+                        block_group.id,
+                        &[edge_into.id, edge_out_of.id],
+                    );
+                    let path = Path::create(
+                        conn,
+                        contig,
+                        block_group.id,
+                        &[edge_into.id, edge_out_of.id],
+                    );
+                    (path, block_group)
+                };
 
                 for (start, end, _old_seq, new_seq, edit_type) in wt_changes.iter() {
                     let start = *start;
@@ -327,6 +345,7 @@ mod tests {
                 op_conn,
                 BufReader::new("this is not valid".as_bytes()),
                 None,
+                false,
                 OperationInfo {
                     file_path: "".to_string(),
                     file_type: FileTypes::GenBank,
@@ -355,6 +374,7 @@ mod tests {
             op_conn,
             BufReader::new(file),
             None,
+            false,
             OperationInfo {
                 file_path: path.to_str().unwrap().to_string(),
                 file_type: FileTypes::GenBank,
@@ -385,6 +405,7 @@ mod tests {
                 op_conn,
                 BufReader::new(file),
                 None,
+                false,
                 OperationInfo {
                     file_path: "".to_string(),
                     file_type: FileTypes::GenBank,
@@ -419,6 +440,7 @@ mod tests {
                 op_conn,
                 BufReader::new(file),
                 None,
+                false,
                 OperationInfo {
                     file_path: "".to_string(),
                     file_type: FileTypes::GenBank,
@@ -470,6 +492,7 @@ mod tests {
                 op_conn,
                 BufReader::new(file),
                 None,
+                false,
                 OperationInfo {
                     file_path: "".to_string(),
                     file_type: FileTypes::GenBank,
@@ -524,6 +547,7 @@ mod tests {
                 op_conn,
                 BufReader::new(file),
                 None,
+                false,
                 OperationInfo {
                     file_path: "".to_string(),
                     file_type: FileTypes::GenBank,
@@ -576,6 +600,7 @@ mod tests {
                 op_conn,
                 BufReader::new(file),
                 None,
+                false,
                 OperationInfo {
                     file_path: "".to_string(),
                     file_type: FileTypes::GenBank,
