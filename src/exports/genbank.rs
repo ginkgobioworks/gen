@@ -279,7 +279,8 @@ pub fn export_genbank(
                         {
                             // if we're not contiguous, it's a deletion
                             offset -= next_node.length();
-                            seq.seq
+                            let original_bases = seq
+                                .seq
                                 .splice(
                                     upos..upos + next_node.length() as usize,
                                     sequence.into_bytes(),
@@ -296,7 +297,10 @@ pub fn export_genbank(
                                 QualifierKey::from("note"),
                                 Some("Geneious type: Editing History Deletion".to_string()),
                             ));
-                            qualifiers.push((QualifierKey::from("Original_Bases"), None));
+                            qualifiers.push((
+                                QualifierKey::from("Original_Bases"),
+                                Some(str::from_utf8(&original_bases).unwrap().to_string()),
+                            ));
                         }
                         if let Some(l) = location {
                             seq.features.push(gb_io::seq::Feature {
@@ -354,6 +358,7 @@ mod tests {
                             a_features.push((
                                 feature.location.find_bounds().unwrap(),
                                 original_bases.clone(),
+                                v.clone(),
                             ))
                         }
                     }
@@ -362,7 +367,7 @@ mod tests {
         }
 
         let mut b_features = vec![];
-        for feature in a[0].features.iter() {
+        for feature in b[0].features.iter() {
             for (k, v) in feature.qualifiers.iter() {
                 if k == "note" {
                     if let Some(v) = v {
@@ -376,13 +381,13 @@ mod tests {
                             b_features.push((
                                 feature.location.find_bounds().unwrap(),
                                 original_bases.clone(),
+                                v.clone(),
                             ))
                         }
                     }
                 }
             }
         }
-
         assert_eq!(a_features, b_features);
     }
 
