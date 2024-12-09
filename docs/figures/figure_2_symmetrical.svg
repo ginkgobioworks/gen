@@ -19,7 +19,7 @@
 <title>1.0</title>
 <polygon fill="none" stroke="black" points="90,-43.25 90,-65.75 162,-65.75 162,-43.25 90,-43.25"/>
 <text text-anchor="start" x="93" y="-50.45" font-family="Courier,monospace" font-weight="bold" font-size="14.00">ATGTATAC</text>
-<text text-anchor="start" x="113.25" y="-31.75" font-family="Times,serif" font-size="10.00">1.0 &#45; 7</text>
+<text text-anchor="start" x="115.12" y="-31.75" font-family="Times,serif" font-size="10.00">1:0&#45;7</text>
 </g>
 <!-- start&#45;&gt;1.0 -->
 <g id="edge1" class="edge">
@@ -30,47 +30,47 @@
 <!-- 1.8 -->
 <g id="node3" class="node">
 <title>1.8</title>
-<polygon fill="none" stroke="black" points="213.75,-71.25 213.75,-93.75 236.25,-93.75 236.25,-71.25 213.75,-71.25"/>
+<polygon fill="none" stroke="black" points="212.12,-71.25 212.12,-93.75 237.88,-93.75 237.88,-71.25 212.12,-71.25"/>
 <text text-anchor="start" x="216.75" y="-77.45" font-family="Courier,monospace" font-size="14.00">AT</text>
-<text text-anchor="start" x="218.62" y="-59.75" font-family="Times,serif" font-size="10.00">1.8</text>
+<text text-anchor="start" x="214.12" y="-59.75" font-family="Times,serif" font-size="10.00">1:8&#45;9</text>
 </g>
 <!-- 1.0&#45;&gt;1.8 -->
 <g id="edge2" class="edge">
 <title>1.0:e&#45;&gt;1.8:w</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M162,-54.5C183.33,-54.5 186.47,-73.7 201.55,-80.3"/>
-<polygon fill="black" stroke="black" points="200.78,-83.72 211.26,-82.21 202.13,-76.85 200.78,-83.72"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M162,-54.5C182.81,-54.5 185.61,-73.7 200.23,-80.3"/>
+<polygon fill="black" stroke="black" points="199.15,-83.66 209.64,-82.2 200.53,-76.79 199.15,-83.66"/>
 </g>
 <!-- 2.0 -->
 <g id="node4" class="node">
 <title>2.0</title>
-<polygon fill="none" stroke="black" points="213.75,-15.25 213.75,-37.75 236.25,-37.75 236.25,-15.25 213.75,-15.25"/>
+<polygon fill="none" stroke="black" points="212.12,-15.25 212.12,-37.75 237.88,-37.75 237.88,-15.25 212.12,-15.25"/>
 <text text-anchor="start" x="216.75" y="-22.45" font-family="Courier,monospace" font-weight="bold" font-size="14.00">TG</text>
-<text text-anchor="start" x="218.62" y="-3.75" font-family="Times,serif" font-size="10.00">2.0</text>
+<text text-anchor="start" x="214.12" y="-3.75" font-family="Times,serif" font-size="10.00">2:0&#45;1</text>
 </g>
 <!-- 1.0&#45;&gt;2.0 -->
 <g id="edge3" class="edge">
 <title>1.0:e&#45;&gt;2.0:w</title>
-<path fill="none" stroke="black" d="M162,-54.5C183.33,-54.5 186.47,-35.3 201.55,-28.7"/>
-<polygon fill="black" stroke="black" points="202.13,-32.15 211.26,-26.79 200.78,-25.28 202.13,-32.15"/>
+<path fill="none" stroke="black" d="M162,-54.5C182.81,-54.5 185.61,-35.3 200.23,-28.7"/>
+<polygon fill="black" stroke="black" points="200.53,-32.21 209.64,-26.8 199.15,-25.34 200.53,-32.21"/>
 </g>
 <!-- 1.10 -->
 <g id="node5" class="node">
 <title>1.10</title>
 <polygon fill="none" stroke="black" points="288,-43.25 288,-65.75 343.5,-65.75 343.5,-43.25 288,-43.25"/>
 <text text-anchor="start" x="291" y="-50.45" font-family="Courier,monospace" font-weight="bold" font-size="14.00">CACGGC</text>
-<text text-anchor="start" x="297.75" y="-31.75" font-family="Times,serif" font-size="10.00">1.10 &#45; 15</text>
+<text text-anchor="start" x="299.62" y="-31.75" font-family="Times,serif" font-size="10.00">1:10&#45;15</text>
 </g>
 <!-- 1.8&#45;&gt;1.10 -->
 <g id="edge4" class="edge">
 <title>1.8:e&#45;&gt;1.10:w</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M237.25,-82.5C258.58,-82.5 261.72,-63.3 276.8,-56.7"/>
-<polygon fill="black" stroke="black" points="277.38,-60.15 286.51,-54.79 276.03,-53.28 277.38,-60.15"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M238.88,-82.5C259.69,-82.5 262.48,-63.3 277.1,-56.7"/>
+<polygon fill="black" stroke="black" points="277.41,-60.21 286.52,-54.8 276.02,-53.34 277.41,-60.21"/>
 </g>
 <!-- 2.0&#45;&gt;1.10 -->
 <g id="edge5" class="edge">
 <title>2.0:e&#45;&gt;1.10:w</title>
-<path fill="none" stroke="black" d="M237.25,-26.5C258.58,-26.5 261.72,-45.7 276.8,-52.3"/>
-<polygon fill="black" stroke="black" points="276.03,-55.72 286.51,-54.21 277.38,-48.85 276.03,-55.72"/>
+<path fill="none" stroke="black" d="M238.88,-26.5C259.69,-26.5 262.48,-45.7 277.1,-52.3"/>
+<polygon fill="black" stroke="black" points="276.02,-55.66 286.52,-54.2 277.41,-48.79 276.02,-55.66"/>
 </g>
 <!-- end -->
 <g id="node6" class="node">

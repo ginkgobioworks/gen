@@ -22,7 +22,10 @@ import pygraphviz
 
 class Graph:
     def __init__(self, db=None, collection_name=None, sample_name=None, block_group_name=None):
-        self.graph = nx.DiGraph()
+        # There are two representations of the same graph: one with ported nodes (the additive model), 
+        # and one with blocks (the conventional model with blocks and links).
+        self.graph = nx.MultiDiGraph() # Allow multiple edges between the same nodes
+        self.block_graph = None
         
         # Either import from a gen sqlite database or set up a minimal structure
         if db:
@@ -83,7 +86,9 @@ class Graph:
         source (tuple): A tuple containing the source node and the position from which the edge departs.
         target (tuple): A tuple containing the target node and the position at which the edge arrives.
         """
-        self.graph.add_edge(f'{source[0]}', f'{target[0]}', from_pos=source[1], to_pos=target[1])
+        (source, from_pos), (target, to_pos) = source, target
+
+        self.graph.add_edge(f'{source}', f'{target}', from_pos=from_pos, to_pos=to_pos)
 
     def get_edges(self):
         """
@@ -91,34 +96,34 @@ class Graph:
         """
         edges = []
         for n1, n2, d in self.graph.edges(data=True):
-            edges.append((n1,n2,d.get('from_pos',None),d.get('to_pos',None)))
-        return edges    
+            edges.append(((n1,d.get('from_pos',None)),
+                          (n2,d.get('to_pos',None))))
+        return edges
     
-    def remove_edge(self, edge):
-        """
-        Removes an edge (given as a tuple) from the graph.
+    def remove_edge(self, source, target):
+        (source, from_pos), (target, to_pos) = source, target
 
-        Parameters:
-        edge (tuple): A tuple containing the source and target nodes of the edge.
-        """
-        self.graph.remove_edge(edge[0], edge[1])
-
+        # Find the key corresponding to the given edge and coordinates
+        for key, data in self.graph[source][target].items():
+            if data.get('from_pos', None) == from_pos and data.get('to_pos', None) == to_pos:
+                self.graph.remove_edge(source, target, key=key)
+                break
+        
         # If there are nodes that are completely disconnected, remove those too
         for node in list(self.graph.nodes):
             if self.graph.out_degree()[node] == 0 and self.graph.in_degree()[node] == 0:
                 self.graph.remove_node(node)
 
-    def highlight_edge(self, edge):
-        """
-        Highlights an edge in the graph.
+    def highlight_edge(self, source, target):
+        # Unpack the source and target (node,position) tuples
+        (source, from_pos), (target, to_pos) = source, target
 
-        Parameters:
-        edge (tuple): A tuple containing the source and target nodes of the edge, with their ports.
-        """
-        for n1, n2, data in self.graph.edges(data=True):
-            if (n1, n2, data.get('from_pos', None), data.get('to_pos', None)) == edge:
-                self.graph.edges[(n1,n2)]['highlight'] = True
-
+        # Find the key corresponding to the given edge and coordinates
+        for key, data in self.graph[source][target].items():
+            if data.get('from_pos', None) == from_pos and data.get('to_pos', None) == to_pos:
+                self.graph.edges[(source,target,key)]['highlight'] = True
+                break
+                
     def import_from_db(self, db, collection_name=None, sample_name=None, block_group_name=None):
         """
         Imports a graph from a gen database.
@@ -186,15 +191,15 @@ class Graph:
             else:
                 self.add_edge((source, from_pos-1), (target, to_pos))
     
-    def make_segment_graph(self, prune=False):
-        # Split up all nodes into segments (i.e. contiguous subsequences)
-        segment_graph = nx.DiGraph()
+    def make_block_graph(self, prune=False):
+        # Split up all nodes into blocks (i.e. contiguous subsequences)
+        self.block_graph = nx.DiGraph()
 
         # Add source and sink nodes
-        segment_graph.add_node('start', label='start', original_node='start', end=-1)
-        segment_graph.add_node('end', label='end', original_node='end', start=0)
+        self.block_graph.add_node('start', label='start', original_node='start', end=-1)
+        self.block_graph.add_node('end', label='end', original_node='end', start=0)
 
-        # Iterate over the nodes in the graph and split them into segments
+        # Iterate over the nodes in the graph and split them into blocks
         for node in self.graph.nodes:
             if node in ['start', 'end']:
                 continue
@@ -206,48 +211,44 @@ class Graph:
             sequence = self.graph.nodes[node].get('sequence', None)
             highlights = self.graph.nodes[node].get('highlights', [False] * len(sequence))
 
-            # New segments are defined by the port node identifier, and a start and end position on the sequence the port node references.
+            # New blocks are defined by the port node identifier, and a start and end position on the sequence the port node references.
             # Each "in port" needs to be present as a segment start, and each "out port" as a segment end.
             # All in ports are preceded by a segment end, an all out ports are followed by a segment start.
             # Position 0 and the last position are always segment starts and ends, respectively.
-            starts = sorted(set([0] + in_ports + [x+1 for x in out_ports if x < (len(sequence)-1)]))
-            ends = sorted(set(out_ports + [len(sequence)-1] + [x-1 for x in in_ports if x > 0])) 
+            block_starts = sorted(set([0] + in_ports + [x+1 for x in out_ports if x < (len(sequence)-1)]))
+            block_ends = sorted(set(out_ports + [len(sequence)-1] + [x-1 for x in in_ports if x > 0])) 
 
-            # Create the segments
-            segments = []
-            for i, j in zip(starts, ends):
+            # Create the blocks
+            blocks = []
+            for i, j in zip(block_starts, block_ends):
                 segment_id = f"{node}.{i}"
-                segment_graph.add_node(segment_id, 
-                                       sequence = sequence[i:j+1], 
-                                       highlights = highlights[i:j+1],
-                                       original_node = node, 
-                                       start=i, end=j)
-                segments.append(segment_id)
+                self.block_graph.add_node(segment_id, 
+                                            sequence = sequence[i:j+1], 
+                                            highlights = highlights[i:j+1],
+                                            original_node = node, 
+                                            start=i, end=j)
+                blocks.append(segment_id)
 
-            # Create new edges between the segments to represent the reference sequence
-            for i, j in zip(segments[:-1], segments[1:]):
-                segment_graph.add_edge(i, j, reference=True)
+            # Create new edges between the blocks to represent the reference sequence
+            for i, j in zip(blocks[:-1], blocks[1:]):
+                self.block_graph.add_edge(i, j, reference=True)
 
         # Translate the original edges to new edges in the segment graph
         for source, target, data in self.graph.edges(data=True):
             source_end = data.get('from_pos', -1)
             target_start = data.get('to_pos', 0)
             
-            # Find the segments that correspond to the source and target nodes, there should be only one of each
-            source_segments = [node for node, segment_data in segment_graph.nodes(data=True) if segment_data['original_node'] == source and segment_data['end'] == source_end]
-            target_segments = [node for node, segment_data in segment_graph.nodes(data=True) if segment_data['original_node'] == target and segment_data['start'] == target_start]
-            assert len(source_segments) == 1
-            assert len(target_segments) == 1
+            # Find the blocks that correspond to the source and target nodes, there should be only one of each
+            source_blocks = [node for node, segment_data in self.block_graph.nodes(data=True) if segment_data['original_node'] == source and segment_data['end'] == source_end]
+            target_blocks = [node for node, segment_data in self.block_graph.nodes(data=True) if segment_data['original_node'] == target and segment_data['start'] == target_start]
+            assert len(source_blocks) == 1
+            assert len(target_blocks) == 1
 
-            segment_graph.add_edge(source_segments[0], target_segments[0], 
-                                   reference=False, 
-                                   highlight=data.get('highlight', False))
+            self.block_graph.add_edge(source_blocks[0], target_blocks[0], 
+                                      original_edge=(source,data.get('from_pos',None),target,data.get('to_pos',None)),
+                                      reference=False, 
+                                      highlight=data.get('highlight', False))
 
-        return segment_graph
-
- 
-        
-        
 
     def highlight_ranges(self, node_id, highlight_ranges):
         """
@@ -264,14 +265,24 @@ class Graph:
                 highlights[i] = True
         self.graph.nodes[node_id]['highlights'] = highlights
 
+    def remove_highlights(self):
+        """
+        Removes highlights from nodes and edges.
+        """
+        for node in self.graph.nodes:
+            self.graph.nodes[node].pop('highlights', None)
+        for edge in self.graph.edges:
+            self.graph.edges[edge].pop('highlight', None)
+
     def render_graph(self, filename=None, minimize=False, splines=True, rankdir = 'TD', hide_nodes=[]):
         # Create an AGraph to hold Graphviz attributes, based on the topology of the original graph
-        agraph = pygraphviz.AGraph(directed=True)
+        agraph = pygraphviz.AGraph(directed=True, strict=False)
         # Add the source and sink nodes first and last, respectively
         agraph.add_node('start', label='start')
         agraph.add_nodes_from([n for n in self.graph.nodes if n not in ['start', 'end']])
         agraph.add_node('end', label='end')
-        agraph.add_edges_from(self.graph.edges)
+        for source, target, data in self.graph.edges(data=True):
+            agraph.add_edge(source, target, key=data, **data)
 
         # Remove nodes that are marked as hidden
         for node in hide_nodes:
@@ -326,8 +337,7 @@ class Graph:
             node.attr['label'] = label
 
         for edge in agraph.iteredges():
-            # Get the attributes from the corresponding edge in the original graph
-            edge_data = self.graph.edges[edge[0], edge[1]]
+            # The attributes should have been transferred over from the original graph
 
             # Set the constraint attribute to false for edges connected to the source or sink node
             if edge[0] == 'start' or edge[1] == 'end':
@@ -336,8 +346,8 @@ class Graph:
             # Connect the head and tail of each edge to the correct port
             # Note: you can also force the head and tail to be on one side of the port 
             # by appending ":s" or ":n" to the port name
-            edge.attr['headport'] = f"{edge_data.get('to_pos','w')}"
-            edge.attr['tailport'] = f"{edge_data.get('from_pos','e')}"
+            edge.attr['headport'] = f"{edge.attr.get('to_pos','w')}"
+            edge.attr['tailport'] = f"{edge.attr.get('from_pos','e')}"
             # Cleaner look for the first edge coming out of the source node, or for left-right layouts in general):
             if (edge[0] == 'start' or rankdir == 'LR') and edge.attr['headport'] == '0':
                 edge.attr['headport'] = 'caption'     
@@ -359,17 +369,17 @@ class Graph:
         
         display(SVG(agraph.draw(prog='dot', format='svg')))
 
-    def render_segment_graph(self, filename=None, minimize=False, splines = True, align_segments = True, rankdir = 'LR', ranksep = 0.5, hide_nodes=[]):
-        # Todo: refactor to break out a node -> segment function instead of make_segment_graph
-        sgraph = self.make_segment_graph()
+    def render_block_graph(self, filename=None, minimize=False, splines = True, align_blocks = True, rankdir = 'LR', ranksep = 0.5, hide_nodes=[]):
+        # Todo: refactor to break out a node -> segment function instead of make_block_graph
+        self.make_block_graph()
 
         # Create an AGraph to hold Graphviz attributes, based on the topology of the original graph
         agraph = pygraphviz.AGraph(directed=True)
         # Add the source and sink nodes first and last, respectively
         agraph.add_node('start', label='start')
-        agraph.add_nodes_from([n for n in sgraph.nodes if n not in ['start', 'end']])
+        agraph.add_nodes_from([n for n in self.block_graph.nodes if n not in ['start', 'end']])
         agraph.add_node('end', label='end')
-        agraph.add_edges_from(sgraph.edges)
+        agraph.add_edges_from(self.block_graph.edges)
         
         # Remove nodes that are marked as hidden
         for node in hide_nodes:
@@ -379,7 +389,7 @@ class Graph:
             if node in ['start', 'end']:
                 continue
             # Get the sequence and highlight information from the networkx graph
-            node_data = sgraph.nodes[node]
+            node_data = self.block_graph.nodes[node]
             sequence = node_data['sequence']
             highlights = node_data.get('highlights', [False] * len(sequence))
             formatted_sequence = [f'<B>{c}</B>' if highlights[i] else c for i, c in enumerate(sequence)]
@@ -399,10 +409,12 @@ class Graph:
 
             label += "</FONT></TD></TR>"  
             label += "<TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>"
-            if end-start > 1:
-                label += f"{origin}.{start} - {end}"
+            if end-start > 0:
+                label += f"{origin}:{start}-{end}"
+            elif start > 0:
+                label += f"{origin}:{start}"
             else:
-                label += f"{origin}.{start}"
+                label += f"{origin}"
             label += "</FONT></TD></TR></TABLE>>"
             
             node.attr['shape'] = 'none'
@@ -412,18 +424,18 @@ class Graph:
 
         for edge in agraph.iteredges():
             # Get the attributes from the corresponding edge in the segment graph
-            edge_data = sgraph.edges[edge[0], edge[1]]
+            edge_data = self.block_graph.edges[edge[0], edge[1]]
 
             # If the edge is a reference edge, make it dashed
             if edge_data.get('reference', False):
                 edge.attr['style'] = 'dashed'
-                # If we want to align segments on a row, add a weight
-                if align_segments:
+                # If we want to align blocks on a row, add a weight
+                if align_blocks:
                     edge.attr['weight'] = 10
 
             # Highlight the edge if it is marked as such
             if edge_data.get('highlight', False):
-                edge.attr['color'] = 'red'
+                edge.attr['penwidth'] = 2
                 
             # Configure where the edges will connect to the nodes
             if edge[1] == 'end':
@@ -475,7 +487,7 @@ if __name__ == "__main__":
     parser.add_argument("--block_group_name", help="Filter by block group name", default=None)
     parser.add_argument("--minimize", help="Minimize node labels", action="store_true")
     parser.add_argument("--splines", help="Use splines for edges", type=bool, default=True)
-    parser.add_argument("--align_segments", help="Align segments on a row", type=bool, default=True)
+    parser.add_argument("--align_blocks", help="Align blocks on a row", type=bool, default=True)
     parser.add_argument("--rankdir", help="Direction of graph layout", choices=['TB', 'LR', 'BT', 'RL'], default='LR')
     parser.add_argument("--ranksep", help="Separation between ranks", type=float, default=0.5)
     parser.add_argument("--hide_nodes", help="Comma-separated list of nodes to hide", default="")
@@ -485,6 +497,6 @@ if __name__ == "__main__":
               collection_name=args.collection_name, 
               sample_name=args.sample_name)
 
-    svg = g.render_segment_graph(minimize=True)
+    svg = g.render_block_graph(minimize=True)
 
 

@@ -1,4 +1,4 @@
-strict digraph "" {
+digraph "" {
 	graph [rankdir=TD,
 		splines=true
 	];
@@ -22,13 +22,21 @@ strict digraph "" {
 <TD PORT='15'><FONT FACE='Courier New'><B>C</B></FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
-	start:e -> 1:caption	[constraint=False];
+	start -> 1:caption	[key="{'to_pos': 0}",
+		constraint=False,
+		to_pos=0];
 	2	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD BORDER='0' PORT='caption' ALIGN='right'>2:</TD><TD PORT='0'><FONT FACE='Courier New'><B>T</B></FONT></TD>
 <TD PORT='1'><FONT FACE='Courier New'><B>G</B></FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
-	1:7 -> 2:0;
+	1:7 -> 2:0	[key="{'from_pos': 7, 'to_pos': 0}",
+		from_pos=7,
+		to_pos=0];
 	end	[label=end];
-	1:15 -> end:w	[constraint=False];
-	2:1 -> 1:10;
+	1:15 -> end	[key="{'from_pos': 15}",
+		constraint=False,
+		from_pos=15];
+	2:1 -> 1:10	[key="{'from_pos': 1, 'to_pos': 10}",
+		from_pos=1,
+		to_pos=10];
 }

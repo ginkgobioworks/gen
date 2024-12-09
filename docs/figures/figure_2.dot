@@ -5,20 +5,20 @@ strict digraph "" {
 	];
 	node [label="\N"];
 	start	[label=start];
-	1.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'><B>ATGTATAC</B></FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>1.0 - 7</FONT></TD></TR></TABLE>>,
+	1.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'><B>ATGTATAC</B></FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>1:0-7</FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
 	start:e -> 1.0:seq:w;
-	1.8	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>AT</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>1.8</FONT></TD></TR></TABLE>>,
+	1.8	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>AT</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>1:8-9</FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
 	1.0:seq:e -> 1.8:seq:w	[style=dashed,
 		weight=10];
-	2.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'><B>TG</B></FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>2.0</FONT></TD></TR></TABLE>>,
+	2.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'><B>TG</B></FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>2:0-1</FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
 	1.0:seq:e -> 2.0:seq:w;
-	1.10	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'><B>CACGGC</B></FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>1.10 - 15</FONT></TD></TR></TABLE>>,
+	1.10	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'><B>CACGGC</B></FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>1:10-15</FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
 	1.8:seq:e -> 1.10:seq:w	[style=dashed,
