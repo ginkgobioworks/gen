@@ -49,9 +49,8 @@ pub fn export_gfa(
     let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
     edges.extend(boundary_edges.clone());
 
-    let (mut graph, _edges_by_node_pair) = Edge::build_graph(&edges, &blocks);
-
-    BlockGroup::prune_graph(&mut graph);
+    let (graph, _edges_by_node_pair) = Edge::build_graph(&edges, &blocks);
+    //    BlockGroup::prune_graph(&mut graph);
 
     let file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(file);
