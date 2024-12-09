@@ -23,3 +23,5 @@ fixtures/*.ipynb
 
 # Gen tracking dir
 .gen/
+docs/figures/genfig/__pycache__/__init__.cpython-312.pyc
+docs/figures/genfig/__pycache__/graph.cpython-312.pyc

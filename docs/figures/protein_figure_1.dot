@@ -1,0 +1,155 @@
+strict digraph "" {
+	graph [rankdir=LR,
+		ranksep=0.5,
+		splines=polyline
+	];
+	node [label="\N"];
+	start	[label=start];
+	3.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>MTI..WAG</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>3.0 - 1048</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	start:e -> 3.0:seq:w;
+	4.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>MTI..ACD</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>4.0 - 63</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	start:e -> 4.0:seq:w;
+	12.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>MKQ..VCD</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>12.0 - 64</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	start:e -> 12.0:seq:w;
+	20.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>MKE..VCD</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>20.0 - 64</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	start:e -> 20.0:seq:w;
+	end	[label=end];
+	3.0:seq:e -> end:w;
+	5.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>ESR..MVD</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>5.0 - 57</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	4.0:seq:e -> 5.0:seq:w;
+	13.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>EKR..MLD</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>13.0 - 57</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	4.0:seq:e -> 13.0:seq:w;
+	21.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>EER..MVD</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>21.0 - 57</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	4.0:seq:e -> 21.0:seq:w;
+	6.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>IAV..NSF</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>6.0 - 43</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	5.0:seq:e -> 6.0:seq:w;
+	14.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>IAT..NSF</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>14.0 - 43</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	5.0:seq:e -> 14.0:seq:w;
+	22.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>IAV..NSY</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>22.0 - 43</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	5.0:seq:e -> 22.0:seq:w;
+	7.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>YRD..NDL</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>7.0 - 49</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	6.0:seq:e -> 7.0:seq:w;
+	15.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>YRD..NSL</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>15.0 - 49</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	6.0:seq:e -> 15.0:seq:w;
+	23.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>YRE..FSL</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>23.0 - 49</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	6.0:seq:e -> 23.0:seq:w;
+	8.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>VDK..GHE</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>8.0 - 51</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	7.0:seq:e -> 8.0:seq:w;
+	16.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>VDR..GHE</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>16.0 - 52</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	7.0:seq:e -> 16.0:seq:w;
+	24.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>VDS..GHE</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>24.0 - 52</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	7.0:seq:e -> 24.0:seq:w;
+	9.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>TTS..WPT</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>9.0 - 59</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	8.0:seq:e -> 9.0:seq:w;
+	17.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>TTS..YPT</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>17.0 - 59</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	8.0:seq:e -> 17.0:seq:w;
+	25.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>TTS..WPT</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>25.0 - 59</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	8.0:seq:e -> 25.0:seq:w;
+	10.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>APA..IGQ</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>10.0 - 75</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	9.0:seq:e -> 10.0:seq:w;
+	18.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>APA..IGM</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>18.0 - 75</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	9.0:seq:e -> 18.0:seq:w;
+	26.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>APA..IGM</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>26.0 - 75</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	9.0:seq:e -> 26.0:seq:w;
+	11.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>QFA..WAG</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>11.0 - 644</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	10.0:seq:e -> 11.0:seq:w;
+	19.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>QFA..TGM</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>19.0 - 647</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	10.0:seq:e -> 19.0:seq:w;
+	27.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>QFA..AGI</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>27.0 - 654</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	10.0:seq:e -> 27.0:seq:w;
+	11.0:seq:e -> end:w;
+	12.0:seq:e -> 5.0:seq:w;
+	12.0:seq:e -> 13.0:seq:w;
+	12.0:seq:e -> 21.0:seq:w;
+	13.0:seq:e -> 6.0:seq:w;
+	13.0:seq:e -> 14.0:seq:w;
+	13.0:seq:e -> 22.0:seq:w;
+	14.0:seq:e -> 7.0:seq:w;
+	14.0:seq:e -> 15.0:seq:w;
+	14.0:seq:e -> 23.0:seq:w;
+	15.0:seq:e -> 8.0:seq:w;
+	15.0:seq:e -> 16.0:seq:w;
+	15.0:seq:e -> 24.0:seq:w;
+	16.0:seq:e -> 9.0:seq:w;
+	16.0:seq:e -> 17.0:seq:w;
+	16.0:seq:e -> 25.0:seq:w;
+	17.0:seq:e -> 10.0:seq:w;
+	17.0:seq:e -> 18.0:seq:w;
+	17.0:seq:e -> 26.0:seq:w;
+	18.0:seq:e -> 11.0:seq:w;
+	18.0:seq:e -> 19.0:seq:w;
+	18.0:seq:e -> 27.0:seq:w;
+	19.0:seq:e -> end:w;
+	20.0:seq:e -> 5.0:seq:w;
+	20.0:seq:e -> 13.0:seq:w;
+	20.0:seq:e -> 21.0:seq:w;
+	21.0:seq:e -> 6.0:seq:w;
+	21.0:seq:e -> 14.0:seq:w;
+	21.0:seq:e -> 22.0:seq:w;
+	22.0:seq:e -> 7.0:seq:w;
+	22.0:seq:e -> 15.0:seq:w;
+	22.0:seq:e -> 23.0:seq:w;
+	23.0:seq:e -> 8.0:seq:w;
+	23.0:seq:e -> 16.0:seq:w;
+	23.0:seq:e -> 24.0:seq:w;
+	24.0:seq:e -> 9.0:seq:w;
+	24.0:seq:e -> 17.0:seq:w;
+	24.0:seq:e -> 25.0:seq:w;
+	25.0:seq:e -> 10.0:seq:w;
+	25.0:seq:e -> 18.0:seq:w;
+	25.0:seq:e -> 26.0:seq:w;
+	26.0:seq:e -> 11.0:seq:w;
+	26.0:seq:e -> 19.0:seq:w;
+	26.0:seq:e -> 27.0:seq:w;
+	27.0:seq:e -> end:w;
+}
