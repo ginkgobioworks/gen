@@ -401,6 +401,129 @@ mod tests {
     mod geneious_genbanks {
         use super::*;
 
+        #[cfg(test)]
+        mod updates {
+            use super::*;
+
+            #[test]
+            fn test_incorporates_updates() {
+                // This tests that we are able to take a genbank that has been further modified
+                // and update it, mimicking a workflow of going between gen <-> 3rd party tool <-> gen
+                setup_gen_dir();
+                let conn = &get_connection(None);
+                let db_uuid = metadata::get_db_uuid(conn);
+                let op_conn = &get_operation_connection(None);
+                setup_db(op_conn, &db_uuid);
+                let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("fixtures/geneious_genbank/insertion.gb");
+                let file = File::open(&path).unwrap();
+                let _ = import_genbank(
+                    conn,
+                    op_conn,
+                    BufReader::new(file),
+                    None,
+                    false,
+                    false,
+                    OperationInfo {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                        description: "test".to_string(),
+                    },
+                );
+
+                let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("fixtures/geneious_genbank/multiple_insertions_deletions.gb");
+                let file = File::open(&path).unwrap();
+                let _ = import_genbank(
+                    conn,
+                    op_conn,
+                    BufReader::new(file),
+                    None,
+                    true,
+                    false,
+                    OperationInfo {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                        description: "test".to_string(),
+                    },
+                );
+
+                let f = reader::parse_file(&path).unwrap();
+                let mod_seq = str::from_utf8(&f[0].seq).unwrap().to_string();
+                let sequences: HashSet<String> = BlockGroup::get_all_sequences(conn, 1, false)
+                    .iter()
+                    .map(|s| s.to_lowercase())
+                    .collect();
+                let unchanged_seq = get_unmodified_sequence();
+                assert!(sequences.contains(&mod_seq));
+                assert!(sequences.contains(&unchanged_seq));
+            }
+
+            #[test]
+            fn test_creates_missing_entries() {
+                // This tests that we are able to take a genbank that has been further modified
+                // and update it, mimicking a workflow of going between gen <-> 3rd party tool <-> gen
+                setup_gen_dir();
+                let conn = &get_connection(None);
+                let db_uuid = metadata::get_db_uuid(conn);
+                let op_conn = &get_operation_connection(None);
+                setup_db(op_conn, &db_uuid);
+                let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("fixtures/geneious_genbank/insertion.gb");
+                let file = File::open(&path).unwrap();
+                let _ = import_genbank(
+                    conn,
+                    op_conn,
+                    BufReader::new(file),
+                    None,
+                    false,
+                    false,
+                    OperationInfo {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                        description: "test".to_string(),
+                    },
+                );
+
+                let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("fixtures/geneious_genbank/concat.gb");
+                let file = File::open(&path).unwrap();
+                let _ = import_genbank(
+                    conn,
+                    op_conn,
+                    BufReader::new(file),
+                    None,
+                    true,
+                    true,
+                    OperationInfo {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                        description: "test".to_string(),
+                    },
+                );
+
+                let f = reader::parse_file(&path).unwrap();
+                let sequences: HashSet<String> = BlockGroup::get_all_sequences(conn, 1, false)
+                    .iter()
+                    .map(|s| s.to_lowercase())
+                    .collect();
+                let unchanged_seq = get_unmodified_sequence();
+                assert!(sequences.contains(&unchanged_seq));
+                let mod_seq = str::from_utf8(&f[0].seq).unwrap().to_string();
+                assert!(sequences.contains(&mod_seq));
+
+                // we have a new blockgroup called deletion thta uses the same base sequence but
+                // has a deletion in it.
+                let sequences: HashSet<String> = BlockGroup::get_all_sequences(conn, 2, false)
+                    .iter()
+                    .map(|s| s.to_lowercase())
+                    .collect();
+                let mod_seq = str::from_utf8(&f[1].seq).unwrap().to_string();
+                assert!(sequences.contains(&unchanged_seq));
+                assert!(sequences.contains(&mod_seq));
+            }
+        }
+
         #[test]
         fn test_parses_insertion() {
             setup_gen_dir();
