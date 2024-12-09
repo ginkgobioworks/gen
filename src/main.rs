@@ -47,6 +47,7 @@ fn get_default_collection(conn: &Connection) -> Option<String> {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 enum Commands {
     /// Commands for transforming file types for input to Gen.
     Transform {
@@ -83,6 +84,9 @@ enum Commands {
         /// A VCF file to incorporate
         #[arg(short, long)]
         vcf: Option<String>,
+        /// A GenBank file to update from
+        #[arg(long)]
+        gb: Option<String>,
         /// If no genotype is provided, enter the genotype to assign variants
         #[arg(short, long)]
         genotype: Option<String>,
@@ -113,6 +117,9 @@ enum Commands {
         /// The end coordinate for the region to add the library to
         #[arg(short, long)]
         end: Option<i64>,
+        /// If a new entity is found, create it as a normal import
+        #[arg(long, action, alias = "cm")]
+        create_missing: bool,
     },
     /// Use a GAF
     #[command(name = "update-gaf")]
@@ -346,6 +353,8 @@ fn main() {
                     &operation_conn,
                     &f,
                     name.deref(),
+                    false,
+                    false,
                     OperationInfo {
                         file_path: gb.clone(),
                         file_type: FileTypes::GenBank,
@@ -367,6 +376,7 @@ fn main() {
             name,
             fasta,
             vcf,
+            gb,
             library,
             parts,
             genotype,
@@ -377,6 +387,7 @@ fn main() {
             start,
             end,
             coordinate_frame,
+            create_missing,
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
@@ -424,6 +435,21 @@ fn main() {
                     coordinate_frame.as_deref(),
                 )
                 .unwrap();
+            } else if let Some(gb_path) = gb {
+                let f = File::open(gb_path).unwrap();
+                let _ = import_genbank(
+                    &conn,
+                    &operation_conn,
+                    &f,
+                    name.deref(),
+                    true,
+                    *create_missing,
+                    OperationInfo {
+                        file_path: gb_path.clone(),
+                        file_type: FileTypes::GenBank,
+                        description: "Update from GenBank".to_string(),
+                    },
+                );
             } else {
                 panic!("Unknown file type provided for update.");
             }
