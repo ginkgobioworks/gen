@@ -42,13 +42,13 @@ The parts and library files were obtained by running the msa_crossover.py script
 modifications will be stored as a new virtual sample called schema_library. Lastly, we export that sample to a GFA file.
 
 ```console
-$ gen init
-$ gen defaults --database protein_engineering.db --collection protein
-$ gen branch --create ex1
-$ gen branch --checkout ex1
-$ gen import --fasta P14779.fasta
-$ gen update --path-name "sp|P14779|CPXB_PRIM2" --start 0 --end 1049 --parts output/segments.fa --library output/layout.csv --new-sample schema_library
-$ gen export --sample schema_library --gfa P450_chimera.gfa
+gen init
+gen defaults --database protein_engineering.db --collection protein
+gen branch --create ex1
+gen branch --checkout ex1
+gen import --fasta P14779.fasta
+gen update --path-name "sp|P14779|CPXB_PRIM2" --start 0 --end 1049 --parts output/segments.fa --library output/layout.csv --new-sample schema_library
+gen export --sample schema_library --gfa P450_chimera.gfa
 ```
 
 This results in a graph with a segment topology as shown below. Each segment is shown as a rectangle containing an
@@ -60,7 +60,7 @@ The figure above was generated using [this Python notebook](../../docs/figures/g
 you can use VG to generate a graphical representation. To do this, we export the graph to a GFA file, which can then be
 read by VG. One challenge is that VG overwrites our node identifiers. These can be restored by operating as follows:
 ```console
-$ docker run --volume $PWD:/data --workdir /data --interactive -t quay.io/vgteam/vg:v1.60.0
+docker run --volume $PWD:/data --workdir /data --interactive -t quay.io/vgteam/vg:v1.60.0
 [...]
 
 ```
@@ -92,12 +92,12 @@ branch. We conclude by listing the branches of our repository, which shows that 
 repository overall, with operation 3 taking place in branch `ex2`: 
 
 ```console
-$ gen branch --checkout main
-$ gen branch --create ex2
-$ gen branch --checkout ex2
-$ wget https://www.rcsb.org/fasta/entry/1PGA -O GB1.fa
-$ gen import --fasta GB1.fa
-$ gen branch --list
+gen branch --checkout main
+gen branch --create ex2
+gen branch --checkout ex2
+wget https://www.rcsb.org/fasta/entry/1PGA -O GB1.fa
+gen import --fasta GB1.fa
+gen branch --list
 
    Name                             Operation           
    ex1                              2                   
@@ -113,11 +113,9 @@ as `--start 38`.
 
 ```console
 gen update --path-name "1PGA_1|Chain" --start 38 --end 39 --parts saturation_parts.fa --library saturation_layout_single.csv --new-sample gb1_mut1
-gen update --path-name "1PGA_1|Chain" --start 39 --end 40 --parts saturation_parts.fa --library saturation_layout_single.csv --new-sample gb1_mut2
-gen update --path-name "1PGA_1|Chain" --start 40 --end 41 --parts saturation_parts.fa --library saturation_layout_single.csv --new-sample gb1_mut3
+gen update --sample gb1_mut1 --path-name "1PGA_1|Chain" --start 39 --end 40 --parts saturation_parts.fa --library saturation_layout_single.csv --new-sample gb1_mut2
+gen update --sample gb1_mut1 --path-name "1PGA_1|Chain" --start 40 --end 41 --parts saturation_parts.fa --library saturation_layout_single.csv --new-sample gb1_mut3
 ```
-
-*BUG: the above doesn't work yet (can't select the new sample by path name)*
 
 ```console
 gen update --path-name "1PGA_1|Chain" --start 38 --end 41 --parts saturation_parts.fa --library saturation_layout_triple.csv --new-sample gb1_mut1
