@@ -21,7 +21,7 @@ We now can export our new GenBank file from Geneious, Tn5_edited.gb. In order to
 gen update --gb Tn5_edited.gb
 ```
 
-This will incorporate changes made in Geneious to the database. The LOCUS tag is used to identify the sequence to use.
+This will incorporate changes made in Geneious to the database. The LOCUS tag is used to identify the sequence to update.
 
 Now we are free to export to GFA, etc. for further analysis.
 
