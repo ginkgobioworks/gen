@@ -189,8 +189,6 @@ where
                         wt_node_id,
                         0,
                         Strand::Forward,
-                        0,
-                        0,
                     );
                     let edge_out_of = Edge::create(
                         conn,
@@ -200,13 +198,23 @@ where
                         PATH_END_NODE_ID,
                         0,
                         Strand::Forward,
-                        0,
-                        0,
                     );
                     BlockGroupEdge::bulk_create(
                         conn,
-                        block_group.id,
-                        &[edge_into.id, edge_out_of.id],
+                        &[
+                            BlockGroupEdgeData {
+                                block_group_id: block_group.id,
+                                edge_id: edge_into.id,
+                                chromosome_index: 0,
+                                phased: 0,
+                            },
+                            BlockGroupEdgeData {
+                                block_group_id: block_group.id,
+                                edge_id: edge_out_of.id,
+                                chromosome_index: 0,
+                                phased: 0,
+                            },
+                        ],
                     );
                     let path = Path::create(
                         conn,
