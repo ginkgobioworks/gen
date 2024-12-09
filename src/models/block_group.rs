@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use interavl::IntervalTree as IT2;
 use intervaltree::IntervalTree;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
@@ -9,7 +8,7 @@ use rusqlite::{params, params_from_iter, types::Value as SQLValue, Connection, R
 use serde::{Deserialize, Serialize};
 
 use crate::graph::{
-    all_reachable_nodes, all_simple_paths, all_simple_paths_by_edge, GraphEdge, GraphNode,
+    all_reachable_nodes, all_simple_paths, flatten_to_interval_tree, GraphEdge, GraphNode,
 };
 use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group_edge::{AugmentedEdgeData, BlockGroupEdge, BlockGroupEdgeData};
@@ -744,113 +743,7 @@ impl BlockGroup {
         // make a tree where every node has a span in the graph.
         let mut graph = BlockGroup::get_graph(conn, block_group_id);
         BlockGroup::prune_graph(&mut graph);
-        #[derive(Clone, Debug, Ord, PartialOrd, Eq, Hash, PartialEq)]
-        struct NodeP {
-            x: i64,
-            y: i64,
-        }
-        let mut excluded_nodes = HashSet::new();
-        let mut node_tree: HashMap<i64, IT2<NodeP, i64>> = HashMap::new();
-
-        let mut start_nodes = vec![];
-        let mut end_nodes = vec![];
-        for node in graph.nodes() {
-            let has_incoming = graph.neighbors_directed(node, Direction::Incoming).next();
-            let has_outgoing = graph.neighbors_directed(node, Direction::Outgoing).next();
-            if has_incoming.is_none() {
-                start_nodes.push(node);
-            }
-            if has_outgoing.is_none() {
-                end_nodes.push(node);
-            }
-        }
-
-        let mut spans: HashSet<NodeIntervalBlock> = HashSet::new();
-
-        for start in start_nodes.iter() {
-            for end_node in end_nodes.iter() {
-                for path in all_simple_paths_by_edge(&graph, *start, *end_node) {
-                    let mut offset = 0;
-                    for (source_node, target_node, edge) in path.iter() {
-                        let block_len = source_node.length();
-                        let node_start = offset;
-                        let node_end = offset + block_len;
-                        spans.insert(NodeIntervalBlock {
-                            block_id: source_node.block_id,
-                            node_id: source_node.node_id,
-                            start: node_start,
-                            end: node_end,
-                            sequence_start: source_node.sequence_start,
-                            sequence_end: source_node.sequence_end,
-                            strand: edge.source_strand,
-                        });
-                        spans.insert(NodeIntervalBlock {
-                            block_id: target_node.block_id,
-                            node_id: target_node.node_id,
-                            start: node_end,
-                            end: node_end + target_node.length(),
-                            sequence_start: target_node.sequence_start,
-                            sequence_end: target_node.sequence_end,
-                            strand: edge.target_strand,
-                        });
-                        if remove_ambiguous_positions {
-                            for (node_id, node_range) in [
-                                (
-                                    source_node.node_id,
-                                    NodeP {
-                                        x: node_start,
-                                        y: source_node.sequence_start,
-                                    }..NodeP {
-                                        x: node_end,
-                                        y: source_node.sequence_end,
-                                    },
-                                ),
-                                (
-                                    target_node.node_id,
-                                    NodeP {
-                                        x: node_end,
-                                        y: target_node.sequence_start,
-                                    }..NodeP {
-                                        x: node_end + target_node.length(),
-                                        y: target_node.sequence_end,
-                                    },
-                                ),
-                            ] {
-                                // TODO; This could be a bit better by trying to conserve subregions
-                                // within a node that are not ambiguous instead of kicking the entire
-                                // node out.
-                                node_tree
-                                    .entry(node_id)
-                                    .and_modify(|tree| {
-                                        for (stored_range, _stored_node_id) in
-                                            tree.iter_overlaps(&node_range)
-                                        {
-                                            if *stored_range != node_range {
-                                                excluded_nodes.insert(node_id);
-                                                break;
-                                            }
-                                        }
-                                        tree.insert(node_range.clone(), node_id);
-                                    })
-                                    .or_insert_with(|| {
-                                        let mut t = IT2::default();
-                                        t.insert(node_range.clone(), node_id);
-                                        t
-                                    });
-                            }
-                        }
-                        offset += block_len;
-                    }
-                }
-            }
-        }
-
-        let tree: IntervalTree<i64, NodeIntervalBlock> = spans
-            .iter()
-            .filter(|block| !remove_ambiguous_positions || !excluded_nodes.contains(&block.node_id))
-            .map(|block| (block.start..block.end, *block))
-            .collect();
-        tree
+        flatten_to_interval_tree(&graph, remove_ambiguous_positions)
     }
 
     pub fn get_current_path(conn: &Connection, block_group_id: i64) -> Path {

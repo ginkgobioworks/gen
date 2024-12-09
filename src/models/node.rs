@@ -64,7 +64,7 @@ impl Node {
         }
     }
 
-    pub fn get_nodes(conn: &Connection, node_ids: Vec<i64>) -> Vec<Node> {
+    pub fn get_nodes(conn: &Connection, node_ids: &[i64]) -> Vec<Node> {
         let mut nodes: Vec<Node> = vec![];
         for chunk in node_ids.chunks(1000) {
             let query_node_ids: Vec<SQLValue> = chunk
@@ -82,9 +82,9 @@ impl Node {
 
     pub fn get_sequences_by_node_ids(
         conn: &Connection,
-        node_ids: Vec<i64>,
+        node_ids: &[i64],
     ) -> HashMap<i64, Sequence> {
-        let nodes = Node::get_nodes(conn, node_ids.into_iter().collect::<Vec<i64>>());
+        let nodes = Node::get_nodes(conn, node_ids);
         let sequence_hashes_by_node_id = nodes
             .iter()
             .map(|node| (node.id, node.sequence_hash.clone()))

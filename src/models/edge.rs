@@ -326,7 +326,7 @@ impl Edge {
         }
 
         let sequences_by_node_id =
-            Node::get_sequences_by_node_ids(conn, node_ids.into_iter().collect::<Vec<i64>>());
+            Node::get_sequences_by_node_ids(conn, &node_ids.into_iter().collect::<Vec<i64>>());
 
         let mut blocks = vec![];
         let mut block_index = 0;

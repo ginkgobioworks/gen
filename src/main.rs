@@ -5,6 +5,7 @@ use gen::config::get_operation_connection;
 
 use gen::annotations::gff::propagate_gff;
 use gen::exports::fasta::export_fasta;
+use gen::exports::genbank::export_genbank;
 use gen::exports::gfa::export_gfa;
 use gen::get_connection;
 use gen::imports::fasta::{import_fasta, FastaError};
@@ -213,6 +214,9 @@ enum Commands {
         /// The name of the fasta file to export to
         #[arg(short, long)]
         fasta: Option<String>,
+        /// The name of the GenBank file to export to
+        #[arg(long)]
+        gb: Option<String>,
     },
     /// Configure default options
     Defaults {
@@ -585,6 +589,7 @@ fn main() {
         }
         Some(Commands::Export {
             name,
+            gb,
             gfa,
             sample,
             fasta,
@@ -603,6 +608,13 @@ fn main() {
                     name,
                     sample.clone().as_deref(),
                     &PathBuf::from(fasta_path),
+                );
+            } else if let Some(gb_path) = gb {
+                export_genbank(
+                    &conn,
+                    name,
+                    sample.clone().as_deref(),
+                    &PathBuf::from(gb_path),
                 );
             } else {
                 panic!("No file type specified for export.");
