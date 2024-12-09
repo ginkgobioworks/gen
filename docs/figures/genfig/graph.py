@@ -469,16 +469,15 @@ class Graph:
 
         # Draw the graph using graphviz and return it as SVG
         agraph.layout(prog='dot')
+        
         if filename:
             svg = agraph.draw(f'{filename}.svg', prog='dot', format='svg')
-        else:
-            svg = agraph.draw(prog='dot', format='svg')
 
         # Test if we're in an interactive session, and only display if we are
         try:
             get_ipython
-            display(SVG(svg))
-            return
+            display(SVG(agraph.draw(prog='dot', format='svg')))
+            return None
         except NameError:
             return svg
 

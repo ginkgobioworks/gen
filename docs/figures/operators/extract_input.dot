@@ -1,0 +1,39 @@
+strict digraph "" {
+	graph [rankdir=LR,
+		ranksep=0.5,
+		splines=true
+	];
+	node [label="\N"];
+	start	[label=start];
+	1.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>ATGT</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>1:0-3</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	start:e -> 1.0:seq:w;
+	1.4	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>A<B>TAC</B></FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>1:4-7</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	1.0:seq:e -> 1.4:seq:w	[style=dashed,
+		weight=10];
+	3.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>C</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>3</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	1.0:seq:e -> 3.0:seq:w;
+	1.8	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'><B>AT</B></FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>1:8-9</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	1.4:seq:e -> 1.8:seq:w	[style=dashed,
+		weight=10];
+	2.0	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'><B>TG</B></FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>2:0-1</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	1.4:seq:e -> 2.0:seq:w	[penwidth=2];
+	1.10	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'><B>CAC</B>GGC</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>1:10-15</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	1.8:seq:e -> 1.10:seq:w	[style=dashed,
+		weight=10];
+	end	[label=end];
+	1.10:seq:e -> end:w;
+	2.0:seq:e -> 1.10:seq:w	[penwidth=2];
+	3.0:seq:e -> 1.4:seq:w;
+}
