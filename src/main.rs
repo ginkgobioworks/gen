@@ -47,6 +47,7 @@ fn get_default_collection(conn: &Connection) -> Option<String> {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 enum Commands {
     /// Commands for transforming file types for input to Gen.
     Transform {
@@ -87,7 +88,6 @@ enum Commands {
         #[arg(long)]
         gb: Option<String>,
         /// If no genotype is provided, enter the genotype to assign variants
-        /// If no genotype is provided, enter the genotype to assign variants
         #[arg(short, long)]
         genotype: Option<String>,
         /// If no sample is provided, enter the sample to associate variants to
@@ -117,6 +117,9 @@ enum Commands {
         /// The end coordinate for the region to add the library to
         #[arg(short, long)]
         end: Option<i64>,
+        /// If a new entity is found, create it as a normal import
+        #[arg(long, action, alias = "cm")]
+        create_missing: bool,
     },
     /// Use a GAF
     #[command(name = "update-gaf")]
@@ -351,6 +354,7 @@ fn main() {
                     &f,
                     name.deref(),
                     false,
+                    false,
                     OperationInfo {
                         file_path: gb.clone(),
                         file_type: FileTypes::GenBank,
@@ -383,6 +387,7 @@ fn main() {
             start,
             end,
             coordinate_frame,
+            create_missing,
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
@@ -438,6 +443,7 @@ fn main() {
                     &f,
                     name.deref(),
                     true,
+                    *create_missing,
                     OperationInfo {
                         file_path: gb_path.clone(),
                         file_type: FileTypes::GenBank,

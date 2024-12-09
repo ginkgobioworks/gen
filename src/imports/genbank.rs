@@ -35,6 +35,7 @@ pub fn import_genbank<'a, R>(
     data: R,
     collection: impl Into<Option<&'a str>>,
     update: bool,
+    create_missing: bool,
     operation_info: OperationInfo,
 ) -> Result<Operation, GenBankError>
 where
@@ -169,14 +170,15 @@ where
                     )),
                 );
 
-                let (path, block_group) = if update {
-                    let block_group = BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null AND name = ?2", params![Value::from(collection.name.clone()), Value::from(contig.clone())]).expect("No block group exists.");
+                let (path, block_group) = if update && !create_missing {
+                    let block_group = BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null AND name = ?2", params![Value::from(collection.name.clone()), Value::from(contig.clone())]).unwrap_or_else(|_| panic!("No block group named {contig} exists. Try importing first or pass --create-missing."));
                     let paths = Path::query(
                         conn,
-                        "select * from paths   where block_group_id = ?1 AND name = ?2",
+                        "select * from paths where block_group_id = ?1 AND name = ?2",
                         params![Value::from(block_group.id), Value::from(contig.clone())],
                     );
-                    (paths[0].clone(), block_group)
+                    let path = paths.first().unwrap_or_else(|| panic!("No path named {contig} exists. Try importing first or pass --create-missing.")).clone();
+                    (path, block_group)
                 } else {
                     let block_group = BlockGroup::create(conn, &collection.name, None, contig);
                     let edge_into = Edge::create(
@@ -346,6 +348,7 @@ mod tests {
                 BufReader::new("this is not valid".as_bytes()),
                 None,
                 false,
+                false,
                 OperationInfo {
                     file_path: "".to_string(),
                     file_type: FileTypes::GenBank,
@@ -374,6 +377,7 @@ mod tests {
             op_conn,
             BufReader::new(file),
             None,
+            false,
             false,
             OperationInfo {
                 file_path: path.to_str().unwrap().to_string(),
@@ -405,6 +409,7 @@ mod tests {
                 op_conn,
                 BufReader::new(file),
                 None,
+                false,
                 false,
                 OperationInfo {
                     file_path: "".to_string(),
@@ -440,6 +445,7 @@ mod tests {
                 op_conn,
                 BufReader::new(file),
                 None,
+                false,
                 false,
                 OperationInfo {
                     file_path: "".to_string(),
@@ -492,6 +498,7 @@ mod tests {
                 op_conn,
                 BufReader::new(file),
                 None,
+                false,
                 false,
                 OperationInfo {
                     file_path: "".to_string(),
@@ -548,6 +555,7 @@ mod tests {
                 BufReader::new(file),
                 None,
                 false,
+                false,
                 OperationInfo {
                     file_path: "".to_string(),
                     file_type: FileTypes::GenBank,
@@ -600,6 +608,7 @@ mod tests {
                 op_conn,
                 BufReader::new(file),
                 None,
+                false,
                 false,
                 OperationInfo {
                     file_path: "".to_string(),
