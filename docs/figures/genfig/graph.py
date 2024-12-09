@@ -470,11 +470,17 @@ class Graph:
         # Draw the graph using graphviz and return it as SVG
         agraph.layout(prog='dot')
         if filename:
-            agraph.draw(f'{filename}.svg', prog='dot', format='svg')
-        
-        svg = agraph.draw(prog='dot', format='svg')
-        display(SVG(svg))
-        return svg
+            svg = agraph.draw(f'{filename}.svg', prog='dot', format='svg')
+        else:
+            svg = agraph.draw(prog='dot', format='svg')
+
+        # Test if we're in an interactive session, and only display if we are
+        try:
+            get_ipython
+            display(SVG(svg))
+            return
+        except NameError:
+            return svg
 
 
 if __name__ == "__main__":
