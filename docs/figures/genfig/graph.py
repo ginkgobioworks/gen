@@ -96,8 +96,8 @@ class Graph:
         """
         edges = []
         for n1, n2, d in self.graph.edges(data=True):
-            edges.append(((n1,d.get('from_pos',None)),
-                          (n2,d.get('to_pos',None))))
+            edges.append(((n1,d.get('from_pos',-1)),
+                          (n2,d.get('to_pos',0))))
         return edges
     
     def remove_edge(self, source, target):
@@ -105,7 +105,7 @@ class Graph:
 
         # Find the key corresponding to the given edge and coordinates
         for key, data in self.graph[source][target].items():
-            if data.get('from_pos', None) == from_pos and data.get('to_pos', None) == to_pos:
+            if data.get('from_pos', -1) == from_pos and data.get('to_pos', 0) == to_pos:
                 self.graph.remove_edge(source, target, key=key)
                 break
         
@@ -120,7 +120,7 @@ class Graph:
 
         # Find the key corresponding to the given edge and coordinates
         for key, data in self.graph[source][target].items():
-            if data.get('from_pos', None) == from_pos and data.get('to_pos', None) == to_pos:
+            if data.get('from_pos', -1) == from_pos and data.get('to_pos', 0) == to_pos:
                 self.graph.edges[(source,target,key)]['highlight'] = True
                 break
                 
@@ -191,7 +191,7 @@ class Graph:
             else:
                 self.add_edge((source, from_pos-1), (target, to_pos))
     
-    def make_block_graph(self, prune=False):
+    def make_block_graph(self, prune=True):
         # Split up all nodes into blocks (i.e. contiguous subsequences)
         self.block_graph = nx.DiGraph()
 
@@ -245,9 +245,19 @@ class Graph:
             assert len(target_blocks) == 1
 
             self.block_graph.add_edge(source_blocks[0], target_blocks[0], 
-                                      original_edge=(source,data.get('from_pos',None),target,data.get('to_pos',None)),
+                                      original_edge=((source,data.get('from_pos',-1)),(target,data.get('to_pos',0))),
                                       reference=False, 
                                       highlight=data.get('highlight', False))
+            
+        # Prune the block graph to remove nodes that are not connected to the main start and end node
+        if prune:
+           while True:
+                trim_blocks = [k for k,v in dict(self.block_graph.in_degree()).items() if v == 0 and k!='start']
+                trim_blocks += [k for k,v in dict(self.block_graph.out_degree()).items() if v == 0 and k!='end']
+                if trim_blocks:
+                    self.block_graph.remove_nodes_from(trim_blocks)
+                else:
+                    break
 
 
     def highlight_ranges(self, node_id, highlight_ranges):
@@ -274,15 +284,17 @@ class Graph:
         for edge in self.graph.edges:
             self.graph.edges[edge].pop('highlight', None)
 
-    def render_graph(self, filename=None, minimize=False, splines=True, rankdir = 'TD', hide_nodes=[]):
+    def render_graph(self, filename=None, minimize=False, splines=True, rankdir = 'TD', hide_nodes=[],
+                      cairo=False):
         # Create an AGraph to hold Graphviz attributes, based on the topology of the original graph
         agraph = pygraphviz.AGraph(directed=True, strict=False)
         # Add the source and sink nodes first and last, respectively
         agraph.add_node('start', label='start')
         agraph.add_nodes_from([n for n in self.graph.nodes if n not in ['start', 'end']])
         agraph.add_node('end', label='end')
-        for source, target, data in self.graph.edges(data=True):
-            agraph.add_edge(source, target, key=data, **data)
+        # Add the edges (the key allows us to have multiple edges between the same nodes)
+        for source, target, key, data in self.graph.edges(data=True, keys=True):
+            agraph.add_edge(source, target, key=key, **data)
 
         # Remove nodes that are marked as hidden
         for node in hide_nodes:
@@ -309,7 +321,7 @@ class Graph:
                 visible_ports = sorted(visible_ports)
 
                 # Start of a list that contains each port of the node, with ellipses between ports that are not sequential
-                labeled_sequence = [f"<TD PORT='{visible_ports[0]}'><FONT FACE='Courier New'>{formatted_sequence[visible_ports[0]]}<SUB>{visible_ports[0]}</SUB></FONT></TD>"]
+                labeled_sequence = [f"<TD PORT='{visible_ports[0]}'><FONT FACE='Monospace'>{formatted_sequence[visible_ports[0]]}<SUB>{visible_ports[0]}</SUB></FONT></TD>"]
                 if len(visible_ports) > 1 and (visible_ports[1]-visible_ports[0]) > 1:
                     labeled_sequence.append("<TD>…</TD>")
                     
@@ -319,15 +331,15 @@ class Graph:
                         labeled_sequence.append("<TD>..</TD>")
                         # A proper elipsis … or ... isn't rendered properly on github 
 
-                    labeled_sequence.append(f"<TD PORT='{b}'><FONT FACE='Courier New'>{formatted_sequence[b]}<SUB>{b}</SUB></FONT></TD>")
+                    labeled_sequence.append(f"<TD PORT='{b}'><FONT FACE='Monospace'>{formatted_sequence[b]}<SUB>{b}</SUB></FONT></TD>")
 
                 label += '\n'.join(labeled_sequence)
                 label += "</TR></TABLE>>"
                 
             else:
-                label = f"<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'><TR>"
+                label = f"<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0' CELLPADDING='3'><TR>"
                 label += f"<TD BORDER='0' PORT='caption' ALIGN='right'>{node}:</TD>"
-                labeled_sequence = [f"<TD PORT='{i}'><FONT FACE='Courier New'>{c}</FONT></TD>" 
+                labeled_sequence = [f"<TD PORT='{i}'><FONT FACE='Monospace'>{c}</FONT></TD>" 
                                       for i, c in enumerate(formatted_sequence)]
                 label += '\n'.join(labeled_sequence)
                 label += "</TR></TABLE>>"
@@ -346,30 +358,39 @@ class Graph:
             # Connect the head and tail of each edge to the correct port
             # Note: you can also force the head and tail to be on one side of the port 
             # by appending ":s" or ":n" to the port name
-            edge.attr['headport'] = f"{edge.attr.get('to_pos','w')}"
+            edge.attr['headport'] = f"{edge.attr.get('to_pos','w')}" 
+            # The above doesn't always work as expected, it seems like sometimes it gets set to None
             edge.attr['tailport'] = f"{edge.attr.get('from_pos','e')}"
+
             # Cleaner look for the first edge coming out of the source node, or for left-right layouts in general):
             if (edge[0] == 'start' or rankdir == 'LR') and edge.attr['headport'] == '0':
-                edge.attr['headport'] = 'caption'     
+                edge.attr['headport'] = 'caption'
+            if (edge[1] == 'end'):
+                edge.attr['headport'] = 'w'
 
          # Set the graph-level attributes that will be used by the dot rendering engine
         agraph.graph_attr.update(rankdir=rankdir, 
-                                 splines='true' if splines else 'polyline'
+                                 splines='true' if splines else 'polyline',
+                                 fontnames='svg'
                                  )
         # Other useful arguments for dot (with defaults): ranksep (0.5) searchsize(100) mclimit(10) newrank(false)
 
-        # Write the dot file to disk if a filename is provided
+        # For the actual rendering the cairo renderer svg:cairo:cairo sometimes produces better results for longer nodes
+        formatter = 'svg:cairo:cairo' if cairo else 'svg:svg:core'
         if filename:
-            agraph.write(f'{filename}.dot')
+            svg = agraph.draw(f'{filename}.svg', prog='dot', format=formatter)
+        else:
+            svg = agraph.draw(prog='dot', format=formatter)
+        # Test if we're in an interactive session, and only display if we are
+        try:
+            get_ipython
+            display(SVG(agraph.draw(prog='dot', format=formatter)))
+            return None
+        except NameError:
+            return svg
 
-        # Draw the graph using graphviz and display it in the notebook
-        agraph.layout(prog='dot')
-        if filename:
-            agraph.draw(f'{filename}.svg', prog='dot', format='svg')
-        
-        display(SVG(agraph.draw(prog='dot', format='svg')))
-
-    def render_block_graph(self, filename=None, minimize=False, splines = True, align_blocks = True, rankdir = 'LR', ranksep = 0.5, hide_nodes=[]):
+    def render_block_graph(self, filename=None, minimize=False, splines = True, align_blocks = True, rankdir = 'LR',
+                            ranksep = 0.5, hide_nodes=[], cairo = False):
         # Todo: refactor to break out a node -> segment function instead of make_block_graph
         self.make_block_graph()
 
@@ -397,8 +418,8 @@ class Graph:
             start = node_data.get('start', 0)
             end = node_data.get('end', len(sequence)-1)
 
-            label = f"<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>"
-            label += f"<TR><TD ALIGN='CENTER' PORT='seq'><FONT FACE='Courier'>"
+            label = f"<<TABLE BORDER='0' CELLBORDER='1'>"
+            label += f"<TR><TD ALIGN='CENTER' PORT='seq'><FONT POINT-SIZE='12' FACE='Monospace'>"
             if minimize and len(sequence) > 7:
                 # Only show the first and last 3 elements
                 label += f"{''.join(formatted_sequence[0:3])}..{''.join(formatted_sequence[-3:])}"
@@ -454,7 +475,8 @@ class Graph:
         # Set the graph-level attributes that will be used by the dot rendering engine
         agraph.graph_attr.update(rankdir=rankdir, 
                                  splines='true' if splines else 'polyline',
-                                 ranksep=ranksep)
+                                 ranksep=ranksep,
+                                 fontnames='svg')
         # Other useful arguments for dot (with defaults): ranksep (0.5) searchsize(100) mclimit(10) newrank(false)
 
         # Write the dot file to disk if a filename is provided
@@ -470,16 +492,86 @@ class Graph:
         # Draw the graph using graphviz and return it as SVG
         agraph.layout(prog='dot')
         
+        formatter = 'svg:cairo:cairo' if cairo else 'svg:svg:core'
+        # For the actual rendering the cairo renderer svg:svg:cairo sometimes produces better results for longer nodes
         if filename:
-            svg = agraph.draw(f'{filename}.svg', prog='dot', format='svg')
-
+            svg = agraph.draw(f'{filename}.svg', prog='dot', format=formatter)
+            # Also make a PNG if we're using cairo, since its SVGs are larger and lack selectable text
+            if cairo:
+                agraph.draw(f'{filename}.png', prog='dot', format='png', args='-Gdpi=300')
+        else:
+            svg = agraph.draw(prog='dot', format=formatter)
         # Test if we're in an interactive session, and only display if we are
         try:
             get_ipython
-            display(SVG(agraph.draw(prog='dot', format='svg')))
+            display(SVG(agraph.draw(prog='dot', format=formatter)))
             return None
         except NameError:
             return svg
+        
+    def extract_subgraph(self, start, end):
+        """
+        Extracts a subgraph from the graph that starts at the given start (node, position) pair and ends at 
+        the given end (node, position) pair.
+
+        Parameters:
+        start (tuple): A tuple containing the node and position to start the subgraph from.
+        end (tuple): A tuple containing the node and position to end the subgraph at.
+        """
+        start_node, start_coordinate = start
+        end_node, end_coordinate = end
+
+        # Ensure we're working with strings
+        start_node = f'{start_node}'
+        end_node = f'{end_node}'
+
+        # Make a copy to work in:
+        Gx = deepcopy(self)
+
+        # 1) remove the existing start and end edges
+        for edge in Gx.get_edges():
+            (source, source_coordinate), (target, target_coordinate) = edge
+            if source == 'start' or target == 'end':
+                Gx.remove_edge(*edge)
+
+        # 2) create the new edges:
+        Gx.connect_to_source(start_node, start_coordinate)
+        Gx.connect_to_sink(end_node, end_coordinate)
+
+        # 3) find all blocks and edges between the start and end nodes
+        Gx.make_block_graph()
+        paths = nx.all_simple_paths(Gx.block_graph, source='start', target='end')
+
+        traversed_blocks = set()
+        traversed_block_edges = set()
+        for path in paths:
+            traversed_blocks.update(path)
+            for b1, b2 in zip(path[:-1], path[1:]):
+                traversed_block_edges.add((b1, b2))
+
+        # 4) remove all nodes that do not have a corresponding block in the traversed_nodes set
+        traversed_nodes = set()
+
+        for block in traversed_blocks:
+            corresponding_node = Gx.block_graph.nodes[block]['original_node']
+            traversed_nodes.add(corresponding_node)
+        remove_nodes = set(Gx.graph.nodes).difference(traversed_nodes)
+        Gx.graph.remove_nodes_from(remove_nodes)
+
+
+        # 5) remove all edges that do not have a corresponding edge in the traversed_edges set
+        traversed_edges = set()
+
+        for block_edge in traversed_block_edges:
+            corresponding_edge = Gx.block_graph.edges[*block_edge].get('original_edge', None)
+            if corresponding_edge:
+                traversed_edges.add(corresponding_edge)
+
+        cut_edges = set(Gx.get_edges()).difference(traversed_edges)
+        for source, target in cut_edges:
+            Gx.remove_edge(source, target)
+            
+        return Gx
 
 
 if __name__ == "__main__":
