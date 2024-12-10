@@ -94,7 +94,7 @@ pub fn update_with_library(
                     conn,
                     part_hash,
                     calculate_hash(&format!(
-                        "{path_id}:{ref_start}-{ref_end}->{sequence_hash}",
+                        "{path_id}:{ref_start}-{ref_end}->{sequence_hash}-column-{index}",
                         path_id = path.id,
                         ref_start = 0,
                         ref_end = seq_length,
@@ -308,6 +308,228 @@ mod tests {
                 "ATCGATCCAACATGTTAAGGAACACACAGAGA".to_string(),
                 "ATCGATCCAACATGCTAAGGAACACACAGAGA".to_string(),
             ])
+        );
+    }
+
+    #[test]
+    fn one_column_of_parts() {
+        setup_gen_dir();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        )
+        .unwrap();
+
+        let mut parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        parts_path.push("fixtures/parts.fa");
+        let mut library_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        library_path.push("fixtures/single_column_design.csv");
+
+        let _ = update_with_library(
+            conn,
+            op_conn,
+            "test",
+            None,
+            "new sample",
+            "m123",
+            7,
+            20,
+            parts_path.to_str().unwrap(),
+            library_path.to_str().unwrap(),
+        );
+
+        let block_groups = Sample::get_block_groups(conn, "test", Some("new sample"));
+        let block_group = &block_groups[0];
+
+        let all_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+                "ATCGATCAAAAGGAACACACAGAGA".to_string(),
+                "ATCGATCTAATGGAACACACAGAGA".to_string(),
+                "ATCGATCCAACGGAACACACAGAGA".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn two_columns_of_same_parts() {
+        setup_gen_dir();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        )
+        .unwrap();
+
+        let mut parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        parts_path.push("fixtures/parts.fa");
+        let mut library_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        library_path.push("fixtures/design_reusing_parts.csv");
+
+        let _ = update_with_library(
+            conn,
+            op_conn,
+            "test",
+            None,
+            "new sample",
+            "m123",
+            7,
+            20,
+            parts_path.to_str().unwrap(),
+            library_path.to_str().unwrap(),
+        );
+
+        let block_groups = Sample::get_block_groups(conn, "test", Some("new sample"));
+        let block_group = &block_groups[0];
+
+        let mut expected_sequences = vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()];
+        for part1 in ["AAAA", "TAAT", "CAAC"].iter() {
+            for part2 in ["AAAA", "TAAT", "CAAC"].iter() {
+                let seq = "ATCGATC".to_owned() + part1 + part2 + "GGAACACACAGAGA";
+                expected_sequences.push(seq);
+            }
+        }
+        let all_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
+        assert_eq!(
+            all_sequences,
+            expected_sequences
+                .into_iter()
+                .map(|x| x.to_string())
+                .collect()
+        );
+    }
+
+    #[test]
+    fn one_column_of_parts_full_replacement() {
+        setup_gen_dir();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        )
+        .unwrap();
+
+        let mut parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        parts_path.push("fixtures/parts.fa");
+        let mut library_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        library_path.push("fixtures/single_column_design.csv");
+
+        let _ = update_with_library(
+            conn,
+            op_conn,
+            "test",
+            None,
+            "new sample",
+            "m123",
+            0,
+            34, // Full sequence replacement
+            parts_path.to_str().unwrap(),
+            library_path.to_str().unwrap(),
+        );
+
+        let block_groups = Sample::get_block_groups(conn, "test", Some("new sample"));
+        let block_group = &block_groups[0];
+
+        let all_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+                "AAAA".to_string(),
+                "TAAT".to_string(),
+                "CAAC".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn two_columns_of_same_parts_full_replacement() {
+        setup_gen_dir();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            false,
+            conn,
+            op_conn,
+        )
+        .unwrap();
+
+        let mut parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        parts_path.push("fixtures/parts.fa");
+        let mut library_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        library_path.push("fixtures/design_reusing_parts.csv");
+
+        let _ = update_with_library(
+            conn,
+            op_conn,
+            "test",
+            None,
+            "new sample",
+            "m123",
+            0,
+            34, // Full sequence replacement
+            parts_path.to_str().unwrap(),
+            library_path.to_str().unwrap(),
+        );
+
+        let block_groups = Sample::get_block_groups(conn, "test", Some("new sample"));
+        let block_group = &block_groups[0];
+
+        let mut expected_sequences = vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()];
+        for part1 in ["AAAA", "TAAT", "CAAC"].iter() {
+            for part2 in ["AAAA", "TAAT", "CAAC"].iter() {
+                let seq = part1.to_owned().to_owned() + part2;
+                expected_sequences.push(seq);
+            }
+        }
+        let all_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
+        assert_eq!(
+            all_sequences,
+            expected_sequences
+                .into_iter()
+                .map(|x| x.to_string())
+                .collect()
         );
     }
 }
