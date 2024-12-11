@@ -20,10 +20,28 @@ pub fn gfa_sample_diff(
     from_sample_name: Option<&str>,
     to_sample_name: &str,
 ) {
-    // General note about how we encode segment IDs.  The node ID and the start coordinate in the
-    // sequence are all that's needed, because the end coordinate can be inferred from the length of
-    // the segment's sequence.  So the segment ID is of the form <node ID>.<start coordinate>
+    /*
+    Generate a GFA file that represents the differences between two samples in a collection.
 
+    General approach: For each pair of shared block groups between the samples, get the current path
+    for each and call find_block_mappings on the pair of paths to get mappings between shared
+    regions on the paths.  Each shared region may cover multiple nodes.  We assume the mappings will
+    be in order from upstream to downstream on the sequences.  We iterate over them to produce a
+    list of ranges on each path's sequence.  For each mapping, and for each path, if there is an
+    unshared region before the common region, we append the range for that unshared region to the
+    path's list of ranges, and then the range for the common region.  Obviously there may be an
+    unshared region on each path at the very end, and if so, we append the range for that region to
+    the appropriate path's list.
+
+    We then convert the list of ranges for a path to a list of segments, with each range being
+    converted to a segment with the range's start coordinate, and the subsequence of the path for
+    that range.  We also create links, with one link per pair of adjacent segments in the path.
+    Each shared segment will have two links going in (one for each path) and two links going out.
+    Each unshared segment will have one link in and one link out.
+
+    We also create a GFA path for each path, which is just a list of the segments generated for that
+    path.
+    */
     let source_block_groups = Sample::get_block_groups(conn, collection_name, from_sample_name);
     let target_block_groups = Sample::get_block_groups(conn, collection_name, Some(to_sample_name));
 
@@ -71,25 +89,28 @@ pub fn gfa_sample_diff(
         let mut source_ranges = vec![];
         let mut target_ranges = vec![];
 
-        let mut source_mapping_start = 0;
-        let mut target_mapping_start = 0;
+        let mut last_source_position = 0;
+        let mut last_target_position = 0;
         for mapping in &mappings {
-            if mapping.source_range.start > source_mapping_start {
+            // Iterate over the shared regions between the source and target path.  If there is an
+            // unshared region before the shared region, append the range for the unshared region.
+            // Then append the range for the shared region.
+            if mapping.source_range.start > last_source_position {
                 source_ranges.push(Range {
-                    start: source_mapping_start,
+                    start: last_source_position,
                     end: mapping.source_range.start,
                 });
             }
             source_ranges.push(mapping.source_range.clone());
-            source_mapping_start = mapping.source_range.end;
-            if mapping.target_range.start > target_mapping_start {
+            last_source_position = mapping.source_range.end;
+            if mapping.target_range.start > last_target_position {
                 target_ranges.push(Range {
-                    start: target_mapping_start,
+                    start: last_target_position,
                     end: mapping.target_range.start,
                 });
             }
             target_ranges.push(mapping.target_range.clone());
-            target_mapping_start = mapping.target_range.end;
+            last_target_position = mapping.target_range.end;
         }
 
         if has_source_path {
@@ -97,9 +118,9 @@ pub fn gfa_sample_diff(
             let source_sequence = source_path.sequence(conn);
 
             let source_len = source_sequence.len().try_into().unwrap();
-            if source_mapping_start < source_len {
+            if last_source_position < source_len {
                 source_ranges.push(Range {
-                    start: source_mapping_start,
+                    start: last_source_position,
                     end: source_len,
                 });
             }
@@ -121,9 +142,9 @@ pub fn gfa_sample_diff(
             let target_sequence = target_path.sequence(conn);
 
             let target_len = target_sequence.len().try_into().unwrap();
-            if target_mapping_start < target_len {
+            if last_target_position < target_len {
                 target_ranges.push(Range {
-                    start: target_mapping_start,
+                    start: last_target_position,
                     end: target_len,
                 });
             }
@@ -186,6 +207,10 @@ fn links_from_blocks(node_blocks: &[NodeIntervalBlock]) -> Vec<Link> {
             strand: block2.strand,
         };
 
+        // General note about how we encode segment IDs.  The node ID and the start coordinate in
+        // the sequence are all that's needed, because the end coordinate can be inferred from the
+        // length of the segment's sequence.  So the segment ID is of the form <node ID>.<start
+        // coordinate>
         let link = Link {
             source_segment_id: source_segment.segment_id(),
             source_strand: block1.strand,
