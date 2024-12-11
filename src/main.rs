@@ -23,6 +23,7 @@ use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::update_with_vcf;
 use itertools::Itertools;
+use noodles::core::Region;
 use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
 use std::fs::File;
@@ -251,22 +252,25 @@ enum Commands {
         #[arg(short, long)]
         sample: String,
     },
-    ShowSequence {
+    GetSequence {
         /// The name of the collection containing the sequence
         #[arg(short, long)]
         name: Option<String>,
         /// The name of the sample containing the sequence
         #[arg(short, long)]
         sample: String,
-        /// The name of the graph to show the sequence for
+        /// The name of the graph to get the sequence for
         #[arg(short, long)]
-        graph: String,
+        graph: Option<String>,
         /// The start coordinate of the sequence
         #[arg(long)]
         start: Option<i64>,
         /// The end coordinate of the sequence
         #[arg(long)]
         end: Option<i64>,
+        /// The region (name:start-end format) of the sequence
+        #[arg(long)]
+        region: Option<String>,
     },
 }
 
@@ -721,24 +725,45 @@ fn main() {
                 println!("{}", block_group.name);
             }
         }
-        Some(Commands::ShowSequence {
+        Some(Commands::GetSequence {
             name,
             sample,
             graph,
             start,
             end,
+            region,
         }) => {
             let name = &name.clone().unwrap_or_else(|| {
                 get_default_collection(&operation_conn)
                     .expect("No collection specified and default not setup.")
             });
-            let block_group_id =
-                BlockGroup::get_or_create_sample_block_group(&conn, name, sample, graph, None)
-                    .unwrap();
+            let parsed_graph_name = if region.is_some() {
+                let parsed_region = region.as_ref().unwrap().parse::<Region>().unwrap();
+                parsed_region.name().to_string()
+            } else {
+                graph.clone().unwrap()
+            };
+            let block_group_id = BlockGroup::get_or_create_sample_block_group(
+                &conn,
+                name,
+                sample,
+                &parsed_graph_name,
+                None,
+            )
+            .unwrap();
             let path = BlockGroup::get_current_path(&conn, block_group_id);
             let sequence = path.sequence(&conn);
-            let start_coordinate = start.unwrap_or(0);
-            let end_coordinate = end.unwrap_or(sequence.len() as i64);
+            let start_coordinate;
+            let mut end_coordinate;
+            if region.is_some() {
+                let parsed_region = region.as_ref().unwrap().parse::<Region>().unwrap();
+                let interval = parsed_region.interval();
+                start_coordinate = interval.start().unwrap().get() as i64;
+                end_coordinate = interval.end().unwrap().get() as i64;
+            } else {
+                start_coordinate = start.unwrap_or(0);
+                end_coordinate = end.unwrap_or(sequence.len() as i64);
+            }
             println!(
                 "{}",
                 &sequence[start_coordinate as usize..end_coordinate as usize]
