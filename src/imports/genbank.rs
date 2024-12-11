@@ -253,7 +253,6 @@ where
                                 sequence_start: 0,
                                 sequence_end: change_seq.length,
                                 path_start: start,
-                                // TODO -- do i do end + len or is this the position on path we are changing?
                                 path_end: end + change_seq.length,
                                 strand: Strand::Forward,
                             },

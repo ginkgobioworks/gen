@@ -53,18 +53,10 @@ fn get_path_nodes(
     let mut path_edges = HashSet::new();
     let mut path_it = path_blocks.iter().peekable();
     while let Some(block) = path_it.next() {
-        let terminal_a = Node::is_terminal(block.node_id);
-        if !terminal_a {
-            path_nodes.insert(block.node_id);
-        }
+        path_nodes.insert(block.node_id);
         if let Some(next_block) = path_it.peek() {
-            let terminal_b = Node::is_terminal(next_block.node_id);
-            if !terminal_b {
-                path_nodes.insert(next_block.node_id);
-            }
-            if !terminal_a && !terminal_b {
-                path_edges.insert((block.node_id, next_block.node_id));
-            }
+            path_nodes.insert(next_block.node_id);
+            path_edges.insert((block.node_id, next_block.node_id));
         }
     }
 
@@ -85,16 +77,8 @@ fn get_path_nodes(
         }
     }
 
-    let blocks = path_blocks
-        .iter()
-        .filter(|block| !Node::is_terminal(block.node_id))
-        .sorted_by(|a, b| Ord::cmp(&a.path_start, &b.path_start))
-        .collect::<Vec<&PathBlock>>();
-    let (_, first_block) = path_blocks
-        .iter()
-        .find_position(|block| block.path_start == 0)
-        .unwrap();
-    let last_block = blocks[blocks.len() - 1];
+    let first_block = path_blocks.first().unwrap();
+    let last_block = path_blocks.last().unwrap();
     let start_nodes = path_graph
         .nodes()
         .filter(|node| {
@@ -122,7 +106,7 @@ fn get_path_nodes(
             for node_path in all_simple_paths(&path_graph, *start_node, *end_node) {
                 let merged_path = merge_nodes(&node_path);
                 let mut invalid = false;
-                for (putative_path_node, path_block) in zip(merged_path, &blocks) {
+                for (putative_path_node, path_block) in zip(merged_path, path_blocks) {
                     if !(putative_path_node.sequence_start <= path_block.sequence_start
                         && putative_path_node.sequence_end == path_block.sequence_end)
                     {
@@ -167,7 +151,11 @@ pub fn export_genbank(
 
     for block_group in block_groups.iter() {
         let path = BlockGroup::get_current_path(conn, block_group.id);
-        let path_blocks = path.blocks(conn);
+        let path_blocks = path
+            .blocks(conn)
+            .into_iter()
+            .filter(|block| !Node::is_terminal(block.node_id))
+            .collect::<Vec<_>>();
         let mut seq = gb_io::seq::Seq::empty();
         seq.name = Some(block_group.name.clone());
         seq.seq = path.sequence(conn).into_bytes();
