@@ -1,7 +1,9 @@
 # Simple editing workflow with Geneious
 
 This shows a simple back-and-forth editing example using Geneious. Here, sequences are managed in Geneious and exported
-as GenBank files to faciliate analyses.
+as GenBank files to facilitate analyses.
+
+Our task here is to take a bacterial transposon (Tn5)
 
 ```console
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&rettype=gb&id=U00004.1" -O Tn5.gb
@@ -14,9 +16,9 @@ gen defaults --database my_project.db --collection plasmids
 gen import --gb Tn5.gb
 ```
 
-Then we move over to our sequence editor, where we edit the BAC sequence to replace the chloramphenicol acetyl transferase (cat) coding sequence by the coding sequence of aminoglycoside-3'-O-phosphotransferase from Tn5 (don't forget to reverse complement it before pasting). We then save the resulting sequence, overwriting the original file.
+Then we move over to our sequence editor, where we can carry out any edits and save our genbank file again (overwriting or creating a new file).
+This updated file can be passed to the `update` command to incorporate the new changes.
 
-We now can export our new GenBank file from Geneious, Tn5_edited.gb. In order to update the sequence in the gen database, we can use the `update` command.
 ```console
 gen update --gb Tn5_edited.gb
 ```
