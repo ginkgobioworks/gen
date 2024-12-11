@@ -1,13 +1,15 @@
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::fmt::Debug;
-use std::hash::Hash;
-use std::iter::from_fn;
-
+use crate::models::block_group::NodeIntervalBlock;
 use crate::models::strand::Strand;
+use interavl::IntervalTree as IT2;
+use intervaltree::IntervalTree;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::prelude::EdgeRef;
 use petgraph::visit::{GraphRef, IntoEdges, IntoNeighbors, IntoNeighborsDirected, NodeCount};
 use petgraph::Direction;
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::fmt::Debug;
+use std::hash::Hash;
+use std::iter::from_fn;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct GraphNode {
@@ -192,6 +194,119 @@ where
         }
     }
     reachable
+}
+
+pub fn flatten_to_interval_tree(
+    graph: &DiGraphMap<GraphNode, GraphEdge>,
+    remove_ambiguous_positions: bool,
+) -> IntervalTree<i64, NodeIntervalBlock> {
+    #[derive(Clone, Debug, Ord, PartialOrd, Eq, Hash, PartialEq)]
+    struct NodeP {
+        x: i64,
+        y: i64,
+    }
+    let mut excluded_nodes = HashSet::new();
+    let mut node_tree: HashMap<i64, IT2<NodeP, i64>> = HashMap::new();
+
+    let mut start_nodes = vec![];
+    let mut end_nodes = vec![];
+    for node in graph.nodes() {
+        let has_incoming = graph.neighbors_directed(node, Direction::Incoming).next();
+        let has_outgoing = graph.neighbors_directed(node, Direction::Outgoing).next();
+        if has_incoming.is_none() {
+            start_nodes.push(node);
+        }
+        if has_outgoing.is_none() {
+            end_nodes.push(node);
+        }
+    }
+
+    let mut spans: HashSet<NodeIntervalBlock> = HashSet::new();
+
+    for start in start_nodes.iter() {
+        for end_node in end_nodes.iter() {
+            for path in all_simple_paths_by_edge(&graph, *start, *end_node) {
+                let mut offset = 0;
+                for (source_node, target_node, edge) in path.iter() {
+                    let block_len = source_node.length();
+                    let node_start = offset;
+                    let node_end = offset + block_len;
+                    spans.insert(NodeIntervalBlock {
+                        block_id: source_node.block_id,
+                        node_id: source_node.node_id,
+                        start: node_start,
+                        end: node_end,
+                        sequence_start: source_node.sequence_start,
+                        sequence_end: source_node.sequence_end,
+                        strand: edge.source_strand,
+                    });
+                    spans.insert(NodeIntervalBlock {
+                        block_id: target_node.block_id,
+                        node_id: target_node.node_id,
+                        start: node_end,
+                        end: node_end + target_node.length(),
+                        sequence_start: target_node.sequence_start,
+                        sequence_end: target_node.sequence_end,
+                        strand: edge.target_strand,
+                    });
+                    if remove_ambiguous_positions {
+                        for (node_id, node_range) in [
+                            (
+                                source_node.node_id,
+                                NodeP {
+                                    x: node_start,
+                                    y: source_node.sequence_start,
+                                }..NodeP {
+                                    x: node_end,
+                                    y: source_node.sequence_end,
+                                },
+                            ),
+                            (
+                                target_node.node_id,
+                                NodeP {
+                                    x: node_end,
+                                    y: target_node.sequence_start,
+                                }..NodeP {
+                                    x: node_end + target_node.length(),
+                                    y: target_node.sequence_end,
+                                },
+                            ),
+                        ] {
+                            // TODO; This could be a bit better by trying to conserve subregions
+                            // within a node that are not ambiguous instead of kicking the entire
+                            // node out.
+                            node_tree
+                                .entry(node_id)
+                                .and_modify(|tree| {
+                                    for (stored_range, _stored_node_id) in
+                                        tree.iter_overlaps(&node_range)
+                                    {
+                                        if *stored_range != node_range {
+                                            excluded_nodes.insert(node_id);
+                                            break;
+                                        }
+                                    }
+                                    tree.insert(node_range.clone(), node_id);
+                                })
+                                .or_insert_with(|| {
+                                    let mut t = IT2::default();
+                                    t.insert(node_range.clone(), node_id);
+                                    t
+                                });
+                        }
+                    }
+                    offset += block_len;
+                }
+            }
+        }
+    }
+
+    let tree: IntervalTree<i64, NodeIntervalBlock> = spans
+        .iter()
+        .filter(|block| !remove_ambiguous_positions || !excluded_nodes.contains(&block.node_id))
+        .map(|block| (block.start..block.end, *block))
+        .collect();
+    tree
 }
 
 #[cfg(test)]

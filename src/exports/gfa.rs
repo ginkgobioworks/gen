@@ -518,7 +518,7 @@ mod tests {
         // 5 total
         assert_eq!(edge_ids.len(), 5);
 
-        let nodes = Node::get_nodes(&conn, node_ids.into_iter().collect::<Vec<i64>>());
+        let nodes = Node::get_nodes(&conn, &node_ids.into_iter().collect::<Vec<i64>>());
         let mut node_hashes = HashSet::new();
         for node in nodes {
             if !Node::is_terminal(node.id) {
@@ -564,7 +564,7 @@ mod tests {
         // 7 total
         assert_eq!(edge_ids2.len(), 7);
 
-        let nodes2 = Node::get_nodes(&conn, node_ids2.into_iter().collect::<Vec<i64>>());
+        let nodes2 = Node::get_nodes(&conn, &node_ids2.into_iter().collect::<Vec<i64>>());
         let mut node_hashes2 = HashSet::new();
         for node in nodes2 {
             if !Node::is_terminal(node.id) {

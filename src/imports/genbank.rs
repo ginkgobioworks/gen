@@ -45,19 +45,119 @@ where
     for result in reader {
         match result {
             Ok(seq) => {
-                let mut seq_model = Sequence::new();
+                // genbank changes are setup where the inserts/deletions/etc. are in the provided
+                // sequence, so we need to undo all these changes to get the WT sequence and then
+                // apply changes. Thus, our sequence/path/etc. creation are deferred until all
+                // features are processed.
+                let mut final_sequence: String;
+                if let Ok(sequence) = str::from_utf8(&seq.seq) {
+                    final_sequence = sequence.to_string();
+                } else {
+                    continue;
+                }
+
+                let mut changes: Vec<(i64, i64, String, String, String)> = vec![];
+
+                for feature in seq.features.iter() {
+                    for (key, value) in feature.qualifiers.iter() {
+                        if key == "note" {
+                            if let Some(v) = value {
+                                let geneious_mod = geneious_edit.captures(v);
+                                if let Some(edit) = geneious_mod {
+                                    let (mut start, mut end) =
+                                        feature.location.find_bounds().map_err(|_| {
+                                            GenBankError::LocationError("Ambiguous Bounds")
+                                        })?;
+                                    match &edit["edit_type"] {
+                                        "Insertion" => {
+                                            // If there is an insertion, it means that the WT is missing
+                                            // this sequence, so we actually treat it as a deletion
+                                            changes.push((
+                                                start,
+                                                end,
+                                                "".to_string(),
+                                                final_sequence[start as usize..end as usize]
+                                                    .to_string(),
+                                                "Insertion".to_string(),
+                                            ));
+                                        }
+                                        "Deletion" | "Replacement" => {
+                                            // If there is a deletion, it means that found sequence is missing
+                                            // this sequence, so we treat it as an insertion
+                                            let deleted_seq = normalize_string(
+                                                &feature
+                                                    .qualifiers
+                                                    .iter()
+                                                    .filter(|(k, _v)| k == "Original_Bases")
+                                                    .map(|(_k, v)| v.clone())
+                                                    .collect::<Option<String>>()
+                                                    .expect("Deleted sequence is not annotated."),
+                                            );
+                                            if matches!(feature.location, Location::Between(_, _)) {
+                                                start += 1;
+                                                end -= 1;
+                                            }
+                                            changes.push((
+                                                start,
+                                                end,
+                                                deleted_seq,
+                                                final_sequence[start as usize..end as usize]
+                                                    .to_string(),
+                                                edit["edit_type"].to_string(),
+                                            ));
+                                        }
+                                        t => {
+                                            println!("Unknown edit type {t}.")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                changes.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+
+                let mut wt_changes = vec![];
+                let mut offset: i64 = 0;
+                for (start, end, old_seq, new_seq, edit_type) in changes.iter() {
+                    let ustart = (start + offset) as usize;
+                    let uend = (end + offset) as usize;
+                    match edit_type.as_str() {
+                        "Insertion" => {
+                            final_sequence =
+                                format!("{}{}", &final_sequence[..ustart], &final_sequence[uend..]);
+                        }
+                        "Deletion" | "Replacement" => {
+                            final_sequence = format!(
+                                "{}{old_seq}{}",
+                                &final_sequence[..ustart],
+                                &final_sequence[uend..]
+                            );
+                        }
+                        _ => {}
+                    }
+                    let seq_diff = old_seq.len() as i64 - new_seq.len() as i64;
+                    wt_changes.push((
+                        *start + offset,
+                        end + offset + seq_diff,
+                        old_seq,
+                        new_seq,
+                        edit_type,
+                    ));
+                    offset += seq_diff;
+                }
+
+                let mut seq_model = Sequence::new().sequence(&final_sequence);
                 let contig = &seq.name.unwrap_or_default();
                 if !contig.is_empty() {
                     seq_model = seq_model.name(contig);
-                }
-                if let Ok(sequence) = str::from_utf8(&seq.seq) {
-                    seq_model = seq_model.sequence(sequence);
                 }
                 if let Some(mol_type) = &seq.molecule_type {
                     seq_model = seq_model.sequence_type(mol_type);
                 }
                 let sequence = seq_model.save(conn);
-                let node_id = Node::create(
+                let wt_node_id = Node::create(
                     conn,
                     &sequence.hash,
                     calculate_hash(&format!(
@@ -72,13 +172,13 @@ where
                     PATH_START_NODE_ID,
                     0,
                     Strand::Forward,
-                    node_id,
+                    wt_node_id,
                     0,
                     Strand::Forward,
                 );
                 let edge_out_of = Edge::create(
                     conn,
-                    node_id,
+                    wt_node_id,
                     sequence.length,
                     Strand::Forward,
                     PATH_END_NODE_ID,
@@ -107,117 +207,82 @@ where
                     &[edge_into.id, edge_out_of.id],
                 );
 
-                for feature in seq.features.iter() {
-                    for (key, value) in feature.qualifiers.iter() {
-                        if key == "note" {
-                            if let Some(v) = value {
-                                let geneious_mod = geneious_edit.captures(v);
-                                if let Some(edit) = geneious_mod {
-                                    let (mut start, mut end) =
-                                        feature.location.find_bounds().map_err(|_| {
-                                            GenBankError::LocationError("Ambiguous Bounds")
-                                        })?;
-                                    match &edit["edit_type"] {
-                                        "Insertion" => {
-                                            // If there is an insertion, it means that the WT is missing
-                                            // this sequence, so we actually treat it as a deletion
-                                            let change_seq = Sequence::new()
-                                                .sequence("")
-                                                .name(v)
-                                                .sequence_type("DNA")
-                                                .save(conn);
-                                            let change_node = Node::create(
-                                                conn,
-                                                &change_seq.hash,
-                                                calculate_hash(&format!(
-                                                    "{parent_hash}:{start}-{end}->{new_hash}",
-                                                    parent_hash = &sequence.hash,
-                                                    new_hash = &change_seq.hash,
-                                                )),
-                                            );
-                                            let change = PathChange {
-                                                block_group_id: block_group.id,
-                                                path: path.clone(),
-                                                path_accession: Some(v.clone()),
-                                                start,
-                                                end,
-                                                block: PathBlock {
-                                                    id: 0,
-                                                    node_id: change_node,
-                                                    block_sequence: "".to_string(),
-                                                    sequence_start: 0,
-                                                    sequence_end: 0,
-                                                    path_start: start,
-                                                    path_end: end,
-                                                    strand: Strand::Forward,
-                                                },
-                                                chromosome_index: 0,
-                                                phased: 0,
-                                            };
-                                            let tree = path.intervaltree(conn);
-                                            BlockGroup::insert_change(conn, &change, &tree);
-                                        }
-                                        "Deletion" | "Replacement" => {
-                                            // If there is a deletion, it means that found sequence is missing
-                                            // this sequence, so we treat it as an insertion
-                                            let deleted_seq = normalize_string(
-                                                &feature
-                                                    .qualifiers
-                                                    .iter()
-                                                    .filter(|(k, _v)| k == "Original_Bases")
-                                                    .map(|(_k, v)| v.clone())
-                                                    .collect::<Option<String>>()
-                                                    .expect("Deleted sequence is not annotated."),
-                                            );
-                                            let del_len = deleted_seq.len() as i64;
-                                            let change_seq = Sequence::new()
-                                                .sequence(&deleted_seq)
-                                                .name(v)
-                                                .sequence_type("DNA")
-                                                .save(conn);
-                                            let change_node = Node::create(
-                                                conn,
-                                                &change_seq.hash,
-                                                calculate_hash(&format!(
-                                                    "{parent_hash}:{start}-{end}->{new_hash}",
-                                                    parent_hash = &sequence.hash,
-                                                    new_hash = &change_seq.hash,
-                                                )),
-                                            );
-                                            if matches!(feature.location, Location::Between(_, _)) {
-                                                start += 1;
-                                                end -= 1;
-                                            }
-                                            let change = PathChange {
-                                                block_group_id: block_group.id,
-                                                path: path.clone(),
-                                                path_accession: Some(v.clone()),
-                                                start,
-                                                end,
-                                                block: PathBlock {
-                                                    id: 0,
-                                                    node_id: change_node,
-                                                    block_sequence: deleted_seq,
-                                                    sequence_start: 0,
-                                                    sequence_end: del_len,
-                                                    path_start: start,
-                                                    path_end: end,
-                                                    strand: Strand::Forward,
-                                                },
-                                                chromosome_index: 0,
-                                                phased: 0,
-                                            };
-                                            let tree = path.intervaltree(conn);
-                                            BlockGroup::insert_change(conn, &change, &tree);
-                                        }
-                                        t => {
-                                            println!("Unknown edit type {t}.")
-                                        }
-                                    }
-                                }
-                            }
+                for (start, end, _old_seq, new_seq, edit_type) in wt_changes.iter() {
+                    let start = *start;
+                    let end = *end;
+                    let change_seq = match edit_type.as_str() {
+                        "Insertion" => Some(
+                            Sequence::new()
+                                .sequence(new_seq)
+                                .name(&format!("Geneious type: Editing History {edit_type}"))
+                                .sequence_type("DNA")
+                                .save(conn),
+                        ),
+                        "Replacement" => Some(
+                            Sequence::new()
+                                .sequence(new_seq)
+                                .name(&format!("Geneious type: Editing History {edit_type}"))
+                                .sequence_type("DNA")
+                                .save(conn),
+                        ),
+                        "Deletion" => None,
+                        _ => {
+                            panic!("Unknown edit type");
                         }
-                    }
+                    };
+                    let change = if let Some(change_seq) = change_seq {
+                        let change_node = Node::create(
+                            conn,
+                            &change_seq.hash,
+                            calculate_hash(&format!(
+                                "{parent_hash}:{start}-{end}->{new_hash}",
+                                parent_hash = &sequence.hash,
+                                new_hash = &change_seq.hash,
+                            )),
+                        );
+                        PathChange {
+                            block_group_id: block_group.id,
+                            path: path.clone(),
+                            path_accession: None,
+                            start,
+                            end,
+                            block: PathBlock {
+                                id: 0,
+                                node_id: change_node,
+                                block_sequence: (**new_seq).clone(),
+                                sequence_start: 0,
+                                sequence_end: change_seq.length,
+                                path_start: start,
+                                path_end: end + change_seq.length,
+                                strand: Strand::Forward,
+                            },
+                            chromosome_index: 0,
+                            phased: 0,
+                        }
+                    } else {
+                        // it's a deletion
+                        PathChange {
+                            block_group_id: block_group.id,
+                            path: path.clone(),
+                            path_accession: None,
+                            start,
+                            end,
+                            block: PathBlock {
+                                id: 0,
+                                node_id: wt_node_id,
+                                block_sequence: "".to_string(),
+                                sequence_start: 0,
+                                sequence_end: 0,
+                                path_start: start,
+                                path_end: end,
+                                strand: Strand::Forward,
+                            },
+                            chromosome_index: 0,
+                            phased: 0,
+                        }
+                    };
+                    let tree = path.intervaltree(conn);
+                    BlockGroup::insert_change(conn, &change, &tree);
                 }
             }
             Err(e) => return Err(GenBankError::ParseError(format!("Failed to parse {}", e))),
@@ -242,10 +307,21 @@ mod tests {
     use crate::models::metadata;
     use crate::models::operations::setup_db;
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
+    use noodles::fasta;
     use std::collections::HashSet;
     use std::fs::File;
     use std::io::BufReader;
     use std::path::PathBuf;
+
+    fn get_unmodified_sequence() -> String {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/geneious_genbank/unmodified.fa");
+        let mut reader = fasta::io::reader::Builder.build_from_path(path).unwrap();
+        let mut records = reader.records();
+        let record = records.next().unwrap().unwrap();
+        let seq = record.sequence();
+        str::from_utf8(seq.as_ref()).unwrap().to_string()
+    }
 
     #[test]
     fn test_error_on_invalid_file() {
@@ -301,6 +377,7 @@ mod tests {
     #[cfg(test)]
     mod geneious_genbanks {
         use super::*;
+
         #[test]
         fn test_parses_insertion() {
             setup_gen_dir();
@@ -491,6 +568,39 @@ mod tests {
                     .to_string()
                 ])
             );
+        }
+
+        #[test]
+        fn test_parses_multiple_changes() {
+            setup_gen_dir();
+            let conn = &get_connection(None);
+            let db_uuid = metadata::get_db_uuid(conn);
+            let op_conn = &get_operation_connection(None);
+            setup_db(op_conn, &db_uuid);
+            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("fixtures/geneious_genbank/multiple_insertions_deletions.gb");
+            let file = File::open(&path).unwrap();
+            let _ = import_genbank(
+                conn,
+                op_conn,
+                BufReader::new(file),
+                None,
+                OperationInfo {
+                    file_path: "".to_string(),
+                    file_type: FileTypes::GenBank,
+                    description: "test".to_string(),
+                },
+            );
+            // there would be 4! sequences so we just check we have the fully changed and unchanged sequence
+            let f = reader::parse_file(&path).unwrap();
+            let mod_seq = str::from_utf8(&f[0].seq).unwrap().to_string();
+            let sequences: HashSet<String> = BlockGroup::get_all_sequences(conn, 1, false)
+                .iter()
+                .map(|s| s.to_lowercase())
+                .collect();
+            let unchanged_seq = get_unmodified_sequence();
+            assert!(sequences.contains(&mod_seq));
+            assert!(sequences.contains(&unchanged_seq));
         }
     }
 }
