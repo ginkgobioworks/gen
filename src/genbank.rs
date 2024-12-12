@@ -191,9 +191,7 @@ pub fn process_sequence(seq: Seq) -> Result<GenBankLocus, GenBankError> {
 mod tests {
     use super::*;
     use gb_io::reader;
-    use itertools::Itertools;
     use noodles::fasta;
-    use std::fs::File;
     use std::path::PathBuf;
 
     fn get_unmodified_sequence() -> String {
@@ -210,7 +208,6 @@ mod tests {
     fn test_restores_original_sequence() {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("fixtures/geneious_genbank/insertion.gb");
-        let file = File::open(&path).unwrap();
         let mut a = reader::parse_file(&path).unwrap();
         let seq = process_sequence(a.remove(0)).unwrap();
         assert_eq!(seq.original_sequence(), get_unmodified_sequence());
@@ -220,7 +217,6 @@ mod tests {
     fn test_returns_changes_to_wt_sequence() {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("fixtures/geneious_genbank/multiple_insertions_deletions.gb");
-        let file = File::open(&path).unwrap();
         let mut a = reader::parse_file(&path).unwrap();
         let seq = process_sequence(a.remove(0)).unwrap();
         let changes = seq.changes_to_wt();
