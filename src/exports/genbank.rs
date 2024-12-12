@@ -472,7 +472,6 @@ mod tests {
         let tmp_dir = tempfile::tempdir().unwrap().into_path();
         let filename = tmp_dir.join("out.gb");
         export_genbank(conn, "", None, &filename);
-
         compare_genbanks(&path, &filename);
     }
 
