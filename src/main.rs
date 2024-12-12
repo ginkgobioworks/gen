@@ -436,7 +436,7 @@ fn main() {
                 .unwrap();
             } else if let Some(gb_path) = gb {
                 let f = File::open(gb_path).unwrap();
-                let _ = update_with_genbank(
+                match update_with_genbank(
                     &conn,
                     &operation_conn,
                     &f,
@@ -447,7 +447,10 @@ fn main() {
                         file_type: FileTypes::GenBank,
                         description: "Update from GenBank".to_string(),
                     },
-                );
+                ) {
+                    Ok(_) => {}
+                    Err(e) => panic!("Failed to update. Error is: {e}"),
+                }
             } else {
                 panic!("Unknown file type provided for update.");
             }
