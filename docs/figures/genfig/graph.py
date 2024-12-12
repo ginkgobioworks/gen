@@ -105,13 +105,22 @@ class Graph:
         """
         Returns a list of edges as tuples that can be hashed and compared
         """
-        edges = []
+        edges = set()
         for n1, n2, d in self.graph.edges(data=True):
-            edges.append(((n1,d.get('from_pos',-1)),
+            edges.add(((n1,d.get('from_pos',-1)),
                           (n2,d.get('to_pos',0))))
         return edges
     
-    def remove_edge(self, source, target):
+    def get_nodes(self):
+        """
+        Returns a list of nodes as tuples that can be hashed and compared
+        """
+        nodes = set()
+        for n, d in self.graph.nodes(data=True):
+            nodes.add((n, d.get('sequence')))
+        return nodes
+    
+    def remove_edge(self, source, target, prune=True):
         (source, from_pos), (target, to_pos) = source, target
 
         # Find the key corresponding to the given edge and coordinates
@@ -121,11 +130,20 @@ class Graph:
                 break
         
         # If there are nodes that are completely disconnected, remove those too
+        if prune:
+            self.prune()
+
+        return self
+    
+    def remove_node(self, node_id):
+        self.graph.remove_node(f'{node_id}')
+        return self
+
+    def prune(self):
+        '''Remove any nodes that are completely disconnected.'''
         for node in list(self.graph.nodes):
             if self.graph.out_degree()[node] == 0 and self.graph.in_degree()[node] == 0:
                 self.graph.remove_node(node)
-
-        return self
 
     def highlight_edge(self, source, target):
         # Unpack the source and target (node,position) tuples
@@ -218,7 +236,6 @@ class Graph:
         for node in self.graph.nodes:
             if node in ['start', 'end']:
                 continue
-
             # Get ports from incoming and outgoing edges
             in_ports = [data.get('to_pos',0) for source, target, data in self.graph.in_edges(node, data=True)]
             out_ports = [data.get('from_pos',-1) for source, target, data in self.graph.out_edges(node, data=True)]
@@ -394,19 +411,8 @@ class Graph:
                                  )
         # Other useful arguments for dot (with defaults): ranksep (0.5) searchsize(100) mclimit(10) newrank(false)
 
-        # For the actual rendering the cairo renderer svg:cairo:cairo sometimes produces better results for longer nodes
-        formatter = 'svg:cairo:cairo' if cairo else 'svg:svg:core'
-        if filename:
-            svg = agraph.draw(f'{filename}.svg', prog='dot', format=formatter)
-        else:
-            svg = agraph.draw(prog='dot', format=formatter)
-        # Test if we're in an interactive session, and only display if we are
-        try:
-            get_ipython
-            display(SVG(agraph.draw(prog='dot', format=formatter)))
-            return None
-        except NameError:
-            return svg
+        return self.render_dot(agraph, filename, cairo)
+
 
     def render_block_graph(self, filename=None, minimize=False, splines = True, align_blocks = True, rankdir = 'LR',
                             ranksep = 0.5, hide_nodes=[], cairo = False):
@@ -489,15 +495,15 @@ class Graph:
             else:
                 edge.attr['tailport'] = 'seq:e'    
 
-
-
         # Set the graph-level attributes that will be used by the dot rendering engine
         agraph.graph_attr.update(rankdir=rankdir, 
                                  splines='true' if splines else 'polyline',
                                  ranksep=ranksep,
                                  fontnames='svg')
         # Other useful arguments for dot (with defaults): ranksep (0.5) searchsize(100) mclimit(10) newrank(false)
-
+        return self.render_dot(agraph, filename, cairo)
+    
+    def render_dot(self, agraph, filename=None, cairo=False):
         # Write the dot file to disk if a filename is provided
         if filename:
             agraph.write(f'{filename}.dot')
@@ -512,7 +518,7 @@ class Graph:
         agraph.layout(prog='dot')
         
         # For the actual rendering the cairo renderer sometimes produces better results for longer nodes
-        # It does not support fonts in SVG however, so we only use it for the png output
+        # It does not support fonts in SVG however, so we make the PNG instead
         if cairo:
             img = agraph.draw(prog='dot', format='png', args='-Gdpi=300')
             filename = filename + '.png' if filename else None
@@ -525,8 +531,7 @@ class Graph:
                 file.write(img)
         
         return img
-        
-  
+
     def extract_subgraph(self, start, end):
         """
         Extracts a subgraph from the graph that starts at the given start (node, position) pair and ends at 
@@ -536,28 +541,29 @@ class Graph:
         start (tuple): A tuple containing the node and position to start the subgraph from.
         end (tuple): A tuple containing the node and position to end the subgraph at.
         """
-        start_node, start_coordinate = start
-        end_node, end_coordinate = end
+        subgraph_start_node, start_coordinate = start
+        subgraph_end_node, end_coordinate = end
 
         # Ensure we're working with strings
-        start_node = f'{start_node}'
-        end_node = f'{end_node}'
+        subgraph_start_node = f'{subgraph_start_node}'
+        subgraph_end_node = f'{subgraph_end_node}'
 
-        # Make a copy to work in:
+        # Create a copy of the current object
         Gx = deepcopy(self)
 
-        # 1) remove the existing start and end edges
+        # 1) remove the existing start and end edges, but don't prune any nodes
         for edge in Gx.get_edges():
             (source, source_coordinate), (target, target_coordinate) = edge
             if source == 'start' or target == 'end':
-                Gx.remove_edge(*edge)
+                Gx.remove_edge(*edge, prune=False)
 
         # 2) create the new edges:
-        Gx.connect_to_source(start_node, start_coordinate)
-        Gx.connect_to_sink(end_node, end_coordinate)
+        Gx.connect_to_source(subgraph_start_node, start_coordinate)
+        Gx.connect_to_sink(subgraph_end_node, end_coordinate)
 
         # 3) find all blocks and edges between the start and end nodes
         Gx.make_block_graph()
+
         paths = nx.all_simple_paths(Gx.block_graph, source='start', target='end')
 
         traversed_blocks = set()
@@ -593,6 +599,15 @@ class Graph:
 
 
 if __name__ == "__main__":
+    G1 = Graph()
+    n1 = G1.add_node('ATGAGTAAAGGAGAAGAACTTTTCACTGGAGT', node_id = '1') # Derived from BBa_K1896001
+    start = ('1', 5)
+    end = ('1', 13) 
+    G1.connect_to_source(*start)
+    G1.connect_to_sink(*end)
+    G2 = G1.extract_subgraph(start, end)
+    G2.render_block_graph()
+
     # Take in a gen database file as argument
     import argparse
     parser = argparse.ArgumentParser()
