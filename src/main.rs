@@ -19,6 +19,7 @@ use gen::operation_management::{parse_patch_operations, OperationError};
 use gen::patch;
 use gen::updates::fasta::update_with_fasta;
 use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
+use gen::updates::genbank::update_with_genbank;
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::update_with_vcf;
 use itertools::Itertools;
@@ -435,11 +436,12 @@ fn main() {
                 .unwrap();
             } else if let Some(gb_path) = gb {
                 let f = File::open(gb_path).unwrap();
-                let _ = import_genbank(
+                let _ = update_with_genbank(
                     &conn,
                     &operation_conn,
                     &f,
                     name.deref(),
+                    *create_missing,
                     OperationInfo {
                         file_path: gb_path.clone(),
                         file_type: FileTypes::GenBank,

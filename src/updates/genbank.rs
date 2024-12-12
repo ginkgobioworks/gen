@@ -1,3 +1,4 @@
+use crate::calculate_hash;
 use crate::genbank::{process_sequence, EditType, GenBankError};
 use crate::models::block_group::{BlockGroup, PathChange};
 use crate::models::block_group_edge::{BlockGroupEdge, BlockGroupEdgeData};
@@ -10,9 +11,8 @@ use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 use crate::models::traits::Query;
 use crate::operation_management::{end_operation, start_operation};
-use crate::{calculate_hash, normalize_string};
 use gb_io::reader;
-use rusqlite::Connection;
+use rusqlite::{params, types::Value, Connection};
 use std::io::Read;
 use std::str;
 
@@ -34,12 +34,13 @@ where
         match result {
             Ok(seq) => {
                 let locus = process_sequence(seq)?;
-                let mut seq_model = Sequence::new().sequence(&locus.original_sequence());
+                let original_sequence = locus.original_sequence();
+                let mut seq_model = Sequence::new().sequence(&original_sequence);
                 if !locus.name.is_empty() {
                     seq_model = seq_model.name(&locus.name);
                 }
-                if let Some(mol_type) = locus.molecule_type {
-                    seq_model = seq_model.sequence_type(&mol_type);
+                if let Some(ref mol_type) = locus.molecule_type {
+                    seq_model = seq_model.sequence_type(mol_type);
                 }
                 let sequence = seq_model.save(conn);
                 let wt_node_id = Node::create(
@@ -47,27 +48,30 @@ where
                     &sequence.hash,
                     calculate_hash(&format!(
                         "{collection}.{contig}:{hash}",
+                        contig = &locus.name,
                         collection = &collection.name,
                         hash = sequence.hash
                     )),
                 );
 
-                let block_group = BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null AND name = ?2", params![Value::from(collection.name.clone()), Value::from(contig.clone())]).unwrap_or_else(|_| {
+                let block_group = BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null AND name = ?2", params![Value::from(collection.name.clone()), Value::from(locus.name.clone())]).unwrap_or_else(|_| {
                         if !create_missing {
-                            panic!("No block group named {contig} exists. Try importing first or pass --create-missing.")
+                            panic!("No block group named {contig} exists. Try importing first or pass --create-missing.", contig=&locus.name)
                         }
-                        BlockGroup::create(conn, &collection.name, None, contig)
+                        BlockGroup::create(conn, &collection.name, None, &locus.name)
                     });
                 let paths = Path::query(
                     conn,
                     "select * from paths where block_group_id = ?1 AND name = ?2",
-                    params![Value::from(block_group.id), Value::from(contig.clone())],
+                    params![Value::from(block_group.id), Value::from(locus.name.clone())],
                 );
-                let path = paths.first().unwrap_or_else(|| {
-                        if !create_missing {
-                            panic!("No path named {contig} exists. Try importing first or pass --create-missing.")
-                        }
-                        let edge_into = Edge::create(
+                let path = if let Some(first) = paths.first() {
+                    first.clone()
+                } else {
+                    if !create_missing {
+                        panic!("No path named {contig} exists. Try importing first or pass --create-missing.", contig=&locus.name)
+                    }
+                    let edge_into = Edge::create(
                         conn,
                         PATH_START_NODE_ID,
                         0,
@@ -104,11 +108,11 @@ where
                     );
                     Path::create(
                         conn,
-                        contig,
+                        &locus.name,
                         block_group.id,
                         &[edge_into.id, edge_out_of.id],
                     )
-                    }).clone();
+                };
                 for edit in locus.changes_to_wt() {
                     let start = edit.start;
                     let end = edit.end;
@@ -116,21 +120,24 @@ where
                         EditType::Insertion => Some(
                             Sequence::new()
                                 .sequence(&edit.new_sequence)
-                                .name(&format!("Geneious type: Editing History {edit_type}"))
+                                .name(&format!(
+                                    "Geneious type: Editing History {edit_type}",
+                                    edit_type = edit.edit_type
+                                ))
                                 .sequence_type("DNA")
                                 .save(conn),
                         ),
                         EditType::Replacement => Some(
                             Sequence::new()
                                 .sequence(&edit.new_sequence)
-                                .name(&format!("Geneious type: Editing History {edit_type}"))
+                                .name(&format!(
+                                    "Geneious type: Editing History {edit_type}",
+                                    edit_type = edit.edit_type
+                                ))
                                 .sequence_type("DNA")
                                 .save(conn),
                         ),
                         EditType::Deletion => None,
-                        _ => {
-                            panic!("Unknown edit type");
-                        }
                     };
                     let change = if let Some(change_seq) = change_seq {
                         let change_node = Node::create(
@@ -268,7 +275,7 @@ mod tests {
             op_conn,
             BufReader::new(file),
             None,
-            false,
+            true,
             OperationInfo {
                 file_path: path.to_str().unwrap().to_string(),
                 file_type: FileTypes::GenBank,
@@ -282,6 +289,7 @@ mod tests {
     #[cfg(test)]
     mod geneious_genbanks {
         use super::*;
+        use crate::imports::genbank::import_genbank;
 
         #[test]
         fn test_incorporates_updates() {
