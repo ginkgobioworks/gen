@@ -18,7 +18,7 @@ pub enum GenBankError {
     Regex(#[from] RegexError),
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum EditType {
     Deletion,
     Insertion,
@@ -48,6 +48,7 @@ impl FromStr for EditType {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct GenBankEdit {
     pub start: i64,
     pub end: i64,
@@ -56,6 +57,7 @@ pub struct GenBankEdit {
     pub edit_type: EditType,
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct GenBankLocus {
     pub name: String,
     pub molecule_type: Option<String>,
@@ -103,6 +105,7 @@ impl GenBankLocus {
             });
             offset += seq_diff;
         }
+        wt_changes.sort_unstable_by(|a, b| Ord::cmp(&a.start, &b.start));
         wt_changes
     }
 }
@@ -182,4 +185,65 @@ pub fn process_sequence(seq: Seq) -> Result<GenBankLocus, GenBankError> {
 
     locus.changes.sort_unstable_by(|a, b| a.start.cmp(&b.start));
     Ok(locus)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gb_io::reader;
+    use itertools::Itertools;
+    use noodles::fasta;
+    use std::fs::File;
+    use std::path::PathBuf;
+
+    fn get_unmodified_sequence() -> String {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/geneious_genbank/unmodified.fa");
+        let mut reader = fasta::io::reader::Builder.build_from_path(path).unwrap();
+        let mut records = reader.records();
+        let record = records.next().unwrap().unwrap();
+        let seq = record.sequence();
+        str::from_utf8(seq.as_ref()).unwrap().to_string()
+    }
+
+    #[test]
+    fn test_restores_original_sequence() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/geneious_genbank/insertion.gb");
+        let file = File::open(&path).unwrap();
+        let mut a = reader::parse_file(&path).unwrap();
+        let seq = process_sequence(a.remove(0)).unwrap();
+        assert_eq!(seq.original_sequence(), get_unmodified_sequence());
+    }
+
+    #[test]
+    fn test_returns_changes_to_wt_sequence() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/geneious_genbank/multiple_insertions_deletions.gb");
+        let file = File::open(&path).unwrap();
+        let mut a = reader::parse_file(&path).unwrap();
+        let seq = process_sequence(a.remove(0)).unwrap();
+        let changes = seq.changes_to_wt();
+        assert_eq!(changes, vec![GenBankEdit {
+            start: 119,
+            end: 237,
+            old_sequence: "TGCGTAAGGAGAAAATACCGCATCAGGCGCCATTCGCCATTCAGGCTGCGCAACTGTTGGGAAGGGCGATCGGTGCGGGCCTCTTCGCTATTACGCCAGCTGGCGAAAGGGGGATGTG".to_string(),
+            new_sequence: "aact".to_string(),
+            edit_type: EditType::Replacement }, GenBankEdit {
+            start: 1425, end: 1425, old_sequence: "".to_string(), new_sequence:
+            "tcagaagaactcgtcaagaaggcgatagaaggcgatgcgctgcgaatcgggagcggcgataccgtaaagcacgaggaagcggtcagcccattcgccgccaagctcttcagcaatatcacgggtagccaacgctatgtcctgatagcggtccgccacacccagccggccacagtcgatgaatccagaaaagcggccattttccaccatgatattcggcaagcaggcatcgccatgggtcacgacgagatcctcgccgtcgggcatgcgcgccttgagcctggcgaacagttcggctggcgcgagcccctgatgctcttcgtccagatcatcctgatcgacaagaccggcttccatccgagtacgtgctcgctcgatgcgatgtttcgcttggtggtcgaatgggcaggtagccggatcaagcgtatgcagccgccgcattgcatcagccatgatggatactttctcggcaggagcaaggtgagatgacaggagatcctgccccggcacttcgcccaatagcagccagtcccttcccgcttcagtgacaacgtcgagcacagctgcgcaaggaacgcccgtcgtggccagccacgatagccgcgctgcctcgtcctgcagttcattcagggcaccggacaggtcggtcttgacaaaaagaaccgggcgcccctgcgctgacagccggaacacggcggcatcagagcagccgattgtctgttgtgcccagtcatagccgaatagcctctccacccaagcggccggagaacctgcgtgcaatccatcttgttcaatcat".to_string(), edit_type: EditType::Insertion }, GenBankEdit { start: 3878, end: 4319, old_sequence: "TTCTTTGCTTCCTCGCCAGTTCGCTCGCTATGCTCGGTTACACGGCTGCGGCGAGCGCTAGTGATAATAAGTGACTGAGGTATGTGCTCTTCTTATCTCCTTTTGTAGTGTTGCTCTTATTTTAAACAACTTTGCGGTTTTTTGATGACTTTGCGATTTTGTTGTTGCTTTGCAGTAAATTGCAAGATTTAATAAAAAAACGCAAAGCAATGATTAAAGGATGTTCAGAATGAAACTCATGGAAACACTTAACCAGTGCATAAACGCTGGTCATGAAATGACGAAGGCTATCGCCATTGCACAGTTTAATGATGACAGCCCGGAAGCGAGGAAAATAACCCGGCGCTGGAGAATAGGTGAAGCAGCGGATTTAGTTGGGGTTTCTTCTCAGGCTATCAGAGATGCCGAGAAAGCAGGGCGACTACCGCACCCGGATATGGA".to_string(), new_sequence: "".to_string(), edit_type: EditType::Deletion }, GenBankEdit { start: 5750, end: 5908, old_sequence: "GCTTATGAACGTGGTCAGCGTTATGCAAGCCGATTGCAGAATGAATTTGCTGGAAATATTTCTGCGCTGGCTGATGCGGAAAATATTTCACGTAAGATTATTACCCGCTGTATCAACACCGCCAAATTGCCTAAATCAGTTGTTGCTCTTTTTTCTCA".to_string(), new_sequence: "aaattt".to_string(), edit_type: EditType::Replacement }, GenBankEdit { start: 5909, end: 5909, old_sequence: "".to_string(), new_sequence: "ccggg".to_string(), edit_type: EditType::Insertion }]);
+
+        // apply all these changes to the WT sequence and ensure we get the final sequence out
+        let mut wt_sequence = seq.original_sequence();
+        assert_ne!(wt_sequence, seq.sequence);
+        for change in changes.iter().rev() {
+            wt_sequence = format!(
+                "{}{}{}",
+                &wt_sequence[..change.start as usize],
+                change.new_sequence,
+                &wt_sequence[change.end as usize..]
+            );
+        }
+        assert_eq!(wt_sequence, seq.sequence);
+    }
 }
