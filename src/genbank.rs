@@ -36,14 +36,16 @@ impl fmt::Display for EditType {
 }
 
 impl FromStr for EditType {
-    type Err = ();
+    type Err = GenBankError;
 
     fn from_str(input: &str) -> Result<EditType, Self::Err> {
         match input {
             "Deletion" => Ok(EditType::Deletion),
             "Insertion" => Ok(EditType::Insertion),
             "Replacement" => Ok(EditType::Replacement),
-            _ => Err(()),
+            _ => Err(Self::Err::ParseError(
+                format!("Unknown edit type: {input}").to_string(),
+            )),
         }
     }
 }
@@ -170,7 +172,7 @@ pub fn process_sequence(seq: Seq) -> Result<GenBankLocus, GenBankError> {
                                     old_sequence: deleted_seq,
                                     new_sequence: final_sequence[start as usize..end as usize]
                                         .to_string(),
-                                    edit_type: EditType::from_str(&edit["edit_type"]).unwrap(),
+                                    edit_type: EditType::from_str(&edit["edit_type"])?,
                                 });
                             }
                             t => {
