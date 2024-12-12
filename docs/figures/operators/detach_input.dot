@@ -19,33 +19,33 @@ strict digraph "" {
 		margin=0,
 		shape=none];
 	1.0:seq:e -> 2.0:seq:w;
-	1.8	[label=<<TABLE BORDER='0' CELLBORDER='1'><TR><TD ALIGN='CENTER' PORT='seq'><FONT POINT-SIZE='12' FACE='Monospace'><B>AG</B></FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>1:8-9</FONT></TD></TR></TABLE>>,
+	1.8	[label=<<TABLE BORDER='0' CELLBORDER='1'><TR><TD ALIGN='CENTER' PORT='seq'><FONT POINT-SIZE='12' FACE='Monospace'><B>AGG</B></FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>1:8-10</FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
 	1.4:seq:e -> 1.8:seq:w	[style=dashed,
 		weight=10];
-	3.0	[label=<<TABLE BORDER='0' CELLBORDER='1'><TR><TD ALIGN='CENTER' PORT='seq'><FONT POINT-SIZE='12' FACE='Monospace'><B>TG</B></FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>3:0-1</FONT></TD></TR></TABLE>>,
+	3.0	[label=<<TABLE BORDER='0' CELLBORDER='1'><TR><TD ALIGN='CENTER' PORT='seq'><FONT POINT-SIZE='12' FACE='Monospace'><B>TGA</B></FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>3:0-2</FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
 	1.4:seq:e -> 3.0:seq:w	[penwidth=2];
-	1.10	[label=<<TABLE BORDER='0' CELLBORDER='1'><TR><TD ALIGN='CENTER' PORT='seq'><FONT POINT-SIZE='12' FACE='Monospace'><B>GAG</B>AAG</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>1:10-15</FONT></TD></TR></TABLE>>,
+	1.11	[label=<<TABLE BORDER='0' CELLBORDER='1'><TR><TD ALIGN='CENTER' PORT='seq'><FONT POINT-SIZE='12' FACE='Monospace'><B>AGA</B>AG</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>1:11-15</FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
-	1.8:seq:e -> 1.10:seq:w	[style=dashed,
+	1.8:seq:e -> 1.11:seq:w	[style=dashed,
 		weight=10];
 	1.16	[label=<<TABLE BORDER='0' CELLBORDER='1'><TR><TD ALIGN='CENTER' PORT='seq'><FONT POINT-SIZE='12' FACE='Monospace'>AAC</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>1:16-18</FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
-	1.10:seq:e -> 1.16:seq:w	[style=dashed,
+	1.11:seq:e -> 1.16:seq:w	[style=dashed,
 		weight=10];
 	1.19	[label=<<TABLE BORDER='0' CELLBORDER='1'><TR><TD ALIGN='CENTER' PORT='seq'><FONT POINT-SIZE='12' FACE='Monospace'>TTTTCACTGGAGT</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>1:19-31</FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
-	1.10:seq:e -> 1.19:seq:w;
+	1.11:seq:e -> 1.19:seq:w;
 	1.16:seq:e -> 1.19:seq:w	[style=dashed,
 		weight=10];
 	end	[label=end];
 	1.19:seq:e -> end:w;
 	2.0:seq:e -> 1.4:seq:w;
-	3.0:seq:e -> 1.10:seq:w	[penwidth=2];
+	3.0:seq:e -> 1.11:seq:w	[penwidth=2];
 }

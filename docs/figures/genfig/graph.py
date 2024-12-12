@@ -2,7 +2,7 @@
 
 import networkx as nx
 import matplotlib.pyplot as plt 
-from IPython.display import SVG, display
+from IPython.display import SVG, Image, display
 import sqlite3
 import json
 from copy import deepcopy
@@ -489,26 +489,40 @@ class Graph:
             #with open(f'{filename}.dot.json', 'w') as file:
             #    json.dump(dot_content, file)
 
-        # Draw the graph using graphviz and return it as SVG
+        # Create the node layout
         agraph.layout(prog='dot')
         
-        formatter = 'svg:cairo:cairo' if cairo else 'svg:svg:core'
-        # For the actual rendering the cairo renderer svg:svg:cairo sometimes produces better results for longer nodes
-        if filename:
-            svg = agraph.draw(f'{filename}.svg', prog='dot', format=formatter)
-            # Also make a PNG if we're using cairo, since its SVGs are larger and lack selectable text
-            if cairo:
-                agraph.draw(f'{filename}.png', prog='dot', format='png', args='-Gdpi=300')
-        else:
-            svg = agraph.draw(prog='dot', format=formatter)
-        # Test if we're in an interactive session, and only display if we are
+        # Test if we're in an interactive session, in which case we can display to the screen as well
         try:
             get_ipython
-            display(SVG(agraph.draw(prog='dot', format=formatter)))
-            return None
+            interactive = True
         except NameError:
-            return svg
+            interactive = False
+        except:
+            raise
         
+        # For the actual rendering the cairo renderer sometimes produces better results for longer nodes
+        # Its SVGs have hardcoded glyphs however, so we only use it for the png output
+        if cairo:
+            img = agraph.draw(prog='dot', format='png', args='-Gdpi=300')
+            filename = filename + '.png' if filename else None
+        else:
+            img = agraph.draw(prog='dot', format='svg')
+            filename = filename + '.svg' if filename else None
+
+        if filename:
+            with open(filename, 'wb') as file:
+                file.write(img)
+        
+        if not interactive:
+            return img
+        
+        if cairo:
+            display(Image(img))
+        else:
+            display(SVG(img))
+        
+  
     def extract_subgraph(self, start, end):
         """
         Extracts a subgraph from the graph that starts at the given start (node, position) pair and ends at 
