@@ -277,6 +277,7 @@ mod tests {
     mod geneious_genbanks {
         use super::*;
         use crate::imports::genbank::import_genbank;
+        use rusqlite::ToSql;
 
         #[test]
         fn test_incorporates_updates() {
@@ -430,6 +431,7 @@ mod tests {
                 },
             );
             assert!(op.is_err());
+            assert_eq!(op, Err(GenBankError::LookupError("No block group named deletion exists. Try importing first or pass --create-missing.".to_string())));
         }
     }
 }
