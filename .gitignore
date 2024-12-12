@@ -23,3 +23,5 @@ fixtures/*.ipynb
 
 # Gen tracking dir
 .gen/
+
+**/.ipynb_checkpoints/

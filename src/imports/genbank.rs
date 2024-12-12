@@ -136,7 +136,7 @@ where
                                 chromosome_index: 0,
                                 phased: 0,
                             }
-                        }
+                        },
                         EditType::Deletion => PathChange {
                             block_group_id: block_group.id,
                             path: path.clone(),
