@@ -353,8 +353,6 @@ fn main() {
                     &operation_conn,
                     &f,
                     name.deref(),
-                    false,
-                    false,
                     OperationInfo {
                         file_path: gb.clone(),
                         file_type: FileTypes::GenBank,
@@ -442,8 +440,6 @@ fn main() {
                     &operation_conn,
                     &f,
                     name.deref(),
-                    true,
-                    *create_missing,
                     OperationInfo {
                         file_path: gb_path.clone(),
                         file_type: FileTypes::GenBank,
