@@ -35,6 +35,12 @@ class Graph:
             self.graph.add_node('start', label='start')
             self.graph.add_node('end', label='end')
 
+    def _repr_png_(self):
+        """
+        Returns the PNG representation of the graph for IPython display.
+        """
+        return self.render_block_graph(minimize=True, cairo=True)
+
     def add_node(self, sequence, node_id=None):
         """
         Adds a node to the graph.
@@ -61,6 +67,8 @@ class Graph:
         """
         self.graph.add_edge('start', f'{node_id}', to_pos=to_pos)
 
+        return self
+
     def connect_to_sink(self, node_id, from_pos=-1):
         """
         Connects a node to the sink node.
@@ -77,6 +85,7 @@ class Graph:
             
         self.graph.add_edge(node_id, 'end', from_pos=from_pos)
 
+        return self
 
     def add_edge(self, source, target):
         """
@@ -89,6 +98,8 @@ class Graph:
         (source, from_pos), (target, to_pos) = source, target
 
         self.graph.add_edge(f'{source}', f'{target}', from_pos=from_pos, to_pos=to_pos)
+
+        return self
 
     def get_edges(self):
         """
@@ -114,6 +125,8 @@ class Graph:
             if self.graph.out_degree()[node] == 0 and self.graph.in_degree()[node] == 0:
                 self.graph.remove_node(node)
 
+        return self
+
     def highlight_edge(self, source, target):
         # Unpack the source and target (node,position) tuples
         (source, from_pos), (target, to_pos) = source, target
@@ -123,6 +136,8 @@ class Graph:
             if data.get('from_pos', -1) == from_pos and data.get('to_pos', 0) == to_pos:
                 self.graph.edges[(source,target,key)]['highlight'] = True
                 break
+
+        return self
                 
     def import_from_db(self, db, collection_name=None, sample_name=None, block_group_name=None):
         """
@@ -275,6 +290,8 @@ class Graph:
                 highlights[i] = True
         self.graph.nodes[node_id]['highlights'] = highlights
 
+        return self
+
     def remove_highlights(self):
         """
         Removes highlights from nodes and edges.
@@ -283,6 +300,8 @@ class Graph:
             self.graph.nodes[node].pop('highlights', None)
         for edge in self.graph.edges:
             self.graph.edges[edge].pop('highlight', None)
+
+        return self
 
     def render_graph(self, filename=None, minimize=False, splines=True, rankdir = 'TD', hide_nodes=[],
                       cairo=False):
@@ -492,17 +511,8 @@ class Graph:
         # Create the node layout
         agraph.layout(prog='dot')
         
-        # Test if we're in an interactive session, in which case we can display to the screen as well
-        try:
-            get_ipython
-            interactive = True
-        except NameError:
-            interactive = False
-        except:
-            raise
-        
         # For the actual rendering the cairo renderer sometimes produces better results for longer nodes
-        # Its SVGs have hardcoded glyphs however, so we only use it for the png output
+        # It does not support fonts in SVG however, so we only use it for the png output
         if cairo:
             img = agraph.draw(prog='dot', format='png', args='-Gdpi=300')
             filename = filename + '.png' if filename else None
@@ -514,13 +524,7 @@ class Graph:
             with open(filename, 'wb') as file:
                 file.write(img)
         
-        if not interactive:
-            return img
-        
-        if cairo:
-            display(Image(img))
-        else:
-            display(SVG(img))
+        return img
         
   
     def extract_subgraph(self, start, end):
@@ -593,12 +597,13 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("db", help="The path to the gen database file")
+    parser.add_argument("--output", help="The path to save the output file (an extension will be added automatically)", default=None)
     parser.add_argument("--collection_name", help="Filter by collection name", default=None)
     parser.add_argument("--sample_name", help="Filter by sample name", default=None)
     parser.add_argument("--block_group_name", help="Filter by block group name", default=None)
-    parser.add_argument("--minimize", help="Minimize node labels", action="store_true")
-    parser.add_argument("--splines", help="Use splines for edges", type=bool, default=True)
-    parser.add_argument("--align_blocks", help="Align blocks on a row", type=bool, default=True)
+    parser.add_argument("--minimize", help="Truncate sequences", action="store_true")
+    parser.add_argument("--lines", help="Use straight lines instead of splines for edges", action="store_true")
+    parser.add_argument("--flex", help="Do not attempt to align blocks from the same segment as a row", action="store_true")
     parser.add_argument("--rankdir", help="Direction of graph layout", choices=['TB', 'LR', 'BT', 'RL'], default='LR')
     parser.add_argument("--ranksep", help="Separation between ranks", type=float, default=0.5)
     parser.add_argument("--hide_nodes", help="Comma-separated list of nodes to hide", default="")
@@ -608,6 +613,12 @@ if __name__ == "__main__":
               collection_name=args.collection_name, 
               sample_name=args.sample_name)
 
-    svg = g.render_block_graph(minimize=True)
+    svg = g.render_block_graph(filename=args.output,
+                               minimize=args.minimize,
+                               splines= not(args.lines),
+                               align_blocks= not(args.flex),
+                               rankdir=args.rankdir,
+                               ranksep=args.ranksep,
+                               hide_nodes=args.hide_nodes.split(',') if args.hide_nodes else [])
 
 
