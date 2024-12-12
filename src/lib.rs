@@ -6,6 +6,7 @@ use std::{io, str};
 pub mod annotations;
 pub mod config;
 pub mod exports;
+pub mod genbank;
 pub mod gfa_reader;
 pub mod graph;
 pub mod imports;
