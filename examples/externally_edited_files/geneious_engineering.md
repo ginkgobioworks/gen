@@ -3,7 +3,9 @@
 This shows a simple back-and-forth editing example using Geneious. Here, sequences are managed in Geneious and exported
 as GenBank files to facilitate analyses.
 
-The task at hand is: "change the selection marker of the Bacterial Artificial Chromosome (BAC) pBeloBAC11 ([file](./pBeloBAC11.gb) provided by NEB) from chloramphenicol resistance to kanamycin resistance." We will use the kanamycin resistance marker from the Tn5 transposon (GenBank: U00004.1), which we can download from NCBI:
+The task at hand is: "change the selection marker of the Bacterial Artificial Chromosome (BAC) pBeloBAC11 ([file](./pBeloBAC11.gb) 
+provided by NEB) from chloramphenicol resistance to kanamycin resistance." We will use the kanamycin resistance marker 
+from the Tn5 transposon (GenBank: U00004.1). First, we download our assets:
 
 ```console
 wget "https://github.com/ginkgobioworks/gen/blob/7814933b99515fc2c7749b7df3014cf438a4ddf9/examples/externally_edited_files/pBeloBAC11.gb?raw=true" -O pBeloBAC11.gb

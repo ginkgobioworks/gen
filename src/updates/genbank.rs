@@ -54,12 +54,15 @@ where
                     )),
                 );
 
-                let block_group = BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null AND name = ?2", params![Value::from(collection.name.clone()), Value::from(locus.name.clone())]).unwrap_or_else(|_| {
+                let block_group = if let Ok(bg) = BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null AND name = ?2", params![Value::from(collection.name.clone()), Value::from(locus.name.clone())]) {
+                    bg
+                }
+                     else {
                         if !create_missing {
-                            panic!("No block group named {contig} exists. Try importing first or pass --create-missing.", contig=&locus.name)
+                            return Err(GenBankError::LookupError(format!("No block group named {contig} exists. Try importing first or pass --create-missing.", contig=&locus.name)));
                         }
                         BlockGroup::create(conn, &collection.name, None, &locus.name)
-                    });
+                    };
                 let paths = Path::query(
                     conn,
                     "select * from paths where block_group_id = ?1 AND name = ?2",
@@ -69,7 +72,7 @@ where
                     first.clone()
                 } else {
                     if !create_missing {
-                        panic!("No path named {contig} exists. Try importing first or pass --create-missing.", contig=&locus.name)
+                        return Err(GenBankError::LookupError(format!("No path named {contig} exists. Try importing first or pass --create-missing.", contig=&locus.name)));
                     }
                     let edge_into = Edge::create(
                         conn,
@@ -385,6 +388,48 @@ mod tests {
             let mod_seq = str::from_utf8(&f[1].seq).unwrap().to_string();
             assert!(sequences.contains(&unchanged_seq));
             assert!(sequences.contains(&mod_seq));
+        }
+
+        #[test]
+        fn test_errors_on_missing_locus() {
+            // This tests that we are able to take a genbank that has been further modified
+            // and update it, mimicking a workflow of going between gen <-> 3rd party tool <-> gen
+            setup_gen_dir();
+            let conn = &get_connection(None);
+            let db_uuid = metadata::get_db_uuid(conn);
+            let op_conn = &get_operation_connection(None);
+            setup_db(op_conn, &db_uuid);
+            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("fixtures/geneious_genbank/insertion.gb");
+            let file = File::open(&path).unwrap();
+            let _ = import_genbank(
+                conn,
+                op_conn,
+                BufReader::new(file),
+                None,
+                OperationInfo {
+                    file_path: "".to_string(),
+                    file_type: FileTypes::GenBank,
+                    description: "test".to_string(),
+                },
+            );
+
+            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("fixtures/geneious_genbank/concat.gb");
+            let file = File::open(&path).unwrap();
+            let op = update_with_genbank(
+                conn,
+                op_conn,
+                BufReader::new(file),
+                None,
+                false,
+                OperationInfo {
+                    file_path: "".to_string(),
+                    file_type: FileTypes::GenBank,
+                    description: "test".to_string(),
+                },
+            );
+            assert!(op.is_err());
         }
     }
 }

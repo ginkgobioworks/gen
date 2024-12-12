@@ -12,6 +12,8 @@ pub enum GenBankError {
     LocationError(&'static str),
     #[error("Parse Error: {0}")]
     ParseError(String),
+    #[error("Lookup Error: {0}")]
+    LookupError(String),
     #[error("Operation Error: {0}")]
     OperationError(#[from] OperationError),
     #[error("Regex Error: {0}")]
