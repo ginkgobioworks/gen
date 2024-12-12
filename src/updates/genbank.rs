@@ -333,7 +333,7 @@ mod tests {
         #[test]
         fn test_creates_missing_entries() {
             // This tests that we are able to take a genbank that has been further modified
-            // and update it, mimicking a workflow of going between gen <-> 3rd party tool <-> gen
+            // and includes new sequences and update it.
             setup_gen_dir();
             let conn = &get_connection(None);
             let db_uuid = metadata::get_db_uuid(conn);
@@ -380,7 +380,7 @@ mod tests {
             let mod_seq = str::from_utf8(&f[0].seq).unwrap().to_string();
             assert!(sequences.contains(&mod_seq));
 
-            // we have a new blockgroup called deletion thta uses the same base sequence but
+            // we have a new blockgroup called deletion that uses the same base sequence but
             // has a deletion in it.
             let sequences: HashSet<String> = BlockGroup::get_all_sequences(conn, 2, false)
                 .iter()
@@ -393,8 +393,8 @@ mod tests {
 
         #[test]
         fn test_errors_on_missing_locus() {
-            // This tests that we are able to take a genbank that has been further modified
-            // and update it, mimicking a workflow of going between gen <-> 3rd party tool <-> gen
+            // This tests that if a genbank file has sequences we are missing, it's an error. This
+            // is an attempt to avoid updating the database with the wrong file.
             setup_gen_dir();
             let conn = &get_connection(None);
             let db_uuid = metadata::get_db_uuid(conn);
