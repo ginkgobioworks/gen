@@ -53,7 +53,7 @@ pub fn get_gen_dir() -> String {
         };
         gen_path = cur_dir.join(".gen");
     }
-    return gen_path.to_str().unwrap().to_string();
+    gen_path.to_str().unwrap().to_string()
 }
 
 pub fn get_gen_db_path() -> PathBuf {
