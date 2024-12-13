@@ -1081,6 +1081,7 @@ dependencies = [
  "rusqlite_migration",
  "ruzstd",
  "sea-query",
+ "sea-query-rusqlite",
  "serde",
  "serde_json",
  "sha2",
@@ -3588,6 +3589,16 @@ dependencies = [
  "quote",
  "syn 2.0.90",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "sea-query-rusqlite"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3743bbdfb24b1a84cc1a6fbf4b1188e6851f6e00ea20944b44c56bf03a585bb4"
+dependencies = [
+ "rusqlite",
+ "sea-query",
 ]
 
 [[package]]

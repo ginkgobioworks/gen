@@ -1,4 +1,5 @@
-use sea_query::{Asterisk, ColumnDef, Iden, Query as SeaQuery, SqliteQueryBuilder, Table};
+use sea_query::{Asterisk, Iden, Query as SeaQuery, SqliteQueryBuilder};
+use sea_query_rusqlite::RusqliteBinder;
 
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -2205,12 +2206,12 @@ mod tests {
 
     #[test]
     fn test_query() {
-        let select = SeaQuery::select()
+        let (select, values) = SeaQuery::select()
             .columns([Asterisk])
             .from(BlockGroupTable::Table)
             .and_where(Expr::col(BlockGroupTable::SampleName).is_null())
             .and_where(Expr::col(BlockGroupTable::Id).eq(1))
-            .build(SqliteQueryBuilder);
-        println!("select is {select:?}");
+            .build_rusqlite(SqliteQueryBuilder);
+        println!("select is {select:?} {values:?}");
     }
 }
