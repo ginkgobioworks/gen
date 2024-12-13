@@ -1,3 +1,6 @@
+use sea_query::{Asterisk, Iden, Query as SeaQuery, SqliteQueryBuilder};
+use sea_query_rusqlite::RusqliteBinder;
+
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
@@ -25,6 +28,16 @@ pub struct BlockGroup {
     pub collection_name: String,
     pub sample_name: Option<String>,
     pub name: String,
+}
+
+#[derive(Iden)]
+enum BlockGroupTable {
+    #[iden = "block_groups"]
+    Table,
+    Id,
+    CollectionName,
+    SampleName,
+    Name,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -773,6 +786,7 @@ mod tests {
     use super::*;
     use crate::models::{collection::Collection, node::Node, sample::Sample, sequence::Sequence};
     use crate::test_helpers::{get_connection, interval_tree_verify, setup_block_group};
+    use sea_query::Expr;
 
     #[test]
     fn test_blockgroup_create() {
@@ -2188,5 +2202,16 @@ mod tests {
         // take out an entire block.
         let tree = BlockGroup::intervaltree_for(conn, gc_bg_id, true);
         BlockGroup::insert_change(conn, &change, &tree);
+    }
+
+    #[test]
+    fn test_query() {
+        let (select, values) = SeaQuery::select()
+            .columns([Asterisk])
+            .from(BlockGroupTable::Table)
+            .and_where(Expr::col(BlockGroupTable::SampleName).is_null())
+            .and_where(Expr::col(BlockGroupTable::Id).eq(1))
+            .build_rusqlite(SqliteQueryBuilder);
+        println!("select is {select:?} {values:?}");
     }
 }
