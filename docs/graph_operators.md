@@ -19,8 +19,7 @@ reachable between the new start and end points are retained. In this case that m
 as well as any implicit internal edges that are no longer relevant.
 
 
-
-![Figure 1](./figures/operators/detach.png) 
+![Figure 1](./figures/operators/detach-attach.png) 
 
 **_Figure 1_**: _..._
 
@@ -30,22 +29,21 @@ as well as any implicit internal edges that are no longer relevant.
 A graph merge operation is performed by taking the union of their edges, and any resulting new blocks are calculated on the fly.
 Let's start out with the graph shown in Figure 3, and merge it with graph shown in Figure 2.
 
-![Figure 3](./figures/operators/merge_input.svg)
-
 This results in the figure shown below. You can see that the node with ID 1 has been split into new blocks to accomodate
 the merged graph, but not introduce more internal edges than necessary.
 
-![Figure 4](./figures/operators/merge_output.svg)
+
+![Figure 2](./figures/operators/intersect-union-difference.png)
+
+
+![Figure 3](./figures/operators/attach-union.png)
+
+
+
 
 
 ### Intersect
 The complementary operation to a union, is to retain only the edges that are present in both, i.e. the intersection. 
-
-![Figure 5a](./figures/operators/intersect_input1.svg)
-![Figure 5b](./figures/operators/intersect_input2.svg)
-**_Figure 5_**: _..._
-
-![Figure 6](./figures/operators/intersect_output.svg)
 
 ### Difference
 

@@ -5,22 +5,22 @@ digraph "" {
 	];
 	node [label="\N"];
 	start	[label=start];
-	1	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0' CELLPADDING='3'><TR><TD BORDER='0' PORT='caption' ALIGN='right'>1:</TD><TD PORT='0'><FONT FACE='Monospace'><B>A</B></FONT></TD>
-<TD PORT='1'><FONT FACE='Monospace'><B>T</B></FONT></TD>
-<TD PORT='2'><FONT FACE='Monospace'><B>G</B></FONT></TD>
-<TD PORT='3'><FONT FACE='Monospace'><B>T</B></FONT></TD>
-<TD PORT='4'><FONT FACE='Monospace'><B>A</B></FONT></TD>
-<TD PORT='5'><FONT FACE='Monospace'><B>T</B></FONT></TD>
-<TD PORT='6'><FONT FACE='Monospace'><B>A</B></FONT></TD>
-<TD PORT='7'><FONT FACE='Monospace'><B>C</B></FONT></TD>
+	1	[label=<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0' CELLPADDING='3'><TR><TD BORDER='0' PORT='caption' ALIGN='right'>1:</TD><TD PORT='0'><FONT FACE='Monospace'>A</FONT></TD>
+<TD PORT='1'><FONT FACE='Monospace'>T</FONT></TD>
+<TD PORT='2'><FONT FACE='Monospace'>G</FONT></TD>
+<TD PORT='3'><FONT FACE='Monospace'>T</FONT></TD>
+<TD PORT='4'><FONT FACE='Monospace'>A</FONT></TD>
+<TD PORT='5'><FONT FACE='Monospace'>T</FONT></TD>
+<TD PORT='6'><FONT FACE='Monospace'>A</FONT></TD>
+<TD PORT='7'><FONT FACE='Monospace'>C</FONT></TD>
 <TD PORT='8'><FONT FACE='Monospace'>A</FONT></TD>
 <TD PORT='9'><FONT FACE='Monospace'>T</FONT></TD>
-<TD PORT='10'><FONT FACE='Monospace'><B>C</B></FONT></TD>
-<TD PORT='11'><FONT FACE='Monospace'><B>A</B></FONT></TD>
-<TD PORT='12'><FONT FACE='Monospace'><B>C</B></FONT></TD>
-<TD PORT='13'><FONT FACE='Monospace'><B>G</B></FONT></TD>
-<TD PORT='14'><FONT FACE='Monospace'><B>G</B></FONT></TD>
-<TD PORT='15'><FONT FACE='Monospace'><B>C</B></FONT></TD></TR></TABLE>>,
+<TD PORT='10'><FONT FACE='Monospace'>C</FONT></TD>
+<TD PORT='11'><FONT FACE='Monospace'>A</FONT></TD>
+<TD PORT='12'><FONT FACE='Monospace'>C</FONT></TD>
+<TD PORT='13'><FONT FACE='Monospace'>G</FONT></TD>
+<TD PORT='14'><FONT FACE='Monospace'>G</FONT></TD>
+<TD PORT='15'><FONT FACE='Monospace'>C</FONT></TD></TR></TABLE>>,
 		margin=0,
 		shape=none];
 	start -> 1:caption	[key=0,

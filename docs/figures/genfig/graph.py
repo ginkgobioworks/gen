@@ -321,7 +321,7 @@ class Graph:
         return self
 
     def render_graph(self, filename=None, minimize=False, splines=True, rankdir = 'TD', hide_nodes=[],
-                      cairo=False):
+                      cairo=False, prune=True):
         # Create an AGraph to hold Graphviz attributes, based on the topology of the original graph
         agraph = pygraphviz.AGraph(directed=True, strict=False)
         # Add the source and sink nodes first and last, respectively
@@ -414,10 +414,11 @@ class Graph:
         return self.render_dot(agraph, filename, cairo)
 
 
-    def render_block_graph(self, filename=None, minimize=False, splines = True, align_blocks = True, rankdir = 'LR',
-                            ranksep = 0.5, hide_nodes=[], cairo = False):
+    def render_block_graph(self, filename=None, minimize=False, splines = True, align_blocks = True, 
+                           rankdir = 'LR', ranksep = 0.5, hide_nodes=[], cairo = False, prune = True,
+                            node_attributes = {}, edge_attributes = {}, graph_attributes = {}):
         # Todo: refactor to break out a node -> segment function instead of make_block_graph
-        self.make_block_graph()
+        self.make_block_graph(prune=prune)
 
         # Create an AGraph to hold Graphviz attributes, based on the topology of the original graph
         agraph = pygraphviz.AGraph(directed=True)
@@ -426,14 +427,20 @@ class Graph:
         agraph.add_nodes_from([n for n in self.block_graph.nodes if n not in ['start', 'end']])
         agraph.add_node('end', label='end')
         agraph.add_edges_from(self.block_graph.edges)
-        
+
         # Remove nodes that are marked as hidden
         for node in hide_nodes:
             agraph.delete_node(node)
 
         for node in agraph.iternodes():
             if node in ['start', 'end']:
+                node.attr['margin'] = 0
+                node.attr['fontsize'] = 12
+                node.attr['width'] = 0.45
+                node.attr['height'] = 0.3
+                node.attr['label'] = 'Start' if node == 'start' else 'End'
                 continue
+
             # Get the sequence and highlight information from the networkx graph
             node_data = self.block_graph.nodes[node]
             sequence = node_data['sequence']
@@ -493,13 +500,23 @@ class Graph:
             if edge[0] == 'start':
                 edge.attr['tailport'] = 'e'
             else:
-                edge.attr['tailport'] = 'seq:e'    
+                edge.attr['tailport'] = 'seq:e'
+
+              
 
         # Set the graph-level attributes that will be used by the dot rendering engine
         agraph.graph_attr.update(rankdir=rankdir, 
                                  splines='true' if splines else 'polyline',
                                  ranksep=ranksep,
                                  fontnames='svg')
+        
+        # Custom attributes will override what we just set above
+        for node in agraph.iternodes():
+            node.attr.update(node_attributes.get(node, {}))
+        for edge in agraph.iteredges():
+            edge.attr.update(edge_attributes.get(edge, {})) 
+        agraph.graph_attr.update(graph_attributes)
+
         # Other useful arguments for dot (with defaults): ranksep (0.5) searchsize(100) mclimit(10) newrank(false)
         return self.render_dot(agraph, filename, cairo)
     
