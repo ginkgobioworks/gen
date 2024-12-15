@@ -446,15 +446,24 @@ class Graph:
 
             # Get the sequence and highlight information from the networkx graph
             node_data = self.block_graph.nodes[node]
+            # Update the node attributes with any custom attributes
+            node_data.update(node_attributes.get(node, {}))
+
             sequence = node_data['sequence']
             highlights = node_data.get('highlights', [False] * len(sequence))
             formatted_sequence = [f'<B>{c}</B>' if highlights[i] else c for i, c in enumerate(sequence)]
+            bgcolor = node_data.get('bgcolor', None)
             origin = node_data['original_node']
             start = node_data.get('start', 0)
             end = node_data.get('end', len(sequence)-1)
 
-            label = f"<<TABLE BORDER='0' CELLBORDER='1'>"
-            label += f"<TR><TD ALIGN='CENTER' PORT='seq'><FONT POINT-SIZE='12' FACE='Monospace'>"
+
+            label = f"<<TABLE BORDER='0'>"
+            if bgcolor:
+                label += f"<TR><TD BORDER='1' ALIGN='CENTER' PORT='seq' BGCOLOR='{bgcolor}'>"
+            else:
+                label += f"<TR><TD BORDER='1' ALIGN='CENTER' PORT='seq'>"
+            label += f"<FONT POINT-SIZE='12' FACE='Monospace'>"
             if minimize and len(sequence) > 7:
                 # Only show the first and last 3 elements
                 label += f"{''.join(formatted_sequence[0:3])}..{''.join(formatted_sequence[-3:])}"
@@ -464,7 +473,7 @@ class Graph:
                 label += ''.join(formatted_sequence)
 
             label += "</FONT></TD></TR>"  
-            label += "<TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>"
+            label += "<TR><TD ALIGN='CENTER'><FONT POINT-SIZE='10'>"
             if end-start > 0:
                 label += f"{origin}:{start}-{end}"
             elif start > 0:
