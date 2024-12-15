@@ -39,7 +39,7 @@ class Graph:
         """
         Returns the PNG representation of the graph for IPython display.
         """
-        return self.render_block_graph(minimize=True, cairo=True)
+        return self.render_block_graph(minimize=True, format='png')
 
     def add_node(self, sequence, node_id=None):
         """
@@ -320,8 +320,7 @@ class Graph:
 
         return self
 
-    def render_graph(self, filename=None, minimize=False, splines=True, rankdir = 'TD', hide_nodes=[],
-                      cairo=False, prune=True):
+    def render_graph(self, filename=None, format='png', minimize=False, splines=True, rankdir = 'TD', hide_nodes=[], prune=True):
         # Create an AGraph to hold Graphviz attributes, based on the topology of the original graph
         agraph = pygraphviz.AGraph(directed=True, strict=False)
         # Add the source and sink nodes first and last, respectively
@@ -411,14 +410,18 @@ class Graph:
                                  )
         # Other useful arguments for dot (with defaults): ranksep (0.5) searchsize(100) mclimit(10) newrank(false)
 
-        return self.render_dot(agraph, filename, cairo)
+        return self.render_dot(agraph, filename, format)
 
 
-    def render_block_graph(self, filename=None, minimize=False, splines = True, align_blocks = True, 
-                           rankdir = 'LR', ranksep = 0.5, hide_nodes=[], cairo = False, prune = True,
+    def render_block_graph(self, filename=None, format='svg', minimize=False, splines = True, align_blocks = True, 
+                           rankdir = 'LR', ranksep = 0.5, hide_nodes=[], prune = True,
                             node_attributes = {}, edge_attributes = {}, graph_attributes = {}):
         # Todo: refactor to break out a node -> segment function instead of make_block_graph
         self.make_block_graph(prune=prune)
+
+        # Ensure that the file format is one of the supported formats
+        if format not in ['svg', 'png', 'dot']:
+            raise ValueError(f'Unsupported file format: {format}')
 
         # Create an AGraph to hold Graphviz attributes, based on the topology of the original graph
         agraph = pygraphviz.AGraph(directed=True)
@@ -518,9 +521,9 @@ class Graph:
         agraph.graph_attr.update(graph_attributes)
 
         # Other useful arguments for dot (with defaults): ranksep (0.5) searchsize(100) mclimit(10) newrank(false)
-        return self.render_dot(agraph, filename, cairo)
+        return self.render_dot(agraph, filename, format)
     
-    def render_dot(self, agraph, filename=None, cairo=False):
+    def render_dot(self, agraph, filename=None, format=None):
         # Write the dot file to disk if a filename is provided
         if filename:
             agraph.write(f'{filename}.dot')
@@ -536,12 +539,15 @@ class Graph:
         
         # For the actual rendering the cairo renderer sometimes produces better results for longer nodes
         # It does not support fonts in SVG however, so we make the PNG instead
-        if cairo:
+        if format == 'png':
             img = agraph.draw(prog='dot', format='png', args='-Gdpi=300')
             filename = filename + '.png' if filename else None
-        else:
+        elif format == 'svg':
             img = agraph.draw(prog='dot', format='svg')
             filename = filename + '.svg' if filename else None
+        else:
+            img = agraph.to_string()
+            filename = filename + '.dot' if filename else None
 
         if filename:
             with open(filename, 'wb') as file:
