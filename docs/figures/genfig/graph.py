@@ -320,7 +320,7 @@ class Graph:
 
         return self
 
-    def render_graph(self, filename=None, format='png', minimize=False, splines=True, rankdir = 'TD', hide_nodes=[], prune=True):
+    def render_graph(self, filename=None, format='svg', minimize=False, splines=True, rankdir = 'TD', hide_nodes=[], prune=True):
         # Create an AGraph to hold Graphviz attributes, based on the topology of the original graph
         agraph = pygraphviz.AGraph(directed=True, strict=False)
         # Add the source and sink nodes first and last, respectively
@@ -645,6 +645,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("db", help="The path to the gen database file")
     parser.add_argument("--output", help="The path to save the output file (an extension will be added automatically)", default=None)
+    parser.add_argument("--format", help="The output file format (svg scales well but can be unpredictable for longer nodes, png is slow but tends to give better fitting text)", choices=['svg','png','dot'], default='png')
     parser.add_argument("--collection_name", help="Filter by collection name", default=None)
     parser.add_argument("--sample_name", help="Filter by sample name", default=None)
     parser.add_argument("--block_group_name", help="Filter by block group name", default=None)
@@ -661,6 +662,7 @@ if __name__ == "__main__":
               sample_name=args.sample_name)
 
     svg = g.render_block_graph(filename=args.output,
+                               format=args.format,
                                minimize=args.minimize,
                                splines= not(args.lines),
                                align_blocks= not(args.flex),

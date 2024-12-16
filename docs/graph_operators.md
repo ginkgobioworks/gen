@@ -1,7 +1,8 @@
 
 # Graph Operators
 
-_Build_ and _derive_ operations work purely with graphs - they take graphs as input and produce new graphs as output, unlike update operations which incorporate external data. The fundamental difference between build and derive lies in how they handle sequence relationships: build operations create new independent graphs by joining, replacing, or dividing sequences, while derive operations maintain a shared reference backbone across all input and output graphs, preserving the context of variants within the original sequence framework.
+_Build_ and _derive_ operations work purely with graphs - they take graphs as input and produce new graphs as output, unlike update operations which incorporate external data. The fundamental difference between build and derive lies in how they handle sequence relationships: build operations create new independent graphs by joining, replacing, or dividing sequences, while derive operations maintain a shared reference backbone across all input and output graphs, preserving the context of variants within the original sequence framework. This is not a hard rule, and it is possible to use derive operations to design
+cloning experiments for new constructs and vice versa.
 
 ## Derive
 ### Detach
@@ -15,9 +16,7 @@ gen derive --detach --sample S1 --region chr1:5-12 --new-sample S2
 ```
 
 Upon receiving this command, gen creates a new graph in which the start and end pointers have been moved, and only the nodes and edges
-reachable between the new start and end points are retained. In this case that means that the edges to node 3 are clipped,
-as well as any implicit internal edges that are no longer relevant.
-
+reachable between the new start and end points are retained. If no sample name is provided for the new samples, gen will edit the original sample instead.  When exported, these files are much smaller since they do not include edges and nodes that are no longer relevant. But as long as the bases (or residues) at the very ends stay intact, they can be easily imported and re-attached to a larger backbone graph as shown in Figure 1.
 
 ![Figure 1](./figures/operators/detach-attach.png) 
 
@@ -25,18 +24,23 @@ as well as any implicit internal edges that are no longer relevant.
 
 ### Attach
 
-### Union
-A graph merge operation is performed by taking the union of their edges, and any resulting new blocks are calculated on the fly.
-Let's start out with the graph shown in Figure 3, and merge it with graph shown in Figure 2.
+```console
+gen derive --attach --sample S2 --backbone S1 --new-sample S3
+```
 
-This results in the figure shown below. You can see that the node with ID 1 has been split into new blocks to accomodate
-the merged graph, but not introduce more internal edges than necessary.
+![Figure 1](./figures/operators/detach-attach.png) 
+
+
+### Union
+A graph merge operation is performed by taking the union of their edges, and any resulting new blocks are calculated on the fly. This is useful to combine distinct sequencing datasets or engineered libraries in a single object that can be more easily handeled and tracked. 
 
 
 ![Figure 2](./figures/operators/intersect-union-difference.png)
 
 
 ![Figure 3](./figures/operators/attach-union.png)
+
+**_Figure 3_**: _..._
 
 
 
@@ -50,9 +54,18 @@ The complementary operation to a union, is to retain only the edges that are pre
 ## Build
 
 ### Stitch
+`gen build --stitch --samples S1,S2,... --new-sample Sx --overlap 20`
 
-### Splice
+![Figure 4](./figures/operators/stitches.png)
+
 
 ### Split
+
+![Figure 5](./figures/operators/split_left.png)
+
+![Figure 6](./figures/operators/split_right_both.png)
+
+
+### Splice
 
 ### Circularize
