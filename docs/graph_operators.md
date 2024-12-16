@@ -40,10 +40,17 @@ gen derive --attach --sample S2 --backbone S1 --new-sample S3
 A graph merge operation is performed by taking the union of their edges, and any resulting new blocks are calculated on the fly. This is useful to combine distinct sequencing datasets or engineered libraries in a single object that can be more easily handeled and tracked. 
 
 
-![Figure 2](./figures/operators/intersect-union-difference.png)
+
+<figure style="width:800px">
+<img src="./figures/operators/intersect-union-difference.png" alt="Figure 2">
+<figcaption width=800><em>Figure x</em>:</figcaption>
+</figure>
 
 
-![Figure 3](./figures/operators/attach-union.png)
+<figure style="width:800px">
+<img src="./figures/operators/attach-union.png" alt="Figure 3">
+<figcaption width=800><em>Figure x</em>:</figcaption>
+</figure>
 
 **_Figure 3_**: _..._
 
@@ -61,16 +68,25 @@ The complementary operation to a union, is to retain only the edges that are pre
 ### Stitch
 `gen build --stitch --samples S1,S2,... --new-sample Sx --overlap 20`
 
-![Figure 4](./figures/operators/stitches.png)
+<figure style="width:800px">
+<img src="./figures/operators/stitches.png" alt="Figure 4">
+<figcaption width=800><em>Figure x</em>:</figcaption>
+</figure>
 
 
 ### Split
 `gen build --split --sample S1 --name X --position 1,2,3,... --overlap 20 --new-sample S2`
 
 
-![Figure 5](./figures/operators/split_left.png)
+<figure style="width:800px">
+<img src="./figures/operators/split_left.png" alt="Figure 5">
+<figcaption width=800><em>Figure x</em>:</figcaption>
+</figure>
 
-![Figure 6](./figures/operators/split_right_both.png)
+<figure style="width:800px">
+<img src="./figures/operators/split_right_both.png" alt="Figure 6">
+<figcaption width=800><em>Figure x</em>:</figcaption>
+</figure>
 
 
 ### Splice
