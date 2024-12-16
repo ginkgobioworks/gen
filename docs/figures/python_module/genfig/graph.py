@@ -2,7 +2,6 @@
 
 import networkx as nx
 import matplotlib.pyplot as plt 
-from IPython.display import SVG, Image, display
 import sqlite3
 import json
 from copy import deepcopy
@@ -320,7 +319,7 @@ class Graph:
 
         return self
 
-    def render_graph(self, filename=None, format='svg', minimize=False, splines=True, rankdir = 'TD', hide_nodes=[], prune=True):
+    def render_graph(self, filename=None, format='svg', minimize=False, splines=True, hide_nodes=[], graph_attributes={}):
         # Create an AGraph to hold Graphviz attributes, based on the topology of the original graph
         agraph = pygraphviz.AGraph(directed=True, strict=False)
         # Add the source and sink nodes first and last, respectively
@@ -398,15 +397,15 @@ class Graph:
             edge.attr['tailport'] = f"{edge.attr.get('from_pos','e')}"
 
             # Cleaner look for the first edge coming out of the source node, or for left-right layouts in general):
-            if (edge[0] == 'start' or rankdir == 'LR') and edge.attr['headport'] == '0':
+            if (edge[0] == 'start' or graph_attributes.get('rankdir', 'TD') == 'LR') and edge.attr['headport'] == '0':
                 edge.attr['headport'] = 'caption'
             if (edge[1] == 'end'):
                 edge.attr['headport'] = 'w'
 
          # Set the graph-level attributes that will be used by the dot rendering engine
-        agraph.graph_attr.update(rankdir=rankdir, 
-                                 splines='true' if splines else 'polyline',
-                                 fontnames='svg'
+        agraph.graph_attr.update(splines = 'true' if splines else 'polyline',
+                                 fontnames = 'svg',
+                                 rankdir = graph_attributes.get('rankdir', 'TD')
                                  )
         # Other useful arguments for dot (with defaults): ranksep (0.5) searchsize(100) mclimit(10) newrank(false)
 
@@ -414,7 +413,7 @@ class Graph:
 
 
     def render_block_graph(self, filename=None, format='svg', minimize=False, splines = True, align_blocks = True, 
-                           rankdir = 'LR', ranksep = 0.5, hide_nodes=[], prune = True,
+                            ranksep = 0.5, hide_nodes=[], prune = True,
                             node_attributes = {}, edge_attributes = {}, graph_attributes = {}):
         # Todo: refactor to break out a node -> segment function instead of make_block_graph
         self.make_block_graph(prune=prune)
@@ -517,11 +516,11 @@ class Graph:
               
 
         # Set the graph-level attributes that will be used by the dot rendering engine
-        agraph.graph_attr.update(rankdir=rankdir, 
+        agraph.graph_attr.update(rankdir=graph_attributes.get('rankdir', 'LR'), 
                                  splines='true' if splines else 'polyline',
                                  ranksep=ranksep,
                                  fontnames='svg')
-        
+                
         # Custom attributes will override what we just set above
         for node in agraph.iternodes():
             node.attr.update(node_attributes.get(node, {}))
@@ -533,16 +532,6 @@ class Graph:
         return self.render_dot(agraph, filename, format)
     
     def render_dot(self, agraph, filename=None, format=None):
-        # Write the dot file to disk if a filename is provided
-        if filename:
-            agraph.write(f'{filename}.dot')
-
-            # Escape the contents of the dot file so we can render it in the browser
-            #with open(f'{filename}.dot', 'r') as file:
-            #    dot_content = file.read()
-            #with open(f'{filename}.dot.json', 'w') as file:
-            #    json.dump(dot_content, file)
-
         # Create the node layout
         agraph.layout(prog='dot')
         
@@ -550,14 +539,10 @@ class Graph:
         # It does not support fonts in SVG however, so we make the PNG instead
         if format == 'png':
             img = agraph.draw(prog='dot', format='png', args='-Gdpi=300')
-            filename = filename + '.png' if filename else None
         elif format == 'svg':
             img = agraph.draw(prog='dot', format='svg')
-            filename = filename + '.svg' if filename else None
         else:
             img = agraph.to_string()
-            filename = filename + '.dot' if filename else None
-
         if filename:
             with open(filename, 'wb') as file:
                 file.write(img)
@@ -614,7 +599,6 @@ class Graph:
         remove_nodes = set(Gx.graph.nodes).difference(traversed_nodes)
         Gx.graph.remove_nodes_from(remove_nodes)
 
-
         # 5) remove all edges that do not have a corresponding edge in the traversed_edges set
         traversed_edges = set()
 
@@ -630,44 +614,49 @@ class Graph:
         return Gx
 
 
-if __name__ == "__main__":
-    G1 = Graph()
-    n1 = G1.add_node('ATGAGTAAAGGAGAAGAACTTTTCACTGGAGT', node_id = '1') # Derived from BBa_K1896001
-    start = ('1', 5)
-    end = ('1', 13) 
-    G1.connect_to_source(*start)
-    G1.connect_to_sink(*end)
-    G2 = G1.extract_subgraph(start, end)
-    G2.render_block_graph()
-
-    # Take in a gen database file as argument
+def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("db", help="The path to the gen database file")
-    parser.add_argument("--output", help="The path to save the output file (an extension will be added automatically)", default=None)
-    parser.add_argument("--format", help="The output file format (svg scales well but can be unpredictable for longer nodes, png is slow but tends to give better fitting text)", choices=['svg','png','dot'], default='png')
+    parser.add_argument("--output", help="The path to save the output file to", default=None)
+    parser.add_argument("--format", help="The output file format (svg scales well but can be unpredictable for longer nodes, png is slow but tends to give better fitting text)", choices=['svg','png','dot'], default='svg')
     parser.add_argument("--collection_name", help="Filter by collection name", default=None)
     parser.add_argument("--sample_name", help="Filter by sample name", default=None)
     parser.add_argument("--block_group_name", help="Filter by block group name", default=None)
     parser.add_argument("--minimize", help="Truncate sequences", action="store_true")
     parser.add_argument("--lines", help="Use straight lines instead of splines for edges", action="store_true")
     parser.add_argument("--flex", help="Do not attempt to align blocks from the same segment as a row", action="store_true")
-    parser.add_argument("--rankdir", help="Direction of graph layout", choices=['TB', 'LR', 'BT', 'RL'], default='LR')
-    parser.add_argument("--ranksep", help="Separation between ranks", type=float, default=0.5)
     parser.add_argument("--hide_nodes", help="Comma-separated list of nodes to hide", default="")
+    parser.add_argument("--graph_attributes", help="JSON string of a dictionary of additional graph attributes", default="{}")
+    parser.add_argument("--node_attributes", help="JSON string of a nested dictionary of additional node attributes", default="{}")
+    parser.add_argument("--edge_attributes", help="JSON string of a nested dictionary of additional edge attributes", default="{}")
+
     args = parser.parse_args()
+
+    try:
+        graph_attributes = json.loads(args.graph_attributes)
+        node_attributes = json.loads(args.node_attributes)
+        edge_attributes = json.loads(args.edge_attributes)
+    except json.JSONDecodeError:
+        print("Error: could not decode JSON string")
     
     g = Graph(db=args.db, 
               collection_name=args.collection_name, 
               sample_name=args.sample_name)
 
-    svg = g.render_block_graph(filename=args.output,
+    img = g.render_block_graph(filename=args.output,
                                format=args.format,
                                minimize=args.minimize,
                                splines= not(args.lines),
                                align_blocks= not(args.flex),
-                               rankdir=args.rankdir,
-                               ranksep=args.ranksep,
-                               hide_nodes=args.hide_nodes.split(',') if args.hide_nodes else [])
-
+                               hide_nodes=args.hide_nodes.split(',') if args.hide_nodes else [],
+                               graph_attributes=graph_attributes,
+                               node_attributes=node_attributes,
+                               edge_attributes=edge_attributes)
+    
+    if not args.output:
+        print(img)
+    
+if __name__ == "__main__":
+    main()
 

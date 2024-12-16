@@ -60,6 +60,8 @@ The complementary operation to a union, is to retain only the edges that are pre
 
 
 ### Split
+`gen build --split --sample S1 --name X --position 1,2,3,... --overlap 20 --new-sample S2`
+
 
 ![Figure 5](./figures/operators/split_left.png)
 

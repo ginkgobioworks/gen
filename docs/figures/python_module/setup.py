@@ -9,4 +9,9 @@ setup(
     description='Generate figures for documentation',
     packages=find_packages(),    
     install_requires=['matplotlib', 'networkx', 'pygraphviz'],
+    entry_points={
+        'console_scripts': [
+            'genfig=genfig.graph:main',
+        ],
+    },
 )
