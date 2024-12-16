@@ -152,17 +152,17 @@ impl Operation {
         patch_path
     }
 
-    pub fn get(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Operation {
+    pub fn get(conn: &Connection, query: &str, placeholders: Vec<Value>) -> SQLResult<Operation> {
         let mut stmt = conn.prepare(query).unwrap();
         let mut rows = stmt
             .query_map(params_from_iter(placeholders), |row| {
                 Ok(Self::process_row(row))
             })
             .unwrap();
-        rows.next().unwrap().unwrap()
+        rows.next().unwrap()
     }
 
-    pub fn get_by_hash(conn: &Connection, op_hash: &str) -> Operation {
+    pub fn get_by_hash(conn: &Connection, op_hash: &str) -> SQLResult<Operation> {
         Operation::get(
             conn,
             "select * from operation where hash = ?1",
@@ -441,7 +441,11 @@ impl Branch {
 
             while let Some(ancestor) = dfs.next(rev_graph) {
                 let ancestor_node = graph.get_key(ancestor);
-                operations.insert(0, Operation::get_by_hash(conn, &ancestor_node));
+                operations.insert(
+                    0,
+                    Operation::get_by_hash(conn, &ancestor_node)
+                        .unwrap_or_else(|_| panic!("Hash {ancestor_node} does not exist.")),
+                );
             }
 
             let mut branch_operations: HashSet<String> = HashSet::from_iter(
@@ -477,7 +481,10 @@ impl Branch {
 
             while let Some(child) = dfs.next(&graph.graph) {
                 let child_hash = graph.get_key(child);
-                operations.push(Operation::get_by_hash(conn, &child_hash));
+                operations.push(
+                    Operation::get_by_hash(conn, &child_hash)
+                        .unwrap_or_else(|_| panic!("Hash {child_hash} does not exist.")),
+                );
             }
         }
 

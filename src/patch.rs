@@ -31,7 +31,8 @@ where
 {
     let mut patches = vec![];
     for operation in operations.iter() {
-        let operation = Operation::get_by_hash(op_conn, operation);
+        let operation = Operation::get_by_hash(op_conn, operation)
+            .unwrap_or_else(|_| panic!("Hash {operation} does not exist."));
         println!("Creating patch for Operation {id}", id = operation.hash);
         let dependency_path =
             get_changeset_path(&operation).join(format!("{op_id}.dep", op_id = operation.hash));

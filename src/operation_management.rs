@@ -760,7 +760,8 @@ pub fn reset(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_h
     move_to(
         conn,
         operation_conn,
-        &Operation::get_by_hash(operation_conn, op_hash),
+        &Operation::get_by_hash(operation_conn, op_hash)
+            .unwrap_or_else(|_| panic!("Hash {op_hash} does not exist.")),
     );
 
     if current_branch.name != "main" {
@@ -795,7 +796,8 @@ pub fn apply<'a>(
     force_hash: impl Into<Option<&'a str>>,
 ) -> Operation {
     let mut session = start_operation(conn);
-    let operation = Operation::get_by_hash(operation_conn, op_hash);
+    let operation = Operation::get_by_hash(operation_conn, op_hash)
+        .unwrap_or_else(|_| panic!("Hash {op_hash} does not exist."));
     let changeset = load_changeset(&operation);
     let input: &mut dyn Read = &mut changeset.as_slice();
     let mut iter = ChangesetIter::start_strm(&input).unwrap();
@@ -874,13 +876,15 @@ pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Opera
                 println!("Reverting operation {operation_hash}");
                 revert_changeset(
                     conn,
-                    &Operation::get_by_hash(operation_conn, operation_hash),
+                    &Operation::get_by_hash(operation_conn, operation_hash)
+                        .unwrap_or_else(|_| panic!("Hash {operation_hash} does not exist.")),
                 );
                 OperationState::set_operation(operation_conn, &operation.db_uuid, next_op);
             }
             Direction::Outgoing => {
                 println!("Applying operation {next_op}");
-                let op_to_apply = Operation::get_by_hash(operation_conn, next_op);
+                let op_to_apply = Operation::get_by_hash(operation_conn, next_op)
+                    .unwrap_or_else(|_| panic!("Hash {next_op} does not exist."));
                 let changeset = load_changeset(&op_to_apply);
                 let input: &mut dyn Read = &mut changeset.as_slice();
                 let mut iter = ChangesetIter::start_strm(&input).unwrap();
@@ -1015,7 +1019,8 @@ pub fn checkout(
     move_to(
         conn,
         operation_conn,
-        &Operation::get_by_hash(operation_conn, &dest_op_hash),
+        &Operation::get_by_hash(operation_conn, &dest_op_hash)
+            .unwrap_or_else(|_| panic!("Hash {dest_op_hash} does not exist.")),
     );
 }
 
@@ -1572,7 +1577,8 @@ mod tests {
             &Operation::get_by_hash(
                 operation_conn,
                 &OperationState::get_operation(operation_conn, &db_uuid).unwrap(),
-            ),
+            )
+            .unwrap_or_else(|_| panic!("Hash does not exist.")),
         );
 
         let block_group_count =
@@ -1599,7 +1605,8 @@ mod tests {
         let op = Operation::get_by_hash(
             operation_conn,
             &OperationState::get_operation(operation_conn, &db_uuid).unwrap(),
-        );
+        )
+        .unwrap();
         let changeset = load_changeset(&op);
         let input: &mut dyn Read = &mut changeset.as_slice();
         let mut iter = ChangesetIter::start_strm(&input).unwrap();
