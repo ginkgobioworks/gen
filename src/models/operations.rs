@@ -154,19 +154,17 @@ impl Operation {
 
     pub fn get(conn: &Connection, query: &str, placeholders: Vec<Value>) -> SQLResult<Operation> {
         let mut stmt = conn.prepare(query).unwrap();
-        let mut rows = stmt
-            .query_map(params_from_iter(placeholders), |row| {
-                Ok(Self::process_row(row))
-            })
-            .unwrap();
+        let mut rows = stmt.query_map(params_from_iter(placeholders), |row| {
+            Ok(Self::process_row(row))
+        })?;
         rows.next().unwrap()
     }
 
     pub fn get_by_hash(conn: &Connection, op_hash: &str) -> SQLResult<Operation> {
         Operation::get(
             conn,
-            "select * from operation where hash = ?1",
-            vec![Value::from(op_hash.to_string())],
+            "select * from operation where hash LIKE ?1",
+            vec![Value::from(format!("{op_hash}%"))],
         )
     }
 }
