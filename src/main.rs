@@ -1,7 +1,7 @@
 #![allow(warnings)]
 use clap::{Parser, Subcommand};
 use gen::config;
-use gen::config::get_operation_connection;
+use gen::config::{get_gen_dir, get_operation_connection};
 
 use gen::annotations::gff::propagate_gff;
 use gen::exports::fasta::export_fasta;
@@ -43,11 +43,12 @@ struct Cli {
     command: Option<Commands>,
 }
 
-fn get_default_collection(conn: &Connection) -> Option<String> {
+fn get_default_collection(conn: &Connection) -> String {
     let mut stmt = conn
         .prepare("select collection_name from defaults where id = 1")
         .unwrap();
-    stmt.query_row((), |row| row.get(0)).unwrap()
+    stmt.query_row((), |row| row.get(0))
+        .unwrap_or("default".to_string())
 }
 
 #[derive(Subcommand)]
@@ -336,7 +337,14 @@ fn main() {
             .prepare("select db_name from defaults where id = 1;")
             .unwrap();
         let row: Option<String> = stmt.query_row((), |row| row.get(0)).unwrap();
-        row.expect("No db specified and no default database chosen.")
+        row.unwrap_or_else(|| {
+            let gen_dir = get_gen_dir();
+            PathBuf::from(gen_dir)
+                .join("default.db")
+                .to_str()
+                .unwrap()
+                .to_string()
+        })
     });
     let db = binding.as_str();
     let conn = get_connection(db);
@@ -355,10 +363,9 @@ fn main() {
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
-            let name = &name.clone().unwrap_or_else(|| {
-                get_default_collection(&operation_conn)
-                    .expect("No collection specified and default not setup.")
-            });
+            let name = &name
+                .clone()
+                .unwrap_or_else(|| get_default_collection(&operation_conn));
             if fasta.is_some() {
                 match import_fasta(
                     &fasta.clone().unwrap(),
@@ -422,10 +429,9 @@ fn main() {
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
-            let name = &name.clone().unwrap_or_else(|| {
-                get_default_collection(&operation_conn)
-                    .expect("No collection specified and default not setup.")
-            });
+            let name = &name
+                .clone()
+                .unwrap_or_else(|| get_default_collection(&operation_conn));
             if let Some(library_path) = library {
                 update_with_library(
                     &conn,
@@ -499,10 +505,9 @@ fn main() {
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
-            let name = &name.clone().unwrap_or_else(|| {
-                get_default_collection(&operation_conn)
-                    .expect("No collection specified and default not setup.")
-            });
+            let name = &name
+                .clone()
+                .unwrap_or_else(|| get_default_collection(&operation_conn));
             update_with_gaf(
                 &conn,
                 &operation_conn,
@@ -653,10 +658,9 @@ fn main() {
             sample,
             fasta,
         }) => {
-            let name = &name.clone().unwrap_or_else(|| {
-                get_default_collection(&operation_conn)
-                    .expect("No collection specified and default not setup.")
-            });
+            let name = &name
+                .clone()
+                .unwrap_or_else(|| get_default_collection(&operation_conn));
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
             if let Some(gfa_path) = gfa {
@@ -727,10 +731,9 @@ fn main() {
             gff,
             output_gff,
         }) => {
-            let name = &name.clone().unwrap_or_else(|| {
-                get_default_collection(&operation_conn)
-                    .expect("No collection specified and default not setup.")
-            });
+            let name = &name
+                .clone()
+                .unwrap_or_else(|| get_default_collection(&operation_conn));
             let from_sample_name = from_sample.clone();
 
             conn.execute("BEGIN TRANSACTION", []).unwrap();
@@ -755,10 +758,9 @@ fn main() {
             }
         }
         Some(Commands::ListGraphs { name, sample }) => {
-            let name = &name.clone().unwrap_or_else(|| {
-                get_default_collection(&operation_conn)
-                    .expect("No collection specified and default not setup.")
-            });
+            let name = &name
+                .clone()
+                .unwrap_or_else(|| get_default_collection(&operation_conn));
             let block_groups = Sample::get_block_groups(&conn, name, Some(sample));
             for block_group in block_groups {
                 println!("{}", block_group.name);
@@ -772,10 +774,9 @@ fn main() {
             end,
             region,
         }) => {
-            let name = &name.clone().unwrap_or_else(|| {
-                get_default_collection(&operation_conn)
-                    .expect("No collection specified and default not setup.")
-            });
+            let name = &name
+                .clone()
+                .unwrap_or_else(|| get_default_collection(&operation_conn));
             let parsed_graph_name = if region.is_some() {
                 let parsed_region = region.as_ref().unwrap().parse::<Region>().unwrap();
                 parsed_region.name().to_string()
