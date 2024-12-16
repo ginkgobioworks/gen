@@ -18,17 +18,22 @@ gen derive --detach --sample S1 --region chr1:5-12 --new-sample S2
 Upon receiving this command, gen creates a new graph in which the start and end pointers have been moved, and only the nodes and edges
 reachable between the new start and end points are retained. If no sample name is provided for the new samples, gen will edit the original sample instead.  When exported, these files are much smaller since they do not include edges and nodes that are no longer relevant. But as long as the bases (or residues) at the very ends stay intact, they can be easily imported and re-attached to a larger backbone graph as shown in Figure 1.
 
-![Figure 1](./figures/operators/detach-attach.png) 
-
-**_Figure 1_**: _..._
 
 ### Attach
+Detached graphs can be (re)attached to any graph that shares the same backbone. The attach operation 
 
 ```console
 gen derive --attach --sample S2 --backbone S1 --new-sample S3
 ```
 
-![Figure 1](./figures/operators/detach-attach.png) 
+
+<figure style="width:800px">
+<img src="./figures/operators/detach-attach.png" alt="Figure 1">
+<figcaption width=800><em>Figure 1</em>: a) DNA sequence graph representing the insertion of the trinucleotide CCC, and a substitution of AGG by TGA; the section we wish to detach is indicated in bold. Numbers below the blocks indicate the gen node id and corresponding coordinate range. b) Subgraph that was detached, note the single-nucleotide terminal blocks A and A. c) Sequence graph with the same node 1 backbone; the terminal blocks from panel b are highlighted in bold. d) Result of attaching the subgraph from panel b to the graph in panel c.</figcaption>
+</figure>
+
+
+
 
 
 ### Union
