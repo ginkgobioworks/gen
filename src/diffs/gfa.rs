@@ -477,13 +477,19 @@ mod tests {
     }
 
     #[test]
-    fn test_gfa_self_diff() {
+    fn test_gfa_diff_against_nothing() {
         // Confirm diff of a sample to itself is just a single segment
         let conn = get_connection(None);
 
         let collection_name = "test collection";
         Collection::create(&conn, collection_name);
-        let block_group = BlockGroup::create(&conn, collection_name, None, "test block group");
+        let _sample = Sample::get_or_create(&conn, "test sample");
+        let block_group = BlockGroup::create(
+            &conn,
+            collection_name,
+            Some("test sample"),
+            "test block group",
+        );
         let sequence1 = Sequence::new()
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
@@ -535,11 +541,104 @@ mod tests {
             .collect::<Vec<BlockGroupEdgeData>>();
         BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
-        let _path1 = Path::create(&conn, "parent", block_group.id, &edge_ids);
+        let _path1 = Path::create(&conn, "test path", block_group.id, &edge_ids);
+
+        let temp_dir = tempdir().unwrap();
+        let gfa_path = temp_dir.path().join("diff-against-nothing.gfa");
+        gfa_sample_diff(&conn, collection_name, &gfa_path, None, "test sample");
+
+        import_gfa(&gfa_path, "test collection 2", None, &conn);
+
+        let new_block_group = Collection::get_block_groups(&conn, "test collection 2")
+            .pop()
+            .unwrap();
+        let all_sequences = BlockGroup::get_all_sequences(&conn, new_block_group.id, false);
+
+        assert_eq!(
+            all_sequences,
+            ["AAAAAAAATTTTTTTT"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<HashSet<String>>()
+        );
+    }
+
+    #[test]
+    fn test_self_diff() {
+        // Confirm diff of a sample to itself is just a single segment
+        let conn = get_connection(None);
+
+        let collection_name = "test collection";
+        Collection::create(&conn, collection_name);
+        let _sample = Sample::get_or_create(&conn, "test sample");
+        let block_group = BlockGroup::create(
+            &conn,
+            collection_name,
+            Some("test sample"),
+            "test block group",
+        );
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(&conn);
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("TTTTTTTT")
+            .save(&conn);
+        let node1_id = Node::create(&conn, &sequence1.hash, None);
+        let node2_id = Node::create(&conn, &sequence2.hash, None);
+
+        let edge1 = Edge::create(
+            &conn,
+            PATH_START_NODE_ID,
+            0,
+            Strand::Forward,
+            node1_id,
+            0,
+            Strand::Forward,
+        );
+        let edge2 = Edge::create(
+            &conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+        );
+        let edge3 = Edge::create(
+            &conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            0,
+            Strand::Forward,
+        );
+
+        let edge_ids = [edge1.id, edge2.id, edge3.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|&edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+
+        let _path1 = Path::create(&conn, "test path", block_group.id, &edge_ids);
 
         let temp_dir = tempdir().unwrap();
         let gfa_path = temp_dir.path().join("self-diff.gfa");
-        gfa_sample_diff(&conn, collection_name, &gfa_path, None, "child");
+        gfa_sample_diff(
+            &conn,
+            collection_name,
+            &gfa_path,
+            Some("test sample"),
+            "test sample",
+        );
 
         import_gfa(&gfa_path, "test collection 2", None, &conn);
 

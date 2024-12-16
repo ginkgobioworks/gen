@@ -1,4 +1,5 @@
 use crate::models::strand::Strand;
+use convert_case::{Case, Casing};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 
@@ -51,7 +52,7 @@ pub fn path_line(path: &Path) -> String {
         .map(|(segment_id, node_strand)| format!("{}{}", segment_id, node_strand))
         .collect::<Vec<String>>()
         .join(",");
-    format!("P\t{}\t{}\t*\n", path.name, segments)
+    format!("P\t{}\t{}\t*\n", path.name.to_case(Case::Train), segments)
 }
 
 pub fn write_segments(writer: &mut BufWriter<File>, segments: &Vec<Segment>) {
