@@ -277,7 +277,6 @@ mod tests {
     mod geneious_genbanks {
         use super::*;
         use crate::imports::genbank::import_genbank;
-        use rusqlite::ToSql;
 
         #[test]
         fn test_incorporates_updates() {
