@@ -643,8 +643,8 @@ fn main() {
         Some(Commands::Checkout { branch, hash }) => {
             if let Some(name) = branch.clone() {
                 if Branch::get_by_name(&operation_conn, &db_uuid, &name).is_none() {
-                    println!("Creating branch {name}");
                     Branch::create(&operation_conn, &db_uuid, &name);
+                    println!("Created branch {name}");
                 }
                 println!("Checking out branch {name}");
                 operation_management::checkout(&conn, &operation_conn, &db_uuid, &Some(name), None);
