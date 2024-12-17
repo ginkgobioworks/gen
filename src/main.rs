@@ -187,7 +187,7 @@ enum Commands {
     },
     /// Migrate a database to a given operation
     Checkout {
-        /// The branch identifier to migrate to
+        /// Create and checkout a new branch.
         #[arg(short, long)]
         branch: Option<String>,
         /// The operation hash to move to
@@ -646,7 +646,37 @@ fn main() {
             operation_management::apply(&conn, &operation_conn, hash, None);
         }
         Some(Commands::Checkout { branch, hash }) => {
-            operation_management::checkout(&conn, &operation_conn, &db_uuid, branch, hash.clone());
+            if let Some(name) = branch.clone() {
+                if Branch::get_by_name(&operation_conn, &db_uuid, &name).is_none() {
+                    Branch::create(&operation_conn, &db_uuid, &name);
+                    println!("Created branch {name}");
+                }
+                println!("Checking out branch {name}");
+                operation_management::checkout(&conn, &operation_conn, &db_uuid, &Some(name), None);
+            } else if let Some(hash_name) = hash.clone() {
+                // if the hash is a branch, check it out
+                if Branch::get_by_name(&operation_conn, &db_uuid, &hash_name).is_some() {
+                    println!("Checking out branch {hash_name}");
+                    operation_management::checkout(
+                        &conn,
+                        &operation_conn,
+                        &db_uuid,
+                        &Some(hash_name),
+                        None,
+                    );
+                } else {
+                    println!("Checking out operation {hash_name}");
+                    operation_management::checkout(
+                        &conn,
+                        &operation_conn,
+                        &db_uuid,
+                        &None,
+                        Some(hash_name),
+                    );
+                }
+            } else {
+                println!("No branch or hash to checkout provided.");
+            }
         }
         Some(Commands::Reset { hash }) => {
             operation_management::reset(&conn, &operation_conn, &db_uuid, hash);

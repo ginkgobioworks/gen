@@ -247,7 +247,10 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(Operation::get_by_hash(op_conn, &operation.hash), operation);
+        assert_eq!(
+            Operation::get_by_hash(op_conn, &operation.hash).unwrap(),
+            operation
+        );
     }
 
     #[cfg(test)]
