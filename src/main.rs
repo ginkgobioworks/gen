@@ -263,7 +263,7 @@ enum Commands {
         name: Option<String>,
         /// The name of the sample to list graphs for
         #[arg(short, long)]
-        sample: String,
+        sample: Option<String>,
     },
     GetSequence {
         /// The name of the collection containing the sequence
@@ -271,7 +271,7 @@ enum Commands {
         name: Option<String>,
         /// The name of the sample containing the sequence
         #[arg(short, long)]
-        sample: String,
+        sample: Option<String>,
         /// The name of the graph to get the sequence for
         #[arg(short, long)]
         graph: Option<String>,
@@ -791,7 +791,7 @@ fn main() {
             let name = &name
                 .clone()
                 .unwrap_or_else(|| get_default_collection(&operation_conn));
-            let block_groups = Sample::get_block_groups(&conn, name, Some(sample));
+            let block_groups = Sample::get_block_groups(&conn, name, sample.as_deref());
             for block_group in block_groups {
                 println!("{}", block_group.name);
             }
@@ -813,15 +813,19 @@ fn main() {
             } else {
                 graph.clone().unwrap()
             };
-            let block_group_id = BlockGroup::get_or_create_sample_block_group(
-                &conn,
-                name,
-                sample,
-                &parsed_graph_name,
-                None,
-            )
-            .unwrap();
-            let path = BlockGroup::get_current_path(&conn, block_group_id);
+            let block_groups = Sample::get_block_groups(&conn, name, sample.as_deref());
+            let formatted_sample_name = if sample.is_some() {
+                format!("sample {}", sample.clone().unwrap())
+            } else {
+                "default sample".to_string()
+            };
+            let block_group = block_groups
+                .iter()
+                .find(|bg| bg.name == parsed_graph_name)
+                .unwrap_or_else(|| {
+                    panic!("Graph {parsed_graph_name} not found for {formatted_sample_name}")
+                });
+            let path = BlockGroup::get_current_path(&conn, block_group.id);
             let sequence = path.sequence(&conn);
             let start_coordinate;
             let mut end_coordinate;

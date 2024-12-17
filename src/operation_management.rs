@@ -757,17 +757,15 @@ pub fn reset(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_h
     if !branch_operations.contains(&current_op) {
         panic!("{op_hash} is not contained in this branch's operations.");
     }
-    move_to(
-        conn,
-        operation_conn,
-        &Operation::get_by_hash(operation_conn, op_hash)
-            .unwrap_or_else(|_| panic!("Hash {op_hash} does not exist.")),
-    );
+    let operation = Operation::get_by_hash(operation_conn, op_hash)
+        .unwrap_or_else(|_| panic!("Hash {op_hash} does not exist."));
+    let full_op_hash = operation.hash.clone();
+    move_to(conn, operation_conn, &operation);
 
     if current_branch.name != "main" {
         match operation_conn.execute(
             "UPDATE branch SET start_operation_hash = ?2 WHERE id = ?1",
-            (current_branch_id, op_hash.to_string()),
+            (current_branch_id, full_op_hash.to_string()),
         ) {
             Ok(_) => {}
             Err(e) => {
@@ -780,13 +778,13 @@ pub fn reset(conn: &Connection, operation_conn: &Connection, db_uuid: &str, op_h
     for op in Operation::query(
         operation_conn,
         "select * from operation where parent_hash = ?1",
-        rusqlite::params!(Value::from(op_hash.to_string())),
+        rusqlite::params!(Value::from(full_op_hash.to_string())),
     )
     .iter()
     {
         Branch::mask_operation(operation_conn, current_branch_id, &op.hash);
     }
-    OperationState::set_operation(operation_conn, db_uuid, op_hash);
+    OperationState::set_operation(operation_conn, db_uuid, &full_op_hash);
 }
 
 pub fn apply<'a>(
@@ -803,16 +801,17 @@ pub fn apply<'a>(
     let mut iter = ChangesetIter::start_strm(&input).unwrap();
     let dependencies = load_changeset_dependencies(&operation);
     apply_changeset(conn, &mut iter, &dependencies);
+    let full_op_hash = operation.hash.clone();
     end_operation(
         conn,
         operation_conn,
         &mut session,
         OperationInfo {
-            file_path: format!("{op_hash}.cs"),
+            file_path: format!("{full_op_hash}.cs"),
             file_type: FileTypes::Changeset,
             description: "changeset_application".to_string(),
         },
-        &format!("Applied changeset {op_hash}."),
+        &format!("Applied changeset {full_op_hash}."),
         force_hash,
     )
     .unwrap()
