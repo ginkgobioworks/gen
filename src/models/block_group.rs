@@ -291,7 +291,11 @@ impl BlockGroup {
             }
         }
         if bg_id == 0 {
-            return Err("No base path exists");
+            let error_string = format!(
+                "No base path exists for sample {} and graph name {}",
+                sample_name, group_name
+            );
+            return Err(Box::leak(error_string.into_boxed_str()));
         }
         let new_bg_id = BlockGroup::create(conn, collection_name, Some(sample_name), group_name);
 

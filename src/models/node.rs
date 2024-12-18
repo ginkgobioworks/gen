@@ -34,7 +34,7 @@ impl Node {
         let node_hash = node_hash.into();
 
         let insert_statement =
-            "INSERT INTO nodes (sequence_hash, hash) VALUES (?1, ?2) RETURNING (id);";
+            "INSERT OR IGNORE INTO nodes (sequence_hash, hash) VALUES (?1, ?2) RETURNING (id);";
         let mut stmt = conn.prepare_cached(insert_statement).unwrap();
         let mut rows = stmt
             .query_map(
@@ -45,7 +45,13 @@ impl Node {
                 |row| row.get(0),
             )
             .unwrap();
-        match rows.next().unwrap() {
+        let result = rows.next();
+        if result.is_none() {
+            // Happens if the OR IGNORE clause was triggered
+            let node_id = Node::get_id_by_hash(conn, node_hash.unwrap().as_str()).unwrap();
+            return node_id;
+        }
+        match result.unwrap() {
             Ok(res) => res,
             Err(rusqlite::Error::SqliteFailure(err, details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
@@ -106,6 +112,20 @@ impl Node {
                 )
             })
             .collect::<HashMap<i64, Sequence>>()
+    }
+
+    pub fn get_id_by_hash(conn: &Connection, node_hash: &str) -> Option<i64> {
+        let query = "SELECT * FROM nodes WHERE hash = ?1;";
+        let result = Node::query(
+            conn,
+            query,
+            rusqlite::params!(SQLValue::from(node_hash.to_string())),
+        );
+        if result.is_empty() {
+            None
+        } else {
+            Some(result[0].id)
+        }
     }
 
     pub fn is_terminal(node_id: i64) -> bool {

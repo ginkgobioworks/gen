@@ -571,7 +571,7 @@ pub struct Haplotype<'a, T: SampleType, S: Opt, U: Opt> {
     pub name: String,
     pub paths: Vec<&'a Path<T, S, U>>,
 }
-impl<'a, T: SampleType, S: Opt, U: Opt> Default for Pansn<'a, T, S, U> {
+impl<T: SampleType, S: Opt, U: Opt> Default for Pansn<'_, T, S, U> {
     fn default() -> Self {
         Self::new()
     }
