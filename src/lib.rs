@@ -5,8 +5,10 @@ use std::{io, str};
 
 pub mod annotations;
 pub mod config;
+pub mod diffs;
 pub mod exports;
 pub mod genbank;
+pub mod gfa;
 pub mod gfa_reader;
 pub mod graph;
 pub mod imports;
