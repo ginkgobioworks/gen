@@ -18,7 +18,7 @@ pub fn gfa_sample_diff(
     collection_name: &str,
     filename: &PathBuf,
     from_sample_name: Option<&str>,
-    to_sample_name: &str,
+    to_sample_name: Option<&str>,
 ) {
     /*
     Generate a GFA file that represents the differences between two samples in a collection.
@@ -43,7 +43,7 @@ pub fn gfa_sample_diff(
     path.
     */
     let source_block_groups = Sample::get_block_groups(conn, collection_name, from_sample_name);
-    let target_block_groups = Sample::get_block_groups(conn, collection_name, Some(to_sample_name));
+    let target_block_groups = Sample::get_block_groups(conn, collection_name, to_sample_name);
 
     let source_paths_by_name = source_block_groups
         .iter()
@@ -117,7 +117,7 @@ pub fn gfa_sample_diff(
             let source_path = source_path_result.unwrap();
             let source_sequence = source_path.sequence(conn);
 
-            let source_len = source_sequence.len().try_into().unwrap();
+            let source_len = source_sequence.len() as i64;
             if last_source_position < source_len {
                 source_ranges.push(Range {
                     start: last_source_position,
@@ -141,7 +141,7 @@ pub fn gfa_sample_diff(
             let target_path = target_path_result.unwrap();
             let target_sequence = target_path.sequence(conn);
 
-            let target_len = target_sequence.len().try_into().unwrap();
+            let target_len = target_sequence.len() as i64;
             if last_target_position < target_len {
                 target_ranges.push(Range {
                     start: last_target_position,
@@ -156,8 +156,7 @@ pub fn gfa_sample_diff(
             let target_links = links_from_blocks(&target_node_blocks);
             links.extend(target_links.iter().cloned());
 
-            let target_gfa_path =
-                path_from_segments(Some(to_sample_name), target_path, &target_segments);
+            let target_gfa_path = path_from_segments(to_sample_name, target_path, &target_segments);
             paths.push(target_gfa_path);
         }
     }
@@ -177,8 +176,8 @@ pub fn gfa_sample_diff(
 fn segments_from_blocks(node_blocks: &Vec<NodeIntervalBlock>, sequence: &str) -> Vec<Segment> {
     let mut segments = vec![];
     for block in node_blocks {
-        let start = usize::try_from(block.start).unwrap();
-        let end = usize::try_from(block.end).unwrap();
+        let start = block.start as usize;
+        let end = block.end as usize;
         let segment = Segment {
             sequence: sequence[start..end].to_string(),
             node_id: block.node_id,
@@ -224,7 +223,7 @@ fn links_from_blocks(node_blocks: &[NodeIntervalBlock]) -> Vec<Link> {
 }
 
 fn path_from_segments(sample_name: Option<&str>, path: &Path, segments: &[Segment]) -> GFAPath {
-    let path_name = if sample_name.is_some() && sample_name.unwrap() != "" {
+    let path_name = if sample_name.unwrap_or("") != "" {
         format!("{}.{}", sample_name.unwrap(), path.name)
     } else {
         path.name.clone()
@@ -360,7 +359,7 @@ mod tests {
 
         let temp_dir = tempdir().unwrap();
         let gfa_path = temp_dir.path().join("parent-child-diff.gfa");
-        gfa_sample_diff(&conn, collection_name, &gfa_path, None, "child");
+        gfa_sample_diff(&conn, collection_name, &gfa_path, None, Some("child"));
 
         import_gfa(&gfa_path, "test collection 2", None, &conn);
 
@@ -426,7 +425,7 @@ mod tests {
             original_grandchild_path.new_path_with(&conn, 10, 14, &edge6, &edge7);
 
         let gfa_path = temp_dir.path().join("parent-grandchild-diff.gfa");
-        gfa_sample_diff(&conn, collection_name, &gfa_path, None, "grandchild");
+        gfa_sample_diff(&conn, collection_name, &gfa_path, None, Some("grandchild"));
 
         import_gfa(&gfa_path, "test collection 3", None, &conn);
 
@@ -456,7 +455,7 @@ mod tests {
             collection_name,
             &gfa_path,
             Some("child"),
-            "grandchild",
+            Some("grandchild"),
         );
 
         import_gfa(&gfa_path, "test collection 4", None, &conn);
@@ -478,7 +477,7 @@ mod tests {
 
     #[test]
     fn test_gfa_diff_against_nothing() {
-        // Confirm diff of a sample to itself is just a single segment
+        // Confirm diff of a sample against nothing is just the sample
         let conn = get_connection(None);
 
         let collection_name = "test collection";
@@ -545,7 +544,7 @@ mod tests {
 
         let temp_dir = tempdir().unwrap();
         let gfa_path = temp_dir.path().join("diff-against-nothing.gfa");
-        gfa_sample_diff(&conn, collection_name, &gfa_path, None, "test sample");
+        gfa_sample_diff(&conn, collection_name, &gfa_path, None, Some("test sample"));
 
         import_gfa(&gfa_path, "test collection 2", None, &conn);
 
@@ -565,7 +564,7 @@ mod tests {
 
     #[test]
     fn test_self_diff() {
-        // Confirm diff of a sample to itself is just a single segment
+        // Confirm diff of a sample to itself just results in a graph that's a single path
         let conn = get_connection(None);
 
         let collection_name = "test collection";
@@ -637,7 +636,7 @@ mod tests {
             collection_name,
             &gfa_path,
             Some("test sample"),
-            "test sample",
+            Some("test sample"),
         );
 
         import_gfa(&gfa_path, "test collection 2", None, &conn);
@@ -658,7 +657,7 @@ mod tests {
 
     #[test]
     fn test_gfa_diff_unrelated_paths() {
-        // Confirm diff of a sample to itself is just a single segment
+        // Confirm diff of a sample to totally unrelated sample produces two separate paths
         let conn = get_connection(None);
 
         let collection_name = "test collection";
@@ -786,7 +785,7 @@ mod tests {
             collection_name,
             &gfa_path,
             Some("sample1"),
-            "sample2",
+            Some("sample2"),
         );
 
         import_gfa(&gfa_path, "test collection 3", None, &conn);
@@ -807,7 +806,8 @@ mod tests {
 
     #[test]
     fn test_gfa_diff_unrelated_paths_matching_block_group_names() {
-        // Confirm diff of a sample to itself is just a single segment
+        // Confirm diff of two paths that are in the same block group but don't share any nodes
+        // results in two disjoint sequences
         let conn = get_connection(None);
 
         let collection_name = "test collection";
@@ -931,7 +931,7 @@ mod tests {
             collection_name,
             &gfa_path,
             Some("sample1"),
-            "sample2",
+            Some("sample2"),
         );
 
         import_gfa(&gfa_path, "test collection 3", None, &conn);
@@ -951,8 +951,10 @@ mod tests {
     }
 
     #[test]
-    fn test_gfa_diff_overlapping_inserts() {
-        // Sets up a basic graph and then exports it to a GFA file
+    fn test_gfa_diff_overlapping_replacements() {
+        // Set up a child with a replacement, then a grandchild with a replacement on the child that
+        // partially overlaps the child's replacement, and confirm diffs between all pairs from
+        // (original, child, grandchild)
         let conn = get_connection(None);
 
         let collection_name = "test collection";
@@ -1041,7 +1043,7 @@ mod tests {
 
         let temp_dir = tempdir().unwrap();
         let gfa_path = temp_dir.path().join("parent-child-diff.gfa");
-        gfa_sample_diff(&conn, collection_name, &gfa_path, None, "child");
+        gfa_sample_diff(&conn, collection_name, &gfa_path, None, Some("child"));
 
         import_gfa(&gfa_path, "test collection 2", None, &conn);
 
@@ -1106,7 +1108,7 @@ mod tests {
         let _grandchild_path = original_grandchild_path.new_path_with(&conn, 4, 10, &edge5, &edge6);
 
         let gfa_path = temp_dir.path().join("parent-grandchild-diff.gfa");
-        gfa_sample_diff(&conn, collection_name, &gfa_path, None, "grandchild");
+        gfa_sample_diff(&conn, collection_name, &gfa_path, None, Some("grandchild"));
 
         import_gfa(&gfa_path, "test collection 3", None, &conn);
 
@@ -1133,7 +1135,7 @@ mod tests {
             collection_name,
             &gfa_path,
             Some("child"),
-            "grandchild",
+            Some("grandchild"),
         );
 
         import_gfa(&gfa_path, "test collection 4", None, &conn);
