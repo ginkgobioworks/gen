@@ -55,12 +55,14 @@ fn get_default_collection(conn: &Connection) -> String {
 #[allow(clippy::large_enum_variant)]
 enum Commands {
     /// Commands for transforming file types for input to Gen.
+    #[command(arg_required_else_help(true))]
     Transform {
         /// For update-gaf, this transforms the csv to a fasta for use in alignments
         #[arg(long)]
         format_csv_for_gaf: Option<String>,
     },
     /// Import a new sequence collection.
+    #[command(arg_required_else_help(true))]
     Import {
         /// Fasta file path
         #[arg(short, long)]
@@ -79,6 +81,7 @@ enum Commands {
         shallow: bool,
     },
     /// Update a sequence collection with new data
+    #[command(arg_required_else_help(true))]
     Update {
         /// The name of the collection to update
         #[arg(short, long)]
@@ -126,8 +129,8 @@ enum Commands {
         #[arg(long, action, alias = "cm")]
         create_missing: bool,
     },
-    /// Use a GAF
-    #[command(name = "update-gaf")]
+    /// Update a sequence collecting using GAF results.
+    #[command(name = "update-gaf", arg_required_else_help(true))]
     UpdateGaf {
         /// The name of the collection to update
         #[arg(short, long)]
@@ -135,7 +138,7 @@ enum Commands {
         /// The GAF input
         #[arg(short, long)]
         gaf: String,
-        /// The GAF input
+        /// The csv describing changes to make
         #[arg(short, long)]
         csv: String,
         /// The sample to update or create
@@ -145,7 +148,8 @@ enum Commands {
         #[arg(short, long)]
         parent_sample: Option<String>,
     },
-    #[command(name = "patch-create")]
+    /// Export a set of operations to a patch file
+    #[command(name = "patch-create", arg_required_else_help(true))]
     PatchCreate {
         /// To create a patch against a non-checked out branch.
         #[arg(short, long)]
@@ -157,7 +161,8 @@ enum Commands {
         #[clap(index = 1)]
         operation: String,
     },
-    #[command(name = "patch-apply")]
+    /// Apply changes from a patch file
+    #[command(name = "patch-apply", arg_required_else_help(true))]
     PatchApply {
         /// The patch file
         #[clap(index = 1)]
@@ -166,6 +171,7 @@ enum Commands {
     /// Initialize a gen repository
     Init {},
     /// Manage and create branches
+    #[command(arg_required_else_help(true))]
     Branch {
         /// Create a branch with the given name
         #[arg(long, action)]
@@ -186,6 +192,7 @@ enum Commands {
         branch_name: Option<String>,
     },
     /// Migrate a database to a given operation
+    #[command(arg_required_else_help(true))]
     Checkout {
         /// Create and checkout a new branch.
         #[arg(short, long)]
@@ -195,24 +202,28 @@ enum Commands {
         hash: Option<String>,
     },
     /// Reset a branch to a previous operation
+    #[command(arg_required_else_help(true))]
     Reset {
         /// The operation hash to reset to
         #[clap(index = 1)]
         hash: String,
     },
     /// View operations carried out against a database
+    #[command(arg_required_else_help(true))]
     Operations {
         /// The branch to list operations for
         #[arg(short, long)]
         branch: Option<String>,
     },
     /// Apply an operation to a branch
+    #[command(arg_required_else_help(true))]
     Apply {
         /// The operation hash to apply
         #[clap(index = 1)]
         hash: String,
     },
     /// Export sequence data
+    #[command(arg_required_else_help(true))]
     Export {
         /// The name of the collection to export
         #[arg(short, long)]
@@ -231,6 +242,7 @@ enum Commands {
         gb: Option<String>,
     },
     /// Configure default options
+    #[command(arg_required_else_help(true))]
     Defaults {
         /// The default database to use
         #[arg(short, long)]
@@ -239,6 +251,8 @@ enum Commands {
         #[arg(short, long)]
         collection: Option<String>,
     },
+    /// Convert annotation coordinates between two samples
+    #[command(arg_required_else_help(true))]
     PropagateAnnotations {
         /// The name of the collection to annotate
         #[arg(short, long)]
@@ -257,6 +271,7 @@ enum Commands {
         output_gff: String,
     },
     ListSamples {},
+    #[command(arg_required_else_help(true))]
     ListGraphs {
         /// The name of the collection to list graphs for
         #[arg(short, long)]
@@ -265,6 +280,8 @@ enum Commands {
         #[arg(short, long)]
         sample: String,
     },
+    /// Extract a sequence from a graph
+    #[command(arg_required_else_help(true))]
     GetSequence {
         /// The name of the collection containing the sequence
         #[arg(short, long)]
@@ -710,7 +727,7 @@ fn main() {
                     &PathBuf::from(gb_path),
                 );
             } else {
-                panic!("No file type specified for export.");
+                println!("No file type specified for export.");
             }
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
