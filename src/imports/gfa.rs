@@ -3,6 +3,7 @@ use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
 use std::path::Path as FilePath;
 
+use crate::gfa::bool_to_strand;
 use crate::gfa_reader::Gfa;
 use crate::models::sample::Sample;
 use crate::models::{
@@ -16,14 +17,6 @@ use crate::models::{
     strand::Strand,
 };
 use crate::progress_bar::{get_handler, get_progress_bar, get_time_elapsed_bar};
-
-fn bool_to_strand(direction: bool) -> Strand {
-    if direction {
-        Strand::Forward
-    } else {
-        Strand::Reverse
-    }
-}
 
 pub fn import_gfa<'a>(
     gfa_path: &FilePath,
