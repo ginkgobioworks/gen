@@ -24,6 +24,7 @@ use gen::patch;
 use gen::updates::fasta::update_with_fasta;
 use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
 use gen::updates::genbank::update_with_genbank;
+use gen::updates::gfa::update_with_gfa;
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::{update_with_vcf, VcfError};
 use gen::views::patch::view_patches;
@@ -135,6 +136,9 @@ enum Commands {
         /// If a new entity is found, create it as a normal import
         #[arg(long, action, alias = "cm")]
         create_missing: bool,
+        /// A GFA file to update from
+        #[arg(long)]
+        gfa: Option<String>,
     },
     /// Update a sequence collecting using GAF results.
     #[command(name = "update-gaf", arg_required_else_help(true))]
@@ -499,6 +503,7 @@ fn main() {
             end,
             coordinate_frame,
             create_missing,
+            gfa,
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
@@ -561,6 +566,18 @@ fn main() {
                         file_type: FileTypes::GenBank,
                         description: "Update from GenBank".to_string(),
                     },
+                ) {
+                    Ok(_) => {}
+                    Err(e) => panic!("Failed to update. Error is: {e}"),
+                }
+            } else if let Some(gfa_path) = gfa {
+                match update_with_gfa(
+                    &conn,
+                    &operation_conn,
+                    name,
+                    sample.clone().as_deref(),
+                    &new_sample.clone().unwrap(),
+                    gfa_path,
                 ) {
                     Ok(_) => {}
                     Err(e) => panic!("Failed to update. Error is: {e}"),
