@@ -16,6 +16,7 @@ use crate::models::{
 };
 use crate::operation_management::{end_operation, start_operation, OperationError};
 use crate::{calculate_hash, parse_genotype};
+use indicatif::{ProgressBar, ProgressStyle};
 use noodles::vcf;
 use noodles::vcf::variant::record::info::field::Value as InfoValue;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
@@ -213,6 +214,12 @@ pub fn update_with_vcf<'a>(
     let mut parent_block_groups: HashMap<(&str, i64), i64> = HashMap::new();
     let mut created_samples = HashSet::new();
 
+    let bar = ProgressBar::no_length().with_style(
+        ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {human_pos:>7} {msg}")
+            .unwrap(),
+    );
+
+    bar.set_message("Processing VCF for changes");
     for result in reader.records() {
         let record = result.unwrap();
         let seq_name: String = record.reference_sequence_name().to_string();
@@ -424,7 +431,17 @@ pub fn update_with_vcf<'a>(
                 .or_default()
                 .push(change);
         }
+        bar.inc(1);
     }
+    bar.finish_and_clear();
+
+    let bar = ProgressBar::new(changes.values().map(|c| c.len() as u64).sum()).with_style(
+        ProgressStyle::with_template(
+            "[{elapsed_precise}] {bar:40.cyan/blue} {human_pos:>7}/{human_len:7} {msg}",
+        )
+        .unwrap(),
+    );
+    bar.set_message("Applying changes...");
     let mut summary: HashMap<String, HashMap<String, i64>> = HashMap::new();
     for ((path, sample_name), path_changes) in changes {
         BlockGroup::insert_changes(
@@ -433,12 +450,14 @@ pub fn update_with_vcf<'a>(
             &mut path_cache,
             coordinate_frame.is_some(),
         );
+        bar.inc(path_changes.len() as u64);
         summary
             .entry(sample_name)
             .or_default()
             .entry(path.name)
             .or_insert(path_changes.len() as i64);
     }
+    bar.finish_and_clear();
     for ((path, accession_name), (acc_start, acc_end)) in accession_cache.iter() {
         BlockGroup::add_accession(
             conn,
