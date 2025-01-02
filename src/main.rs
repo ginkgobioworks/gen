@@ -23,7 +23,7 @@ use gen::updates::fasta::update_with_fasta;
 use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
 use gen::updates::genbank::update_with_genbank;
 use gen::updates::library::update_with_library;
-use gen::updates::vcf::update_with_vcf;
+use gen::updates::vcf::{update_with_vcf, VcfError};
 use itertools::Itertools;
 use noodles::core::Region;
 use rusqlite::{types::Value, Connection};
@@ -209,7 +209,7 @@ enum Commands {
         hash: String,
     },
     /// View operations carried out against a database
-    #[command(arg_required_else_help(true))]
+    #[command()]
     Operations {
         /// The branch to list operations for
         #[arg(short, long)]
@@ -479,7 +479,7 @@ fn main() {
                 )
                 .unwrap();
             } else if let Some(vcf_path) = vcf {
-                update_with_vcf(
+                match update_with_vcf(
                     vcf_path,
                     name,
                     genotype.clone().unwrap_or("".to_string()),
@@ -487,8 +487,11 @@ fn main() {
                     &conn,
                     &operation_conn,
                     coordinate_frame.as_deref(),
-                )
-                .unwrap();
+                ) {
+                    Ok(_) => {},
+                    Err(VcfError::OperationError(OperationError::NoChanges)) => println!("No changes made. If the VCF lacks a sample or genotype, they need to be provided via --sample and --genotype."),
+                    Err(e) => panic!("Error updating with vcf: {e}"),
+                }
             } else if let Some(gb_path) = gb {
                 let f = File::open(gb_path).unwrap();
                 match update_with_genbank(
