@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path as FilePath;
 
 use crate::gfa_reader::Gfa;
+use crate::models::sample::Sample;
 use crate::models::{
     block_group::BlockGroup,
     block_group_edge::{BlockGroupEdge, BlockGroupEdgeData},
@@ -31,6 +32,9 @@ pub fn import_gfa<'a>(
 ) {
     Collection::create(conn, collection_name);
     let sample_name = sample_name.into();
+    if let Some(sample_name) = sample_name {
+        Sample::get_or_create(conn, sample_name);
+    }
     let block_group = BlockGroup::create(conn, collection_name, sample_name, "");
     let gfa: Gfa<String, (), ()> = Gfa::parse_gfa_file(gfa_path.to_str().unwrap());
     let mut sequences_by_segment_id: HashMap<&String, Sequence> = HashMap::new();
@@ -263,6 +267,20 @@ mod tests {
 
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len() as i64;
         assert_eq!(node_count, 6);
+    }
+
+    #[test]
+    fn test_creates_sample() {
+        setup_gen_dir();
+        let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        gfa_path.push("fixtures/simple.gfa");
+        let collection_name = "test".to_string();
+        let conn = &get_connection(None);
+        import_gfa(&gfa_path, &collection_name, "new-sample", conn);
+        assert_eq!(
+            Sample::get_by_name(conn, "new-sample").unwrap().name,
+            "new-sample"
+        );
     }
 
     #[test]

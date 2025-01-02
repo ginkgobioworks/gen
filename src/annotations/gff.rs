@@ -119,6 +119,7 @@ mod tests {
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             "test",
+            None,
             false,
             &conn,
             op_conn,

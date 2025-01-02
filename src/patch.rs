@@ -137,6 +137,7 @@ mod tests {
         let op_1 = import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &collection,
+            None,
             false,
             conn,
             operation_conn,
@@ -174,6 +175,7 @@ mod tests {
         let op_1 = import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &collection,
+            None,
             false,
             conn,
             operation_conn,
@@ -214,6 +216,7 @@ mod tests {
         let _op_1 = import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &collection,
+            None,
             false,
             conn,
             operation_conn,

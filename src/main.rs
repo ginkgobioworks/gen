@@ -76,8 +76,11 @@ enum Commands {
         /// The name of the collection to store the entry under
         #[arg(short, long)]
         name: Option<String>,
+        /// A sample name to associate the fasta file with
+        #[arg(short, long)]
+        sample: Option<String>,
         /// Don't store the sequence in the database, instead store the filename
-        #[arg(short, long, action)]
+        #[arg(long, action)]
         shallow: bool,
     },
     /// Update a sequence collection with new data
@@ -377,6 +380,7 @@ fn main() {
             gfa,
             name,
             shallow,
+            sample,
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
@@ -387,6 +391,7 @@ fn main() {
                 match import_fasta(
                     &fasta.clone().unwrap(),
                     name,
+                    sample.as_deref(),
                     *shallow,
                     &conn,
                     &operation_conn,
@@ -402,7 +407,12 @@ fn main() {
                     }
                 }
             } else if gfa.is_some() {
-                import_gfa(&PathBuf::from(gfa.clone().unwrap()), name, None, &conn);
+                import_gfa(
+                    &PathBuf::from(gfa.clone().unwrap()),
+                    name,
+                    sample.as_deref(),
+                    &conn,
+                );
             } else if let Some(gb) = gb {
                 let f = File::open(gb).unwrap();
                 let _ = import_genbank(
@@ -410,6 +420,7 @@ fn main() {
                     &operation_conn,
                     &f,
                     name.deref(),
+                    sample.as_deref(),
                     OperationInfo {
                         file_path: gb.clone(),
                         file_type: FileTypes::GenBank,

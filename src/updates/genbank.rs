@@ -298,6 +298,7 @@ mod tests {
                 op_conn,
                 BufReader::new(file),
                 None,
+                None,
                 OperationInfo {
                     file_path: "".to_string(),
                     file_type: FileTypes::GenBank,
@@ -348,6 +349,7 @@ mod tests {
                 conn,
                 op_conn,
                 BufReader::new(file),
+                None,
                 None,
                 OperationInfo {
                     file_path: "".to_string(),
@@ -409,6 +411,7 @@ mod tests {
                 conn,
                 op_conn,
                 BufReader::new(file),
+                None,
                 None,
                 OperationInfo {
                     file_path: "".to_string(),
