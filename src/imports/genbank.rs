@@ -187,7 +187,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::imports::fasta::import_fasta;
     use crate::models::file_types::FileTypes;
     use crate::models::metadata;
     use crate::models::operations::setup_db;
