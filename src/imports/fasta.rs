@@ -4,6 +4,7 @@ use std::str;
 use crate::calculate_hash;
 use crate::models::file_types::FileTypes;
 use crate::models::operations::OperationInfo;
+use crate::models::sample::Sample;
 use crate::models::{
     block_group::BlockGroup,
     block_group_edge::{BlockGroupEdge, BlockGroupEdgeData},
@@ -30,6 +31,7 @@ pub enum FastaError {
 pub fn import_fasta(
     fasta: &String,
     name: &str,
+    sample: Option<&str>,
     shallow: bool,
     conn: &Connection,
     operation_conn: &Connection,
@@ -45,6 +47,9 @@ pub fn import_fasta(
             name: name.to_string(),
         }
     };
+    if let Some(sample_name) = sample {
+        Sample::get_or_create(conn, sample_name);
+    }
     let mut summary: HashMap<String, i64> = HashMap::new();
 
     for result in reader.records() {
@@ -76,7 +81,7 @@ pub fn import_fasta(
                 hash = seq.hash
             )),
         );
-        let block_group = BlockGroup::create(conn, &collection.name, None, &name);
+        let block_group = BlockGroup::create(conn, &collection.name, sample, &name);
         let edge_into = Edge::create(
             conn,
             PATH_START_NODE_ID,
@@ -159,6 +164,7 @@ mod tests {
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             "test",
+            None,
             false,
             &conn,
             op_conn,
@@ -189,6 +195,7 @@ mod tests {
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             "test",
+            None,
             true,
             &conn,
             op_conn,
@@ -221,6 +228,7 @@ mod tests {
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &collection,
+            None,
             false,
             conn,
             op_conn,
@@ -234,6 +242,7 @@ mod tests {
             import_fasta(
                 &fasta_path.to_str().unwrap().to_string(),
                 &collection,
+                None,
                 false,
                 conn,
                 op_conn,

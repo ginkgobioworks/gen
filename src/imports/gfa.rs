@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path as FilePath;
 
 use crate::gfa_reader::Gfa;
+use crate::models::sample::Sample;
 use crate::models::{
     block_group::BlockGroup,
     block_group_edge::{BlockGroupEdge, BlockGroupEdgeData},
@@ -31,6 +32,9 @@ pub fn import_gfa<'a>(
 ) {
     Collection::create(conn, collection_name);
     let sample_name = sample_name.into();
+    if let Some(sample_name) = sample_name {
+        Sample::get_or_create(conn, sample_name);
+    }
     let block_group = BlockGroup::create(conn, collection_name, sample_name, "");
     let gfa: Gfa<String, (), ()> = Gfa::parse_gfa_file(gfa_path.to_str().unwrap());
     let mut sequences_by_segment_id: HashMap<&String, Sequence> = HashMap::new();

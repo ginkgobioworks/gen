@@ -7,6 +7,7 @@ use crate::models::edge::Edge;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::operations::{Operation, OperationInfo};
 use crate::models::path::{Path, PathBlock};
+use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 use crate::operation_management::{end_operation, start_operation};
@@ -20,6 +21,7 @@ pub fn import_genbank<'a, R>(
     op_conn: &Connection,
     data: R,
     collection: impl Into<Option<&'a str>>,
+    sample: Option<&str>,
     operation_info: OperationInfo,
 ) -> Result<Operation, GenBankError>
 where
@@ -28,6 +30,11 @@ where
     let mut session = start_operation(conn);
     let reader = reader::SeqReader::new(data);
     let collection = Collection::create(conn, collection.into().unwrap_or_default());
+
+    if let Some(sample_name) = sample {
+        Sample::get_or_create(conn, sample_name);
+    }
+
     for result in reader {
         match result {
             Ok(seq) => {
@@ -52,7 +59,7 @@ where
                     )),
                 );
 
-                let block_group = BlockGroup::create(conn, &collection.name, None, &locus.name);
+                let block_group = BlockGroup::create(conn, &collection.name, sample, &locus.name);
                 let edge_into = Edge::create(
                     conn,
                     PATH_START_NODE_ID,
@@ -212,6 +219,7 @@ mod tests {
                 op_conn,
                 BufReader::new("this is not valid".as_bytes()),
                 None,
+                None,
                 OperationInfo {
                     file_path: "".to_string(),
                     file_type: FileTypes::GenBank,
@@ -239,6 +247,7 @@ mod tests {
             conn,
             op_conn,
             BufReader::new(file),
+            None,
             None,
             OperationInfo {
                 file_path: path.to_str().unwrap().to_string(),
@@ -274,6 +283,7 @@ mod tests {
                 op_conn,
                 BufReader::new(file),
                 None,
+                None,
                 OperationInfo {
                     file_path: "".to_string(),
                     file_type: FileTypes::GenBank,
@@ -307,6 +317,7 @@ mod tests {
                 conn,
                 op_conn,
                 BufReader::new(file),
+                None,
                 None,
                 OperationInfo {
                     file_path: "".to_string(),
@@ -358,6 +369,7 @@ mod tests {
                 conn,
                 op_conn,
                 BufReader::new(file),
+                None,
                 None,
                 OperationInfo {
                     file_path: "".to_string(),
@@ -413,6 +425,7 @@ mod tests {
                 op_conn,
                 BufReader::new(file),
                 None,
+                None,
                 OperationInfo {
                     file_path: "".to_string(),
                     file_type: FileTypes::GenBank,
@@ -464,6 +477,7 @@ mod tests {
                 conn,
                 op_conn,
                 BufReader::new(file),
+                None,
                 None,
                 OperationInfo {
                     file_path: "".to_string(),
