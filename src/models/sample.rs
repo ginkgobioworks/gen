@@ -126,4 +126,12 @@ impl Sample {
         let samples = Sample::query(conn, "select * from samples;", rusqlite::params!());
         samples.iter().map(|s| s.name.clone()).collect()
     }
+
+    pub fn get_by_name(conn: &Connection, name: &str) -> SQLResult<Sample> {
+        Sample::get(
+            conn,
+            "select * from samples where name = ?1;",
+            rusqlite::params!(name),
+        )
+    }
 }

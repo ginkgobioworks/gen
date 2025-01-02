@@ -28,10 +28,10 @@ pub enum FastaError {
     OperationError(#[from] OperationError),
 }
 
-pub fn import_fasta(
+pub fn import_fasta<'a>(
     fasta: &String,
     name: &str,
-    sample: Option<&str>,
+    sample: impl Into<Option<&'a str>>,
     shallow: bool,
     conn: &Connection,
     operation_conn: &Connection,
@@ -47,6 +47,7 @@ pub fn import_fasta(
             name: name.to_string(),
         }
     };
+    let sample = sample.into();
     if let Some(sample_name) = sample {
         Sample::get_or_create(conn, sample_name);
     }
@@ -179,6 +180,41 @@ mod tests {
         assert_eq!(
             path.sequence(&conn),
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()
+        );
+    }
+
+    #[test]
+    fn test_add_fasta_creates_sample() {
+        setup_gen_dir();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            "test",
+            "new-sample",
+            false,
+            conn,
+            op_conn,
+        )
+        .unwrap();
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, 1, false),
+            HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
+        );
+
+        let path = Path::get(conn, 1);
+        assert_eq!(
+            path.sequence(conn),
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()
+        );
+        assert_eq!(
+            Sample::get_by_name(conn, "new-sample").unwrap().name,
+            "new-sample"
         );
     }
 

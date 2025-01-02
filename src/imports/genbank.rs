@@ -21,7 +21,7 @@ pub fn import_genbank<'a, R>(
     op_conn: &Connection,
     data: R,
     collection: impl Into<Option<&'a str>>,
-    sample: Option<&str>,
+    sample: impl Into<Option<&'a str>>,
     operation_info: OperationInfo,
 ) -> Result<Operation, GenBankError>
 where
@@ -30,6 +30,7 @@ where
     let mut session = start_operation(conn);
     let reader = reader::SeqReader::new(data);
     let collection = Collection::create(conn, collection.into().unwrap_or_default());
+    let sample = sample.into();
 
     if let Some(sample_name) = sample {
         Sample::get_or_create(conn, sample_name);
@@ -186,6 +187,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::imports::fasta::import_fasta;
     use crate::models::file_types::FileTypes;
     use crate::models::metadata;
     use crate::models::operations::setup_db;
@@ -259,6 +261,34 @@ mod tests {
         assert_eq!(
             Operation::get_by_hash(op_conn, &operation.hash).unwrap(),
             operation
+        );
+    }
+
+    #[test]
+    fn test_creates_sample() {
+        setup_gen_dir();
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/geneious_genbank/insertion.gb");
+        let file = File::open(&path).unwrap();
+        let _ = import_genbank(
+            conn,
+            op_conn,
+            BufReader::new(file),
+            None,
+            "new-sample",
+            OperationInfo {
+                file_path: "".to_string(),
+                file_type: FileTypes::GenBank,
+                description: "test".to_string(),
+            },
+        );
+        assert_eq!(
+            Sample::get_by_name(conn, "new-sample").unwrap().name,
+            "new-sample"
         );
     }
 
