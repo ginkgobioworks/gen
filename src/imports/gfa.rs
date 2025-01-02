@@ -270,6 +270,20 @@ mod tests {
     }
 
     #[test]
+    fn test_creates_sample() {
+        setup_gen_dir();
+        let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        gfa_path.push("fixtures/simple.gfa");
+        let collection_name = "test".to_string();
+        let conn = &get_connection(None);
+        import_gfa(&gfa_path, &collection_name, "new-sample", conn);
+        assert_eq!(
+            Sample::get_by_name(conn, "new-sample").unwrap().name,
+            "new-sample"
+        );
+    }
+
+    #[test]
     fn test_import_no_path_gfa() {
         let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         gfa_path.push("fixtures/no_path.gfa");
