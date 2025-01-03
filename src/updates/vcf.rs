@@ -1,7 +1,3 @@
-use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
-use std::{io, str};
-
 use crate::models::operations::OperationInfo;
 use crate::models::{
     block_group::{BlockGroup, BlockGroupData, PathCache, PathChange},
@@ -16,7 +12,7 @@ use crate::models::{
 };
 use crate::operation_management::{end_operation, start_operation, OperationError};
 use crate::{calculate_hash, parse_genotype};
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use noodles::vcf;
 use noodles::vcf::variant::record::info::field::Value as InfoValue;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
@@ -26,6 +22,10 @@ use noodles::vcf::variant::record::AlternateBases;
 use noodles::vcf::variant::Record;
 use rusqlite;
 use rusqlite::{types::Value as SQLValue, Connection};
+use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
+use std::time::Duration;
+use std::{io, str};
 use thiserror::Error;
 
 #[derive(Debug)]
@@ -183,6 +183,7 @@ pub fn update_with_vcf<'a>(
     operation_conn: &Connection,
     coordinate_frame: impl Into<Option<&'a str>>,
 ) -> Result<Operation, VcfError> {
+    let progress_bar = MultiProgress::new();
     let coordinate_frame = coordinate_frame.into();
 
     let mut session = start_operation(conn);
@@ -214,12 +215,18 @@ pub fn update_with_vcf<'a>(
     let mut parent_block_groups: HashMap<(&str, i64), i64> = HashMap::new();
     let mut created_samples = HashSet::new();
 
-    let bar = ProgressBar::no_length().with_style(
-        ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {human_pos:>7} {msg}")
+    let _ = progress_bar.println("Parsing VCF for changes.");
+
+    let bar = progress_bar.add(
+        ProgressBar::no_length().with_style(
+            ProgressStyle::with_template(
+                "[{elapsed_precise}] {'':19}{spinner:2.cyan/blue}{'':19} {human_pos:>7} {msg}",
+            )
             .unwrap(),
+        ),
     );
 
-    bar.set_message("Processing VCF for changes");
+    bar.set_message("Rows Parsed");
     for result in reader.records() {
         let record = result.unwrap();
         let seq_name: String = record.reference_sequence_name().to_string();
@@ -433,15 +440,17 @@ pub fn update_with_vcf<'a>(
         }
         bar.inc(1);
     }
-    bar.finish_and_clear();
+    bar.finish();
 
-    let bar = ProgressBar::new(changes.values().map(|c| c.len() as u64).sum()).with_style(
-        ProgressStyle::with_template(
-            "[{elapsed_precise}] {bar:40.cyan/blue} {human_pos:>7}/{human_len:7} {msg}",
-        )
-        .unwrap(),
+    let bar = progress_bar.add(
+        ProgressBar::new(changes.values().map(|c| c.len() as u64).sum()).with_style(
+            ProgressStyle::with_template(
+                "[{elapsed_precise}] {bar:40.cyan/blue} {human_pos:>7}/{human_len:7} {msg}",
+            )
+            .unwrap(),
+        ),
     );
-    bar.set_message("Applying changes...");
+    bar.set_message("Changes applied");
     let mut summary: HashMap<String, HashMap<String, i64>> = HashMap::new();
     for ((path, sample_name), path_changes) in changes {
         BlockGroup::insert_changes(
@@ -457,7 +466,7 @@ pub fn update_with_vcf<'a>(
             .entry(path.name)
             .or_insert(path_changes.len() as i64);
     }
-    bar.finish_and_clear();
+    bar.finish();
     for ((path, accession_name), (acc_start, acc_end)) in accession_cache.iter() {
         BlockGroup::add_accession(
             conn,
@@ -476,7 +485,17 @@ pub fn update_with_vcf<'a>(
         }
     }
 
-    end_operation(
+    let bar = progress_bar.add(
+        ProgressBar::no_length().with_style(
+            ProgressStyle::with_template(
+                "[{elapsed_precise}] {'':19}{spinner:2.cyan/blue}{'':20} {msg}",
+            )
+            .unwrap(),
+        ),
+    );
+    bar.set_message("Saving operation");
+    bar.enable_steady_tick(Duration::from_millis(100));
+    let op = end_operation(
         conn,
         operation_conn,
         &mut session,
@@ -488,7 +507,9 @@ pub fn update_with_vcf<'a>(
         &summary_str,
         None,
     )
-    .map_err(VcfError::OperationError)
+    .map_err(VcfError::OperationError);
+    bar.finish();
+    op
 }
 
 #[cfg(test)]
