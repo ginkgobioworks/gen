@@ -1,7 +1,3 @@
-use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
-use std::{io, str};
-
 use crate::models::operations::OperationInfo;
 use crate::models::{
     block_group::{BlockGroup, BlockGroupData, PathCache, PathChange},
@@ -15,7 +11,9 @@ use crate::models::{
     traits::*,
 };
 use crate::operation_management::{end_operation, start_operation, OperationError};
+use crate::progress_bar::{add_saving_operation_bar, get_progress_bar};
 use crate::{calculate_hash, parse_genotype};
+use indicatif::MultiProgress;
 use noodles::vcf;
 use noodles::vcf::variant::record::info::field::Value as InfoValue;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
@@ -25,6 +23,9 @@ use noodles::vcf::variant::record::AlternateBases;
 use noodles::vcf::variant::Record;
 use rusqlite;
 use rusqlite::{types::Value as SQLValue, Connection};
+use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
+use std::{io, str};
 use thiserror::Error;
 
 #[derive(Debug)]
@@ -182,6 +183,7 @@ pub fn update_with_vcf<'a>(
     operation_conn: &Connection,
     coordinate_frame: impl Into<Option<&'a str>>,
 ) -> Result<Operation, VcfError> {
+    let progress_bar = MultiProgress::new();
     let coordinate_frame = coordinate_frame.into();
 
     let mut session = start_operation(conn);
@@ -213,6 +215,11 @@ pub fn update_with_vcf<'a>(
     let mut parent_block_groups: HashMap<(&str, i64), i64> = HashMap::new();
     let mut created_samples = HashSet::new();
 
+    let _ = progress_bar.println("Parsing VCF for changes.");
+
+    let bar = progress_bar.add(get_progress_bar(None));
+
+    bar.set_message("Records Parsed");
     for result in reader.records() {
         let record = result.unwrap();
         let seq_name: String = record.reference_sequence_name().to_string();
@@ -424,7 +431,14 @@ pub fn update_with_vcf<'a>(
                 .or_default()
                 .push(change);
         }
+        bar.inc(1);
     }
+    bar.finish();
+
+    let bar = progress_bar.add(get_progress_bar(
+        changes.values().map(|c| c.len() as u64).sum::<u64>(),
+    ));
+    bar.set_message("Changes applied");
     let mut summary: HashMap<String, HashMap<String, i64>> = HashMap::new();
     for ((path, sample_name), path_changes) in changes {
         BlockGroup::insert_changes(
@@ -433,12 +447,14 @@ pub fn update_with_vcf<'a>(
             &mut path_cache,
             coordinate_frame.is_some(),
         );
+        bar.inc(path_changes.len() as u64);
         summary
             .entry(sample_name)
             .or_default()
             .entry(path.name)
             .or_insert(path_changes.len() as i64);
     }
+    bar.finish();
     for ((path, accession_name), (acc_start, acc_end)) in accession_cache.iter() {
         BlockGroup::add_accession(
             conn,
@@ -457,7 +473,9 @@ pub fn update_with_vcf<'a>(
         }
     }
 
-    end_operation(
+    let bar = add_saving_operation_bar(&progress_bar);
+    bar.set_message("Saving operation");
+    let op = end_operation(
         conn,
         operation_conn,
         &mut session,
@@ -469,7 +487,9 @@ pub fn update_with_vcf<'a>(
         &summary_str,
         None,
     )
-    .map_err(VcfError::OperationError)
+    .map_err(VcfError::OperationError);
+    bar.finish();
+    op
 }
 
 #[cfg(test)]

@@ -237,7 +237,6 @@ impl<T: SampleType + Ord + Clone, S: Opt + Ord + Clone, U: Opt> Gfa<T, S, U> {
     /// Parse a GFA file
     pub fn parse_gfa_file(file_name: &str) -> Gfa<T, S, U> {
         if file_path::new(file_name).exists() {
-            println!("Reading file: {}", file_name);
             let file = File::open(file_name).expect("ERROR: CAN NOT READ FILE\n");
             let reader = BufReader::new(file);
 

@@ -15,6 +15,8 @@ use crate::models::{
     sequence::Sequence,
     strand::Strand,
 };
+use crate::progress_bar::{get_progress_bar, get_time_elapsed_bar};
+use indicatif::MultiProgress;
 
 fn bool_to_strand(direction: bool) -> Strand {
     if direction {
@@ -30,16 +32,22 @@ pub fn import_gfa<'a>(
     sample_name: impl Into<Option<&'a str>>,
     conn: &Connection,
 ) {
+    let progress_bar = MultiProgress::new();
     Collection::create(conn, collection_name);
     let sample_name = sample_name.into();
     if let Some(sample_name) = sample_name {
         Sample::get_or_create(conn, sample_name);
     }
     let block_group = BlockGroup::create(conn, collection_name, sample_name, "");
+    let bar = progress_bar.add(get_time_elapsed_bar());
+    bar.set_message("Parsing GFA");
     let gfa: Gfa<String, (), ()> = Gfa::parse_gfa_file(gfa_path.to_str().unwrap());
     let mut sequences_by_segment_id: HashMap<&String, Sequence> = HashMap::new();
     let mut node_ids_by_segment_id: HashMap<&String, i64> = HashMap::new();
+    bar.finish();
 
+    let bar = progress_bar.add(get_progress_bar(gfa.segments.len() as u64));
+    bar.set_message("Parsing Segments");
     for segment in &gfa.segments {
         let input_sequence = segment.sequence.get_string(&gfa.sequence);
         let sequence = Sequence::new()
@@ -49,9 +57,13 @@ pub fn import_gfa<'a>(
         sequences_by_segment_id.insert(&segment.id, sequence.clone());
         let node_id = Node::create(conn, &sequence.hash, None);
         node_ids_by_segment_id.insert(&segment.id, node_id);
+        bar.inc(1);
     }
+    bar.finish();
 
     let mut edges = HashSet::new();
+    let bar = progress_bar.add(get_progress_bar(gfa.links.len() as u64));
+    bar.set_message("Parsing Links");
     for link in &gfa.links {
         let source = sequences_by_segment_id.get(&link.from).unwrap();
         let source_node_id = *node_ids_by_segment_id.get(&link.from).unwrap();
@@ -63,8 +75,12 @@ pub fn import_gfa<'a>(
             target_node_id,
             bool_to_strand(link.to_dir),
         ));
+        bar.inc(1);
     }
+    bar.finish();
 
+    let bar = progress_bar.add(get_progress_bar(gfa.paths.len() as u64));
+    bar.set_message("Parsing Paths");
     for input_path in &gfa.paths {
         let mut source_node_id = PATH_START_NODE_ID;
         let mut source_coordinate = 0;
@@ -91,8 +107,12 @@ pub fn import_gfa<'a>(
             PATH_END_NODE_ID,
             Strand::Forward,
         ));
+        bar.inc(1);
     }
+    bar.finish();
 
+    let bar = progress_bar.add(get_progress_bar(gfa.paths.len() as u64));
+    bar.set_message("Parsing Walks");
     for input_walk in &gfa.walk {
         let mut source_node_id = PATH_START_NODE_ID;
         let mut source_coordinate = 0;
@@ -119,8 +139,12 @@ pub fn import_gfa<'a>(
             PATH_END_NODE_ID,
             Strand::Forward,
         ));
+        bar.inc(1);
     }
+    bar.finish();
 
+    let bar = progress_bar.add(get_time_elapsed_bar());
+    bar.set_message("Creating Gen Objects");
     let edge_ids = Edge::bulk_create(conn, &edges.into_iter().collect::<Vec<EdgeData>>());
     let new_block_group_edges = edge_ids
         .iter()
@@ -131,6 +155,7 @@ pub fn import_gfa<'a>(
             phased: 0,
         })
         .collect::<Vec<_>>();
+
     BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
 
     let saved_edges = Edge::bulk_load(conn, &edge_ids);
@@ -215,6 +240,7 @@ pub fn import_gfa<'a>(
         path_edge_ids.push(edge_id);
         Path::create(conn, path_name, block_group.id, &path_edge_ids);
     }
+    bar.finish();
 }
 
 fn edge_data_from_fields(
