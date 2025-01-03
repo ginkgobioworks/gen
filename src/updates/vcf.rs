@@ -25,7 +25,6 @@ use rusqlite;
 use rusqlite::{types::Value as SQLValue, Connection};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
-use std::time::Duration;
 use std::{io, str};
 use thiserror::Error;
 

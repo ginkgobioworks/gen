@@ -14,7 +14,7 @@ use crate::models::{
     strand::Strand,
 };
 use crate::operation_management::{end_operation, start_operation, OperationError};
-use crate::progress_bar::{get_progress_bar, get_saving_operation_bar, get_time_elapsed_bar};
+use crate::progress_bar::{get_progress_bar, get_saving_operation_bar};
 use indicatif::MultiProgress;
 use noodles::fasta;
 use rusqlite;
@@ -55,7 +55,7 @@ pub fn import_fasta<'a>(
     }
     let mut summary: HashMap<String, i64> = HashMap::new();
 
-    progress_bar.println("Parsing Fasta");
+    let _ = progress_bar.println("Parsing Fasta");
     let bar = progress_bar.add(get_progress_bar(None));
     bar.set_message("Entries Processed.");
     for result in reader.records() {
