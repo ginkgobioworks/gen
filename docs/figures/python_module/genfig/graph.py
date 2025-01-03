@@ -319,7 +319,8 @@ class Graph:
 
         return self
 
-    def render_graph(self, filename=None, format='svg', minimize=False, splines=True, hide_nodes=[], graph_attributes={}):
+    def render_graph(self, filename=None, format='svg', minimize=False, splines=True, hide_nodes=[], 
+                     graph_attributes={}, node_attributes={}, edge_attributes={}):
         # Create an AGraph to hold Graphviz attributes, based on the topology of the original graph
         agraph = pygraphviz.AGraph(directed=True, strict=False)
         # Add the source and sink nodes first and last, respectively
@@ -336,6 +337,11 @@ class Graph:
 
         for node in agraph.iternodes():
             if node in ['start', 'end']:
+                node.attr['margin'] = 0
+                node.attr['fontsize'] = 12
+                node.attr['width'] = 0.45
+                node.attr['height'] = 0.3
+                node.attr['label'] = 'Start' if node == 'start' else 'End'
                 continue
             # Get the sequence and highlight information from the original graph
             node_data = self.graph.nodes[node]
@@ -371,7 +377,7 @@ class Graph:
                 label += "</TR></TABLE>>"
                 
             else:
-                label = f"<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0' CELLPADDING='3'><TR>"
+                label = f"<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0' CELLPADDING='2'><TR>"
                 label += f"<TD BORDER='0' PORT='caption' ALIGN='right'>{node}:</TD>"
                 labeled_sequence = [f"<TD PORT='{i}'><FONT FACE='Monospace'>{c}</FONT></TD>" 
                                       for i, c in enumerate(formatted_sequence)]
@@ -381,6 +387,9 @@ class Graph:
             node.attr['shape'] = 'none'
             node.attr['margin'] = 0
             node.attr['label'] = label
+
+            # Update the node attributes with any custom attributes
+            node.attr.update(node_attributes.get(node, {}))
 
         for edge in agraph.iteredges():
             # The attributes should have been transferred over from the original graph
@@ -408,6 +417,19 @@ class Graph:
                                  rankdir = graph_attributes.get('rankdir', 'TD')
                                  )
         # Other useful arguments for dot (with defaults): ranksep (0.5) searchsize(100) mclimit(10) newrank(false)
+
+        # Custom attributes will override what we just set above
+        for node in agraph.iternodes():
+            node.attr.update(node_attributes.get(node, {}))
+        for edge in agraph.iteredges():
+            source = edge[0]
+            source_coordinate = edge.attr.get('from_pos', -1)
+            target = edge[1]
+            target_coordinate = edge.attr.get('to_pos', 0)
+            port_edge = (f"{source}:{source_coordinate}", f"{target}:{target_coordinate}")
+            edge.attr.update(edge_attributes.get(port_edge, {})) 
+
+        agraph.graph_attr.update(graph_attributes)
 
         return self.render_dot(agraph, filename, format)
 
@@ -493,6 +515,7 @@ class Graph:
             # If the edge is a reference edge, make it dashed
             if edge_data.get('reference', False):
                 edge.attr['style'] = 'dashed'
+                edge.attr['arrowhead'] = 'none'
                 # If we want to align blocks on a row, add a weight
                 if align_blocks:
                     edge.attr['weight'] = 10
@@ -512,7 +535,6 @@ class Graph:
                 edge.attr['tailport'] = 'e'
             else:
                 edge.attr['tailport'] = 'seq:e'
-
               
 
         # Set the graph-level attributes that will be used by the dot rendering engine
@@ -534,6 +556,14 @@ class Graph:
     def render_dot(self, agraph, filename=None, format=None):
         # Create the node layout
         agraph.layout(prog='dot')
+
+        # Handle the dot output format as text
+        if format == 'dot':
+            output = agraph.to_string()
+            if filename:
+                with open(filename, 'w') as file:
+                    file.write(output)
+            return output
         
         # For the actual rendering the cairo renderer sometimes produces better results for longer nodes
         # It does not support fonts in SVG however, so we make the PNG instead
@@ -542,8 +572,12 @@ class Graph:
         elif format == 'svg':
             img = agraph.draw(prog='dot', format='svg')
         else:
-            img = agraph.to_string()
-        if filename:
+            try:
+                img = agraph.draw(prog='dot', format=format)
+            except ValueError:
+                raise ValueError(f'Unsupported file format: {format}')
+        
+        if filename:  
             with open(filename, 'wb') as file:
                 file.write(img)
         

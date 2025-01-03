@@ -37,8 +37,7 @@
 <!-- 1.0&#45;&gt;1.8 -->
 <g id="edge2" class="edge">
 <title>1.0:e&#45;&gt;1.8:w</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M137.4,-59.38C158.9,-59.38 161.36,-79.95 176.32,-87.02"/>
-<polygon fill="black" stroke="black" points="175.54,-90.43 186.04,-89.06 176.98,-83.58 175.54,-90.43"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M137.4,-59.38C163.36,-59.38 161.56,-89.38 187.52,-89.38"/>
 </g>
 <!-- 2.0 -->
 <g id="node4" class="node">
@@ -63,8 +62,7 @@
 <!-- 1.8&#45;&gt;1.10 -->
 <g id="edge4" class="edge">
 <title>1.8:e&#45;&gt;1.10:w</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M215.27,-89.38C236.78,-89.38 239.24,-68.8 254.19,-61.73"/>
-<polygon fill="black" stroke="black" points="254.85,-65.17 263.92,-59.69 253.41,-58.32 254.85,-65.17"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M215.27,-89.38C241.24,-89.38 239.44,-59.38 265.4,-59.38"/>
 </g>
 <!-- 2.0&#45;&gt;1.10 -->
 <g id="edge5" class="edge">
