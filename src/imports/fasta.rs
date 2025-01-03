@@ -127,6 +127,7 @@ pub fn import_fasta<'a>(
         summary.entry(path.name).or_insert(sequence_length);
         bar.inc(1);
     }
+    bar.finish();
     let mut summary_str = "".to_string();
     for (path_name, change_count) in summary.iter() {
         summary_str.push_str(&format!(" {path_name}: {change_count} changes.\n"));

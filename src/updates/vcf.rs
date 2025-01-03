@@ -219,7 +219,7 @@ pub fn update_with_vcf<'a>(
 
     let bar = progress_bar.add(get_progress_bar(None));
 
-    bar.set_message("Rows Parsed");
+    bar.set_message("Records Parsed");
     for result in reader.records() {
         let record = result.unwrap();
         let seq_name: String = record.reference_sequence_name().to_string();
