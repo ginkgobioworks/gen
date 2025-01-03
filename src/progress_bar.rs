@@ -55,3 +55,9 @@ pub fn get_time_elapsed_bar() -> ProgressBar {
     bar.enable_steady_tick(Duration::from_millis(250));
     bar
 }
+
+pub fn get_saving_operation_bar() -> ProgressBar {
+    let bar = get_time_elapsed_bar();
+    bar.set_message("Saving operation");
+    bar
+}

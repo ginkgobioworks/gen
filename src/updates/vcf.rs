@@ -11,7 +11,7 @@ use crate::models::{
     traits::*,
 };
 use crate::operation_management::{end_operation, start_operation, OperationError};
-use crate::progress_bar::{get_progress_bar, get_time_elapsed_bar};
+use crate::progress_bar::{get_progress_bar, get_saving_operation_bar};
 use crate::{calculate_hash, parse_genotype};
 use indicatif::MultiProgress;
 use noodles::vcf;
@@ -474,7 +474,7 @@ pub fn update_with_vcf<'a>(
         }
     }
 
-    let bar = progress_bar.add(get_time_elapsed_bar());
+    let bar = progress_bar.add(get_saving_operation_bar());
     bar.set_message("Saving operation");
     let op = end_operation(
         conn,

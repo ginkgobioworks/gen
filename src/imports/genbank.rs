@@ -11,7 +11,9 @@ use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 use crate::operation_management::{end_operation, start_operation};
+use crate::progress_bar::{get_progress_bar, get_saving_operation_bar};
 use gb_io::reader;
+use indicatif::MultiProgress;
 use rusqlite::Connection;
 use std::io::Read;
 use std::str;
@@ -27,6 +29,7 @@ pub fn import_genbank<'a, R>(
 where
     R: Read,
 {
+    let progress_bar = MultiProgress::new();
     let mut session = start_operation(conn);
     let reader = reader::SeqReader::new(data);
     let collection = Collection::create(conn, collection.into().unwrap_or_default());
@@ -36,6 +39,8 @@ where
         Sample::get_or_create(conn, sample_name);
     }
 
+    let bar = progress_bar.add(get_progress_bar(None));
+    bar.set_message("Entries parsed");
     for result in reader {
         match result {
             Ok(seq) => {
@@ -171,9 +176,11 @@ where
             }
             Err(e) => return Err(GenBankError::ParseError(format!("Failed to parse {}", e))),
         }
+        bar.inc(1);
     }
     let filename = operation_info.file_path.clone();
-    end_operation(
+    let bar = progress_bar.add(get_saving_operation_bar());
+    let op = end_operation(
         conn,
         op_conn,
         &mut session,
@@ -181,7 +188,9 @@ where
         &format!("Genbank Import of {filename}",),
         None,
     )
-    .map_err(GenBankError::OperationError)
+    .map_err(GenBankError::OperationError);
+    bar.finish();
+    op
 }
 
 #[cfg(test)]
