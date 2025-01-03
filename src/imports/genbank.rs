@@ -11,7 +11,7 @@ use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 use crate::operation_management::{end_operation, start_operation};
-use crate::progress_bar::{get_progress_bar, get_saving_operation_bar};
+use crate::progress_bar::{add_saving_operation_bar, get_progress_bar};
 use gb_io::reader;
 use indicatif::MultiProgress;
 use rusqlite::Connection;
@@ -39,6 +39,7 @@ where
         Sample::get_or_create(conn, sample_name);
     }
 
+    let _ = progress_bar.println("Parsing GenBank");
     let bar = progress_bar.add(get_progress_bar(None));
     bar.set_message("Entries parsed");
     for result in reader {
@@ -178,8 +179,9 @@ where
         }
         bar.inc(1);
     }
+    bar.finish();
     let filename = operation_info.file_path.clone();
-    let bar = progress_bar.add(get_saving_operation_bar());
+    let bar = add_saving_operation_bar(&progress_bar);
     let op = end_operation(
         conn,
         op_conn,

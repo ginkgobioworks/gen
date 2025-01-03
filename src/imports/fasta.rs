@@ -14,7 +14,7 @@ use crate::models::{
     strand::Strand,
 };
 use crate::operation_management::{end_operation, start_operation, OperationError};
-use crate::progress_bar::{get_progress_bar, get_saving_operation_bar};
+use crate::progress_bar::{add_saving_operation_bar, get_progress_bar};
 use indicatif::MultiProgress;
 use noodles::fasta;
 use rusqlite;
@@ -132,7 +132,7 @@ pub fn import_fasta<'a>(
         summary_str.push_str(&format!(" {path_name}: {change_count} changes.\n"));
     }
 
-    let bar = progress_bar.add(get_saving_operation_bar());
+    let bar = add_saving_operation_bar(&progress_bar);
     let op = end_operation(
         conn,
         operation_conn,

@@ -1,4 +1,4 @@
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::time::Duration;
 
 pub fn get_progress_bar(length: impl Into<Option<u64>>) -> ProgressBar {
@@ -56,8 +56,10 @@ pub fn get_time_elapsed_bar() -> ProgressBar {
     bar
 }
 
-pub fn get_saving_operation_bar() -> ProgressBar {
-    let bar = get_time_elapsed_bar();
+pub fn add_saving_operation_bar(progress_bar: &MultiProgress) -> ProgressBar {
+    // we have this pattern here because calling set_message before a bar is added to the multibar
+    // causes duplicate lines to appear
+    let bar = progress_bar.add(get_time_elapsed_bar());
     bar.set_message("Saving operation");
     bar
 }
