@@ -16,6 +16,7 @@ pub mod migrations;
 pub mod models;
 pub mod operation_management;
 pub mod patch;
+mod progress_bar;
 pub mod range;
 #[cfg(test)]
 pub mod test_helpers;

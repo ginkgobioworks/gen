@@ -11,8 +11,9 @@ use crate::models::{
     traits::*,
 };
 use crate::operation_management::{end_operation, start_operation, OperationError};
+use crate::progress_bar::{get_progress_bar, get_time_elapsed_bar};
 use crate::{calculate_hash, parse_genotype};
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::MultiProgress;
 use noodles::vcf;
 use noodles::vcf::variant::record::info::field::Value as InfoValue;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
@@ -217,14 +218,7 @@ pub fn update_with_vcf<'a>(
 
     let _ = progress_bar.println("Parsing VCF for changes.");
 
-    let bar = progress_bar.add(
-        ProgressBar::no_length().with_style(
-            ProgressStyle::with_template(
-                "[{elapsed_precise}] {'':19}{spinner:2.cyan/blue}{'':19} {human_pos:>7} {msg}",
-            )
-            .unwrap(),
-        ),
-    );
+    let bar = progress_bar.add(get_progress_bar(None));
 
     bar.set_message("Rows Parsed");
     for result in reader.records() {
@@ -442,14 +436,9 @@ pub fn update_with_vcf<'a>(
     }
     bar.finish();
 
-    let bar = progress_bar.add(
-        ProgressBar::new(changes.values().map(|c| c.len() as u64).sum()).with_style(
-            ProgressStyle::with_template(
-                "[{elapsed_precise}] {bar:40.cyan/blue} {human_pos:>7}/{human_len:7} {msg}",
-            )
-            .unwrap(),
-        ),
-    );
+    let bar = progress_bar.add(get_progress_bar(
+        changes.values().map(|c| c.len() as u64).sum::<u64>(),
+    ));
     bar.set_message("Changes applied");
     let mut summary: HashMap<String, HashMap<String, i64>> = HashMap::new();
     for ((path, sample_name), path_changes) in changes {
@@ -485,16 +474,8 @@ pub fn update_with_vcf<'a>(
         }
     }
 
-    let bar = progress_bar.add(
-        ProgressBar::no_length().with_style(
-            ProgressStyle::with_template(
-                "[{elapsed_precise}] {'':19}{spinner:2.cyan/blue}{'':20} {msg}",
-            )
-            .unwrap(),
-        ),
-    );
+    let bar = progress_bar.add(get_time_elapsed_bar());
     bar.set_message("Saving operation");
-    bar.enable_steady_tick(Duration::from_millis(100));
     let op = end_operation(
         conn,
         operation_conn,
