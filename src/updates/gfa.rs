@@ -289,6 +289,7 @@ mod tests {
         import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &collection,
+            None,
             false,
             conn,
             op_conn,
