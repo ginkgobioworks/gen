@@ -45,9 +45,8 @@ impl PathEdge {
             .unwrap();
         match rows.next().unwrap() {
             Ok(res) => res,
-            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+            Err(rusqlite::Error::SqliteFailure(err, _details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
-                    println!("{err:?} {details:?}");
                     let mut placeholders = vec![path_id];
                     let query = "SELECT id from path_edges where path_id = ?1 AND edge_id = ?2;";
                     placeholders.push(edge_id);

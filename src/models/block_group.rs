@@ -120,9 +120,8 @@ impl BlockGroup {
             })
         }) {
             Ok(res) => res,
-            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+            Err(rusqlite::Error::SqliteFailure(err, _details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
-                    println!("{err:?} {details:?}");
                     let bg_id = match sample_name {
                         Some(v) => {conn
                             .query_row(

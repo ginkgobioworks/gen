@@ -53,9 +53,8 @@ impl Node {
         }
         match result.unwrap() {
             Ok(res) => res,
-            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+            Err(rusqlite::Error::SqliteFailure(err, _details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
-                    println!("{err:?} {details:?}");
                     let placeholders = vec![node_hash.unwrap()];
                     let query = "SELECT id from nodes where hash = ?1;";
                     conn.query_row(query, params_from_iter(&placeholders), |row| row.get(0))

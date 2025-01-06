@@ -147,9 +147,8 @@ impl Edge {
             })
         }) {
             Ok(edge) => edge,
-            Err(rusqlite::Error::SqliteFailure(err, details)) => {
+            Err(rusqlite::Error::SqliteFailure(err, _details)) => {
                 if err.code == rusqlite::ErrorCode::ConstraintViolation {
-                    println!("{err:?} {details:?}");
                     Edge {
                         id: conn
                             .query_row(id_query, params_from_iter(&placeholders), |row| row.get(0))

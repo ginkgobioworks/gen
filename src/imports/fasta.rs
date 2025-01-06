@@ -1,6 +1,3 @@
-use std::collections::HashMap;
-use std::str;
-
 use crate::calculate_hash;
 use crate::models::file_types::FileTypes;
 use crate::models::operations::OperationInfo;
@@ -17,9 +14,13 @@ use crate::models::{
     strand::Strand,
 };
 use crate::operation_management::{end_operation, start_operation, OperationError};
+use crate::progress_bar::{add_saving_operation_bar, get_progress_bar};
+use indicatif::MultiProgress;
 use noodles::fasta;
 use rusqlite;
 use rusqlite::Connection;
+use std::collections::HashMap;
+use std::str;
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
@@ -36,6 +37,7 @@ pub fn import_fasta<'a>(
     conn: &Connection,
     operation_conn: &Connection,
 ) -> Result<Operation, FastaError> {
+    let progress_bar = MultiProgress::new();
     let mut session = start_operation(conn);
 
     let mut reader = fasta::io::reader::Builder.build_from_path(fasta).unwrap();
@@ -53,6 +55,9 @@ pub fn import_fasta<'a>(
     }
     let mut summary: HashMap<String, i64> = HashMap::new();
 
+    let _ = progress_bar.println("Parsing Fasta");
+    let bar = progress_bar.add(get_progress_bar(None));
+    bar.set_message("Entries Processed.");
     for result in reader.records() {
         let record = result.expect("Error during fasta record parsing");
         let sequence = str::from_utf8(record.sequence().as_ref())
@@ -120,13 +125,16 @@ pub fn import_fasta<'a>(
         BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
         let path = Path::create(conn, &name, block_group.id, &[edge_into.id, edge_out_of.id]);
         summary.entry(path.name).or_insert(sequence_length);
+        bar.inc(1);
     }
+    bar.finish();
     let mut summary_str = "".to_string();
     for (path_name, change_count) in summary.iter() {
         summary_str.push_str(&format!(" {path_name}: {change_count} changes.\n"));
     }
 
-    end_operation(
+    let bar = add_saving_operation_bar(&progress_bar);
+    let op = end_operation(
         conn,
         operation_conn,
         &mut session,
@@ -138,7 +146,9 @@ pub fn import_fasta<'a>(
         &summary_str,
         None,
     )
-    .map_err(FastaError::OperationError)
+    .map_err(FastaError::OperationError);
+    bar.finish();
+    op
 }
 
 #[cfg(test)]
