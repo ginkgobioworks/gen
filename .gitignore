@@ -17,6 +17,7 @@ target/
 # Python notebooks and environment used to generate unit tests
 fixtures/*.ipynb
 .venv/
+**/.ipynb_checkpoints/
 
 # Mac droppings
 .DS_Store
@@ -24,4 +25,7 @@ fixtures/*.ipynb
 # Gen tracking dir
 .gen/
 
-**/.ipynb_checkpoints/
+# Python module for figure drawing
+**/__pycache__/*
+**/*.egg-info/*
+
