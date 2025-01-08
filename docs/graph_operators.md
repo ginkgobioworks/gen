@@ -22,12 +22,11 @@ That being said, creating an expression construct by combining a set of regulato
 operation where choosing a name for the output makes sense. Commands like `stitch` and `splice` have a `--new-name`
 argument that can be almost any text string as long as it is unique within the context of the current collection in the
 repository. Including placeholder symbols like `%n` and `%u` in the name is an easy way to avoid naming conflicts. `%n`
-is automatically replaced by the *n*ext available numerical identifier, so if the database already holds 41 sequence
-graphs, `--new-name "plasmid_%n"` becomes "plasmid_42". This avoids name collisions within a branch, but may still lead
+is automatically replaced by the *n*ext available numerical identifier for that name, so if plasmid_1 and plasmid_2 already exist,`--new-name "plasmid_%n"` results in a new graph called "plasmid_3". For each new naming pattern the count starts at 1, and the most next index will always be larger than the previous one (gaps in the range are not filled). This avoids name collisions within a branch, but may still lead
 to conflicts when one branch is merged into another, requiring a name change at that point. This is not a problem for
 the `%u` placeholder, which is automatically replaced by a Universally *u*nique identifier (UUID), a combination of
 alphanumerical characters that is statistically unlikely to ever come up twice. As a compromise between legibility and
-uniqueness, only the first 7 characters are actually used. For very large repositories the odds increase however, and a
+uniqueness, only the first 7 characters are actually used. For very large repositories the odds of a collision increase however, and a
 `%U` placeholder (capitalized) can be used to include a full 128-bit UUID instead. Commands that generate multiple
 output graphs at once support an additional placeholder: `%i`, which is replaced by the *i*ndex of the output of that
 specific run, always starting over at 1.
