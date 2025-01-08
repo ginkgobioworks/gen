@@ -23,8 +23,8 @@ operation where choosing a name for the output makes sense. Commands like `stitc
 argument that can be almost any text string as long as it is unique within the context of the current collection in the
 repository. Including placeholder symbols like `%n` and `%u` in the name is an easy way to avoid naming conflicts. `%n`
 is automatically replaced by the *n*ext available numerical identifier for that name, so if plasmid_1 and plasmid_2
-already exist,`--new-name "plasmid_%n"` results in a new graph called "plasmid_3". For each new naming pattern the count
-starts at 1, and the most next index will always be larger than the previous one (gaps in the range are not filled).
+already exist,`--new-name "plasmid_%n"` results in a new graph called "plasmid_3". For each new naming pattern `%n`
+starts at 1, afterwards it will always be larger than the previous occurence of the pattern (gaps in the range are not filled).
 This avoids name collisions within a branch, but may still lead to conflicts when one branch is merged into another,
 requiring a name change at that point. This is not a problem for the `%u` placeholder, which is automatically replaced
 by a Universally *u*nique identifier (UUID), a combination of alphanumerical characters that is statistically unlikely
