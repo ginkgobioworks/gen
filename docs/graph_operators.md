@@ -27,9 +27,7 @@ to conflicts when one branch is merged into another, requiring a name change at 
 the `%u` placeholder, which is automatically replaced by a Universally *u*nique identifier (UUID), a combination of
 alphanumerical characters that is statistically unlikely to ever come up twice. As a compromise between legibility and
 uniqueness, only the first 7 characters are actually used. For very large repositories the odds of a collision increase however, and a
-`%U` placeholder (capitalized) can be used to include a full 128-bit UUID instead. Commands that generate multiple
-output graphs at once support an additional placeholder: `%i`, which is replaced by the *i*ndex of the output of that
-specific run, always starting over at 1.
+`%U` placeholder (capitalized) can be used to include a full 128-bit UUID instead.
 
 A second facet by which sequence graphs can be addressed is the _sample_ they are associated with. In the gen data
 model, a sample is a text string corresponding with a physical object or individual, for example. But it can also refer
@@ -43,7 +41,7 @@ the _null_ sample.
 Ultimately, samples allow users to represent _observed_ sequence variants next to _intended_ variants, model molecular
 cloning workflows, and design experiments. They are the primary input and output of `derive` operations, but are also
 used in `make` commands to refer to a specific instance of a named sequence graph. Just like the `--new-name` argument
-described above, `--new-sample` supports the placeholders `%n` (next), `%u`/`%U` (unique), and `%i` (index).
+described above, `--new-sample` supports the placeholders `%n` (next) and `%u`/`%U` (unique).
 
 ## Make
 
