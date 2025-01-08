@@ -1,44 +1,45 @@
 # Graph Operators
 
 _Make_ and _derive_ operations work purely with graphs - they take graphs from the database as input and produce new
-graphs as output, unlike update operations which incorporate external data. The fundamental difference between _make_
+graphs as output, unlike update operations, which incorporate external data. The fundamental difference between _make_
 and _derive_ lies in how they handle sequence relationships across their inputs and outputs: _make_ operations create
 new connections between disjoint input graphs, whereas _derive_ operations take place within a common reference
-backbone. For example: deriving the intersection of evolved sequence variants of a protein within an experimental group
+backbone. For example, deriving the intersection of evolved sequence variants of a protein within an experimental group
 is an operation where all inputs and outputs are versions of that same protein. In contrast, inserting a transgene into
-an expression vector requires two distinct inputs (the vector and the gene). This is not intended to be strict rule, and
-there are examples where the line blurs: for example, splitting a computationally designed chromosome into chunks for
-synthesis, and then stitching them together is a workflow that arguably takes place entirely within the sequence context
-of the chromosome, yet those are still considered to be _make_ operations. Likewise, while there is a certain
-directionality to the intent of _derive_ and _make_ operations (respectively analysis and design of experiments), users
+an expression vector requires two distinct inputs (the vector and the gene). This is not intended to be a strict rule,
+and there are examples where the line blurs: for example, splitting a computationally designed chromosome into chunks
+for synthesis, and then stitching them together is a workflow that arguably takes place entirely within the sequence
+context of the chromosome, yet those are still considered to be _make_ operations. Likewise, while there is a certain
+directionality to the intent of _derive_ and _make_ operations (respectively, analysis and design of experiments), users
 should feel empowered to combine operations as needed.
 
-Most _make_ commands primarily address sequence graphs by their name, for example "chr1" for chromosome I. With gen
+Most _make_ commands primarily address sequence graphs by their name, for example, "chr1" for chromosome I. With gen
 being a version control system, it is safe to overwrite sequences when edits (real or virtual) are made, you can always
 roll back the repository to a previous version. The sequence graph model also makes it possible you to store entire
 libraries of edit variants in the same chr1 object.
 
 That being said, creating an expression construct by combining a set of regulatory parts and a coding sequence is an
-operation where chosing a name for the output makes sense. Commands like `stitch` and `splice` have a `--new-name`
+operation where choosing a name for the output makes sense. Commands like `stitch` and `splice` have a `--new-name`
 argument that can be almost any text string as long as it is unique within the context of the current collection in the
 repository. Including placeholder symbols like `%n` and `%u` in the name is an easy way to avoid naming conflicts. `%n`
 is automatically replaced by the *n*ext available numerical identifier, so if the database already holds 41 sequence
-graphs, `--new-name "plasmid_%n"` becomes "plasmid_42". This avoids name colisions within a branch, but may still lead
-to conflicts when one branched is merged into another. The `%u` placeholder is automatically replaced by a Universally
-unique identifier (UUID), a combination of alphanumerical characters that is statistically unlikely to ever come up
-twice. As a compromise between legibility and uniqueness, only the first 4 to 8 characters are actualy used. For very
-large repositories the odds increase however, and a `%U` placeholder (capitalized) can be used to include a full 128-bit
-UUID instead. Commands that generate multiple output graphs at once support an additional placeholder: `%i`, which is
-replaced by the _i_index of the output of that specific run, always starting over at 1.
+graphs, `--new-name "plasmid_%n"` becomes "plasmid_42". This avoids name collisions within a branch, but may still lead
+to conflicts when one branch is merged into another, requiring a name change at that point. This is not a problem for
+the `%u` placeholder, which is automatically replaced by a Universally *u*nique identifier (UUID), a combination of
+alphanumerical characters that is statistically unlikely to ever come up twice. As a compromise between legibility and
+uniqueness, only the first 7 characters are actually used. For very large repositories the odds increase however, and a
+`%U` placeholder (capitalized) can be used to include a full 128-bit UUID instead. Commands that generate multiple
+output graphs at once support an additional placeholder: `%i`, which is replaced by the *i*ndex of the output of that
+specific run, always starting over at 1.
 
 A second facet by which sequence graphs can be addressed is the _sample_ they are associated with. In the gen data
 model, a sample is a text string corresponding with a physical object or individual, for example. But it can also refer
 to an entire experiment or population, or even be a purely virtual object representing a specific instance or variation
 of a sequence graph. Practically this means that "chr1 in sample S1" is a different object than "chr1 in sample S2", and
 changes to one do not automatically propagate to the other. A sequence graph can be associated with at most one sample,
-but one sample can hold multiple sequence graphs, for example all the chromosomes that make up a genome. Not every
-sequence graph has to be explicitly associated with a sample, and those that are referred to by name only are said to be
-part of the _null_ sample. 
+but one sample can hold multiple sequence graphs (e.g. all the chromosomes that make up a genome). Not every sequence
+graph has to be explicitly associated with a sample, and those that are referred to by name only are said to be part of
+the _null_ sample. 
 
 Ultimately, samples allow users to represent _observed_ sequence variants next to _intended_ variants, model molecular
 cloning workflows, and design experiments. They are the primary input and output of `derive` operations, but are also
@@ -51,52 +52,72 @@ described above, `--new-sample` supports the placeholders `%n` (next), `%u`/`%U`
 A sequence graph can be split into pieces to enable a synthesis or cloning campaign using the `make chunks` subcommand,
 which can be used, for example, as follows:
 
-`gen make chunks chr1 --positions 100,200,300 —-overlap 20 left`
+`gen make chunks chr1 --breakpoints 100 200 300 —-overlap 20`
 
-This command can be interpreted as "split the sequence graph called chr1 into 4 chunks by introducing breakpoints at
-positions 100, 200 and 300, using the designated linear path associated with ch1 as the coordinate reference frame. Gen
-sequence graphs generally have a designated path that serves as a linear backbone to which variants are referenced. An
-error will be raised if this path is absent, unless users manually specify a path using the `--backbone` option. To make
-chunks using the sequence graph associated to a sample, users can specify a sample name through the `--sample` option.
-The name of the sequence itself is provided alongside the sample since one sample may contain multiple sequence graphs.
+This command can be interpreted as "split the sequence graph called chr1 into chunks by introducing breakpoints at
+positions 100, 200 and 300, using the designated linear path associated with ch1 as the coordinate reference frame and
+including a 20 bp overhang". 
 
-By using the `--overlap` option, chunks can be made to overlap at the breakpoints by making it so that adjacent chunks
+The positions at which the graph should be split can either be given explicitly using the `--breakpoints` option, or they 
+can be calculated automatically using the `--chunksize` option. These positions are interpreted or calculated as linear coordinates 
+on the reference path of the graph. The `--backbone` option can be used to select a specific path instead, and the `--sample` 
+option is used to select an instance of the graph associated with a specific sample.
+
+With the `--overlap` option, chunks can be made to overlap at the breakpoints. An overlap occurs when adjacent chunks
 start or end at a position that is offset from the given breakpoint. This is illustrated in Figure 1, in which the right
-chunk starts exactly at the breakpoint, while the left chunk ends 4 basepairs downstream. This is referred to as a
-'left' overlap and is the default. To obtain the overlap structures demonstrated in Fugure 2, users can specify `right`
-or `both` after the length. In the case of `both`, the length refers to the combined length, with each end being
-extended by half the length (rounding up on the left side).
+chunk starts exactly at the breakpoint, while the left chunk ends 4 base pairs downstream. This is referred to as a
+'forward' overlap, and is the default structure if the argument consists of a single integer (e.g. `--overlap 4`). To
+obtain the overlap structures demonstrated in Figure 2, users can specify how much of an overlap to attach to the chunk
+to the right of the breakpoint by entering a pair of integers separated by a colon. A 'backward' overlap is specified as
+`--overlap 0:4`, for instance, and an overlap that is distributed to both sides as `--overlap 2:2`.
+
+The same overlap is applied at each breakpoint if only one length (pair) is provided. Multiple overlap arguments can be
+given to specify the overlap at each breakpoint individually. In that case the number of overlap arguments must be equal
+to the number of breakpoints. This can be used to create outwardly extended overlaps from a center chunk for example:
+`--breakpoints 100 200 --overlaps 0:4 4:0` 
+
+Giving users a choice in overlap design allows them to model their specific cloning protocol as they see fit. It also
+helps prevent overlaps from running into a variable region, which normally causes an error. The `--force` flag overrides
+this check, but it is important to note that any variable region that spans chunk boundaries will be dropped. Or in
+terms of the graph: the breakpoints (shifted to account for overlap) induce a subgraph that contains only the edges and
+blocks that can be reached on walks between the (shifted) breakpoints.
+
 
 ```console
-gen make chunks <name> [options]
+Usage: gen make chunks <NAME> (--breakpoints POS ... | --chunksize LENGTH) [--overlap FWD:[BWD] [FWD:[BWD]] ...] [--sample SAMPLE] [--backbone PATH] 
         Divide a sequence graph into multiple parts at specified positions, with or without overlap,
         resulting in distinct output objects. 
 
 
-        Options:
-            --positions <n1,n2..>  
-            --chunksize <n>                
-            --backbone <path>      Interpret breakpoint positions in the reference frame of the given path  
-            --sample <sample>      Sample that contains the sequence graph to be split
-            --overlap <n>          Create n bp overlap between fragments
-            --overlap <n> left     Put overlap region in left fragment (default)
-            --overlap <n> right    Put overlap region in right fragment
-            --overlap <n> both     Keep overlap region in both fragments
-            --new-name <name>      
-            --new-sample <sample>
-            --force                Allow splitting at breakpoints in variable region
-            --strict               Fail if variants present in overlap regions
+Options:
+    --breakpoints POSITION ... 
+    --chunksize LENGTH               
+    --backbone PATH      Interpret breakpoint positions in the reference frame of the given path  
+    --sample SAMPLE     Sample that contains the sequence graph to be split
+    --overlap FWD:[BWD] [FWD:[BWD]] ...      
+            Make chunks overlap by n bp added to the left chunk at each break point, and m bp on the right chunk. 
+    --new-name NAME      
+    --new-sample SAMPLE
+    --force                Allow splitting at breakpoints in variable region
 ```
+
 
 <figure style="margin-left: auto; margin-right: auto">
 <img src="./figures/operators/split_left.png" width=600 alt="Figure 1">
-<figcaption width=800><b>Figure 1</b>: a. Genetic sequence that is to be split into chunks at the breakpoint (dotted line) with a left overlap of length 4.
-b. Chunk upstream of the breakpoint</figcaption>
+<figcaption width=800><b>Figure 1</b>: <kbd> gen make chunks chr1 --breakpoints 15 --overlap 4</kbd><br>
+ (a) Chr1 sequence graph with desired breakpoint indicated as dotted line.
+ (b) Left chunk
+ (c) Right chunk
+</figcaption>
+
 </figure>
 
 <figure style="margin-left: auto; margin-right: auto">
 <img src="./figures/operators/split_right_both.png" width=600 alt="Figure 6">
-<figcaption width=800><b>Figure 2</b>:</figcaption>
+<figcaption width=800><b>Figure 2</b>:
+(a,b) <kbd> gen make chunks chr1 --breakpoints 15 --overlap 0:4</kbd><br>
+(c,d) <kbd> gen make chunks chr1 --breakpoints 15 --overlap 2:2</kbd><br>
+</figcaption>
 </figure>
 
 ### Stitch
@@ -114,7 +135,8 @@ TODO
 
 
 ### Splice
-Whereas a the previous operation joins the ends of multiple sequence graphs, `splice` inserts one graph _into_ another graph.
+Whereas a the previous operation joins the ends of multiple sequence graphs, `splice` inserts one graph _into_ another
+graph.
 
 TODO
 
@@ -129,7 +151,7 @@ TBD
 ### Union
 The `derive union` command combines variants across samples by deriving the union of the sequence graphs they contain.
 This is used to merge experimental results or library designs into samples that can be handled and tracked as a unit.
-Graph unions also allow researches to model biological processes like a cross between two individuals. The combined
+Graph unions also allow researchers to model biological processes like a cross between two individuals. The combined
 sequence graph represents all possible allele combinations, and can be used to align sequencing reads for instance.
 
 Sequence graphs with a common name across the input samples are merged by combining their nodes and edges. For example,
