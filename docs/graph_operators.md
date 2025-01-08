@@ -46,6 +46,32 @@ described above, `--new-sample` supports the placeholders `%n` (next) and `%u`/`
 ## Make
 
 ### Chunks
+```console
+Usage: gen make chunks INPUT (--breakpoints POS1 [POS2 ...] | --chunksize LENGTH) [--backbone PATH] [--sample SAMPLE] 
+            [--overlap FWD[:BWD] [FWD[:BWD]] ...]  
+            
+        Split a sequence graph at the given breakpoints or into chunks of a specific size, replacing the original graph 
+        unless the output is directed to a new sample. 
+        
+        INPUT: name of the sequence graph to make chunks from
+
+Options:
+    --breakpoints POS1 [POS2 ...]
+                        Split the sequence graph at specific positions on a reference path.
+    --chunksize LENGTH  Place breakpoints at regularly spaced intervals. Mutually exclusive with --breakpoints.         
+    --backbone PATH     Interpret or compute breakpoints in the context of a path other than the default reference path. 
+    --sample SAMPLE     Input graph is associated to a specific sample.
+    --overlap FWD[:BWD] [FWD[:BWD]] ...            
+                        Make chunks overlap by n bp added to the left chunk at each break point, and m bp on the right chunk. 
+    --new-name OUT1 [OUT2 ...]
+                        Output chunk name(s) with support for placeholders `%n` (next) and `%u`/`%U` (unique). If only 
+                        OUT1 is provided, it will be reused with new placeholders for each chunk. 
+                        Default: "<INPUT>.%n"
+    --new-sample SAMPLE Do not replace the INPUT but place output chunks in a new sample. Supports placeholders. 
+    --force             Allow variable regions at breakpoints and in overlaps. Warning: edges that span chunk boundaries 
+                        will be dropped.
+```
+
 A sequence graph can be split into pieces to enable a synthesis or cloning campaign using the `make chunks` subcommand,
 which can be used, for example, as follows:
 
@@ -55,13 +81,13 @@ This command can be interpreted as "split the sequence graph called chr1 into ch
 positions 100, 200 and 300, using the designated linear path associated with ch1 as the coordinate reference frame and
 including a 20 bp overhang". 
 
-The positions at which the graph should be split can either be given explicitly using the `--breakpoints` option, or they 
-can be calculated automatically using the `--chunksize` option. These positions are interpreted or calculated as linear coordinates 
+The positions at which the graph should be split can either be given explicitly (`--breakpoints`), or they 
+can be calculated automatically (`--chunksize`). In both cases, positions are interpreted as linear coordinates 
 on the reference path of the graph. The `--backbone` option can be used to select a specific path instead, and the `--sample` 
 option is used to select an instance of the graph associated with a specific sample.
 
-With the `--overlap` option, chunks can be made to overlap at the breakpoints. An overlap occurs when adjacent chunks
-start or end at a position that is offset from the given breakpoint. This is illustrated in Figure 1, in which the right
+Chunks can optionally be made to overlap by having adjacent chunks
+start or end at a position that is offset from each breakpoint. This is illustrated in Figure 1, in which the right
 chunk starts exactly at the breakpoint, while the left chunk ends 4 base pairs downstream. This is referred to as a
 'forward' overlap, and is the default structure if the argument consists of a single integer (e.g. `--overlap 4`). To
 obtain the overlap structures demonstrated in Figure 2, users can specify how much of an overlap to attach to the chunk
@@ -79,32 +105,17 @@ this check, but it is important to note that any variable region that spans chun
 terms of the graph: the breakpoints (shifted to account for overlap) induce a subgraph that contains only the edges and
 blocks that can be reached on walks between the (shifted) breakpoints.
 
-
-```console
-Usage: gen make chunks <NAME> (--breakpoints POS ... | --chunksize LENGTH) [--overlap FWD:[BWD] [FWD:[BWD]] ...] [--sample SAMPLE] [--backbone PATH] 
-        Divide a sequence graph into multiple parts at specified positions, with or without overlap,
-        resulting in distinct output objects. 
-
-
-Options:
-    --breakpoints POSITION ... 
-    --chunksize LENGTH               
-    --backbone PATH      Interpret breakpoint positions in the reference frame of the given path  
-    --sample SAMPLE     Sample that contains the sequence graph to be split
-    --overlap FWD:[BWD] [FWD:[BWD]] ...      
-            Make chunks overlap by n bp added to the left chunk at each break point, and m bp on the right chunk. 
-    --new-name NAME      
-    --new-sample SAMPLE
-    --force                Allow splitting at breakpoints in variable region
-```
+By default, `make chunks` replaces the input graph, but this can be avoided by directing the output to a sample instead
+(`--new-sample`). Chunks are named after their parent (chr1 becomes chr1.1, chr1.2, chr1.3), but users can also specify names as a list and/or with wildcards (`--new-names`).
 
 
 <figure style="margin-left: auto; margin-right: auto">
 <img src="./figures/operators/split_left.png" width=600 alt="Figure 1">
 <figcaption width=800><b>Figure 1</b>: <kbd> gen make chunks chr1 --breakpoints 15 --overlap 4</kbd><br>
  (a) Chr1 sequence graph with desired breakpoint indicated as dotted line.
- (b) Left chunk
- (c) Right chunk
+ (b) A left chunk with a forward overlap of 4 nucleotides is created by moving the End mode of the graph. Block 1:20-31 is shown to indicate the change (dashed line = reference), it cannot be accessed on any path between start and end.
+ (c) Right chunk without overlap compared to the breakpoint. For this chunk the edge from the start node is moved instead.
+
 </figcaption>
 
 </figure>
@@ -113,11 +124,13 @@ Options:
 <img src="./figures/operators/split_right_both.png" width=600 alt="Figure 6">
 <figcaption width=800><b>Figure 2</b>:
 (a,b) <kbd> gen make chunks chr1 --breakpoints 15 --overlap 0:4</kbd><br>
+Left and right chunk made from the graph in Fig 1a, but with a backwards overlap.
 (c,d) <kbd> gen make chunks chr1 --breakpoints 15 --overlap 2:2</kbd><br>
+Left and right chunk with a forward and backward overlap of 2 nucleotides, or 4 in total.
 </figcaption>
 </figure>
 
-### Stitch
+### Stitch [WIP]
 The stitch operation provides a general-purpose representation of molecular cloning workflows in a graph sequence model.
 Supporting specific protocols like Gibson assembly is considered out of scope for the gen client, but users are
 encouraged to leverage gen for the underlying primitives. 
@@ -131,21 +144,31 @@ TODO
 
 
 
-### Splice
-Whereas a the previous operation joins the ends of multiple sequence graphs, `splice` inserts one graph _into_ another
+### Splice [WIP]
+Whereas `stitch` operations take place at the ends of a graph, `splice` works on the _inside_.
 graph.
 
 TODO
 
-### Delete/Insert/Replace 
-TBD (could be used as shorthand for splices)
+### Deletion/Insertion/Substitution [TBD]
+Shorthand for splice commands to improve discoverability and avoid errors.
+TBD
 
-### Circularize
+### Circle [TBD]
 TBD
 
 ## Derive
 
-### Union
+### Union [WIP]
+```console
+Usage: gen derive union S1 S2 [S3 ...] [--new-sample OUTPUT]
+            
+        Combines the contents of two or more samples, merging sequence graphs based on their name and printing statistics to the screen.
+
+Options:
+    --new-sample OUTPUT Store output as a new sample. Supports placeholders. 
+```
+
 The `derive union` command combines variants across samples by deriving the union of the sequence graphs they contain.
 This is used to merge experimental results or library designs into samples that can be handled and tracked as a unit.
 Graph unions also allow researchers to model biological processes like a cross between two individuals. The combined
@@ -158,20 +181,8 @@ multiple sequence graphs. For example, the union of sample 'S1' which contains '
 results in a sample that contains both 'chr1' and 'chr2'.
 
 
-```console
-gen derive union <sample 1> <sample 2> [<sample n>] [options]
-        Combines the contents of multiple samples, merging sequence graphs based on their name.
-        The output replaces the null-sample sequence graphs unless the --new-sample option is used. 
 
-        Options:
-            --new-sample <sample>           Name of sample that will be created to store output 
-```
-
-
-
-### Intersection
-
-
+### Intersection [WIP]
 The complementary operation to a union, is to retain only the edges that are present in both, i.e. the intersection. 
 
 <figure style="margin-left: auto; margin-right: auto">
@@ -180,34 +191,34 @@ The complementary operation to a union, is to retain only the edges that are pre
 </figure>
 
 ```console
-gen derive intersection <sample 1> <sample 2> [<sample n>] [options]
-        Computes the intersection between multiple samples
+Usage: gen derive intersection S1 S2 [S3 ...] [-o, --output SAMPLE]
+            
+        Combines the contents of two or more samples, merging sequence graphs based on their name and printing statistics to the screen.
 
-
-        Options:
-            --new-sample <sample>
-            --scaffold <sample> 
+Options:
+    --output SAMPLE 
+        Direct output to existing or new sample, replacing previous contents witht he same name. Supports placeholders. 
 ```
 
-### Difference
+### Difference [WIP]
 
 <figure style="margin-left: auto; margin-right: auto">
 <img src="./figures/operators/scaffold_edges.png" width=800 alt="Figure X">
-<figcaption><b>Figure x</b>a) First event (insertion). b) Second event c) Second event in alternative sample d) Difference between C and B results in detached blocks. d) Scaffold reattaches blocks </figcaption>
+<figcaption><b>Figure x</b>a) First event (insertion). b) Second event c) Second event in alternative sample d) Difference between C and B results in detached blocks. d) The scaffold prevents blocks from getting detached.</figcaption>
 </figure>
 
 ```console
-gen derive difference <sample 1> <sample 2> [<sample n>] [options]
-        Computes the difference between multiple samples
+Usage: gen derive intersection S1 S2 [S3 ...] [-o, --output SAMPLE]
+            
+        Combines the contents of two or more samples, merging sequence graphs based on their name and printing statistics to the screen.
 
-
-        Options:
-            --new-sample <sample>
-            --scaffold <sample> 
+Options:
+    --output SAMPLE  Store output as a new sample. Supports placeholders. 
+    --scaffold 
 ```
 
 
-### Subgraph
+### Subgraph [WIP]
 Pangenome graphs can get rather big and unwieldy, but by deriving a subgraph we can extract a specific region to work on
 in a sequence editor, and later on merge it back into the complete sequence. Because a subgraph does not include edges
 and nodes that are no longer relevant to the user, it can be exported to a file that is much smaller in size and is
@@ -259,7 +270,7 @@ include the extracted subgraph as part of a synthetic design, however, it can be
 under a new name using `--new-name`. This complicates the use of other 'derive' operations later on, but makes it
 possible to use a subgraph in 'make' operations.
 
-### Supergraph
+### Supergraph [WIP]
 Extracted subgraphs and their descendants can be (re)attached to the sequence graph they were derived from, or any graph
 that shares at least the boundaries of the subgraph. This is done using the supergraph operation and a scaffold sample
 that represents the original context. First, the boundary blocks of the input graph are used to induce an analogous
