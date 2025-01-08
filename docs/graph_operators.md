@@ -22,12 +22,15 @@ That being said, creating an expression construct by combining a set of regulato
 operation where choosing a name for the output makes sense. Commands like `stitch` and `splice` have a `--new-name`
 argument that can be almost any text string as long as it is unique within the context of the current collection in the
 repository. Including placeholder symbols like `%n` and `%u` in the name is an easy way to avoid naming conflicts. `%n`
-is automatically replaced by the *n*ext available numerical identifier for that name, so if plasmid_1 and plasmid_2 already exist,`--new-name "plasmid_%n"` results in a new graph called "plasmid_3". For each new naming pattern the count starts at 1, and the most next index will always be larger than the previous one (gaps in the range are not filled). This avoids name collisions within a branch, but may still lead
-to conflicts when one branch is merged into another, requiring a name change at that point. This is not a problem for
-the `%u` placeholder, which is automatically replaced by a Universally *u*nique identifier (UUID), a combination of
-alphanumerical characters that is statistically unlikely to ever come up twice. As a compromise between legibility and
-uniqueness, only the first 7 characters are actually used. For very large repositories the odds of a collision increase however, and a
-`%U` placeholder (capitalized) can be used to include a full 128-bit UUID instead.
+is automatically replaced by the *n*ext available numerical identifier for that name, so if plasmid_1 and plasmid_2
+already exist,`--new-name "plasmid_%n"` results in a new graph called "plasmid_3". For each new naming pattern the count
+starts at 1, and the most next index will always be larger than the previous one (gaps in the range are not filled).
+This avoids name collisions within a branch, but may still lead to conflicts when one branch is merged into another,
+requiring a name change at that point. This is not a problem for the `%u` placeholder, which is automatically replaced
+by a Universally *u*nique identifier (UUID), a combination of alphanumerical characters that is statistically unlikely
+to ever come up twice. As a compromise between legibility and uniqueness, only the first 7 characters are actually used.
+For very large repositories the odds of a collision increase however, and a `%U` placeholder (capitalized) can be used
+to include a full 128-bit UUID instead.
 
 A second facet by which sequence graphs can be addressed is the _sample_ they are associated with. In the gen data
 model, a sample is a text string corresponding with a physical object or individual, for example. But it can also refer
@@ -81,18 +84,18 @@ This command can be interpreted as "split the sequence graph called chr1 into ch
 positions 100, 200 and 300, using the designated linear path associated with ch1 as the coordinate reference frame and
 including a 20 bp overhang". 
 
-The positions at which the graph should be split can either be given explicitly (`--breakpoints`), or they 
-can be calculated automatically (`--chunksize`). In both cases, positions are interpreted as linear coordinates 
-on the reference path of the graph. The `--backbone` option can be used to select a specific path instead, and the `--sample` 
+The positions at which the graph should be split can either be given explicitly (`--breakpoints`), or they can be
+calculated automatically (`--chunksize`). In both cases, positions are interpreted as linear coordinates on the
+reference path of the graph. The `--backbone` option can be used to select a specific path instead, and the `--sample`
 option is used to select an instance of the graph associated with a specific sample.
 
-Chunks can optionally be made to overlap by having adjacent chunks
-start or end at a position that is offset from each breakpoint. This is illustrated in Figure 1, in which the right
-chunk starts exactly at the breakpoint, while the left chunk ends 4 base pairs downstream. This is referred to as a
-'forward' overlap, and is the default structure if the argument consists of a single integer (e.g. `--overlap 4`). To
-obtain the overlap structures demonstrated in Figure 2, users can specify how much of an overlap to attach to the chunk
-to the right of the breakpoint by entering a pair of integers separated by a colon. A 'backward' overlap is specified as
-`--overlap 0:4`, for instance, and an overlap that is distributed to both sides as `--overlap 2:2`.
+Chunks can optionally be made to overlap by having adjacent chunks start or end at a position that is offset from each
+breakpoint. This is illustrated in Figure 1, in which the right chunk starts exactly at the breakpoint, while the left
+chunk ends 4 base pairs downstream. This is referred to as a 'forward' overlap, and is the default structure if the
+argument consists of a single integer (e.g. `--overlap 4`). To obtain the overlap structures demonstrated in Figure 2,
+users can specify how much of an overlap to attach to the chunk to the right of the breakpoint by entering a pair of
+integers separated by a colon. A 'backward' overlap is specified as `--overlap 0:4`, for instance, and an overlap that
+is distributed to both sides as `--overlap 2:2`.
 
 The same overlap is applied at each breakpoint if only one length (pair) is provided. Multiple overlap arguments can be
 given to specify the overlap at each breakpoint individually. In that case the number of overlap arguments must be equal
@@ -106,7 +109,8 @@ terms of the graph: the breakpoints (shifted to account for overlap) induce a su
 blocks that can be reached on walks between the (shifted) breakpoints.
 
 By default, `make chunks` replaces the input graph, but this can be avoided by directing the output to a sample instead
-(`--new-sample`). Chunks are named after their parent (chr1 becomes chr1.1, chr1.2, chr1.3), but users can also specify names as a list and/or with wildcards (`--new-names`).
+(`--new-sample`). Chunks are named after their parent (chr1 becomes chr1.1, chr1.2, chr1.3), but users can also specify
+names as a list and/or with wildcards (`--new-names`).
 
 
 <figure style="margin-left: auto; margin-right: auto">
@@ -145,14 +149,12 @@ TODO
 
 
 ### Splice [WIP]
-Whereas `stitch` operations take place at the ends of a graph, `splice` works on the _inside_.
-graph.
+Whereas `stitch` operations take place at the ends of a graph, `splice` works on the _inside_. graph.
 
 TODO
 
 ### Deletion/Insertion/Substitution [TBD]
-Shorthand for splice commands to improve discoverability and avoid errors.
-TBD
+Shorthand for splice commands to improve discoverability and avoid errors. TBD
 
 ### Circle [TBD]
 TBD
