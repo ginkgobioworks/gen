@@ -1,11 +1,11 @@
-use crate::gfa_reader::{Gfa, Path as GFAPath, Segment};
+use crate::gfa_reader::{Gfa, Segment};
 use crate::models::operations::OperationInfo;
 use crate::models::{
     block_group::BlockGroup,
     block_group_edge::{BlockGroupEdge, BlockGroupEdgeData},
     edge::{Edge, EdgeData},
     file_types::FileTypes,
-    node::{Node, PATH_START_NODE_ID},
+    node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
     path::Path,
     sample::Sample,
     sequence::Sequence,
@@ -46,11 +46,10 @@ pub fn update_with_gfa(
     // Find which incoming paths match existing paths, and store information about them and their
     // segments
     let mut existing_path_ids_by_new_path_name = HashMap::new();
-    let mut path_name_by_segment_id = HashMap::new();
-    let mut paths_by_name = HashMap::new();
+    let mut path_segments_by_name = HashMap::new();
     for path in &gfa.paths {
         let path_name = path.name.clone();
-        paths_by_name.insert(path_name.clone(), path);
+        path_segments_by_name.insert(path_name.clone(), path.nodes.clone());
         let mut path_segments = vec![];
         for segment_id in path.nodes.iter() {
             let sequence = segments_by_id
@@ -59,7 +58,6 @@ pub fn update_with_gfa(
                 .sequence
                 .get_string(&gfa.sequence);
             path_segments.push(sequence);
-            path_name_by_segment_id.insert(segment_id, path_name.clone());
         }
         let path_sequence = path_segments
             .iter()
@@ -72,7 +70,31 @@ pub fn update_with_gfa(
             }
         }
     }
-    // TODO: Same thing for walks
+
+    // Same thing as with paths, but for walks
+    for walk in &gfa.walk {
+        let walk_name = walk.sample_id.clone();
+        path_segments_by_name.insert(walk_name.clone(), walk.walk_id.clone());
+        let mut walk_segments = vec![];
+        for segment_id in walk.walk_id.iter() {
+            let sequence = segments_by_id
+                .get(segment_id)
+                .unwrap()
+                .sequence
+                .get_string(&gfa.sequence);
+            walk_segments.push(sequence);
+        }
+        let walk_sequence = walk_segments
+            .iter()
+            .map(|segment| segment.to_string())
+            .collect::<Vec<String>>()
+            .join("");
+        for existing_path in existing_paths.iter() {
+            if existing_path.sequence(conn) == walk_sequence {
+                existing_path_ids_by_new_path_name.insert(walk_name.clone(), existing_path.id);
+            }
+        }
+    }
 
     let matched_path_name_list = existing_path_ids_by_new_path_name
         .keys()
@@ -84,7 +106,7 @@ pub fn update_with_gfa(
         .collect::<HashSet<&str>>();
 
     // Record unmatched paths and walks, update existing matched ones
-    let mut unmatched_paths = vec![];
+    let mut unmatched_path_names = vec![];
     let mut matched_path_name_by_segment_id = HashMap::new();
     for path in &gfa.paths {
         let path_name = &path.name;
@@ -93,14 +115,29 @@ pub fn update_with_gfa(
                 matched_path_name_by_segment_id.insert(segment_id, path_name);
             }
         } else {
-            unmatched_paths.push(path);
+            unmatched_path_names.push(path.name.clone());
         }
     }
-    // TODO: Same thing for walks
 
-    for unmatched_path in unmatched_paths.iter() {
+    for walk in &gfa.walk {
+        let walk_name = &walk.sample_id;
+        if matched_path_names.contains(walk_name.as_str()) {
+            for segment_id in walk.walk_id.iter() {
+                matched_path_name_by_segment_id.insert(segment_id, walk_name);
+            }
+        } else {
+            unmatched_path_names.push(walk_name.clone());
+        }
+    }
+
+    let mut new_paths_added = 0;
+
+    // For any apparently new path, check if it shares segments with another path in the GFA that
+    // matches a path in the database.  If so, create the new path and appropriate nodes/edges.
+    for unmatched_path_name in unmatched_path_names.iter() {
         let mut matched_new_paths = HashSet::new();
-        for segment_id in unmatched_path.nodes.iter() {
+        let segment_ids = path_segments_by_name.get(unmatched_path_name).unwrap();
+        for segment_id in segment_ids.iter() {
             let path_name_result = matched_path_name_by_segment_id.get(segment_id);
             if let Some(path_name) = path_name_result {
                 matched_new_paths.insert(path_name);
@@ -112,21 +149,22 @@ pub fn update_with_gfa(
                 .get(*matched_new_path_name)
                 .unwrap();
             let existing_path = Path::get(conn, *existing_path_id);
-            let matched_path = paths_by_name.get(*matched_new_path_name).unwrap();
+            let matched_path_segments = path_segments_by_name.get(*matched_new_path_name).unwrap();
+            let unmatched_path_segments = path_segments_by_name.get(unmatched_path_name).unwrap();
             create_new_path_from_existing(
                 conn,
                 &existing_path,
-                matched_path,
-                unmatched_path,
+                matched_path_segments,
+                unmatched_path_name,
+                unmatched_path_segments,
                 &gfa,
                 &segments_by_id,
             );
+            new_paths_added += 1;
         }
     }
-    // TODO: Same thing for walks
 
-    //    let summary_str = format!(" {}: 1 change", new_path.name);
-    let summary_str = "";
+    let summary_str = format!("{} new paths added", new_paths_added);
 
     operation_management::end_operation(
         conn,
@@ -137,7 +175,7 @@ pub fn update_with_gfa(
             file_type: FileTypes::GFA,
             description: "gfa_update".to_string(),
         },
-        summary_str,
+        &summary_str,
         None,
     )
     .unwrap();
@@ -150,15 +188,16 @@ pub fn update_with_gfa(
 fn create_new_path_from_existing(
     conn: &Connection,
     existing_path: &Path,
-    matched_path: &GFAPath<String, (), ()>,
-    unmatched_path: &GFAPath<String, (), ()>,
+    matched_path_segment_ids: &[String],
+    unmatched_path_name: &str,
+    unmatched_path_segment_ids: &[String],
     gfa: &Gfa<String, (), ()>,
     segments_by_id: &HashMap<String, &Segment<String, ()>>,
 ) {
     let interval_tree = existing_path.intervaltree(conn);
     let mut existing_path_ranges_by_segment_id = HashMap::new();
     let mut existing_path_position = 0;
-    for segment_id in matched_path.nodes.iter() {
+    for segment_id in matched_path_segment_ids.iter() {
         let segment_sequence = segments_by_id
             .get(segment_id)
             .unwrap()
@@ -182,7 +221,7 @@ fn create_new_path_from_existing(
     let mut previous_node_coordinate = -1;
     let mut previous_node_strand = Strand::Forward;
     let mut new_path_edges = vec![];
-    for segment_id in unmatched_path.nodes.iter() {
+    for segment_id in unmatched_path_segment_ids.iter() {
         if existing_path_ranges_by_segment_id.contains_key(segment_id) {
             // Current segment matches something in the existing path, add an edge from the previous
             // node to the next one, which already exists
@@ -194,15 +233,18 @@ fn create_new_path_from_existing(
                 .value;
             let block_with_end = interval_tree.query_point(*end as i64).next().unwrap().value;
 
-            new_path_edges.push(EdgeData {
-                source_node_id: previous_node_id,
-                source_coordinate: previous_node_coordinate,
-                source_strand: previous_node_strand,
-                target_node_id: block_with_start.node_id,
-                target_coordinate: block_with_start.sequence_start + *start as i64
-                    - block_with_start.start,
-                target_strand: block_with_start.strand,
-            });
+            let target_coordinate =
+                block_with_start.sequence_start + *start as i64 - block_with_start.start;
+            if previous_node_id != block_with_start.node_id {
+                new_path_edges.push(EdgeData {
+                    source_node_id: previous_node_id,
+                    source_coordinate: previous_node_coordinate,
+                    source_strand: previous_node_strand,
+                    target_node_id: block_with_start.node_id,
+                    target_coordinate,
+                    target_strand: block_with_start.strand,
+                });
+            }
 
             existing_path_position += (end - start) as i64;
             previous_node_id = block_with_end.node_id;
@@ -219,7 +261,7 @@ fn create_new_path_from_existing(
                 .sequence(segment_sequence)
                 .save(conn);
             let node_id = Node::create(conn, &sequence.hash, None);
-            // TODO: Fix this
+            // TODO: Set strand correctly
             let next_node_strand = Strand::Forward;
             new_path_edges.push(EdgeData {
                 source_node_id: previous_node_id,
@@ -235,7 +277,34 @@ fn create_new_path_from_existing(
         }
     }
 
-    // TODO: Add edge to path end node
+    let last_segment_id = unmatched_path_segment_ids.last().unwrap();
+    if existing_path_ranges_by_segment_id.contains_key(last_segment_id) {
+        let (start, _end) = existing_path_ranges_by_segment_id
+            .get(last_segment_id)
+            .unwrap();
+        let block_with_start = interval_tree
+            .query_point(*start as i64)
+            .next()
+            .unwrap()
+            .value;
+        new_path_edges.push(EdgeData {
+            source_node_id: block_with_start.node_id,
+            source_coordinate: block_with_start.end,
+            source_strand: block_with_start.strand,
+            target_node_id: PATH_END_NODE_ID,
+            target_coordinate: 0,
+            target_strand: Strand::Forward,
+        });
+    } else {
+        new_path_edges.push(EdgeData {
+            source_node_id: previous_node_id,
+            source_coordinate: previous_node_coordinate,
+            source_strand: previous_node_strand,
+            target_node_id: PATH_END_NODE_ID,
+            target_coordinate: 0,
+            target_strand: Strand::Forward,
+        });
+    }
 
     let block_group_id = existing_path.block_group_id;
     let new_edge_ids = Edge::bulk_create(conn, &new_path_edges);
@@ -249,7 +318,7 @@ fn create_new_path_from_existing(
         })
         .collect::<Vec<BlockGroupEdgeData>>();
     BlockGroupEdge::bulk_create(conn, &block_group_edges);
-    Path::create(conn, &unmatched_path.name, block_group_id, &new_edge_ids);
+    Path::create(conn, unmatched_path_name, block_group_id, &new_edge_ids);
 }
 
 #[cfg(test)]
