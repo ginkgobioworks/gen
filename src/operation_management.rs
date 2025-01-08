@@ -19,7 +19,7 @@ use fallible_streaming_iterator::FallibleStreamingIterator;
 use itertools::Itertools;
 use petgraph::Direction;
 use rusqlite;
-use rusqlite::session::ChangesetIter;
+use rusqlite::session::{ChangesetItem, ChangesetIter};
 use rusqlite::types::{FromSql, Value};
 use rusqlite::{session, Connection};
 use serde::{Deserialize, Serialize};
@@ -51,13 +51,22 @@ pub enum FileMode {
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct DependencyModels {
-    sequences: Vec<Sequence>,
-    block_group: Vec<BlockGroup>,
-    nodes: Vec<Node>,
-    edges: Vec<Edge>,
-    paths: Vec<Path>,
-    accessions: Vec<Accession>,
-    accession_edges: Vec<AccessionEdge>,
+    pub sequences: Vec<Sequence>,
+    pub block_group: Vec<BlockGroup>,
+    pub nodes: Vec<Node>,
+    pub edges: Vec<Edge>,
+    pub paths: Vec<Path>,
+    pub accessions: Vec<Accession>,
+    pub accession_edges: Vec<AccessionEdge>,
+}
+
+#[derive(Debug)]
+pub struct ChangesetModels {
+    pub sequences: Vec<Sequence>,
+    pub block_groups: Vec<BlockGroup>,
+    pub nodes: Vec<Node>,
+    pub edges: Vec<Edge>,
+    pub block_group_edges: Vec<BlockGroupEdge>,
 }
 
 pub fn get_file(path: &PathBuf, mode: FileMode) -> fs::File {
@@ -293,6 +302,106 @@ pub fn load_changeset(operation: &Operation) -> Vec<u8> {
     let mut contents = vec![];
     file.read_to_end(&mut contents).unwrap();
     contents
+}
+
+fn parse_string(item: &ChangesetItem, col: usize) -> String {
+    str::from_utf8(item.new_value(col).unwrap().as_bytes().unwrap())
+        .unwrap()
+        .to_string()
+}
+
+fn parse_maybe_string(item: &ChangesetItem, col: usize) -> Option<String> {
+    item.new_value(col)
+        .unwrap()
+        .as_bytes_or_null()
+        .unwrap()
+        .map(|v| str::from_utf8(v).unwrap().to_string())
+}
+
+fn parse_number(item: &ChangesetItem, col: usize) -> i64 {
+    item.new_value(col).unwrap().as_i64().unwrap()
+}
+
+fn parse_maybe_number(item: &ChangesetItem, col: usize) -> Option<i64> {
+    item.new_value(col).unwrap().as_i64_or_null().unwrap()
+}
+
+pub fn load_changeset_models(changeset: &mut ChangesetIter) -> ChangesetModels {
+    let mut created_block_groups = vec![];
+    let mut created_edges = vec![];
+    let mut created_nodes = vec![];
+    let mut created_sequences = vec![];
+    let mut created_bg_edges = vec![];
+
+    while let Some(item) = changeset.next().unwrap() {
+        let op = item.op().unwrap();
+        // info on indirect changes: https://www.sqlite.org/draft/session/sqlite3session_indirect.html
+        if !op.indirect() {
+            let table = op.table_name();
+            let pk_column = item
+                .pk()
+                .unwrap()
+                .iter()
+                .find_position(|item| **item == 1)
+                .unwrap()
+                .0;
+            match table {
+                "sequences" => {
+                    let hash = parse_string(item, pk_column);
+                    let sequence = Sequence::new()
+                        .sequence_type(&parse_string(item, 1))
+                        .sequence(&parse_string(item, 2))
+                        .name(&parse_string(item, 3))
+                        .file_path(&parse_string(item, 4))
+                        .length(parse_number(item, 5))
+                        .build();
+                    assert_eq!(hash, sequence.hash);
+                    created_sequences.push(sequence);
+                }
+                "block_groups" => {
+                    created_block_groups.push(BlockGroup {
+                        id: parse_number(item, pk_column),
+                        collection_name: parse_string(item, 1),
+                        sample_name: parse_maybe_string(item, 2),
+                        name: parse_string(item, 3),
+                    });
+                }
+                "nodes" => {
+                    created_nodes.push(Node {
+                        id: parse_number(item, pk_column),
+                        sequence_hash: parse_string(item, 1),
+                        hash: parse_maybe_string(item, 2),
+                    });
+                }
+                "edges" => created_edges.push(Edge {
+                    id: parse_number(item, pk_column),
+                    source_node_id: parse_number(item, 1),
+                    source_coordinate: parse_number(item, 2),
+                    source_strand: Strand::column_result(item.new_value(3).unwrap()).unwrap(),
+                    target_node_id: parse_number(item, 4),
+                    target_coordinate: parse_number(item, 5),
+                    target_strand: Strand::column_result(item.new_value(6).unwrap()).unwrap(),
+                }),
+                "block_group_edges" => {
+                    created_bg_edges.push(BlockGroupEdge {
+                        id: parse_number(item, pk_column),
+                        block_group_id: parse_number(item, 1),
+                        edge_id: parse_number(item, 2),
+                        chromosome_index: parse_number(item, 3),
+                        phased: parse_number(item, 4),
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
+    ChangesetModels {
+        sequences: created_sequences,
+        block_groups: created_block_groups,
+        nodes: created_nodes,
+        edges: created_edges,
+        block_group_edges: created_bg_edges,
+    }
 }
 
 pub fn apply_changeset(

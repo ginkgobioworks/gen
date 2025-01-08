@@ -24,6 +24,7 @@ use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
 use gen::updates::genbank::update_with_genbank;
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::{update_with_vcf, VcfError};
+use gen::views::patch::view_patches;
 use itertools::Itertools;
 use noodles::core::Region;
 use rusqlite::{types::Value, Connection};
@@ -167,6 +168,13 @@ enum Commands {
     /// Apply changes from a patch file
     #[command(name = "patch-apply", arg_required_else_help(true))]
     PatchApply {
+        /// The patch file
+        #[clap(index = 1)]
+        patch: String,
+    },
+    /// View a patch
+    #[command(name = "patch-view", arg_required_else_help(true))]
+    PatchView {
         /// The patch file
         #[clap(index = 1)]
         patch: String,
@@ -317,7 +325,7 @@ fn main() {
         return;
     }
 
-    let operation_conn = get_operation_connection();
+    let operation_conn = get_operation_connection(None);
     if let Some(Commands::Defaults {
         database,
         collection,
@@ -773,6 +781,11 @@ fn main() {
             let mut f = File::open(patch).unwrap();
             let patches = patch::load_patches(&mut f);
             patch::apply_patches(&conn, &operation_conn, &patches);
+        }
+        Some(Commands::PatchView { patch }) => {
+            let mut f = File::open(patch).unwrap();
+            let patches = patch::load_patches(&mut f);
+            view_patches(&patches);
         }
         None => {}
         // these will never be handled by this method as we search for them earlier.

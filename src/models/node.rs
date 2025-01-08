@@ -13,6 +13,7 @@ pub const PATH_END_NODE_ID: i64 = 2;
 pub struct Node {
     pub id: i64,
     pub sequence_hash: String,
+    pub hash: Option<String>,
 }
 
 impl Query for Node {
@@ -21,6 +22,7 @@ impl Query for Node {
         Node {
             id: row.get(0).unwrap(),
             sequence_hash: row.get(1).unwrap(),
+            hash: row.get(2).unwrap(),
         }
     }
 }

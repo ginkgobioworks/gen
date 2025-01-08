@@ -14,10 +14,15 @@ pub static BASE_DIR: LazyLock<RwLock<PathBuf>> =
     LazyLock::new(|| RwLock::new(env::current_dir().unwrap()));
 }
 
-pub fn get_operation_connection() -> Connection {
-    let db_path = get_gen_db_path();
+pub fn get_operation_connection(db_path: impl Into<Option<PathBuf>>) -> Connection {
+    let db_path = db_path.into();
+    let path = if let Some(s) = db_path {
+        s
+    } else {
+        get_gen_db_path()
+    };
     let mut conn =
-        Connection::open(&db_path).unwrap_or_else(|_| panic!("Error connecting to {:?}", &db_path));
+        Connection::open(&path).unwrap_or_else(|_| panic!("Error connecting to {:?}", &path));
     run_operation_migrations(&mut conn);
     conn
 }
