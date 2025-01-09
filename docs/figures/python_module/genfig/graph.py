@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
 import networkx as nx
-import matplotlib.pyplot as plt 
 import sqlite3
 import json
 from copy import deepcopy
+import subprocess
 
 import pygraphviz
 # Note: to install pygraphviz on macOS, you need to first install graphviz using homebrew,
@@ -653,11 +653,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("db", help="The path to the gen database file")
     parser.add_argument("--output", help="The path to save the output file to", default=None)
-    parser.add_argument("--format", help="The output file format (svg scales well but can be unpredictable for longer nodes, png is slow but tends to give better fitting text)", choices=['svg','png','dot'], default='svg')
-    parser.add_argument("--collection_name", help="Filter by collection name", default=None)
-    parser.add_argument("--sample_name", help="Filter by sample name", default=None)
-    parser.add_argument("--block_group_name", help="Filter by block group name", default=None)
-    parser.add_argument("--minimize", help="Truncate sequences", action="store_true")
+    parser.add_argument("--format", help="The output file format (svg scales well but can be unpredictable for longer nodes, png is slow but tends to give better fitting text)", choices=['svg','png','dot'], default='png')
+    parser.add_argument("--collection", help="Filter by collection name", default=None)
+    parser.add_argument("--sample", help="Filter by sample name", default=None)
+    parser.add_argument("--graph", help="Filter by graph name", default=None)
+    parser.add_argument("--ports", help="Visualize as a ported graph without splitting nodes", action="store_true")
+    parser.add_argument("--maximize", help="Do not truncate sequences", action="store_true")
     parser.add_argument("--lines", help="Use straight lines instead of splines for edges", action="store_true")
     parser.add_argument("--flex", help="Do not attempt to align blocks from the same segment as a row", action="store_true")
     parser.add_argument("--hide_nodes", help="Comma-separated list of nodes to hide", default="")
@@ -675,12 +676,23 @@ def main():
         print("Error: could not decode JSON string")
     
     g = Graph(db=args.db, 
-              collection_name=args.collection_name, 
-              sample_name=args.sample_name)
+              collection_name=args.collection, 
+              sample_name=args.sample,
+              block_group_name=args.graph)
 
-    img = g.render_block_graph(filename=args.output,
+    if args.ports:
+        img = g.render_graph(filename=args.output,
+                             format=args.format,
+                             minimize=not(args.maximize),
+                             splines= not(args.lines),
+                             hide_nodes=args.hide_nodes.split(',') if args.hide_nodes else [],
+                             graph_attributes=graph_attributes,
+                             node_attributes=node_attributes,
+                             edge_attributes=edge_attributes)
+    else:
+        img = g.render_block_graph(filename=args.output,
                                format=args.format,
-                               minimize=args.minimize,
+                               minimize=not(args.maximize),
                                splines= not(args.lines),
                                align_blocks= not(args.flex),
                                hide_nodes=args.hide_nodes.split(',') if args.hide_nodes else [],
@@ -689,7 +701,11 @@ def main():
                                edge_attributes=edge_attributes)
     
     if not args.output:
-        print(img)
+        # Try to display in the terminal using kitty, otherwise just print the raw image data
+        try:
+            subprocess.run(["kitty", "icat"], input=img)
+        except FileNotFoundError:
+            print(img)
     
 if __name__ == "__main__":
     main()
