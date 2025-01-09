@@ -85,18 +85,23 @@ pub fn view_patches(patches: &[OperationPatch]) {
             block_graph.add_node((PATH_END_NODE_ID, 0, 0));
             for bg_edge in bg_edges {
                 let edge = *edges_by_id.get(&bg_edge.edge_id).unwrap();
-                println!("e is {edge:?}");
                 if edge.target_node_id == PATH_END_NODE_ID {
                     graph.add_edge(
                         edge.source_node_id,
                         edge.target_node_id,
                         (edge.source_coordinate - 1, edge.target_coordinate),
                     );
-                } else {
+                } else if edge.source_node_id == PATH_START_NODE_ID {
                     graph.add_edge(
                         edge.source_node_id,
                         edge.target_node_id,
                         (edge.source_coordinate, edge.target_coordinate),
+                    );
+                } else {
+                    graph.add_edge(
+                        edge.source_node_id,
+                        edge.target_node_id,
+                        (edge.source_coordinate - 1, edge.target_coordinate),
                     );
                 }
             }
@@ -135,8 +140,6 @@ pub fn view_patches(patches: &[OperationPatch]) {
                 let block_starts = block_starts.into_iter().sorted().collect::<Vec<_>>();
                 let block_ends = block_ends.into_iter().sorted().collect::<Vec<_>>();
 
-                println!("{node} {block_starts:?} {block_ends:?}");
-
                 let mut blocks = vec![];
                 for (i, j) in block_starts.iter().zip(block_ends.iter()) {
                     block_graph.add_node((node, *i, *j));
@@ -148,9 +151,7 @@ pub fn view_patches(patches: &[OperationPatch]) {
                 }
             }
 
-            println!("{block_graph:?}");
             for (src, dest, (fp, tp)) in graph.all_edges() {
-                println!("{src} {fp} {dest} {tp}");
                 let source_block = block_graph
                     .nodes()
                     .find(|(node, start, end)| *node == src && end == fp)
@@ -161,7 +162,6 @@ pub fn view_patches(patches: &[OperationPatch]) {
                     .unwrap();
                 block_graph.add_edge(source_block, dest_block, ());
             }
-            println!("final {block_graph:?}");
 
             let path = format!("test_{bg_id}.dot");
             use std::fs::File;
