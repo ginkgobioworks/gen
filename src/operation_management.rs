@@ -96,6 +96,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
     let mut previous_edges = HashSet::new();
     let mut previous_paths = HashSet::new();
     let mut previous_accessions = HashSet::new();
+    let mut previous_nodes = HashSet::new();
     let mut previous_sequences = HashSet::new();
     let mut previous_accession_edges = HashSet::new();
     let mut created_block_groups = HashSet::new();
@@ -150,11 +151,13 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                     let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     let source_node_id = item.new_value(1).unwrap().as_i64().unwrap();
                     let target_node_id = item.new_value(4).unwrap().as_i64().unwrap();
+                    println!("new edge {source_node_id} {target_node_id}");
                     created_edges.insert(edge_pk);
                     let nodes = Node::get_nodes(conn, &[source_node_id, target_node_id]);
                     for node in nodes.iter() {
                         if !created_nodes.contains(&node.id) {
                             previous_sequences.insert(node.sequence_hash.clone());
+                            previous_nodes.insert(node.id);
                         }
                     }
                 }
@@ -236,7 +239,10 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
             ),
             rusqlite::params!(),
         ),
-        nodes: vec![],
+        nodes: Node::get_nodes(
+            conn,
+            &previous_nodes.into_iter().sorted().collect::<Vec<_>>(),
+        ),
         edges: Edge::query(
             conn,
             &format!(
