@@ -178,6 +178,10 @@ pub fn view_patches(patches: &[OperationPatch]) {
                         s = seq.get_sequence(start, start + 3),
                         e = seq.get_sequence(end - 2, end + 1)
                     )
+                } else if node_id == PATH_START_NODE_ID {
+                    "start".to_string()
+                } else if node_id == PATH_END_NODE_ID {
+                    "end".to_string()
                 } else {
                     seq.get_sequence(start, end + 1)
                 };
@@ -211,14 +215,12 @@ pub fn view_patches(patches: &[OperationPatch]) {
             }
 
             for ((src, s_fp, s_tp), (dest, d_fp, d_tp), ()) in block_graph.all_edges() {
+                let style = if src == dest { "dashed" } else { "solid" };
+                let arrow = if src == dest { "none" } else { "normal" };
                 dot.push_str(&format!(
-                    "\"{src}.{s_fp}.{s_tp}\" -> \"{dest}.{d_fp}.{d_tp}\"\n"
+                    "\"{src}.{s_fp}.{s_tp}\" -> \"{dest}.{d_fp}.{d_tp}\" [arrowhead={arrow}, headport=\"seq:w\", tailport=\"seq:e\", style=\"{style}\"]\n"
                 ));
             }
-
-            // for (src, dest, (from, to)) in graph.all_edges() {
-            //     dot.push_str(&format!("{src}:{from} -> {dest}:{to}\n"));
-            // }
 
             dot.push('}');
             let _ = file.write_all(dot.as_bytes());
