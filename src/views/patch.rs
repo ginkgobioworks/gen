@@ -1,6 +1,6 @@
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::Edge;
-use crate::models::node::Node;
+use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::sequence::Sequence;
 use crate::operation_management::{
     load_changeset, load_changeset_dependencies, load_changeset_models,
@@ -29,6 +29,19 @@ fn get_contiguous_regions(v: &[i64]) -> Vec<(i64, i64)> {
 }
 
 pub fn view_patches(patches: &[OperationPatch]) {
+    let START_NODE = Node {
+        id: PATH_START_NODE_ID,
+        sequence_hash: "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+            .to_string(),
+        hash: None,
+    };
+
+    let END_NODE = Node {
+        id: PATH_END_NODE_ID,
+        sequence_hash: "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+            .to_string(),
+        hash: None,
+    };
     for patch in patches {
         let op_info = &patch.operation;
         let changeset = load_changeset(op_info);
@@ -41,6 +54,8 @@ pub fn view_patches(patches: &[OperationPatch]) {
         let mut bges_by_bg: HashMap<i64, Vec<&BlockGroupEdge>> = HashMap::new();
         let mut edges_by_id: HashMap<i64, &Edge> = HashMap::new();
         let mut nodes_by_id: HashMap<i64, &Node> = HashMap::new();
+        nodes_by_id.insert(START_NODE.id, &START_NODE);
+        nodes_by_id.insert(END_NODE.id, &END_NODE);
         let mut sequences_by_hash: HashMap<&String, &Sequence> = HashMap::new();
 
         for bge in new_models.block_group_edges.iter() {
@@ -65,66 +80,145 @@ pub fn view_patches(patches: &[OperationPatch]) {
 
         for (bg_id, bg_edges) in bges_by_bg.iter() {
             let mut graph: DiGraphMap<i64, (i64, i64)> = DiGraphMap::new();
+            let mut block_graph: DiGraphMap<(i64, i64, i64), ()> = DiGraphMap::new();
+            block_graph.add_node((PATH_START_NODE_ID, 0, 0));
+            block_graph.add_node((PATH_END_NODE_ID, 0, 0));
             for bg_edge in bg_edges {
                 let edge = *edges_by_id.get(&bg_edge.edge_id).unwrap();
-                if Node::is_terminal(edge.source_node_id) || Node::is_terminal(edge.target_node_id)
-                {
+                println!("e is {edge:?}");
+                if edge.target_node_id == PATH_END_NODE_ID {
+                    graph.add_edge(
+                        edge.source_node_id,
+                        edge.target_node_id,
+                        (edge.source_coordinate - 1, edge.target_coordinate),
+                    );
+                } else {
+                    graph.add_edge(
+                        edge.source_node_id,
+                        edge.target_node_id,
+                        (edge.source_coordinate, edge.target_coordinate),
+                    );
+                }
+            }
+
+            for node in graph.nodes() {
+                if node == PATH_START_NODE_ID || node == PATH_END_NODE_ID {
                     continue;
                 }
-                graph.add_edge(
-                    edge.source_node_id,
-                    edge.target_node_id,
-                    (edge.source_coordinate, edge.target_coordinate),
-                );
+                let in_ports = graph
+                    .edges_directed(node, Direction::Incoming)
+                    .map(|(src, dest, (fp, tp))| *tp)
+                    .collect::<Vec<_>>();
+                let out_ports = graph
+                    .edges_directed(node, Direction::Outgoing)
+                    .map(|(src, dest, (fp, tp))| *fp)
+                    .collect::<Vec<_>>();
+
+                let node_obj = *nodes_by_id.get(&node).unwrap();
+                let sequence = *sequences_by_hash.get(&node_obj.sequence_hash).unwrap();
+                let s_len = sequence.length;
+                let mut block_starts: HashSet<i64> = HashSet::from_iter(in_ports.iter().copied());
+                block_starts.insert(0);
+                for x in out_ports.iter() {
+                    if *x < s_len - 1 {
+                        block_starts.insert(x + 1);
+                    }
+                }
+                let mut block_ends: HashSet<i64> = HashSet::from_iter(out_ports.iter().copied());
+                block_ends.insert(s_len);
+                for x in in_ports.iter() {
+                    if *x > 0 {
+                        block_ends.insert(x - 1);
+                    }
+                }
+
+                let block_starts = block_starts.into_iter().sorted().collect::<Vec<_>>();
+                let block_ends = block_ends.into_iter().sorted().collect::<Vec<_>>();
+
+                println!("{node} {block_starts:?} {block_ends:?}");
+
+                let mut blocks = vec![];
+                for (i, j) in block_starts.iter().zip(block_ends.iter()) {
+                    block_graph.add_node((node, *i, *j));
+                    blocks.push((node, *i, *j));
+                }
+
+                for (i, j) in blocks.iter().tuple_windows() {
+                    block_graph.add_edge(*i, *j, ());
+                }
             }
+
+            println!("{block_graph:?}");
+            for (src, dest, (fp, tp)) in graph.all_edges() {
+                println!("{src} {fp} {dest} {tp}");
+                let source_block = block_graph
+                    .nodes()
+                    .find(|(node, start, end)| *node == src && end == fp)
+                    .unwrap();
+                let dest_block = block_graph
+                    .nodes()
+                    .find(|(node, start, end)| *node == dest && start == tp)
+                    .unwrap();
+                block_graph.add_edge(source_block, dest_block, ());
+            }
+            println!("final {block_graph:?}");
 
             let path = format!("test_{bg_id}.dot");
             use std::fs::File;
             let mut file = File::create(path).unwrap();
-            let mut dot = "digraph struct {\n    rankdir=TB\n    node [shape=record]\n".to_string();
-            for node in graph.nodes() {
-                let mut labels = vec![];
-                let node_obj = *nodes_by_id.get(&node).unwrap();
-                let seq = *sequences_by_hash.get(&node_obj.sequence_hash).unwrap();
-                let mut regions: HashSet<i64> = HashSet::new();
-                for (_, _, (_, to)) in graph.edges_directed(node, Direction::Incoming) {
-                    regions.insert(*to);
-                }
-                for (_, _, (from, _)) in graph.edges_directed(node, Direction::Outgoing) {
-                    regions.insert(*from);
-                }
-                let regions = regions.into_iter().sorted().collect::<Vec<_>>();
-                let mut added = HashSet::new();
-                for (start, end) in get_contiguous_regions(&regions) {
-                    let mut label = vec![];
-                    if start != 0 {
-                        label.push("...".to_string());
-                    }
-                    for i in (start - 1..end + 2) {
-                        if !added.contains(&i) && i >= 0 && i < seq.length {
-                            label.push(format!(
-                                "{{<{i}>{i}|{bp}}}",
-                                bp = seq.get_sequence(i, i + 1)
-                            ));
-                        } else if i == seq.length {
-                            label.push(format!("{{<{i}>{i}|END}}"));
-                        }
-                        added.insert(i);
-                    }
-                    if end != seq.length {
-                        label.push("...".to_string());
-                    }
-                    labels.push(label.join("|"));
-                }
+            let mut dot = "digraph {\n    rankdir=LR\n    node [shape=none]\n".to_string();
+            for (node_id, start, end) in block_graph.nodes() {
+                let node = *nodes_by_id.get(&node_id).unwrap();
+                let seq = *sequences_by_hash.get(&node.sequence_hash).unwrap();
+                let len = end - start;
+
+                let formatted_seq = if len > 7 {
+                    format!(
+                        "{s}...{e}",
+                        s = seq.get_sequence(start, start + 3),
+                        e = seq.get_sequence(end - 3, end)
+                    )
+                } else {
+                    seq.get_sequence(start, end + 1)
+                };
+
+                let coordinates = if end - start > 0 {
+                    format!("{node_id}:{start}-{end}")
+                } else if start > 0 {
+                    format!("{node_id}:{start}")
+                } else {
+                    format!("{node_id}")
+                };
+
+                let label = format!(
+                    "<\
+                <TABLE BORDER='0'>\
+                    <TR>\
+                        <TD BORDER='1' ALIGN='CENTER' PORT='seq'>\
+                            <FONT POINT-SIZE='12' FACE='Monospace'>{formatted_seq}</FONT>\
+                        </TD>\
+                    </TR>\
+                    <TR>\
+                        <TD ALIGN='CENTER'>\
+                            <FONT POINT-SIZE='10'>{coordinates}</FONT>\
+                        </TD>\
+                    </TR>\
+                </TABLE>\
+                >"
+                );
+
+                dot.push_str(&format!("\"{node_id}.{start}.{end}\" [label={label}]\n",));
+            }
+
+            for ((src, s_fp, s_tp), (dest, d_fp, d_tp), ()) in block_graph.all_edges() {
                 dot.push_str(&format!(
-                    "{node} [label=\"{label}\"]\n",
-                    label = labels.join("|")
+                    "\"{src}.{s_fp}.{s_tp}\" -> \"{dest}.{d_fp}.{d_tp}\"\n"
                 ));
             }
 
-            for (src, dest, (from, to)) in graph.all_edges() {
-                dot.push_str(&format!("{src}:{from} -> {dest}:{to}\n"));
-            }
+            // for (src, dest, (from, to)) in graph.all_edges() {
+            //     dot.push_str(&format!("{src}:{from} -> {dest}:{to}\n"));
+            // }
 
             dot.push('}');
             let _ = file.write_all(dot.as_bytes());
