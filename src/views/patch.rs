@@ -168,6 +168,18 @@ pub fn view_patches(patches: &[OperationPatch]) {
             let mut file = File::create(path).unwrap();
             let mut dot = "digraph {\n    rankdir=LR\n    node [shape=none]\n".to_string();
             for (node_id, start, end) in block_graph.nodes() {
+                if Node::is_terminal(node_id) {
+                    let label = if node_id == PATH_START_NODE_ID {
+                        "start"
+                    } else {
+                        "end"
+                    };
+                    dot.push_str(&format!(
+                        "\"{node_id}.{start}.{end}\" [label=\"{label}\", shape=ellipse]\n",
+                    ));
+                    continue;
+                }
+
                 let node = *nodes_by_id.get(&node_id).unwrap();
                 let seq = *sequences_by_hash.get(&node.sequence_hash).unwrap();
                 let len = end - start;
@@ -217,8 +229,18 @@ pub fn view_patches(patches: &[OperationPatch]) {
             for ((src, s_fp, s_tp), (dest, d_fp, d_tp), ()) in block_graph.all_edges() {
                 let style = if src == dest { "dashed" } else { "solid" };
                 let arrow = if src == dest { "none" } else { "normal" };
+                let headport = if dest == PATH_END_NODE_ID {
+                    "w"
+                } else {
+                    "seq:w"
+                };
+                let tailport = if src == PATH_START_NODE_ID {
+                    "e"
+                } else {
+                    "seq:e"
+                };
                 dot.push_str(&format!(
-                    "\"{src}.{s_fp}.{s_tp}\" -> \"{dest}.{d_fp}.{d_tp}\" [arrowhead={arrow}, headport=\"seq:w\", tailport=\"seq:e\", style=\"{style}\"]\n"
+                    "\"{src}.{s_fp}.{s_tp}\" -> \"{dest}.{d_fp}.{d_tp}\" [arrowhead={arrow}, headport=\"{headport}\", tailport=\"{tailport}\", style=\"{style}\"]\n"
                 ));
             }
 
