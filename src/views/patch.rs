@@ -176,7 +176,7 @@ pub fn view_patches(patches: &[OperationPatch]) {
                     format!(
                         "{s}...{e}",
                         s = seq.get_sequence(start, start + 3),
-                        e = seq.get_sequence(end - 3, end)
+                        e = seq.get_sequence(end - 2, end + 1)
                     )
                 } else {
                     seq.get_sequence(start, end + 1)
