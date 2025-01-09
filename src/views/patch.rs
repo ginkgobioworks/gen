@@ -6,10 +6,27 @@ use crate::operation_management::{
     load_changeset, load_changeset_dependencies, load_changeset_models,
 };
 use crate::patch::OperationPatch;
+use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
+use petgraph::Direction;
 use rusqlite::session::ChangesetIter;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
+
+fn get_contiguous_regions(v: &[i64]) -> Vec<(i64, i64)> {
+    let mut regions = vec![];
+    let mut last = v[0];
+    let mut start = v[0];
+    for i in v.iter().skip(1) {
+        if i - 1 != last {
+            regions.push((start, last));
+            start = *i;
+        }
+        last = *i;
+    }
+    regions.push((start, last));
+    regions
+}
 
 pub fn view_patches(patches: &[OperationPatch]) {
     for patch in patches {
@@ -47,98 +64,69 @@ pub fn view_patches(patches: &[OperationPatch]) {
         }
 
         for (bg_id, bg_edges) in bges_by_bg.iter() {
-            let mut graph: DiGraphMap<i64, ()> = DiGraphMap::new();
-            let mut node_map = HashMap::new();
-            let mut i = 1;
-            let mut edge_labels = HashMap::new();
-            let mut last_node: Option<i64> = None;
+            let mut graph: DiGraphMap<i64, (i64, i64)> = DiGraphMap::new();
             for bg_edge in bg_edges {
                 let edge = *edges_by_id.get(&bg_edge.edge_id).unwrap();
                 if Node::is_terminal(edge.source_node_id) || Node::is_terminal(edge.target_node_id)
                 {
                     continue;
                 }
-                println!("edge is {edge:?}");
-                let source_node = *nodes_by_id.get(&edge.source_node_id).unwrap();
-                let source_s = *sequences_by_hash.get(&source_node.sequence_hash).unwrap();
-                let target_node = *nodes_by_id.get(&edge.target_node_id).unwrap();
-                let target_s = *sequences_by_hash.get(&target_node.sequence_hash).unwrap();
-                let key = format!(
-                    "{name}[{start}-{end}]",
-                    name = &source_s.name,
-                    start = 0,
-                    end = edge.source_coordinate
+                graph.add_edge(
+                    edge.source_node_id,
+                    edge.target_node_id,
+                    (edge.source_coordinate, edge.target_coordinate),
                 );
-                let sn = *node_map.entry(key).or_insert_with(|| {
-                    i += 1;
-                    i
-                });
-                let key = format!(
-                    "{name}[{start}-{end}]",
-                    name = &target_s.name,
-                    start = edge.target_coordinate,
-                    end = edge.target_coordinate + target_s.length
-                );
-                let tn = *node_map.entry(key).or_insert_with(|| {
-                    i += 1;
-                    i
-                });
-                graph.add_edge(sn, tn, ());
-                let hdir;
-                let tdir;
-                if edge.source_node_id != edge.target_node_id {
-                    if let Some(ln) = last_node {
-                        if sn == ln {
-                            hdir = "n";
-                            tdir = "e";
-                        } else {
-                            hdir = "w";
-                            tdir = "n";
-                        }
-                    } else if sn == tn {
-                        hdir = "w";
-                        tdir = "e";
-                    } else {
-                        hdir = "w";
-                        tdir = "n";
-                    }
-                } else {
-                    hdir = "w";
-                    tdir = "e";
-                }
-                println!("{last_node:?} {sn} {tn}");
-                edge_labels.insert((sn, tn), format!("tailport = {tdir}, headport = {hdir}"));
-                last_node = Some(tn);
             }
 
             let path = format!("test_{bg_id}.dot");
-            use petgraph::dot::{Config, Dot};
             use std::fs::File;
             let mut file = File::create(path).unwrap();
-            let nodemap_inv: HashMap<i64, String> =
-                HashMap::from_iter(node_map.iter().map(|(k, v)| (*v, k.clone())));
-            let dot = format!(
-                "{dot:?}",
-                dot = Dot::with_attr_getters(
-                    &graph,
-                    &[Config::NodeNoLabel, Config::EdgeNoLabel],
-                    &|_, (src, dst, _)| {
-                        return edge_labels
-                            .get(&(src, dst))
-                            .unwrap_or(&"".to_string())
-                            .to_string();
-                        // if src != dst {
-                        //     return format!("headport = e, tailport = n");
-                        // }
-                        // return format!("");
-                    },
-                    &|_, (node, _weight)| format!(
-                        "label = \"{label}\"",
-                        label = nodemap_inv.get(&node).unwrap()
-                    ),
-                )
-            );
-            let dot = dot.replace("digraph {", "digraph {\nrankdir=LR");
+            let mut dot = "digraph struct {\n    rankdir=TB\n    node [shape=record]\n".to_string();
+            for node in graph.nodes() {
+                let mut labels = vec![];
+                let node_obj = *nodes_by_id.get(&node).unwrap();
+                let seq = *sequences_by_hash.get(&node_obj.sequence_hash).unwrap();
+                let mut regions: HashSet<i64> = HashSet::new();
+                for (_, _, (_, to)) in graph.edges_directed(node, Direction::Incoming) {
+                    regions.insert(*to);
+                }
+                for (_, _, (from, _)) in graph.edges_directed(node, Direction::Outgoing) {
+                    regions.insert(*from);
+                }
+                let regions = regions.into_iter().sorted().collect::<Vec<_>>();
+                let mut added = HashSet::new();
+                for (start, end) in get_contiguous_regions(&regions) {
+                    let mut label = vec![];
+                    if start != 0 {
+                        label.push("...".to_string());
+                    }
+                    for i in (start - 1..end + 2) {
+                        if !added.contains(&i) && i >= 0 && i < seq.length {
+                            label.push(format!(
+                                "{{<{i}>{i}|{bp}}}",
+                                bp = seq.get_sequence(i, i + 1)
+                            ));
+                        } else if i == seq.length {
+                            label.push(format!("{{<{i}>{i}|END}}"));
+                        }
+                        added.insert(i);
+                    }
+                    if end != seq.length {
+                        label.push("...".to_string());
+                    }
+                    labels.push(label.join("|"));
+                }
+                dot.push_str(&format!(
+                    "{node} [label=\"{label}\"]\n",
+                    label = labels.join("|")
+                ));
+            }
+
+            for (src, dest, (from, to)) in graph.all_edges() {
+                dot.push_str(&format!("{src}:{from} -> {dest}:{to}\n"));
+            }
+
+            dot.push('}');
             let _ = file.write_all(dot.as_bytes());
         }
     }
