@@ -32,7 +32,7 @@ use std::fmt::Debug;
 use std::fs::File;
 use std::io::Write;
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{io, str};
 
 #[derive(Parser)]
@@ -176,6 +176,9 @@ enum Commands {
     /// View a patch
     #[command(name = "patch-view", arg_required_else_help(true))]
     PatchView {
+        /// The prefix to save dot files under. Defaults to patch filename
+        #[arg(long, short)]
+        prefix: Option<String>,
         /// The patch file
         #[clap(index = 1)]
         patch: String,
@@ -783,13 +786,27 @@ fn main() {
             let patches = patch::load_patches(&mut f);
             patch::apply_patches(&conn, &operation_conn, &patches);
         }
-        Some(Commands::PatchView { patch }) => {
-            let mut f = File::open(patch).unwrap();
+        Some(Commands::PatchView { prefix, patch }) => {
+            let patch_path = Path::new(patch);
+            let mut f = File::open(patch_path).unwrap();
             let patches = patch::load_patches(&mut f);
             let diagrams = view_patches(&patches);
             for (patch_hash, patch_diagrams) in diagrams.iter() {
                 for (bg_id, dot) in patch_diagrams.iter() {
-                    let mut f = File::create(format!("{patch_hash}_{bg_id}.dot")).unwrap();
+                    let path = if let Some(p) = prefix {
+                        format!("{p}_{patch_hash}_{bg_id}.dot")
+                    } else {
+                        format!(
+                            "{patch_base}_{patch_hash}_{bg_id}.dot",
+                            patch_base = patch_path
+                                .with_extension("")
+                                .file_name()
+                                .unwrap()
+                                .to_str()
+                                .unwrap()
+                        )
+                    };
+                    let mut f = File::create(path).unwrap();
                     f.write_all(dot.as_bytes())
                         .expect("Failed to write diagram");
                 }

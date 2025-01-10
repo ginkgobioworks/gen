@@ -6,6 +6,7 @@ use crate::operation_management::{
     load_changeset, load_changeset_dependencies, load_changeset_models,
 };
 use crate::patch::OperationPatch;
+use html_escape;
 use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
@@ -184,7 +185,7 @@ pub fn view_patches(patches: &[OperationPatch]) -> HashMap<String, HashMap<i64, 
                 <TABLE BORDER='0'>\
                     <TR>\
                         <TD BORDER='1' ALIGN='CENTER' PORT='seq'>\
-                            <FONT POINT-SIZE='12' FACE='Monospace'>{formatted_seq}</FONT>\
+                            <FONT POINT-SIZE='12' FACE='Monospace'>{escaped_seq}</FONT>\
                         </TD>\
                     </TR>\
                     <TR>\
@@ -193,7 +194,8 @@ pub fn view_patches(patches: &[OperationPatch]) -> HashMap<String, HashMap<i64, 
                         </TD>\
                     </TR>\
                 </TABLE>\
-                >"
+                >",
+                    escaped_seq = html_escape::encode_safe(&formatted_seq)
                 );
 
                 dot.push_str(&format!("\"{segment_id}\" [label={label}]\n",));
