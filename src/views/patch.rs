@@ -11,24 +11,7 @@ use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
 use rusqlite::session::ChangesetIter;
 use std::collections::{HashMap, HashSet};
-use std::io::{Read, Write};
-
-fn get_contiguous_regions(v: &[i64]) -> Vec<(i64, i64)> {
-    let mut regions = vec![];
-    if !v.is_empty() {
-        let mut last = v[0];
-        let mut start = v[0];
-        for i in v.iter().skip(1) {
-            if i - 1 != last {
-                regions.push((start, last));
-                start = *i;
-            }
-            last = *i;
-        }
-        regions.push((start, last));
-    }
-    regions
-}
+use std::io::Read;
 
 pub fn view_patches(patches: &[OperationPatch]) -> HashMap<String, HashMap<i64, String>> {
     // For each blockgroup in a patch, a
@@ -240,30 +223,4 @@ pub fn view_patches(patches: &[OperationPatch]) -> HashMap<String, HashMap<i64, 
         diagrams.insert(patch.operation.hash.clone(), bg_dots);
     }
     diagrams
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[cfg(test)]
-    mod contiguous_regions {
-        use super::*;
-        #[test]
-        fn test_merges_intervals() {
-            let v = vec![1, 2, 3, 6, 7, 9];
-            assert_eq!(get_contiguous_regions(&v), vec![(1, 3), (6, 7), (9, 9)]);
-        }
-
-        #[test]
-        fn test_empty_intervals() {
-            let v = vec![];
-            assert!(get_contiguous_regions(&v).is_empty());
-        }
-
-        #[test]
-        fn test_single_interval() {
-            let v = vec![1];
-            assert_eq!(get_contiguous_regions(&v), vec![(1, 1)]);
-        }
-    }
 }

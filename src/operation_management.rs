@@ -519,44 +519,28 @@ pub fn apply_changeset(
                 .0;
             match table {
                 "samples" => {
-                    Sample::get_or_create(
-                        conn,
-                        str::from_utf8(item.new_value(pk_column).unwrap().as_bytes().unwrap())
-                            .unwrap(),
-                    );
+                    Sample::get_or_create(conn, &parse_string(item, pk_column));
                 }
                 "sequences" => {
                     Sequence::new()
-                        .sequence_type(
-                            str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap()).unwrap(),
-                        )
-                        .sequence(
-                            str::from_utf8(item.new_value(2).unwrap().as_bytes().unwrap()).unwrap(),
-                        )
-                        .name(
-                            str::from_utf8(item.new_value(3).unwrap().as_bytes().unwrap()).unwrap(),
-                        )
-                        .file_path(
-                            str::from_utf8(item.new_value(4).unwrap().as_bytes().unwrap()).unwrap(),
-                        )
-                        .length(item.new_value(5).unwrap().as_i64().unwrap())
+                        .sequence_type(&parse_string(item, 1))
+                        .sequence(&parse_string(item, 2))
+                        .name(&parse_string(item, 3))
+                        .file_path(&parse_string(item, 4))
+                        .length(parse_number(item, 5))
                         .save(conn);
                 }
                 "block_groups" => {
-                    let bg_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
+                    let bg_pk = parse_number(item, pk_column);
                     if let Some(v) = dep_bg_map.get(&bg_pk) {
                         blockgroup_map.insert(bg_pk, *v);
                     } else {
-                        let sample_name: Option<&str> =
-                            match item.new_value(2).unwrap().as_bytes_or_null().unwrap() {
-                                Some(v) => Some(str::from_utf8(v).unwrap()),
-                                None => None,
-                            };
+                        let sample_name = parse_maybe_string(item, 2);
                         let new_bg = BlockGroup::create(
                             conn,
-                            str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap()).unwrap(),
-                            sample_name,
-                            str::from_utf8(item.new_value(3).unwrap().as_bytes().unwrap()).unwrap(),
+                            &parse_string(item, 1),
+                            sample_name.as_deref(),
+                            &parse_string(item, 3),
                         );
                         blockgroup_map.insert(bg_pk, new_bg.id);
                     };
@@ -564,40 +548,32 @@ pub fn apply_changeset(
                 "paths" => {
                     // defer path creation until edges are made
                     insert_paths.push(Path {
-                        id: item.new_value(pk_column).unwrap().as_i64().unwrap(),
-                        block_group_id: item.new_value(1).unwrap().as_i64().unwrap(),
-                        name: str::from_utf8(item.new_value(2).unwrap().as_bytes().unwrap())
-                            .unwrap()
-                            .to_string(),
+                        id: parse_number(item, pk_column),
+                        block_group_id: parse_number(item, 1),
+                        name: parse_string(item, 2),
                     });
                 }
                 "nodes" => {
-                    let node_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
+                    let node_pk = parse_number(item, pk_column);
                     node_map.insert(
                         node_pk,
                         (
-                            str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
-                                .unwrap()
-                                .to_string(),
-                            item.new_value(2)
-                                .unwrap()
-                                .as_str_or_null()
-                                .unwrap()
-                                .map(|s| s.to_string()),
+                            parse_string(item, 1),
+                            parse_maybe_string(item, 2).map(|s| s.to_string()),
                         ),
                     );
                 }
                 "edges" => {
-                    let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
+                    let edge_pk = parse_number(item, pk_column);
                     edge_map.insert(
                         edge_pk,
                         EdgeData {
-                            source_node_id: item.new_value(1).unwrap().as_i64().unwrap(),
-                            source_coordinate: item.new_value(2).unwrap().as_i64().unwrap(),
+                            source_node_id: parse_number(item, 1),
+                            source_coordinate: parse_number(item, 2),
                             source_strand: Strand::column_result(item.new_value(3).unwrap())
                                 .unwrap(),
-                            target_node_id: item.new_value(4).unwrap().as_i64().unwrap(),
-                            target_coordinate: item.new_value(5).unwrap().as_i64().unwrap(),
+                            target_node_id: parse_number(item, 4),
+                            target_coordinate: parse_number(item, 5),
                             target_strand: Strand::column_result(item.new_value(6).unwrap())
                                 .unwrap(),
                         },
@@ -631,12 +607,10 @@ pub fn apply_changeset(
                 "accessions" => {
                     // we defer accession creation until edges and paths are made
                     insert_accessions.push(Accession {
-                        id: item.new_value(pk_column).unwrap().as_i64().unwrap(),
-                        name: str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
-                            .unwrap()
-                            .to_string(),
-                        path_id: item.new_value(2).unwrap().as_i64().unwrap(),
-                        parent_accession_id: item.new_value(2).unwrap().as_i64_or_null().unwrap(),
+                        id: parse_number(item, pk_column),
+                        name: parse_string(item, 1),
+                        path_id: parse_number(item, 2),
+                        parent_accession_id: parse_maybe_number(item, 2),
                     });
                 }
                 "accession_edges" => {
