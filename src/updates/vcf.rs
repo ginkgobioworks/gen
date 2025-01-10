@@ -11,9 +11,8 @@ use crate::models::{
     traits::*,
 };
 use crate::operation_management::{end_operation, start_operation, OperationError};
-use crate::progress_bar::{add_saving_operation_bar, get_progress_bar};
+use crate::progress_bar::{add_saving_operation_bar, get_handler, get_progress_bar};
 use crate::{calculate_hash, parse_genotype};
-use indicatif::MultiProgress;
 use noodles::vcf;
 use noodles::vcf::variant::record::info::field::Value as InfoValue;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;
@@ -183,7 +182,7 @@ pub fn update_with_vcf<'a>(
     operation_conn: &Connection,
     coordinate_frame: impl Into<Option<&'a str>>,
 ) -> Result<Operation, VcfError> {
-    let progress_bar = MultiProgress::new();
+    let progress_bar = get_handler();
     let coordinate_frame = coordinate_frame.into();
 
     let mut session = start_operation(conn);

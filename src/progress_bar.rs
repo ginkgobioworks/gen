@@ -1,5 +1,14 @@
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::time::Duration;
+
+pub fn get_handler() -> MultiProgress {
+    let p = MultiProgress::new();
+    #[cfg(test)]
+    {
+        p.set_draw_target(ProgressDrawTarget::hidden())
+    }
+    p
+}
 
 pub fn get_progress_bar(length: impl Into<Option<u64>>) -> ProgressBar {
     let length = length.into();

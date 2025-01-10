@@ -15,8 +15,7 @@ use crate::models::{
     sequence::Sequence,
     strand::Strand,
 };
-use crate::progress_bar::{get_progress_bar, get_time_elapsed_bar};
-use indicatif::MultiProgress;
+use crate::progress_bar::{get_handler, get_progress_bar, get_time_elapsed_bar};
 
 fn bool_to_strand(direction: bool) -> Strand {
     if direction {
@@ -32,7 +31,7 @@ pub fn import_gfa<'a>(
     sample_name: impl Into<Option<&'a str>>,
     conn: &Connection,
 ) {
-    let progress_bar = MultiProgress::new();
+    let progress_bar = get_handler();
     Collection::create(conn, collection_name);
     let sample_name = sample_name.into();
     if let Some(sample_name) = sample_name {
