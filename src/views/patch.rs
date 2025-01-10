@@ -151,7 +151,7 @@ pub fn view_patches(patches: &[OperationPatch]) -> HashMap<String, HashMap<i64, 
 
             let mut dot = "digraph {\n    rankdir=LR\n    node [shape=none]\n".to_string();
             for (node_id, start, end) in block_graph.nodes() {
-                let segment_id = format!("{node_id}.{start}.{end}");
+                let block_id = format!("{node_id}.{start}.{end}");
                 if Node::is_terminal(node_id) {
                     let label = if Node::is_start_node(node_id) {
                         "start"
@@ -159,7 +159,7 @@ pub fn view_patches(patches: &[OperationPatch]) -> HashMap<String, HashMap<i64, 
                         "end"
                     };
                     dot.push_str(&format!(
-                        "\"{segment_id}\" [label=\"{label}\", shape=ellipse]\n",
+                        "\"{block_id}\" [label=\"{label}\", shape=ellipse]\n",
                     ));
                     continue;
                 }
@@ -198,12 +198,15 @@ pub fn view_patches(patches: &[OperationPatch]) -> HashMap<String, HashMap<i64, 
                     escaped_seq = html_escape::encode_safe(&formatted_seq)
                 );
 
-                dot.push_str(&format!("\"{segment_id}\" [label={label}]\n",));
+                dot.push_str(&format!("\"{block_id}\" [label={label}]\n",));
             }
 
             for ((src, s_fp, s_tp), (dest, d_fp, d_tp), ()) in block_graph.all_edges() {
-                let style = if src == dest { "dashed" } else { "solid" };
-                let arrow = if src == dest { "none" } else { "normal" };
+                // Edges between adjacent blocks from the same node don't have an arrowhead
+                // and are dashed because they represent the reference and can't be traversed.
+                // TODO: In a heterozygous genome this isn't true. Check needs to be expanded.
+                let style = if src == dest && d_fp == s_tp + 1 { "dashed" } else { "solid" };
+                let arrow = if src == dest && d_fp == s_tp + 1 { "none" } else { "normal" };
                 let headport = if Node::is_end_node(dest) {
                     "w"
                 } else {
