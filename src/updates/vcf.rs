@@ -21,6 +21,8 @@ use noodles::vcf::variant::record::samples::series::Value;
 use noodles::vcf::variant::record::samples::Sample as NoodlesSample;
 use noodles::vcf::variant::record::AlternateBases;
 use noodles::vcf::variant::Record;
+use regex;
+use regex::Regex;
 use rusqlite;
 use rusqlite::{types::Value as SQLValue, Connection};
 use std::collections::{HashMap, HashSet};
@@ -157,13 +159,13 @@ fn prepare_change(
 }
 
 #[derive(Debug)]
-struct VcfEntry<'a> {
+struct VcfEntry {
     block_group_id: i64,
     sample_name: String,
     path: Path,
     ids: Option<String>,
     ref_start: i64,
-    alt_seq: &'a str,
+    alt_seq: String,
     chromosome_index: i64,
     phased: i64,
 }
@@ -185,6 +187,7 @@ pub fn update_with_vcf<'a>(
 ) -> Result<Operation, VcfError> {
     let progress_bar = MultiProgress::new();
     let coordinate_frame = coordinate_frame.into();
+    let cnv_re = Regex::new(r"(?x)<CN(?P<count>\d+)>").unwrap();
 
     let mut session = start_operation(conn);
 
@@ -265,12 +268,18 @@ pub fn update_with_vcf<'a>(
                         .filter(|_| gt.allele as i32 == accession_allele);
                     let mut ref_start = (record.variant_start().unwrap().unwrap().get() - 1) as i64;
                     if gt.allele != 0 {
-                        let mut alt_seq = alt_alleles[chromosome_index - 1];
+                        let mut alt_seq = alt_alleles[chromosome_index - 1].to_string();
+                        let is_cnv = cnv_re.captures(&alt_seq);
+                        if let Some(cap) = is_cnv {
+                            let count: usize =
+                                cap["count"].parse().expect("Invalid CN specification");
+                            alt_seq = ref_seq.to_string().repeat(count);
+                        }
                         // If the alt sequence is a deletion, we want to remove the base in common in the VCF spec.
                         // So if VCF says ATC -> A, we don't want to include the `A` in the alt_seq.
-                        if alt_seq != "*" && alt_seq.len() < ref_seq.len() {
+                        if !alt_seq.is_empty() && alt_seq != "*" && alt_seq.len() < ref_seq.len() {
                             ref_start += 1;
-                            alt_seq = &alt_seq[1..];
+                            alt_seq = alt_seq[1..].to_string();
                         }
                         let phased = match gt.phasing {
                             Phasing::Phased => 1,
@@ -338,11 +347,20 @@ pub fn update_with_vcf<'a>(
                                     let allele_accession = accession_name
                                         .clone()
                                         .filter(|_| allele as i32 == accession_allele);
+                                    let mut alt_seq = alt_alleles[allele - 1].to_string();
+                                    let is_cnv = cnv_re.captures(&alt_seq);
+                                    if let Some(cap) = is_cnv {
+                                        let count: usize =
+                                            cap["count"].parse().expect("Invalid CN specification");
+                                        alt_seq = ref_seq.to_string().repeat(count);
+                                    }
                                     if allele != 0 {
-                                        let mut alt_seq = alt_alleles[allele - 1];
-                                        if alt_seq != "*" && alt_seq.len() < ref_seq.len() {
+                                        if !alt_seq.is_empty()
+                                            && alt_seq != "*"
+                                            && alt_seq.len() < ref_seq.len()
+                                        {
                                             ref_start += 1;
-                                            alt_seq = &alt_seq[1..];
+                                            alt_seq = alt_seq[1..].to_string();
                                         }
                                         let sample_path = PathCache::lookup(
                                             &mut path_cache,
@@ -723,6 +741,48 @@ mod tests {
                 .iter()
                 .map(|v| v.to_string())
             )
+        );
+    }
+
+    #[test]
+    fn test_parses_cnvs() {
+        setup_gen_dir();
+        let vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple_cnv.vcf");
+        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            None,
+            false,
+            conn,
+            op_conn,
+        )
+        .unwrap();
+
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, "foo").id, true),
+            HashSet::from_iter(vec![
+                "ATCGATCGATCGGATCGGGAACACACAGAGA".to_string(),
+                "ATCGATCGATCGATCATCATCGATCGGGAACACACAGAGA".to_string()
+            ])
         );
     }
 

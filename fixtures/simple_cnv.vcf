@@ -1,0 +1,7 @@
+##fileformat=VCFv4.1
+##filedate=Tue Sep  4 13:12:57 2018
+##reference=simple.fa
+##contig=<ID=m123,length=34>
+##phasing=none
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	foo
+m123	13	.	ATC	<CN0>,<CN2>,<CN3>,<CN4>	1611.92	.	TYPE=SV	GT	1/3
