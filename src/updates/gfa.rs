@@ -49,9 +49,9 @@ pub fn update_with_gfa(
     let mut path_segments_by_name = HashMap::new();
     for path in &gfa.paths {
         let path_name = path.name.clone();
-        path_segments_by_name.insert(path_name.clone(), path.nodes.clone());
+        path_segments_by_name.insert(path_name.clone(), path.segments.clone());
         let mut path_segments = vec![];
-        for segment_id in path.nodes.iter() {
+        for segment_id in path.segments.iter() {
             let sequence = segments_by_id
                 .get(segment_id)
                 .unwrap()
@@ -74,9 +74,9 @@ pub fn update_with_gfa(
     // Same thing as with paths, but for walks
     for walk in &gfa.walk {
         let walk_name = walk.sample_id.clone();
-        path_segments_by_name.insert(walk_name.clone(), walk.walk_id.clone());
+        path_segments_by_name.insert(walk_name.clone(), walk.segments.clone());
         let mut walk_segments = vec![];
-        for segment_id in walk.walk_id.iter() {
+        for segment_id in walk.segments.iter() {
             let sequence = segments_by_id
                 .get(segment_id)
                 .unwrap()
@@ -111,7 +111,7 @@ pub fn update_with_gfa(
     for path in &gfa.paths {
         let path_name = &path.name;
         if matched_path_names.contains(path_name.as_str()) {
-            for segment_id in path.nodes.iter() {
+            for segment_id in path.segments.iter() {
                 matched_path_name_by_segment_id.insert(segment_id, path_name);
             }
         } else {
@@ -122,7 +122,7 @@ pub fn update_with_gfa(
     for walk in &gfa.walk {
         let walk_name = &walk.sample_id;
         if matched_path_names.contains(walk_name.as_str()) {
-            for segment_id in walk.walk_id.iter() {
+            for segment_id in walk.segments.iter() {
                 matched_path_name_by_segment_id.insert(segment_id, walk_name);
             }
         } else {
@@ -235,6 +235,8 @@ fn create_new_path_from_existing(
 
             let target_coordinate =
                 block_with_start.sequence_start + *start as i64 - block_with_start.start;
+            // NOTE: We're assuming that if the previous segment was on the same node ID as the
+            // block with the start coordinate, they are contiguous, so no new edge is needed
             if previous_node_id != block_with_start.node_id {
                 new_path_edges.push(EdgeData {
                     source_node_id: previous_node_id,
@@ -409,6 +411,61 @@ mod tests {
             None,
             "applied diff",
             gfa_diff_path.to_str().unwrap(),
+        );
+
+        let expected_sequences = vec![
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+        ];
+        let block_groups = BlockGroup::query(
+            conn,
+            "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
+            rusqlite::params!(
+                SQLValue::from(collection),
+                SQLValue::from("applied diff".to_string()),
+            ),
+        );
+        assert_eq!(block_groups.len(), 1);
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, block_groups[0].id, false),
+            HashSet::from_iter(expected_sequences),
+        );
+    }
+
+    #[test]
+    fn test_update_with_walks() {
+        // Same as previous test, but with walks instead of paths in the GFA
+        setup_gen_dir();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            None,
+            false,
+            conn,
+            op_conn,
+        )
+        .unwrap();
+
+        let mut gfa_update_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        gfa_update_path.push("fixtures/walk-diff.gfa");
+
+        let _ = update_with_gfa(
+            conn,
+            op_conn,
+            &collection,
+            None,
+            "applied diff",
+            gfa_update_path.to_str().unwrap(),
         );
 
         let expected_sequences = vec![
