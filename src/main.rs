@@ -30,6 +30,7 @@ use noodles::core::Region;
 use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
 use std::fs::File;
+use std::io::Write;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::{io, str};
@@ -785,7 +786,14 @@ fn main() {
         Some(Commands::PatchView { patch }) => {
             let mut f = File::open(patch).unwrap();
             let patches = patch::load_patches(&mut f);
-            view_patches(&patches);
+            let diagrams = view_patches(&patches);
+            for (patch_hash, patch_diagrams) in diagrams.iter() {
+                for (bg_id, dot) in patch_diagrams.iter() {
+                    let mut f = File::create(format!("{patch_hash}_{bg_id}.dot")).unwrap();
+                    f.write_all(dot.as_bytes())
+                        .expect("Failed to write diagram");
+                }
+            }
         }
         None => {}
         // these will never be handled by this method as we search for them earlier.
