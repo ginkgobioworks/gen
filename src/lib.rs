@@ -18,7 +18,7 @@ pub mod operation_management;
 pub mod patch;
 mod progress_bar;
 pub mod range;
-// #[cfg(test)]
+#[cfg(test)]
 pub mod test_helpers;
 pub mod updates;
 pub mod views;

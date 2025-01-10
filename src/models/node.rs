@@ -130,6 +130,32 @@ impl Node {
     }
 
     pub fn is_terminal(node_id: i64) -> bool {
-        node_id == PATH_START_NODE_ID || node_id == PATH_END_NODE_ID
+        Node::is_start_node(node_id) || Node::is_end_node(node_id)
+    }
+
+    pub fn is_start_node(node_id: i64) -> bool {
+        node_id == PATH_START_NODE_ID
+    }
+
+    pub fn is_end_node(node_id: i64) -> bool {
+        node_id == PATH_END_NODE_ID
+    }
+
+    pub fn get_start_node() -> Node {
+        Node {
+            id: PATH_START_NODE_ID,
+            sequence_hash: "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+                .to_string(),
+            hash: None,
+        }
+    }
+
+    pub fn get_end_node() -> Node {
+        Node {
+            id: PATH_END_NODE_ID,
+            sequence_hash: "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+                .to_string(),
+            hash: None,
+        }
     }
 }

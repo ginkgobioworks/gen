@@ -151,11 +151,10 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                     let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
                     let source_node_id = item.new_value(1).unwrap().as_i64().unwrap();
                     let target_node_id = item.new_value(4).unwrap().as_i64().unwrap();
-                    println!("new edge {source_node_id} {target_node_id}");
                     created_edges.insert(edge_pk);
                     let nodes = Node::get_nodes(conn, &[source_node_id, target_node_id]);
                     for node in nodes.iter() {
-                        if !created_nodes.contains(&node.id) {
+                        if !created_nodes.contains(&node.id) && !Node::is_terminal(node.id) {
                             previous_sequences.insert(node.sequence_hash.clone());
                             previous_nodes.insert(node.id);
                         }
@@ -430,7 +429,7 @@ pub fn apply_changeset(
 
     let mut dep_node_map = HashMap::new();
     for node in dependencies.nodes.iter() {
-        let new_node_id = Node::create(conn, &node.sequence_hash.clone(), None);
+        let new_node_id = Node::create(conn, &node.sequence_hash, node.hash.clone());
         dep_node_map.insert(&node.id, new_node_id);
     }
 

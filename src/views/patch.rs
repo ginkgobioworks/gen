@@ -1,6 +1,6 @@
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::Edge;
-use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
+use crate::models::node::Node;
 use crate::models::sequence::Sequence;
 use crate::operation_management::{
     load_changeset, load_changeset_dependencies, load_changeset_models,
@@ -15,34 +15,32 @@ use std::io::{Read, Write};
 
 fn get_contiguous_regions(v: &[i64]) -> Vec<(i64, i64)> {
     let mut regions = vec![];
-    let mut last = v[0];
-    let mut start = v[0];
-    for i in v.iter().skip(1) {
-        if i - 1 != last {
-            regions.push((start, last));
-            start = *i;
+    if !v.is_empty() {
+        let mut last = v[0];
+        let mut start = v[0];
+        for i in v.iter().skip(1) {
+            if i - 1 != last {
+                regions.push((start, last));
+                start = *i;
+            }
+            last = *i;
         }
-        last = *i;
+        regions.push((start, last));
     }
-    regions.push((start, last));
     regions
 }
 
-pub fn view_patches(patches: &[OperationPatch]) {
-    let START_NODE = Node {
-        id: PATH_START_NODE_ID,
-        sequence_hash: "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
-            .to_string(),
-        hash: None,
-    };
+pub fn view_patches(patches: &[OperationPatch]) -> HashMap<String, HashMap<i64, String>> {
+    // For each blockgroup in a patch, a
+    let start_node = Node::get_start_node();
+    let end_node = Node::get_end_node();
+    let mut diagrams: HashMap<String, HashMap<i64, String>> = HashMap::new();
 
-    let END_NODE = Node {
-        id: PATH_END_NODE_ID,
-        sequence_hash: "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
-            .to_string(),
-        hash: None,
-    };
     for patch in patches {
+        // The beginning work is loading the models from the patch as well as dependencies. Once
+        // loaded, a graph is created of the added nodes and returned as a dot string
+        let mut bg_dots: HashMap<i64, String> = HashMap::new();
+
         let op_info = &patch.operation;
         let changeset = load_changeset(op_info);
         let dependencies = load_changeset_dependencies(op_info);
@@ -54,8 +52,8 @@ pub fn view_patches(patches: &[OperationPatch]) {
         let mut bges_by_bg: HashMap<i64, Vec<&BlockGroupEdge>> = HashMap::new();
         let mut edges_by_id: HashMap<i64, &Edge> = HashMap::new();
         let mut nodes_by_id: HashMap<i64, &Node> = HashMap::new();
-        nodes_by_id.insert(START_NODE.id, &START_NODE);
-        nodes_by_id.insert(END_NODE.id, &END_NODE);
+        nodes_by_id.insert(start_node.id, &start_node);
+        nodes_by_id.insert(end_node.id, &end_node);
         let mut sequences_by_hash: HashMap<&String, &Sequence> = HashMap::new();
 
         for bge in new_models.block_group_edges.iter() {
@@ -79,19 +77,20 @@ pub fn view_patches(patches: &[OperationPatch]) {
         }
 
         for (bg_id, bg_edges) in bges_by_bg.iter() {
+            // There are 2 graphs created here. The first graph is our normal graph of nodes
+            // and edges. This graph is then used to make our second graph representing the spans
+            // of each node (blocks).
             let mut graph: DiGraphMap<i64, (i64, i64)> = DiGraphMap::new();
             let mut block_graph: DiGraphMap<(i64, i64, i64), ()> = DiGraphMap::new();
-            block_graph.add_node((PATH_START_NODE_ID, 0, 0));
-            block_graph.add_node((PATH_END_NODE_ID, 0, 0));
+            block_graph.add_node((start_node.id, 0, 0));
+            block_graph.add_node((end_node.id, 0, 0));
             for bg_edge in bg_edges {
                 let edge = *edges_by_id.get(&bg_edge.edge_id).unwrap();
-                if edge.target_node_id == PATH_END_NODE_ID {
-                    graph.add_edge(
-                        edge.source_node_id,
-                        edge.target_node_id,
-                        (edge.source_coordinate - 1, edge.target_coordinate),
-                    );
-                } else if edge.source_node_id == PATH_START_NODE_ID {
+                // Because our model is an edge graph, the coordinate where an edge occurs is
+                // actually offset from the block. So we need to adjust coordinates when going
+                // to blocks. This isn't true for our start node though, which has a source
+                // coordinate of 0.
+                if Node::is_start_node(edge.source_node_id) {
                     graph.add_edge(
                         edge.source_node_id,
                         edge.target_node_id,
@@ -107,16 +106,19 @@ pub fn view_patches(patches: &[OperationPatch]) {
             }
 
             for node in graph.nodes() {
-                if node == PATH_START_NODE_ID || node == PATH_END_NODE_ID {
+                // This is where we make the block graph. For this, we figure out the positions of
+                // all incoming and outgoing edges from the node. Then we make blocks between those
+                // positions.
+                if Node::is_terminal(node) {
                     continue;
                 }
                 let in_ports = graph
                     .edges_directed(node, Direction::Incoming)
-                    .map(|(src, dest, (fp, tp))| *tp)
+                    .map(|(_src, _dest, (_fp, tp))| *tp)
                     .collect::<Vec<_>>();
                 let out_ports = graph
                     .edges_directed(node, Direction::Outgoing)
-                    .map(|(src, dest, (fp, tp))| *fp)
+                    .map(|(_src, _dest, (fp, _tp))| *fp)
                     .collect::<Vec<_>>();
 
                 let node_obj = *nodes_by_id.get(&node).unwrap();
@@ -154,28 +156,26 @@ pub fn view_patches(patches: &[OperationPatch]) {
             for (src, dest, (fp, tp)) in graph.all_edges() {
                 let source_block = block_graph
                     .nodes()
-                    .find(|(node, start, end)| *node == src && end == fp)
+                    .find(|(node, _start, end)| *node == src && end == fp)
                     .unwrap();
                 let dest_block = block_graph
                     .nodes()
-                    .find(|(node, start, end)| *node == dest && start == tp)
+                    .find(|(node, start, _end)| *node == dest && start == tp)
                     .unwrap();
                 block_graph.add_edge(source_block, dest_block, ());
             }
 
-            let path = format!("test_{bg_id}.dot");
-            use std::fs::File;
-            let mut file = File::create(path).unwrap();
             let mut dot = "digraph {\n    rankdir=LR\n    node [shape=none]\n".to_string();
             for (node_id, start, end) in block_graph.nodes() {
+                let segment_id = format!("{node_id}.{start}.{end}");
                 if Node::is_terminal(node_id) {
-                    let label = if node_id == PATH_START_NODE_ID {
+                    let label = if Node::is_start_node(node_id) {
                         "start"
                     } else {
                         "end"
                     };
                     dot.push_str(&format!(
-                        "\"{node_id}.{start}.{end}\" [label=\"{label}\", shape=ellipse]\n",
+                        "\"{segment_id}\" [label=\"{label}\", shape=ellipse]\n",
                     ));
                     continue;
                 }
@@ -190,21 +190,11 @@ pub fn view_patches(patches: &[OperationPatch]) {
                         s = seq.get_sequence(start, start + 3),
                         e = seq.get_sequence(end - 2, end + 1)
                     )
-                } else if node_id == PATH_START_NODE_ID {
-                    "start".to_string()
-                } else if node_id == PATH_END_NODE_ID {
-                    "end".to_string()
                 } else {
                     seq.get_sequence(start, end + 1)
                 };
 
-                let coordinates = if end - start > 0 {
-                    format!("{node_id}:{start}-{end}")
-                } else if start > 0 {
-                    format!("{node_id}:{start}")
-                } else {
-                    format!("{node_id}")
-                };
+                let coordinates = format!("{node_id}:{start}-{end}");
 
                 let label = format!(
                     "<\
@@ -223,18 +213,18 @@ pub fn view_patches(patches: &[OperationPatch]) {
                 >"
                 );
 
-                dot.push_str(&format!("\"{node_id}.{start}.{end}\" [label={label}]\n",));
+                dot.push_str(&format!("\"{segment_id}\" [label={label}]\n",));
             }
 
             for ((src, s_fp, s_tp), (dest, d_fp, d_tp), ()) in block_graph.all_edges() {
                 let style = if src == dest { "dashed" } else { "solid" };
                 let arrow = if src == dest { "none" } else { "normal" };
-                let headport = if dest == PATH_END_NODE_ID {
+                let headport = if Node::is_end_node(dest) {
                     "w"
                 } else {
                     "seq:w"
                 };
-                let tailport = if src == PATH_START_NODE_ID {
+                let tailport = if Node::is_start_node(src) {
                     "e"
                 } else {
                     "seq:e"
@@ -245,7 +235,35 @@ pub fn view_patches(patches: &[OperationPatch]) {
             }
 
             dot.push('}');
-            let _ = file.write_all(dot.as_bytes());
+            bg_dots.insert(*bg_id, dot);
+        }
+        diagrams.insert(patch.operation.hash.clone(), bg_dots);
+    }
+    diagrams
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(test)]
+    mod contiguous_regions {
+        use super::*;
+        #[test]
+        fn test_merges_intervals() {
+            let v = vec![1, 2, 3, 6, 7, 9];
+            assert_eq!(get_contiguous_regions(&v), vec![(1, 3), (6, 7), (9, 9)]);
+        }
+
+        #[test]
+        fn test_empty_intervals() {
+            let v = vec![];
+            assert!(get_contiguous_regions(&v).is_empty());
+        }
+
+        #[test]
+        fn test_single_interval() {
+            let v = vec![1];
+            assert_eq!(get_contiguous_regions(&v), vec![(1, 1)]);
         }
     }
 }
