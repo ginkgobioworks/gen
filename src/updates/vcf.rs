@@ -347,14 +347,15 @@ pub fn update_with_vcf<'a>(
                                     let allele_accession = accession_name
                                         .clone()
                                         .filter(|_| allele as i32 == accession_allele);
-                                    let mut alt_seq = alt_alleles[allele - 1].to_string();
-                                    let is_cnv = cnv_re.captures(&alt_seq);
-                                    if let Some(cap) = is_cnv {
-                                        let count: usize =
-                                            cap["count"].parse().expect("Invalid CN specification");
-                                        alt_seq = ref_seq.to_string().repeat(count);
-                                    }
                                     if allele != 0 {
+                                        let mut alt_seq = alt_alleles[allele - 1].to_string();
+                                        let is_cnv = cnv_re.captures(&alt_seq);
+                                        if let Some(cap) = is_cnv {
+                                            let count: usize = cap["count"]
+                                                .parse()
+                                                .expect("Invalid CN specification");
+                                            alt_seq = ref_seq.to_string().repeat(count);
+                                        }
                                         if !alt_seq.is_empty()
                                             && alt_seq != "*"
                                             && alt_seq.len() < ref_seq.len()
