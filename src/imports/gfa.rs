@@ -77,7 +77,7 @@ pub fn import_gfa<'a>(
         let mut source_node_id = PATH_START_NODE_ID;
         let mut source_coordinate = 0;
         let mut source_strand = Strand::Forward;
-        for (index, segment_id) in input_path.nodes.iter().enumerate() {
+        for (index, segment_id) in input_path.segments.iter().enumerate() {
             let target = sequences_by_segment_id.get(segment_id).unwrap();
             let target_node_id = *node_ids_by_segment_id.get(segment_id).unwrap();
             let target_strand = bool_to_strand(input_path.dir[index]);
@@ -109,7 +109,7 @@ pub fn import_gfa<'a>(
         let mut source_node_id = PATH_START_NODE_ID;
         let mut source_coordinate = 0;
         let mut source_strand = Strand::Forward;
-        for (index, segment_id) in input_walk.walk_id.iter().enumerate() {
+        for (index, segment_id) in input_walk.segments.iter().enumerate() {
             let target = sequences_by_segment_id.get(segment_id).unwrap();
             let target_node_id = *node_ids_by_segment_id.get(segment_id).unwrap();
             let target_strand = bool_to_strand(input_walk.walk_dir[index]);
@@ -169,7 +169,7 @@ pub fn import_gfa<'a>(
         let mut source_coordinate = 0;
         let mut source_strand = Strand::Forward;
         let mut path_edge_ids = vec![];
-        for (index, segment_id) in input_path.nodes.iter().enumerate() {
+        for (index, segment_id) in input_path.segments.iter().enumerate() {
             let target = sequences_by_segment_id.get(segment_id).unwrap();
             let target_node_id = *node_ids_by_segment_id.get(segment_id).unwrap();
             let target_strand = bool_to_strand(input_path.dir[index]);
@@ -204,7 +204,7 @@ pub fn import_gfa<'a>(
         let mut source_coordinate = 0;
         let mut source_strand = Strand::Forward;
         let mut path_edge_ids = vec![];
-        for (index, segment_id) in input_walk.walk_id.iter().enumerate() {
+        for (index, segment_id) in input_walk.segments.iter().enumerate() {
             let target = sequences_by_segment_id.get(segment_id).unwrap();
             let target_node_id = *node_ids_by_segment_id.get(segment_id).unwrap();
             let target_strand = bool_to_strand(input_walk.walk_dir[index]);

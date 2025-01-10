@@ -159,7 +159,7 @@ pub struct Link<T: SampleType, S: Opt, U: Opt> {
 pub struct Path<T: SampleType, S: Opt, U: Opt> {
     pub name: String,
     pub dir: Vec<bool>,
-    pub nodes: Vec<T>,
+    pub segments: Vec<T>,
     pub overlap: U,
     pub opt: S,
 }
@@ -173,7 +173,7 @@ pub struct Walk<T: SampleType, S: Opt> {
     pub seq_start: i32,
     pub seq_end: i32,
     pub walk_dir: Vec<bool>,
-    pub walk_id: Vec<T>,
+    pub segments: Vec<T>,
     pub opt: S,
 }
 
@@ -301,7 +301,7 @@ impl<T: SampleType + Ord + Clone, S: Opt + Ord + Clone, U: Opt> Gfa<T, S, U> {
                         z.paths.push(Path {
                             name,
                             dir: dirs,
-                            nodes: node_id,
+                            segments: node_id,
                             overlap: U::parse1(overlap, &mut z.sequence),
                             opt: S::parse1(split_line.next(), &mut z.sequence),
                         });
@@ -321,7 +321,7 @@ impl<T: SampleType + Ord + Clone, S: Opt + Ord + Clone, U: Opt> Gfa<T, S, U> {
                             seq_start,
                             seq_end,
                             walk_dir: w1,
-                            walk_id: w2,
+                            segments: w2,
                             opt: S::parse1(opt, &mut z.sequence),
                         });
                     }
@@ -382,7 +382,7 @@ impl<T: SampleType + Ord + Clone, S: Opt + Ord + Clone, U: Opt> Gfa<T, S, U> {
                     + "-"
                     + &walk.seq_end.to_string(),
                 dir: walk.walk_dir.clone(),
-                nodes: walk.walk_id.to_vec(),
+                segments: walk.segments.to_vec(),
                 overlap: U::parse1(None, &mut self.sequence),
                 opt: walk.opt.clone(),
             });
@@ -506,7 +506,7 @@ fn walk_parser<T: SampleType>(walk: &str, s1: &mut String) -> (Vec<bool>, Vec<T>
     (dirs, node_id)
 }
 
-pub fn fill_nodes(graph: &mut Gfa<u32, (), ()>) {
+pub fn fill_segments(graph: &mut Gfa<u32, (), ()>) {
     graph.segments.sort();
 
     let mut filled_vec = Vec::new();
