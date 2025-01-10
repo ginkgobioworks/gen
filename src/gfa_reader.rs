@@ -158,7 +158,7 @@ pub struct Link<T: SampleType, S: Opt, U: Opt> {
 #[derive(Debug, Clone, Ord, Eq, PartialOrd, PartialEq)]
 pub struct Path<T: SampleType, S: Opt, U: Opt> {
     pub name: String,
-    pub dir: Vec<bool>,
+    pub strands: Vec<bool>,
     pub segments: Vec<T>,
     pub overlap: U,
     pub opt: S,
@@ -172,7 +172,7 @@ pub struct Walk<T: SampleType, S: Opt> {
     pub seq_id: String,
     pub seq_start: i32,
     pub seq_end: i32,
-    pub walk_dir: Vec<bool>,
+    pub strands: Vec<bool>,
     pub segments: Vec<T>,
     pub opt: S,
 }
@@ -300,7 +300,7 @@ impl<T: SampleType + Ord + Clone, S: Opt + Ord + Clone, U: Opt> Gfa<T, S, U> {
                         let overlap = split_line.next();
                         z.paths.push(Path {
                             name,
-                            dir: dirs,
+                            strands: dirs,
                             segments: node_id,
                             overlap: U::parse1(overlap, &mut z.sequence),
                             opt: S::parse1(split_line.next(), &mut z.sequence),
@@ -320,7 +320,7 @@ impl<T: SampleType + Ord + Clone, S: Opt + Ord + Clone, U: Opt> Gfa<T, S, U> {
                             seq_id,
                             seq_start,
                             seq_end,
-                            walk_dir: w1,
+                            strands: w1,
                             segments: w2,
                             opt: S::parse1(opt, &mut z.sequence),
                         });
@@ -381,7 +381,7 @@ impl<T: SampleType + Ord + Clone, S: Opt + Ord + Clone, U: Opt> Gfa<T, S, U> {
                     + &walk.seq_start.to_string()
                     + "-"
                     + &walk.seq_end.to_string(),
-                dir: walk.walk_dir.clone(),
+                strands: walk.strands.clone(),
                 segments: walk.segments.to_vec(),
                 overlap: U::parse1(None, &mut self.sequence),
                 opt: walk.opt.clone(),
