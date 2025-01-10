@@ -1,3 +1,4 @@
+use crate::gfa::bool_to_strand;
 use crate::gfa_reader::{Gfa, Segment};
 use crate::models::operations::OperationInfo;
 use crate::models::{
@@ -24,12 +25,24 @@ pub fn update_with_gfa(
     new_sample_name: &str,
     gfa_path: &str,
 ) -> io::Result<()> {
+    /*
+    Updates an existing sample by applying a "diff" represented by a GFA file, and creates a new
+    sample with new paths, nodes, and edges from the GFA.
+
+    In order for the update to work, the GFA must have at least one path (let's call it a
+    "matched path") whose sequence matches that of the current path for an existing block group.
+    Then, if there is another path in the GFA that has segments in common with the matched path
+    (let's call it an "unmatched path"), we create a new path (and nodes and edges as necessary)
+    for the unmatched path within the same block group as the existing path.
+    */
     let mut session = operation_management::start_operation(conn);
 
     let _new_sample =
         Sample::get_or_create_child(conn, collection_name, new_sample_name, parent_sample_name);
     let block_groups = Sample::get_block_groups(conn, collection_name, Some(new_sample_name));
 
+    // NOTE: Only getting the current path for each block group because it's the most likely one to
+    // be the basis for an update
     let existing_paths = block_groups
         .iter()
         .map(|block_group| BlockGroup::get_current_path(conn, block_group.id))
@@ -47,9 +60,11 @@ pub fn update_with_gfa(
     // segments
     let mut existing_path_ids_by_new_path_name = HashMap::new();
     let mut path_segments_by_name = HashMap::new();
+    let mut path_strands_by_name = HashMap::new();
     for path in &gfa.paths {
         let path_name = path.name.clone();
         path_segments_by_name.insert(path_name.clone(), path.segments.clone());
+        path_strands_by_name.insert(path_name.clone(), path.strands.clone());
         let mut path_segments = vec![];
         for segment_id in path.segments.iter() {
             let sequence = segments_by_id
@@ -71,10 +86,12 @@ pub fn update_with_gfa(
         }
     }
 
-    // Same thing as with paths, but for walks
+    // Find which incoming walks match existing paths, and store information about them and their
+    // segments
     for walk in &gfa.walk {
         let walk_name = walk.sample_id.clone();
         path_segments_by_name.insert(walk_name.clone(), walk.segments.clone());
+        path_strands_by_name.insert(walk_name.clone(), walk.strands.clone());
         let mut walk_segments = vec![];
         for segment_id in walk.segments.iter() {
             let sequence = segments_by_id
@@ -132,7 +149,7 @@ pub fn update_with_gfa(
 
     let mut new_paths_added = 0;
 
-    // For any apparently new path, check if it shares segments with another path in the GFA that
+    // For any unmatched path, check if it shares segments with another path in the GFA that
     // matches a path in the database.  If so, create the new path and appropriate nodes/edges.
     for unmatched_path_name in unmatched_path_names.iter() {
         let mut matched_new_paths = HashSet::new();
@@ -143,7 +160,12 @@ pub fn update_with_gfa(
                 matched_new_paths.insert(path_name);
             }
         }
-        if matched_new_paths.len() == 1 {
+        if matched_new_paths.is_empty() {
+            println!(
+                "Warning: No path found that matches path {} from input GFA, skipping",
+                unmatched_path_name
+            );
+        } else if matched_new_paths.len() == 1 {
             let matched_new_path_name = *matched_new_paths.iter().next().unwrap();
             let existing_path_id = existing_path_ids_by_new_path_name
                 .get(*matched_new_path_name)
@@ -151,18 +173,29 @@ pub fn update_with_gfa(
             let existing_path = Path::get(conn, *existing_path_id);
             let matched_path_segments = path_segments_by_name.get(*matched_new_path_name).unwrap();
             let unmatched_path_segments = path_segments_by_name.get(unmatched_path_name).unwrap();
+            let unmatched_path_strands = path_strands_by_name.get(unmatched_path_name).unwrap();
             create_new_path_from_existing(
                 conn,
                 &existing_path,
                 matched_path_segments,
                 unmatched_path_name,
                 unmatched_path_segments,
+                unmatched_path_strands,
                 &gfa,
                 &segments_by_id,
             );
             new_paths_added += 1;
+        } else {
+            println!(
+                "Warning: Multiple paths found that match path {} from input GFA, skipping",
+                unmatched_path_name
+            );
         }
     }
+
+    // TODO: If there are links from segments in matched or unmatched paths that have target
+    // segments that aren't in any path, create the corresponding edges and nodes, and do the same
+    // recursively (complete the transitive closure)
 
     let summary_str = format!("{} new paths added", new_paths_added);
 
@@ -185,12 +218,14 @@ pub fn update_with_gfa(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_new_path_from_existing(
     conn: &Connection,
     existing_path: &Path,
     matched_path_segment_ids: &[String],
     unmatched_path_name: &str,
     unmatched_path_segment_ids: &[String],
+    unmatched_path_strands: &[bool],
     gfa: &Gfa<String, (), ()>,
     segments_by_id: &HashMap<String, &Segment<String, ()>>,
 ) {
@@ -221,10 +256,10 @@ fn create_new_path_from_existing(
     let mut previous_node_coordinate = -1;
     let mut previous_node_strand = Strand::Forward;
     let mut new_path_edges = vec![];
-    for segment_id in unmatched_path_segment_ids.iter() {
+    for (i, segment_id) in unmatched_path_segment_ids.iter().enumerate() {
         if existing_path_ranges_by_segment_id.contains_key(segment_id) {
-            // Current segment matches something in the existing path, add an edge from the previous
-            // node to the next one, which already exists
+            // Current segment matches something in the existing path.  Maybe add an edge from the
+            // previous node to the next one, which already exists
             let (start, end) = existing_path_ranges_by_segment_id.get(segment_id).unwrap();
             let block_with_start = interval_tree
                 .query_point(*start as i64)
@@ -254,7 +289,7 @@ fn create_new_path_from_existing(
                 block_with_end.sequence_start + existing_path_position - block_with_end.start;
             previous_node_strand = block_with_end.strand;
         } else {
-            // Current segment is new, create a sequence and node for it, then add an edge to the
+            // Current segment is new.  Create a sequence and node for it, then add an edge to the
             // new node
             let segment = segments_by_id.get(segment_id).unwrap();
             let segment_sequence = segment.sequence.get_string(&gfa.sequence);
@@ -263,8 +298,7 @@ fn create_new_path_from_existing(
                 .sequence(segment_sequence)
                 .save(conn);
             let node_id = Node::create(conn, &sequence.hash, None);
-            // TODO: Set strand correctly
-            let next_node_strand = Strand::Forward;
+            let next_node_strand = bool_to_strand(*unmatched_path_strands.get(i).unwrap());
             new_path_edges.push(EdgeData {
                 source_node_id: previous_node_id,
                 source_coordinate: previous_node_coordinate,

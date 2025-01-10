@@ -80,7 +80,7 @@ pub fn import_gfa<'a>(
         for (index, segment_id) in input_path.segments.iter().enumerate() {
             let target = sequences_by_segment_id.get(segment_id).unwrap();
             let target_node_id = *node_ids_by_segment_id.get(segment_id).unwrap();
-            let target_strand = bool_to_strand(input_path.dir[index]);
+            let target_strand = bool_to_strand(input_path.strands[index]);
             edges.insert(edge_data_from_fields(
                 source_node_id,
                 source_coordinate,
@@ -112,7 +112,7 @@ pub fn import_gfa<'a>(
         for (index, segment_id) in input_walk.segments.iter().enumerate() {
             let target = sequences_by_segment_id.get(segment_id).unwrap();
             let target_node_id = *node_ids_by_segment_id.get(segment_id).unwrap();
-            let target_strand = bool_to_strand(input_walk.walk_dir[index]);
+            let target_strand = bool_to_strand(input_walk.strands[index]);
             edges.insert(edge_data_from_fields(
                 source_node_id,
                 source_coordinate,
@@ -172,7 +172,7 @@ pub fn import_gfa<'a>(
         for (index, segment_id) in input_path.segments.iter().enumerate() {
             let target = sequences_by_segment_id.get(segment_id).unwrap();
             let target_node_id = *node_ids_by_segment_id.get(segment_id).unwrap();
-            let target_strand = bool_to_strand(input_path.dir[index]);
+            let target_strand = bool_to_strand(input_path.strands[index]);
             let key = edge_data_from_fields(
                 source_node_id,
                 source_coordinate,
@@ -207,7 +207,7 @@ pub fn import_gfa<'a>(
         for (index, segment_id) in input_walk.segments.iter().enumerate() {
             let target = sequences_by_segment_id.get(segment_id).unwrap();
             let target_node_id = *node_ids_by_segment_id.get(segment_id).unwrap();
-            let target_strand = bool_to_strand(input_walk.walk_dir[index]);
+            let target_strand = bool_to_strand(input_walk.strands[index]);
             let key = edge_data_from_fields(
                 source_node_id,
                 source_coordinate,
