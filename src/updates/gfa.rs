@@ -1,3 +1,4 @@
+use crate::calculate_hash;
 use crate::gfa::bool_to_strand;
 use crate::gfa_reader::{Gfa, Segment};
 use crate::models::operations::OperationInfo;
@@ -62,9 +63,8 @@ pub fn update_with_gfa(
     let mut path_segments_by_name = HashMap::new();
     let mut path_strands_by_name = HashMap::new();
     for path in &gfa.paths {
-        let path_name = path.name.clone();
-        path_segments_by_name.insert(path_name.clone(), path.segments.clone());
-        path_strands_by_name.insert(path_name.clone(), path.strands.clone());
+        path_segments_by_name.insert(path.name.clone(), &path.segments);
+        path_strands_by_name.insert(path.name.clone(), &path.strands);
         let mut path_segments = vec![];
         for segment_id in path.segments.iter() {
             let sequence = segments_by_id
@@ -81,7 +81,7 @@ pub fn update_with_gfa(
             .join("");
         for existing_path in existing_paths.iter() {
             if existing_path.sequence(conn) == path_sequence {
-                existing_path_ids_by_new_path_name.insert(path_name.clone(), existing_path.id);
+                existing_path_ids_by_new_path_name.insert(path.name.clone(), existing_path.id);
             }
         }
     }
@@ -89,9 +89,9 @@ pub fn update_with_gfa(
     // Find which incoming walks match existing paths, and store information about them and their
     // segments
     for walk in &gfa.walk {
-        let walk_name = walk.sample_id.clone();
-        path_segments_by_name.insert(walk_name.clone(), walk.segments.clone());
-        path_strands_by_name.insert(walk_name.clone(), walk.strands.clone());
+        let walk_name = &walk.sample_id;
+        path_segments_by_name.insert(walk_name.clone(), &walk.segments);
+        path_strands_by_name.insert(walk_name.clone(), &walk.strands);
         let mut walk_segments = vec![];
         for segment_id in walk.segments.iter() {
             let sequence = segments_by_id
@@ -129,7 +129,10 @@ pub fn update_with_gfa(
         let path_name = &path.name;
         if matched_path_names.contains(path_name.as_str()) {
             for segment_id in path.segments.iter() {
-                matched_path_name_by_segment_id.insert(segment_id, path_name);
+                matched_path_name_by_segment_id
+                    .entry(segment_id)
+                    .or_insert(HashSet::new())
+                    .insert(path_name);
             }
         } else {
             unmatched_path_names.push(path.name.clone());
@@ -140,7 +143,10 @@ pub fn update_with_gfa(
         let walk_name = &walk.sample_id;
         if matched_path_names.contains(walk_name.as_str()) {
             for segment_id in walk.segments.iter() {
-                matched_path_name_by_segment_id.insert(segment_id, walk_name);
+                matched_path_name_by_segment_id
+                    .entry(segment_id)
+                    .or_insert(HashSet::new())
+                    .insert(walk_name);
             }
         } else {
             unmatched_path_names.push(walk_name.clone());
@@ -152,12 +158,12 @@ pub fn update_with_gfa(
     // For any unmatched path, check if it shares segments with another path in the GFA that
     // matches a path in the database.  If so, create the new path and appropriate nodes/edges.
     for unmatched_path_name in unmatched_path_names.iter() {
-        let mut matched_new_paths = HashSet::new();
+        let mut matched_new_paths: HashSet<&str> = HashSet::new();
         let segment_ids = path_segments_by_name.get(unmatched_path_name).unwrap();
         for segment_id in segment_ids.iter() {
-            let path_name_result = matched_path_name_by_segment_id.get(segment_id);
-            if let Some(path_name) = path_name_result {
-                matched_new_paths.insert(path_name);
+            let path_name_results = matched_path_name_by_segment_id.get(segment_id);
+            if let Some(path_names) = path_name_results {
+                matched_new_paths.extend(path_names.iter().map(|path_name| path_name.as_str()));
             }
         }
         if matched_new_paths.is_empty() {
@@ -166,7 +172,7 @@ pub fn update_with_gfa(
                 unmatched_path_name
             );
         } else if matched_new_paths.len() == 1 {
-            let matched_new_path_name = *matched_new_paths.iter().next().unwrap();
+            let matched_new_path_name = matched_new_paths.iter().next().unwrap();
             let existing_path_id = existing_path_ids_by_new_path_name
                 .get(*matched_new_path_name)
                 .unwrap();
@@ -257,10 +263,9 @@ fn create_new_path_from_existing(
     let mut previous_node_strand = Strand::Forward;
     let mut new_path_edges = vec![];
     for (i, segment_id) in unmatched_path_segment_ids.iter().enumerate() {
-        if existing_path_ranges_by_segment_id.contains_key(segment_id) {
+        if let Some((start, end)) = existing_path_ranges_by_segment_id.get(segment_id) {
             // Current segment matches something in the existing path.  Maybe add an edge from the
             // previous node to the next one, which already exists
-            let (start, end) = existing_path_ranges_by_segment_id.get(segment_id).unwrap();
             let block_with_start = interval_tree
                 .query_point(*start as i64)
                 .next()
@@ -297,7 +302,11 @@ fn create_new_path_from_existing(
                 .sequence_type("DNA")
                 .sequence(segment_sequence)
                 .save(conn);
-            let node_id = Node::create(conn, &sequence.hash, None);
+            let node_id = Node::create(
+                conn,
+                &sequence.hash,
+                calculate_hash(&format!("{segment_id}_{hash}", hash = &sequence.hash)),
+            );
             let next_node_strand = bool_to_strand(*unmatched_path_strands.get(i).unwrap());
             new_path_edges.push(EdgeData {
                 source_node_id: previous_node_id,
@@ -362,15 +371,12 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
-    use crate::diffs::gfa::gfa_sample_diff;
     use crate::imports::fasta::import_fasta;
     use crate::models::operations::setup_db;
     use crate::models::{metadata, traits::Query};
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
-    use crate::updates::fasta::update_with_fasta;
     use rusqlite::types::Value as SQLValue;
     use std::path::PathBuf;
-    use tempfile::tempdir;
 
     #[test]
     fn test_basic_update() {
@@ -401,42 +407,8 @@ mod tests {
         )
         .unwrap();
 
-        let mut fasta_update_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        fasta_update_path.push("fixtures/aaaaaaaa.fa");
-
-        let _ = update_with_fasta(
-            conn,
-            op_conn,
-            &collection,
-            None,
-            "child",
-            "m123",
-            2,
-            5,
-            fasta_update_path.to_str().unwrap(),
-        );
-
-        let expected_sequences = vec![
-            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
-            "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
-        ];
-        let block_groups = BlockGroup::query(
-            conn,
-            "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
-            rusqlite::params!(
-                SQLValue::from(collection.clone()),
-                SQLValue::from("child".to_string()),
-            ),
-        );
-        assert_eq!(block_groups.len(), 1);
-        assert_eq!(
-            BlockGroup::get_all_sequences(conn, block_groups[0].id, false),
-            HashSet::from_iter(expected_sequences),
-        );
-
-        let temp_dir = tempdir().unwrap();
-        let gfa_diff_path = temp_dir.path().join("parent-child-diff.gfa");
-        gfa_sample_diff(conn, &collection, &gfa_diff_path, None, Some("child"));
+        let mut gfa_update_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        gfa_update_path.push("fixtures/path-diff.gfa");
 
         let _ = update_with_gfa(
             conn,
@@ -444,7 +416,7 @@ mod tests {
             &collection,
             None,
             "applied diff",
-            gfa_diff_path.to_str().unwrap(),
+            gfa_update_path.to_str().unwrap(),
         );
 
         let expected_sequences = vec![
