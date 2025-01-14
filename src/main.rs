@@ -597,39 +597,42 @@ fn main() {
             operation_conn.execute("END TRANSACTION", []).unwrap();
         }
         Some(Commands::Operations { branch }) => {
-            let current_op = OperationState::get_operation(&operation_conn, &db_uuid)
-                .expect("Unable to read operation.");
-            let branch_name = branch.clone().unwrap_or_else(|| {
-                let current_branch_id =
-                    OperationState::get_current_branch(&operation_conn, &db_uuid)
-                        .expect("No current branch is set.");
-                Branch::get_by_id(&operation_conn, current_branch_id)
-                    .unwrap_or_else(|| panic!("No branch with id {current_branch_id}"))
-                    .name
-            });
-            let operations = Branch::get_operations(
-                &operation_conn,
-                Branch::get_by_name(&operation_conn, &db_uuid, &branch_name)
-                    .unwrap_or_else(|| panic!("No branch named {branch_name}."))
-                    .id,
-            );
-            let mut indicator = "";
-            println!(
-                "{indicator:<3}{col1:>64}   {col2:<70}",
-                col1 = "Id",
-                col2 = "Summary"
-            );
-            for op in operations.iter() {
-                if op.hash == current_op {
-                    indicator = ">";
-                } else {
-                    indicator = "";
-                }
+            let current_op = OperationState::get_operation(&operation_conn, &db_uuid);
+            if let Some(current_op) = current_op {
+                let branch_name = branch.clone().unwrap_or_else(|| {
+                    let current_branch_id =
+                        OperationState::get_current_branch(&operation_conn, &db_uuid)
+                            .expect("No current branch is set.");
+                    Branch::get_by_id(&operation_conn, current_branch_id)
+                        .unwrap_or_else(|| panic!("No branch with id {current_branch_id}"))
+                        .name
+                });
+                let operations = Branch::get_operations(
+                    &operation_conn,
+                    Branch::get_by_name(&operation_conn, &db_uuid, &branch_name)
+                        .unwrap_or_else(|| panic!("No branch named {branch_name}."))
+                        .id,
+                );
+                let mut indicator = "";
                 println!(
                     "{indicator:<3}{col1:>64}   {col2:<70}",
-                    col1 = op.hash,
-                    col2 = op.change_type
+                    col1 = "Id",
+                    col2 = "Summary"
                 );
+                for op in operations.iter() {
+                    if op.hash == current_op {
+                        indicator = ">";
+                    } else {
+                        indicator = "";
+                    }
+                    println!(
+                        "{indicator:<3}{col1:>64}   {col2:<70}",
+                        col1 = op.hash,
+                        col2 = op.change_type
+                    );
+                }
+            } else {
+                println!("No operations found.");
             }
         }
         Some(Commands::Branch {
