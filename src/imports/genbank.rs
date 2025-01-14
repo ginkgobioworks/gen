@@ -11,9 +11,8 @@ use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
 use crate::operation_management::{end_operation, start_operation};
-use crate::progress_bar::{add_saving_operation_bar, get_progress_bar};
+use crate::progress_bar::{add_saving_operation_bar, get_handler, get_progress_bar};
 use gb_io::reader;
-use indicatif::MultiProgress;
 use rusqlite::Connection;
 use std::io::Read;
 use std::str;
@@ -29,7 +28,7 @@ pub fn import_genbank<'a, R>(
 where
     R: Read,
 {
-    let progress_bar = MultiProgress::new();
+    let progress_bar = get_handler();
     let mut session = start_operation(conn);
     let reader = reader::SeqReader::new(data);
     let collection = Collection::create(conn, collection.into().unwrap_or_default());

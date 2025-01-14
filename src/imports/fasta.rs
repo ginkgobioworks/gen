@@ -14,8 +14,7 @@ use crate::models::{
     strand::Strand,
 };
 use crate::operation_management::{end_operation, start_operation, OperationError};
-use crate::progress_bar::{add_saving_operation_bar, get_progress_bar};
-use indicatif::MultiProgress;
+use crate::progress_bar::{add_saving_operation_bar, get_handler, get_progress_bar};
 use noodles::fasta;
 use rusqlite;
 use rusqlite::Connection;
@@ -37,7 +36,7 @@ pub fn import_fasta<'a>(
     conn: &Connection,
     operation_conn: &Connection,
 ) -> Result<Operation, FastaError> {
-    let progress_bar = MultiProgress::new();
+    let progress_bar = get_handler();
     let mut session = start_operation(conn);
 
     let mut reader = fasta::io::reader::Builder.build_from_path(fasta).unwrap();
