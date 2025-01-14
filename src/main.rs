@@ -24,13 +24,15 @@ use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
 use gen::updates::genbank::update_with_genbank;
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::{update_with_vcf, VcfError};
+use gen::views::patch::view_patches;
 use itertools::Itertools;
 use noodles::core::Region;
 use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
 use std::fs::File;
+use std::io::Write;
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{io, str};
 
 #[derive(Parser)]
@@ -167,6 +169,16 @@ enum Commands {
     /// Apply changes from a patch file
     #[command(name = "patch-apply", arg_required_else_help(true))]
     PatchApply {
+        /// The patch file
+        #[clap(index = 1)]
+        patch: String,
+    },
+    /// View a patch
+    #[command(name = "patch-view", arg_required_else_help(true))]
+    PatchView {
+        /// The prefix to save dot files under. Defaults to patch filename
+        #[arg(long, short)]
+        prefix: Option<String>,
         /// The patch file
         #[clap(index = 1)]
         patch: String,
@@ -317,7 +329,7 @@ fn main() {
         return;
     }
 
-    let operation_conn = get_operation_connection();
+    let operation_conn = get_operation_connection(None);
     if let Some(Commands::Defaults {
         database,
         collection,
@@ -773,6 +785,32 @@ fn main() {
             let mut f = File::open(patch).unwrap();
             let patches = patch::load_patches(&mut f);
             patch::apply_patches(&conn, &operation_conn, &patches);
+        }
+        Some(Commands::PatchView { prefix, patch }) => {
+            let patch_path = Path::new(patch);
+            let mut f = File::open(patch_path).unwrap();
+            let patches = patch::load_patches(&mut f);
+            let diagrams = view_patches(&patches);
+            for (patch_hash, patch_diagrams) in diagrams.iter() {
+                for (bg_id, dot) in patch_diagrams.iter() {
+                    let path = if let Some(p) = prefix {
+                        format!("{p}_{patch_hash}_{bg_id}.dot")
+                    } else {
+                        format!(
+                            "{patch_base}_{patch_hash}_{bg_id}.dot",
+                            patch_base = patch_path
+                                .with_extension("")
+                                .file_name()
+                                .unwrap()
+                                .to_str()
+                                .unwrap()
+                        )
+                    };
+                    let mut f = File::create(path).unwrap();
+                    f.write_all(dot.as_bytes())
+                        .expect("Failed to write diagram");
+                }
+            }
         }
         None => {}
         // these will never be handled by this method as we search for them earlier.

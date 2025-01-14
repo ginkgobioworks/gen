@@ -19,7 +19,7 @@ use fallible_streaming_iterator::FallibleStreamingIterator;
 use itertools::Itertools;
 use petgraph::Direction;
 use rusqlite;
-use rusqlite::session::ChangesetIter;
+use rusqlite::session::{ChangesetItem, ChangesetIter};
 use rusqlite::types::{FromSql, Value};
 use rusqlite::{session, Connection};
 use serde::{Deserialize, Serialize};
@@ -51,13 +51,22 @@ pub enum FileMode {
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct DependencyModels {
-    sequences: Vec<Sequence>,
-    block_group: Vec<BlockGroup>,
-    nodes: Vec<Node>,
-    edges: Vec<Edge>,
-    paths: Vec<Path>,
-    accessions: Vec<Accession>,
-    accession_edges: Vec<AccessionEdge>,
+    pub sequences: Vec<Sequence>,
+    pub block_group: Vec<BlockGroup>,
+    pub nodes: Vec<Node>,
+    pub edges: Vec<Edge>,
+    pub paths: Vec<Path>,
+    pub accessions: Vec<Accession>,
+    pub accession_edges: Vec<AccessionEdge>,
+}
+
+#[derive(Debug)]
+pub struct ChangesetModels {
+    pub sequences: Vec<Sequence>,
+    pub block_groups: Vec<BlockGroup>,
+    pub nodes: Vec<Node>,
+    pub edges: Vec<Edge>,
+    pub block_group_edges: Vec<BlockGroupEdge>,
 }
 
 pub fn get_file(path: &PathBuf, mode: FileMode) -> fs::File {
@@ -87,6 +96,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
     let mut previous_edges = HashSet::new();
     let mut previous_paths = HashSet::new();
     let mut previous_accessions = HashSet::new();
+    let mut previous_nodes = HashSet::new();
     let mut previous_sequences = HashSet::new();
     let mut previous_accession_edges = HashSet::new();
     let mut created_block_groups = HashSet::new();
@@ -144,8 +154,9 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                     created_edges.insert(edge_pk);
                     let nodes = Node::get_nodes(conn, &[source_node_id, target_node_id]);
                     for node in nodes.iter() {
-                        if !created_nodes.contains(&node.id) {
+                        if !created_nodes.contains(&node.id) && !Node::is_terminal(node.id) {
                             previous_sequences.insert(node.sequence_hash.clone());
+                            previous_nodes.insert(node.id);
                         }
                     }
                 }
@@ -227,7 +238,10 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
             ),
             rusqlite::params!(),
         ),
-        nodes: vec![],
+        nodes: Node::get_nodes(
+            conn,
+            &previous_nodes.into_iter().sorted().collect::<Vec<_>>(),
+        ),
         edges: Edge::query(
             conn,
             &format!(
@@ -295,6 +309,101 @@ pub fn load_changeset(operation: &Operation) -> Vec<u8> {
     contents
 }
 
+fn parse_string(item: &ChangesetItem, col: usize) -> String {
+    str::from_utf8(item.new_value(col).unwrap().as_bytes().unwrap())
+        .unwrap()
+        .to_string()
+}
+
+fn parse_maybe_string(item: &ChangesetItem, col: usize) -> Option<String> {
+    item.new_value(col)
+        .unwrap()
+        .as_bytes_or_null()
+        .unwrap()
+        .map(|v| str::from_utf8(v).unwrap().to_string())
+}
+
+fn parse_number(item: &ChangesetItem, col: usize) -> i64 {
+    item.new_value(col).unwrap().as_i64().unwrap()
+}
+
+fn parse_maybe_number(item: &ChangesetItem, col: usize) -> Option<i64> {
+    item.new_value(col).unwrap().as_i64_or_null().unwrap()
+}
+
+pub fn load_changeset_models(changeset: &mut ChangesetIter) -> ChangesetModels {
+    let mut created_block_groups = vec![];
+    let mut created_edges = vec![];
+    let mut created_nodes = vec![];
+    let mut created_sequences = vec![];
+    let mut created_bg_edges = vec![];
+
+    while let Some(item) = changeset.next().unwrap() {
+        let op = item.op().unwrap();
+        // info on indirect changes: https://www.sqlite.org/draft/session/sqlite3session_indirect.html
+        if !op.indirect() {
+            let table = op.table_name();
+            let pk_column = item
+                .pk()
+                .unwrap()
+                .iter()
+                .find_position(|item| **item == 1)
+                .unwrap()
+                .0;
+            match table {
+                "sequences" => {
+                    let hash = parse_string(item, pk_column);
+                    let sequence = Sequence::new()
+                        .sequence_type(&parse_string(item, 1))
+                        .sequence(&parse_string(item, 2))
+                        .name(&parse_string(item, 3))
+                        .file_path(&parse_string(item, 4))
+                        .length(parse_number(item, 5))
+                        .build();
+                    assert_eq!(hash, sequence.hash);
+                    created_sequences.push(sequence);
+                }
+                "block_groups" => created_block_groups.push(BlockGroup {
+                    id: parse_number(item, pk_column),
+                    collection_name: parse_string(item, 1),
+                    sample_name: parse_maybe_string(item, 2),
+                    name: parse_string(item, 3),
+                }),
+
+                "nodes" => created_nodes.push(Node {
+                    id: parse_number(item, pk_column),
+                    sequence_hash: parse_string(item, 1),
+                    hash: parse_maybe_string(item, 2),
+                }),
+                "edges" => created_edges.push(Edge {
+                    id: parse_number(item, pk_column),
+                    source_node_id: parse_number(item, 1),
+                    source_coordinate: parse_number(item, 2),
+                    source_strand: Strand::column_result(item.new_value(3).unwrap()).unwrap(),
+                    target_node_id: parse_number(item, 4),
+                    target_coordinate: parse_number(item, 5),
+                    target_strand: Strand::column_result(item.new_value(6).unwrap()).unwrap(),
+                }),
+                "block_group_edges" => created_bg_edges.push(BlockGroupEdge {
+                    id: parse_number(item, pk_column),
+                    block_group_id: parse_number(item, 1),
+                    edge_id: parse_number(item, 2),
+                    chromosome_index: parse_number(item, 3),
+                    phased: parse_number(item, 4),
+                }),
+                _ => {}
+            }
+        }
+    }
+    ChangesetModels {
+        sequences: created_sequences,
+        block_groups: created_block_groups,
+        nodes: created_nodes,
+        edges: created_edges,
+        block_group_edges: created_bg_edges,
+    }
+}
+
 pub fn apply_changeset(
     conn: &Connection,
     changeset: &mut ChangesetIter,
@@ -315,7 +424,7 @@ pub fn apply_changeset(
 
     let mut dep_node_map = HashMap::new();
     for node in dependencies.nodes.iter() {
-        let new_node_id = Node::create(conn, &node.sequence_hash.clone(), None);
+        let new_node_id = Node::create(conn, &node.sequence_hash, node.hash.clone());
         dep_node_map.insert(&node.id, new_node_id);
     }
 
@@ -405,44 +514,28 @@ pub fn apply_changeset(
                 .0;
             match table {
                 "samples" => {
-                    Sample::get_or_create(
-                        conn,
-                        str::from_utf8(item.new_value(pk_column).unwrap().as_bytes().unwrap())
-                            .unwrap(),
-                    );
+                    Sample::get_or_create(conn, &parse_string(item, pk_column));
                 }
                 "sequences" => {
                     Sequence::new()
-                        .sequence_type(
-                            str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap()).unwrap(),
-                        )
-                        .sequence(
-                            str::from_utf8(item.new_value(2).unwrap().as_bytes().unwrap()).unwrap(),
-                        )
-                        .name(
-                            str::from_utf8(item.new_value(3).unwrap().as_bytes().unwrap()).unwrap(),
-                        )
-                        .file_path(
-                            str::from_utf8(item.new_value(4).unwrap().as_bytes().unwrap()).unwrap(),
-                        )
-                        .length(item.new_value(5).unwrap().as_i64().unwrap())
+                        .sequence_type(&parse_string(item, 1))
+                        .sequence(&parse_string(item, 2))
+                        .name(&parse_string(item, 3))
+                        .file_path(&parse_string(item, 4))
+                        .length(parse_number(item, 5))
                         .save(conn);
                 }
                 "block_groups" => {
-                    let bg_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
+                    let bg_pk = parse_number(item, pk_column);
                     if let Some(v) = dep_bg_map.get(&bg_pk) {
                         blockgroup_map.insert(bg_pk, *v);
                     } else {
-                        let sample_name: Option<&str> =
-                            match item.new_value(2).unwrap().as_bytes_or_null().unwrap() {
-                                Some(v) => Some(str::from_utf8(v).unwrap()),
-                                None => None,
-                            };
+                        let sample_name = parse_maybe_string(item, 2);
                         let new_bg = BlockGroup::create(
                             conn,
-                            str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap()).unwrap(),
-                            sample_name,
-                            str::from_utf8(item.new_value(3).unwrap().as_bytes().unwrap()).unwrap(),
+                            &parse_string(item, 1),
+                            sample_name.as_deref(),
+                            &parse_string(item, 3),
                         );
                         blockgroup_map.insert(bg_pk, new_bg.id);
                     };
@@ -450,40 +543,32 @@ pub fn apply_changeset(
                 "paths" => {
                     // defer path creation until edges are made
                     insert_paths.push(Path {
-                        id: item.new_value(pk_column).unwrap().as_i64().unwrap(),
-                        block_group_id: item.new_value(1).unwrap().as_i64().unwrap(),
-                        name: str::from_utf8(item.new_value(2).unwrap().as_bytes().unwrap())
-                            .unwrap()
-                            .to_string(),
+                        id: parse_number(item, pk_column),
+                        block_group_id: parse_number(item, 1),
+                        name: parse_string(item, 2),
                     });
                 }
                 "nodes" => {
-                    let node_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
+                    let node_pk = parse_number(item, pk_column);
                     node_map.insert(
                         node_pk,
                         (
-                            str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
-                                .unwrap()
-                                .to_string(),
-                            item.new_value(2)
-                                .unwrap()
-                                .as_str_or_null()
-                                .unwrap()
-                                .map(|s| s.to_string()),
+                            parse_string(item, 1),
+                            parse_maybe_string(item, 2).map(|s| s.to_string()),
                         ),
                     );
                 }
                 "edges" => {
-                    let edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
+                    let edge_pk = parse_number(item, pk_column);
                     edge_map.insert(
                         edge_pk,
                         EdgeData {
-                            source_node_id: item.new_value(1).unwrap().as_i64().unwrap(),
-                            source_coordinate: item.new_value(2).unwrap().as_i64().unwrap(),
+                            source_node_id: parse_number(item, 1),
+                            source_coordinate: parse_number(item, 2),
                             source_strand: Strand::column_result(item.new_value(3).unwrap())
                                 .unwrap(),
-                            target_node_id: item.new_value(4).unwrap().as_i64().unwrap(),
-                            target_coordinate: item.new_value(5).unwrap().as_i64().unwrap(),
+                            target_node_id: parse_number(item, 4),
+                            target_coordinate: parse_number(item, 5),
                             target_strand: Strand::column_result(item.new_value(6).unwrap())
                                 .unwrap(),
                         },
@@ -517,12 +602,10 @@ pub fn apply_changeset(
                 "accessions" => {
                     // we defer accession creation until edges and paths are made
                     insert_accessions.push(Accession {
-                        id: item.new_value(pk_column).unwrap().as_i64().unwrap(),
-                        name: str::from_utf8(item.new_value(1).unwrap().as_bytes().unwrap())
-                            .unwrap()
-                            .to_string(),
-                        path_id: item.new_value(2).unwrap().as_i64().unwrap(),
-                        parent_accession_id: item.new_value(2).unwrap().as_i64_or_null().unwrap(),
+                        id: parse_number(item, pk_column),
+                        name: parse_string(item, 1),
+                        path_id: parse_number(item, 2),
+                        parent_accession_id: parse_maybe_number(item, 2),
                     });
                 }
                 "accession_edges" => {

@@ -7,7 +7,7 @@ use petgraph::prelude::EdgeRef;
 use petgraph::visit::{GraphRef, IntoEdges, IntoNeighbors, IntoNeighborsDirected, NodeCount};
 use petgraph::Direction;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 use std::hash::Hash;
 use std::iter::from_fn;
 
@@ -17,6 +17,16 @@ pub struct GraphNode {
     pub node_id: i64,
     pub sequence_start: i64,
     pub sequence_end: i64,
+}
+
+impl fmt::Display for GraphNode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}[{}-{}]",
+            self.node_id, self.sequence_start, self.sequence_end
+        )
+    }
 }
 
 impl GraphNode {

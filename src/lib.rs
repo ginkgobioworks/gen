@@ -21,6 +21,7 @@ pub mod range;
 #[cfg(test)]
 pub mod test_helpers;
 pub mod updates;
+pub mod views;
 
 use crate::migrations::run_migrations;
 use noodles::vcf::variant::record::samples::series::value::genotype::Phasing;

@@ -18,7 +18,7 @@ use std::io::{Read, Write};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OperationPatch {
-    operation: Operation,
+    pub operation: Operation,
     files: FileAddition,
     summary: OperationSummary,
     dependencies: Vec<u8>,
