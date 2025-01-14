@@ -305,7 +305,10 @@ fn create_new_path_from_existing(
             let node_id = Node::create(
                 conn,
                 &sequence.hash,
-                calculate_hash(&format!("{segment_id}_{hash}", hash = &sequence.hash)),
+                calculate_hash(&format!(
+                    "{unmatched_path_name}_{segment_id}_{hash}",
+                    hash = &sequence.hash
+                )),
             );
             let next_node_strand = bool_to_strand(*unmatched_path_strands.get(i).unwrap());
             new_path_edges.push(EdgeData {
