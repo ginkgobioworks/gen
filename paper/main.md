@@ -91,7 +91,7 @@ patches from operations and treated like a git patch. A patch contains models to
 changes.
 
 For visualizing patches, the `patch-view` command can be used to generate a DOT formated graph (fig. [dot_example](.
-/dot_example/final.svg)). 
+paper/dot_example/final.svg)). 
 
 # Discussion
 
