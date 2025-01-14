@@ -15,7 +15,8 @@ use std::collections::{HashMap, HashSet};
 use std::io::Read;
 
 pub fn view_patches(patches: &[OperationPatch]) -> HashMap<String, HashMap<i64, String>> {
-    // For each blockgroup in a patch, a
+    // For each blockgroup in a patch, a .dot file is generated showing how the base sequence
+    // has been updated.
     let start_node = Node::get_start_node();
     let end_node = Node::get_end_node();
     let mut diagrams: HashMap<String, HashMap<i64, String>> = HashMap::new();
