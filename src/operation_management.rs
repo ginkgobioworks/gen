@@ -363,21 +363,18 @@ pub fn load_changeset_models(changeset: &mut ChangesetIter) -> ChangesetModels {
                     assert_eq!(hash, sequence.hash);
                     created_sequences.push(sequence);
                 }
-                "block_groups" => {
-                    created_block_groups.push(BlockGroup {
-                        id: parse_number(item, pk_column),
-                        collection_name: parse_string(item, 1),
-                        sample_name: parse_maybe_string(item, 2),
-                        name: parse_string(item, 3),
-                    });
-                }
-                "nodes" => {
-                    created_nodes.push(Node {
-                        id: parse_number(item, pk_column),
-                        sequence_hash: parse_string(item, 1),
-                        hash: parse_maybe_string(item, 2),
-                    });
-                }
+                "block_groups" => created_block_groups.push(BlockGroup {
+                    id: parse_number(item, pk_column),
+                    collection_name: parse_string(item, 1),
+                    sample_name: parse_maybe_string(item, 2),
+                    name: parse_string(item, 3),
+                }),
+
+                "nodes" => created_nodes.push(Node {
+                    id: parse_number(item, pk_column),
+                    sequence_hash: parse_string(item, 1),
+                    hash: parse_maybe_string(item, 2),
+                }),
                 "edges" => created_edges.push(Edge {
                     id: parse_number(item, pk_column),
                     source_node_id: parse_number(item, 1),
@@ -387,15 +384,13 @@ pub fn load_changeset_models(changeset: &mut ChangesetIter) -> ChangesetModels {
                     target_coordinate: parse_number(item, 5),
                     target_strand: Strand::column_result(item.new_value(6).unwrap()).unwrap(),
                 }),
-                "block_group_edges" => {
-                    created_bg_edges.push(BlockGroupEdge {
-                        id: parse_number(item, pk_column),
-                        block_group_id: parse_number(item, 1),
-                        edge_id: parse_number(item, 2),
-                        chromosome_index: parse_number(item, 3),
-                        phased: parse_number(item, 4),
-                    });
-                }
+                "block_group_edges" => created_bg_edges.push(BlockGroupEdge {
+                    id: parse_number(item, pk_column),
+                    block_group_id: parse_number(item, 1),
+                    edge_id: parse_number(item, 2),
+                    chromosome_index: parse_number(item, 3),
+                    phased: parse_number(item, 4),
+                }),
                 _ => {}
             }
         }
