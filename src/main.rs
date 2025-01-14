@@ -4,6 +4,7 @@ use gen::config;
 use gen::config::{get_gen_dir, get_operation_connection};
 
 use gen::annotations::gff::propagate_gff;
+use gen::diffs::gfa::gfa_sample_diff;
 use gen::exports::fasta::export_fasta;
 use gen::exports::genbank::export_genbank;
 use gen::exports::gfa::export_gfa;
@@ -318,6 +319,21 @@ enum Commands {
         /// The region (name:start-end format) of the sequence
         #[arg(long)]
         region: Option<String>,
+    },
+    /// Output a file representing the "diff" between two samples
+    Diff {
+        /// The name of the collection to diff
+        #[arg(short, long)]
+        name: Option<String>,
+        /// The name of the first sample to diff
+        #[arg(long)]
+        sample1: Option<String>,
+        /// The name of the second sample to diff
+        #[arg(long)]
+        sample2: Option<String>,
+        /// The name of the output GFA file
+        #[arg(long)]
+        gfa: String,
     },
 }
 
@@ -912,6 +928,23 @@ fn main() {
             println!(
                 "{}",
                 &sequence[start_coordinate as usize..end_coordinate as usize]
+            );
+        }
+        Some(Commands::Diff {
+            name,
+            sample1,
+            sample2,
+            gfa,
+        }) => {
+            let name = &name
+                .clone()
+                .unwrap_or_else(|| get_default_collection(&operation_conn));
+            gfa_sample_diff(
+                &conn,
+                name,
+                &PathBuf::from(gfa),
+                sample1.as_deref(),
+                sample2.as_deref(),
             );
         }
     }
