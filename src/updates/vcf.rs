@@ -357,6 +357,9 @@ pub fn update_with_vcf<'a>(
                                                 let count: usize = cap["count"]
                                                     .parse()
                                                     .expect("Invalid CN specification");
+                                                // our ref sequence will be something like "ATC" and our new alt
+                                                // sequence will be (ATC)*count. The position provided will be
+                                                // the left most base, so the A here.
                                                 alt_seq = ref_seq.to_string().repeat(count);
                                             } else {
                                                 continue;
