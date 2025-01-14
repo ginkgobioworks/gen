@@ -33,18 +33,9 @@ identifying where the change will be inserted, splitting the prior chunk in half
 previous segment to the new segment. The edge model requires no updates, only the addition of new edges. This has
 significant speed advantages, as no queries and updates are required of the database.
 
-## Database
+## Graph Representation
 
-Gen uses a sqlite database. Sqlite was chosen because it is extensively used across all major platforms. It is
-additionally a local database, enabling users to use gen without having to set up more complicated databases or require
-an internet connection to a cloud service. Sqlite also allows extensibility of the data model via
-schema migrations and users can extend the Gen model with new tables to add custom functionality if desired. Updates to
-gen will be possible with schema migrations, which help mitigate the version issues plaguing many bioinformatic data
-formats.
-
-Another consideration for sqlite is it can be accessed via web assembly (WASM), meaning databases stored in places such
-an Amazon s3 bucket can be accessed without any dedicated servers. Thus, applications can be developed and ran entirely
-on the client side.
+Explanation on nodes, edges, paths and accessions.
 
 ## Data Organization
 
@@ -57,6 +48,31 @@ to simplify the process of finding the starts and end of a graph. When a vcf is 
 is created with the alternative sequence and two new edges are created -- an edge from the reference sequence's source
 node (such as chr1) to the new node, and an edge from the end of the new node back to the reference sequence. For
 deletions, only a new single edge is required to represent the new path.
+
+## Updating the Graph
+
+Updating a graph has varying levels of difficulty. Gen's data model supports polyploidy and as such it may not be 
+possible to have a consistent index into a sequence. For example, if a heterozygous change is present at base 15 of 
+chromosome 1, all positions after that position may not be unambiguously indexable. For this, various operations are 
+possible to address the increasing levels of complexity.
+
+A vcf file may be provided to the `update` command to incorporate any changes identified. 
+
+Accessions can be created as part of updates to provide areas of a graph that can be referenced unambiguously.
+
+Alignments may be used to insert new sequences into a graph.
+
+A GFA may be provided with updates to a path.
+ 
+A fasta file may be inserted at a given position.
+
+A custom library format may be provided. 
+
+A GenBank file can be provided with changes annotated. Currently, we only support changes encoded in the Geneious 
+format.
+
+Changes can be made with respect to the initially imported sequence (often the reference sequence), or to a derived 
+sample graph.
 
 ## Phasing
 
@@ -91,6 +107,20 @@ patches from operations and treated like a git patch. A patch contains models to
 changes.
 
 For visualizing patches, the `patch-view` command can be used to generate a DOT formated graph (fig. [dot_example](dot_example/final.svg)). 
+
+## Database
+
+Gen uses a sqlite database. Sqlite was chosen because it is extensively used across all major platforms. It is
+additionally a local database, enabling users to use gen without having to set up more complicated databases or require
+an internet connection to a cloud service. Sqlite also allows extensibility of the data model via
+schema migrations and users can extend the Gen model with new tables to add custom functionality if desired. Updates to
+gen will be possible with schema migrations, which help mitigate the version issues plaguing many bioinformatic data
+formats.
+
+Another consideration for sqlite is it can be accessed via web assembly (WASM), meaning databases stored in places such
+an Amazon s3 bucket can be accessed without any dedicated servers. Thus, applications can be developed and ran entirely
+on the client side.
+
 
 # Discussion
 
