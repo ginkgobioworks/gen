@@ -162,7 +162,8 @@ enum Commands {
         /// The patch name
         #[arg(short, long)]
         name: String,
-        /// The operation(s) to create a patch from. For a range, use 1..3 and for multiple use commas.
+        /// The operation(s) to create a patch from. For a range, use start..end and for multiple
+        /// or discontinuous ranges, use commas. HEAD and HEAD~<number> syntax is supported.
         #[clap(index = 1)]
         operation: String,
     },
@@ -173,10 +174,11 @@ enum Commands {
         #[clap(index = 1)]
         patch: String,
     },
-    /// View a patch
+    /// View a patch in dot format
     #[command(name = "patch-view", arg_required_else_help(true))]
     PatchView {
-        /// The prefix to save dot files under. Defaults to patch filename
+        /// The prefix to use in the output filenames. One dot file is created for each operation and graph,
+        /// following the pattern {prefix}_{operation}_{graph_id}.dot. Defaults to patch filename.
         #[arg(long, short)]
         prefix: Option<String>,
         /// The patch file
@@ -794,10 +796,10 @@ fn main() {
             for (patch_hash, patch_diagrams) in diagrams.iter() {
                 for (bg_id, dot) in patch_diagrams.iter() {
                     let path = if let Some(p) = prefix {
-                        format!("{p}_{patch_hash}_{bg_id}.dot")
+                        format!("{p}_{patch_hash:.7}_{bg_id}.dot")
                     } else {
                         format!(
-                            "{patch_base}_{patch_hash}_{bg_id}.dot",
+                            "{patch_base}_{patch_hash:.7}_{bg_id}.dot",
                             patch_base = patch_path
                                 .with_extension("")
                                 .file_name()
