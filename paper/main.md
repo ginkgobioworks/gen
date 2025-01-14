@@ -12,7 +12,7 @@ synthetic biology -- tracking engineering. The current state of sharing the evol
 ad-hoc. We saw that the addition of variants to a graph can be captured as a set of changes. And if we can annotate
 these set of changes, we are able to devise a git-like system for tracking changes to samples. This enables workflows
 common in software engineering, such as continuous integration and code review. Additionally, this naturally links the
-process of genetic engineering with tracking the work that was done. This provides an easier path for follow up work
+process of genetic engineering with tracking the work that was done. This provides an easier path for follow-up work
 such as patent applications and regulatory compliance.
 
 For these two purposes, Gen was created. Gen offers a growable database of tracking changes to a sequence. Changes are
@@ -36,11 +36,11 @@ significant speed advantages, as no queries and updates are required of the data
 ## Database
 
 Gen uses a sqlite database. Sqlite was chosen because it is extensively used across all major platforms. It is
-additionally a local database, enabling users to use gen without having to setup more complicated databases such as
-postgres or require an internet connection to a cloud service. Sqlite also allows extensibility of the data model via
+additionally a local database, enabling users to use gen without having to set up more complicated databases or require
+an internet connection to a cloud service. Sqlite also allows extensibility of the data model via
 schema migrations and users can extend the Gen model with new tables to add custom functionality if desired. Updates to
-gen will be possible with schema migrations, which help mitigate the version issues plaguing many bioinfomatic data
-formats such as GFA and GFF.
+gen will be possible with schema migrations, which help mitigate the version issues plaguing many bioinformatic data
+formats.
 
 Another consideration for sqlite is it can be accessed via web assembly (WASM), meaning databases stored in places such
 an Amazon s3 bucket can be accessed without any dedicated servers. Thus, applications can be developed and ran entirely
@@ -60,20 +60,38 @@ deletions, only a new single edge is required to represent the new path.
 
 ## Phasing
 
-While we continually add new edges, we need to indicate which edges belong together. Phasing is supported and 
+While we continually add new edges, we need to indicate which edges belong together. Phasing is supported and
 changes on the same chromatid will be exported together. Phasing is stored as the chromosome_index field, xx, and yyy.
 
-A similar need for phasing is within combinatorial assembly. This is where a set of parts are engineered in series, 
-leading to a massive diversity of end products. However, in many cases users want a desired set of paths through 
+A similar need for phasing is within combinatorial assembly. This is where a set of parts are engineered in series,
+leading to a massive diversity of end products. However, in many cases users want a desired set of paths through
 these parts. This is another form of phasing, where a set of parts are linked together much like a haplotype.
 
-To support both of these cases, the concept of a phase layer is utilized. A phase layer groups together variants 
+To support both of these cases, the concept of a phase layer is utilized. A phase layer groups together variants
 representing both haplotypes and linked parts.
 
 ## Operations
 
 There are various methods to change a graph, which we term an operation. Each operation is analogous to a commit in git.
 It is recorded under the operations command, and can be exported to a patch for sharing.
+
+## Translating coordinate schemes
+
+Annotations can be propagated through the graph structure. Thus, annotations on the reference genome can be 
+translated into the coordinates of new samples. Coordinates are translated with the following rules:
+
+xx
+yy
+zz
+
+## Distribution and Collaboration
+
+Gen is designed to facilitate collaboration across teams in a distributed manner. Changes can be shared by creating 
+patches from operations and treated like a git patch. A patch contains models to add as well as upstream dependencies of
+changes.
+
+For visualizing patches, the `patch-view` command can be used to generate a DOT formated graph (fig. [dot_example](.
+/dot_example/final.svg)). 
 
 # Discussion
 
