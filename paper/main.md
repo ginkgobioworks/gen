@@ -39,8 +39,18 @@ Explanation on nodes, edges, paths and accessions.
 
 ## Data Organization
 
-Gen has 3 mechanisms for faceting data -- a database file, a collection, and a sample. A database file is an on-disk
-sqlite database. A collection is a set of graphs. A sample is a graph specific to a given individual. Each graph is
+Data is stored in on-disk sqlite database files that act as compartmentalized repositories. Within each database file,
+Gen has 3 mechanisms for facetting data -- a graph name, a sample, and a collection. The name of a graph
+refers to its underlying biological identity as polynucleotide or polypeptide; the sample identifies a specific
+variation or instance of the graph; and a collection groups a set of graphs together. Practically this means that
+"chromosome I in sample S1" is a different object than "chromosome I in sample S2", and one graph can be modified without
+forcing the change to propagate to the other. But because both graphs share a common universe of node and edge
+identifiers, variants and annotations can still be easily compared or propagated between samples if desired. 
+
+The interpretation of the sample facet is flexible by design. Depending on the application domain or needs of the user a sample could refer to a physical specimen or individual, for example, but also an environmental population or pool of experimental samples. Samples do not have to have a counterpart in the physical world, they can be purely virtual and refer to a digitally designed sequence or model-derived screening library. Multiple graphs can be associated to the same sample (e.g. all chromosomes in a genome), but not every graph has to be associated with a sample. If it is not, that graph is said to be part of the _null_ sample.
+
+
+Each graph is
 comprised of nodes and edges. An example of importing a fasta and applying a vcf is used to show how the model are
 added. First, for each record such as chr1 and chr2, a node is created of the entire sequence. Two new edges are added
 to the new node, connecting the start of the sequence to a source node and the end to a sink node. These nodes are used
