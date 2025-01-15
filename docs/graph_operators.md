@@ -23,11 +23,11 @@ command family, which implement operations that do modify the underlying topolog
 - `make delete`: removes a region while maintaining graph connectivity.
 - `make insert`: embeds a nested graph at a specified position.
 
-Recall that a graph is identified by two facets: its name and its sample, with samples being further grouped into
-collections. The name represents the underlying biological identity of the graph (for example "chromosome I"); the
-sample is a text string that identifies a specific variation or instance of that named graph. Practically this means
-that "chromosome I in sample S1" is a different object than "chromosome I in sample S2", and one graph can be changed
-without forcing the edit to propagate to the other. But because both graphs share the same universe of node and edge
+Recall that a graph is identified on three facets: name, sample, and collection. Each of these are strings: the name
+refers to the underlying biological identity of the graph (for example "chromosome I"); the sample identifies a specific
+variation or instance of the graph; and collections group a set of graphs together. Practically this means that
+"chromosome I in sample S1" is a different object than "chromosome I in sample S2", and one graph can be changed without
+forcing the edit to propagate to the other. But because both graphs share the same universe of node and edge
 identifiers, variants and annotations can still be easily propagated between samples if desired. 
 
 Each sample can be associated with multiple graphs (e.g. all chromosomes in a genome), as long as their names are unique
