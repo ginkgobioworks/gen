@@ -39,21 +39,34 @@ Explanation on nodes, edges, paths and accessions.
 
 ## Data Organization
 
-Gen has 3 mechanisms for faceting data -- a database file, a collection, and a sample. A database file is an on-disk
-sqlite database. A collection is a set of graphs. A sample is a graph specific to a given individual. Each graph is
-comprised of nodes and edges. An example of importing a fasta and applying a vcf is used to show how the model are
-added. First, for each record such as chr1 and chr2, a node is created of the entire sequence. Two new edges are added
-to the new node, connecting the start of the sequence to a source node and the end to a sink node. These nodes are used
-to simplify the process of finding the starts and end of a graph. When a vcf is applied, for non-deletions, a new node
-is created with the alternative sequence and two new edges are created -- an edge from the reference sequence's source
-node (such as chr1) to the new node, and an edge from the end of the new node back to the reference sequence. For
+Data is stored in on-disk sqlite database files that act as compartmentalized repositories. Within each database file,
+Gen has 3 mechanisms for facetting data -- a graph name, a sample, and a collection. The name of a graph refers to its
+underlying biological identity as polynucleotide or polypeptide; the sample identifies a specific variation or instance
+of the graph; and a collection groups a set of graphs together. Practically this means that "chromosome I in sample S1"
+is a different object than "chromosome I in sample S2", and one graph can be modified without forcing the change to
+propagate to the other. But because both graphs share a common universe of node and edge identifiers, variants and
+annotations can still be easily compared or propagated between samples if desired. 
+
+The interpretation of the sample facet is flexible by design. Depending on the application domain or needs of the user a
+sample could refer to a physical specimen or individual, for example, but also an environmental population or pool of
+experimental samples. Samples do not have to have a counterpart in the physical world, they can be purely virtual and
+refer to a digitally designed sequence or model-derived screening library. Multiple graphs can be associated to the same
+sample (e.g. all chromosomes in a genome), but not every graph has to be associated with a sample. If it is not, that
+graph is said to be part of the _null_ sample.
+
+Each graph is comprised of nodes and edges. An example of importing a fasta and applying a vcf is used to show how the
+model are added. First, for each record such as chr1 and chr2, a node is created of the entire sequence. Two new edges
+are added to the new node, connecting the start of the sequence to a source node and the end to a sink node. These nodes
+are used to simplify the process of finding the starts and end of a graph. When a vcf is applied, for non-deletions, a
+new node is created with the alternative sequence and two new edges are created -- an edge from the reference sequence's
+source node (such as chr1) to the new node, and an edge from the end of the new node back to the reference sequence. For
 deletions, only a new single edge is required to represent the new path.
 
 ## Updating the Graph
 
-Updating a graph has varying levels of difficulty. Gen's data model supports polyploidy and as such it may not be 
-possible to have a consistent index into a sequence. For example, if a heterozygous change is present at base 15 of 
-chromosome 1, all positions after that position may not be unambiguously indexable. For this, various operations are 
+Updating a graph has varying levels of difficulty. Gen's data model supports polyploidy and as such it may not be
+possible to have a consistent index into a sequence. For example, if a heterozygous change is present at base 15 of
+chromosome 1, all positions after that position may not be unambiguously indexable. For this, various operations are
 possible to address the increasing levels of complexity.
 
 A vcf file may be provided to the `update` command to incorporate any changes identified. 
@@ -68,20 +81,20 @@ A fasta file may be inserted at a given position.
 
 A custom library format may be provided. 
 
-A GenBank file can be provided with changes annotated. Currently, we only support changes encoded in the Geneious 
+A GenBank file can be provided with changes annotated. Currently, we only support changes encoded in the Geneious
 format.
 
-Changes can be made with respect to the initially imported sequence (often the reference sequence), or to a derived 
+Changes can be made with respect to the initially imported sequence (often the reference sequence), or to a derived
 sample graph.
 
 ## Phasing
 
-While we continually add new edges, we need to indicate which edges belong together. Phasing is supported and
-changes on the same chromatid will be exported together. Phasing is stored as the chromosome_index field, xx, and yyy.
+While we continually add new edges, we need to indicate which edges belong together. Phasing is supported and changes on
+the same chromatid will be exported together. Phasing is stored as the chromosome_index field, xx, and yyy.
 
 A similar need for phasing is within combinatorial assembly. This is where a set of parts are engineered in series,
-leading to a massive diversity of end products. However, in many cases users want a desired set of paths through
-these parts. This is another form of phasing, where a set of parts are linked together much like a haplotype.
+leading to a massive diversity of end products. However, in many cases users want a desired set of paths through these
+parts. This is another form of phasing, where a set of parts are linked together much like a haplotype.
 
 To support both of these cases, the concept of a phase layer is utilized. A phase layer groups together variants
 representing both haplotypes and linked parts.
@@ -93,29 +106,27 @@ It is recorded under the operations command, and can be exported to a patch for 
 
 ## Translating coordinate schemes
 
-Annotations can be propagated through the graph structure. Thus, annotations on the reference genome can be 
-translated into the coordinates of new samples. Coordinates are translated with the following rules:
+Annotations can be propagated through the graph structure. Thus, annotations on the reference genome can be translated
+into the coordinates of new samples. Coordinates are translated with the following rules:
 
-xx
-yy
-zz
+xx yy zz
 
 ## Distribution and Collaboration
 
-Gen is designed to facilitate collaboration across teams in a distributed manner. Changes can be shared by creating 
+Gen is designed to facilitate collaboration across teams in a distributed manner. Changes can be shared by creating
 patches from operations and treated like a git patch. A patch contains models to add as well as upstream dependencies of
 changes.
 
-For visualizing patches, the `patch-view` command can be used to generate a DOT formated graph (fig. [dot_example](dot_example/final.svg)). 
+For visualizing patches, the `patch-view` command can be used to generate a DOT formated graph (fig.
+[dot_example](dot_example/final.svg)). 
 
 ## Database
 
 Gen uses a sqlite database. Sqlite was chosen because it is extensively used across all major platforms. It is
 additionally a local database, enabling users to use gen without having to set up more complicated databases or require
-an internet connection to a cloud service. Sqlite also allows extensibility of the data model via
-schema migrations and users can extend the Gen model with new tables to add custom functionality if desired. Updates to
-gen will be possible with schema migrations, which help mitigate the version issues plaguing many bioinformatic data
-formats.
+an internet connection to a cloud service. Sqlite also allows extensibility of the data model via schema migrations and
+users can extend the Gen model with new tables to add custom functionality if desired. Updates to gen will be possible
+with schema migrations, which help mitigate the version issues plaguing many bioinformatic data formats.
 
 Another consideration for sqlite is it can be accessed via web assembly (WASM), meaning databases stored in places such
 an Amazon s3 bucket can be accessed without any dedicated servers. Thus, applications can be developed and ran entirely
