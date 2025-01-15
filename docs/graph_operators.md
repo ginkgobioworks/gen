@@ -1,88 +1,166 @@
 # Graph Operators
 
-_Make_ and _derive_ operations work purely with graphs - they take graphs from the database as input and produce new
-graphs as output, unlike update operations, which incorporate external data. The fundamental difference between _make_
-and _derive_ lies in how they handle sequence relationships across their inputs and outputs: _make_ operations create
-new connections between disjoint input graphs, whereas _derive_ operations take place within a common reference
-backbone. For example, deriving the intersection of evolved sequence variants of a protein within an experimental group
-is an operation where all inputs and outputs are versions of that same protein. In contrast, inserting a transgene into
-an expression vector requires two distinct inputs (the vector and the gene). This is not intended to be a strict rule,
-and there are examples where the line blurs: for example, splitting a computationally designed chromosome into chunks
-for synthesis, and then stitching them together is a workflow that arguably takes place entirely within the sequence
-context of the chromosome, yet those are still considered to be _make_ operations. Likewise, while there is a certain
-directionality to the intent of _derive_ and _make_ operations (respectively, analysis and design of experiments), users
-should feel empowered to combine operations as needed.
+In addition to _update_ commands that incorporate variants from external data, gen also provides a set of operations for
+graph manipulation within the client. The operations are organized into two categories: _derive_ commands and _make_
+commands.
 
-Most _make_ commands primarily address sequence graphs by their name, for example, "chr1" for chromosome I. With gen
-being a version control system, it is safe to overwrite sequences when edits (real or virtual) are made, you can always
-roll back the repository to a previous version. The sequence graph model also makes it possible you to store entire
-libraries of edit variants in the same chr1 object.
+The _derive_ command family computes subgraphs and combinations through various analytical operations. The following
+subcommands are available:
 
-That being said, creating an expression construct by combining a set of regulatory parts and a coding sequence is an
-operation where choosing a name for the output makes sense. Commands like `stitch` and `splice` have a `--new-name`
-argument that can be almost any text string as long as it is unique within the context of the current collection in the
-repository. Including placeholder symbols like `%n` and `%u` in the name is an easy way to avoid naming conflicts. `%n`
-is automatically replaced by the *n*ext available numerical identifier for that name, so if plasmid_1 and plasmid_2
-already exist,`--new-name "plasmid_%n"` results in a new graph called "plasmid_3". For each new naming pattern `%n`
-starts at 1, afterwards it will always be larger than the previous occurence of the pattern (gaps in the range are not filled).
-This avoids name collisions within a branch, but may still lead to conflicts when one branch is merged into another,
-requiring a name change at that point. This is not a problem for the `%u` placeholder, which is automatically replaced
-by a Universally *u*nique identifier (UUID), a combination of alphanumerical characters that is statistically unlikely
-to ever come up twice. As a compromise between legibility and uniqueness, only the first 7 characters are actually used.
-For very large repositories the odds of a collision increase however, and a `%U` placeholder (capitalized) can be used
-to include a full 128-bit UUID instead.
+- `derive subgraph`: extracts a region or subset based on specific criteria
+- `derive chunks`: partitions a graph into multiple (overlapping) subgraphs
+- `derive union`: combines variants from multiple inputs as a single graph
+- `derive intersection`: selects variants common to all inputs
+- `derive difference`: computes the set difference between two graphs
 
-A second facet by which sequence graphs can be addressed is the _sample_ they are associated with. In the gen data
-model, a sample is a text string corresponding with a physical object or individual, for example. But it can also refer
-to an entire experiment or population, or even be a purely virtual object representing a specific instance or variation
-of a sequence graph. Practically this means that "chr1 in sample S1" is a different object than "chr1 in sample S2", and
-changes to one do not automatically propagate to the other. A sequence graph can be associated with at most one sample,
-but one sample can hold multiple sequence graphs (e.g. all the chromosomes that make up a genome). Not every sequence
-graph has to be explicitly associated with a sample, and those that are referred to by name only are said to be part of
-the _null_ sample. 
+These operations help a user design cloning workflows and navigate long sequences with many variants. An example
+workflow could start with the grouping of isolates based on phenotypical measurements, followed by selection of the
+mutations that are shared within, but not between, groups for further study. The resulting graphs are made up out of
+combinations of existing variants, derivation does not introduce new variants. This is not the case for the _make_
+command family, which implement operations that do modify the underlying topology:
 
-Ultimately, samples allow users to represent _observed_ sequence variants next to _intended_ variants, model molecular
-cloning workflows, and design experiments. They are the primary input and output of `derive` operations, but are also
-used in `make` commands to refer to a specific instance of a named sequence graph. Just like the `--new-name` argument
-described above, `--new-sample` supports the placeholders `%n` (next) and `%u`/`%U` (unique).
+- `make stitch`: performs linear composition by joining the terminal _end_ node of one graph to the initial _start_ node
+  of another graph.
+- `make splice`: embeds one graph into another by excising and replacing a subgraph.
+- `make delete`: removes a region while maintaining graph connectivity.
+- `make insert`: embeds a nested graph at a specified position.
 
-## Make
+Recall that a graph is identified by two facets: its name and its sample, with samples being further grouped into
+collections. The name represents the underlying biological identity of the graph (for example "chromosome I"); the
+sample is a text string that identifies a specific variation or instance of that named graph. Practically this means
+that "chromosome I in sample S1" is a different object than "chromosome I in sample S2", and one graph can be changed
+without forcing the edit to propagate to the other. But because both graphs share the same universe of node and edge
+identifiers, variants and annotations can still be easily propagated between samples if desired. 
+
+Each sample can be associated with multiple graphs (e.g. all chromosomes in a genome), as long as their names are unique
+in the repository. Beyond that, gen imposes few restictions, which simplifies integration with ELN and LIMS interfaces.
+The sample identifier can refer to sequencing data from a physical specimen or individual, for example. But it can also
+refer to an entire experiment or population, or even be a purely virtual object representing a specific instance or
+variation of a graph. Not every graph has to be associated with a sample, and if it is not, that graph is said to be
+part of the _null sample_. 
+
+The name facet determines which operations are possible between graphs. Set operations like union or intersection only
+operate between graphs sharing the same name, hence the primary input to these commands are samples. For example, taking
+the union of two samples results in a new sample with the same number of graphs, each combining the sample-specific
+variations of their named counterpart. _Make_ commands tend to require the user specify both the name and sample as
+input (except for graphs in the _null_ sample). The user can then choose to save the output under a new name and/or in a
+new sample.
+
+A graph's name and sample identifier can be almost any text string as long as it is unique within the context of the
+current collection in the repository. Placeholder symbols like `%n` and `%u` provide an easy way to avoid naming
+conflicts. When `%n` is used in a pattern, it is automatically replaced by the *n*ext available numerical identifier for
+that pattern, so if _plasmid_1_ and _plasmid_2_ already exist,`--new-name "plasmid_%n"` results in a new graph called
+"plasmid_3". On the first use within a collection `%n` starts at 1, afterwards it will always be larger than the
+previous occurence of the pattern (gaps in the range are not filled). This avoids name collisions within a branch, but
+may still lead to conflicts when one branch is merged into another, requiring a name change at that point. This is not a
+problem for the `%u` placeholder, which is automatically replaced by the first 7 characters of the text representation
+of a Universally *u*nique identifier (UUID), a large random number that is statistically unlikely to ever come up twice.
+Using only the first 7 characters is a compromise between legibility and uniqueness, and should be sufficient in most
+cases. For very large repositories the odds of a collision increase however, and a `%U` placeholder (capitalized) can be
+used to include a full 128-bit UUID instead.
+
+While there is a certain directionality to the intent of _derive_ and _make_ operations (respectively, analysis and
+design of experiments), users should feel empowered to combine operations as needed. For example, deriving a subgraph
+from a large pangenome graph can make a design task more manageable by hiding overlapping or irrelevant variants. The
+original sequence context can be restored afterwards by performing a splice operation at the same location.
+
+
+## Derive
+
+### Subgraph [WIP]
+Pangenome graphs can get rather big and unwieldy, but by deriving a subgraph we can extract a specific region to work on
+in a sequence editor, and later on merge it back into the complete sequence. Because a subgraph does not include edges
+and nodes that are no longer relevant to the user, it can be exported to a file that is much smaller in size and is
+generally easier to visualize or edit. To illustrate, the first panel in Figure X represents a sequence in which an
+insertion and substitution have taken place. We want to take a closer look at the region indicated in bold, and use the
+`derive subgraph` command as follows:
+
+```console
+gen derive subgraph —-sample S1 —-region chr1:7-12 —-new-sample my_locus
+```
+
+The region string can be read as “the sequence from position 7 through 12 (but not including 12) on the current path of
+the graph with the name chr1”. An error will be raised if the sequence graph does not have a designated path. If we
+wanted to use a different path on chr1, we would also specify the name of that path as `—-backbone` argument along with
+the region. It must be noted that even though the region definition is linear, the derived subgraph is not. Instead, the
+ends of the region induce a subgraph consisting of all the blocks and edges that can be accessed by walks between both
+points. Any edges to or from blocks that are outside of the subgraph will be rewritten to edges to the end and start
+dummy nodes, respectively.
+
+Alternatively, users can specify the boundaries directly by entering a pair of block identifiers using the
+`—-start-block` and `—-end-block` options. Block identifiers can be obtained from visualizations or exported GFA files,
+where they take the role of segment names. They currently follow the format `m.n`, where m and n refer to the node ID in
+the sequence graph, and starting coordinate of the block on that node, respectively. This ensures consistency between
+multiple versions of the sequence graph, since node IDs do not change when new blocks are created. The end coordinate of
+the block can be derived from its length, but this may be made explicit in the future if advantageous (for example
+`m.n.l` where l is equal to the block length). Blocks are not stored in the database directly, but are instead inferred
+from nodes and edges as needed. This also means that a block does not have to exist _a priori_ when specifying a start
+or end block to create the subgraph. For example: if your graph contains a 10kb long block with ID 1.0 and you don't
+want to include the entire block, then you can enter 1.5000 as start block even though there are currently no edges that
+connect to that coordinate.
+
+Lastly, users can define a subgraph through a named accession instead. An accession also defines a part of the graph
+through coordinates on a linear path, but they are stored by name in the gen database. and referenced through the
+`-—accession` option of the extract command. The accession does not have to be defined in the sample from which you
+derive a subgraph, it is automatically translated from the coordinate frame of the sample in which it was originally
+defined. This is only possible if the graphs are related trough the sample lineage, and an error will be raised if they
+are not.
+
+The `--sample` option specifies which sample to take a subgraph from, if it is not specified graphs from the _null sample_. In the example above we also use the `—-new-sample` option
+to create a new sample called 'my_locus' for the output, otherwise gen will store it in the null sample. While we could
+always roll back to the previous contents, it can still be useful to create a new sample and keep the original sample as
+a reference scaffold. As long as the bases (or residues) at the very ends of the subgraph remain intact, edited
+subgraphs can be easily imported and re-attached to a larger scaffold graph using the `derive supergraph` command.
+
+By default, subgraphs retain the name of their parent graph: the graph contained in the 'my_locus' sample created by the
+example command above is still called 'chr1', since it can be seen as a window into the 'chr1' sequence. If you want to
+include the extracted subgraph as part of a synthetic design, however, it can be useful to save the subgraph itself
+under a new name using `--new-name`. This complicates the use of other 'derive' operations later on, but makes it
+possible to use a subgraph in 'make' operations.
+
+<figure style="margin-left: auto; margin-right: auto">
+<img src="./figures/operators/subgraph-supergraph.png" width=800 alt="Figure 1">
+<figcaption width=800><b>Figure X</b>: a) DNA sequence graph representing the insertion of the trinucleotide CCC, and a 
+substitution of AGG by TGA; the section we wish to extract as subgraph is indicated in bold. Numbers below the blocks 
+indicate the gen node id and corresponding coordinate range. b) Extracted subset, note terminal blocks with nucleotides 
+A and A. c) Scaffold graph with the terminal blocks from panel b highlighted in bold. d) Supergraph created from the 
+subgraph in panel b and the scaffold in panel c.</figcaption>
+</figure>
 
 ### Chunks
 ```console
-Usage: gen make chunks INPUT (--breakpoints POS1 [POS2 ...] | --chunksize LENGTH) [--backbone PATH] [--sample SAMPLE] 
-            [--overlap FWD[:BWD] [FWD[:BWD]] ...]  
-            
-        Split a sequence graph at the given breakpoints or into chunks of a specific size, replacing the original graph 
-        unless the output is directed to a new sample. 
-        
-        INPUT: name of the sequence graph to make chunks from
+Usage: gen derive chunks INPUT (--breakpoints POS1 [POS2 ...] | --chunksize LENGTH) [--backbone PATH] [--sample SAMPLE]
+[--overlap FWD[:BWD] [FWD[:BWD]] ...]
+
+Split a sequence graph at the given breakpoints or into chunks of a specific size.
+
+INPUT: name of the sequence graph to derive chunks from
 
 Options:
-    --breakpoints POS1 [POS2 ...]
-                        Split the sequence graph at specific positions on a reference path.
-    --chunksize LENGTH  Place breakpoints at regularly spaced intervals. Mutually exclusive with --breakpoints.         
-    --backbone PATH     Interpret or compute breakpoints in the context of a path other than the default reference path. 
-    --sample SAMPLE     Input graph is associated to a specific sample.
-    --overlap FWD[:BWD] [FWD[:BWD]] ...            
-                        Make chunks overlap by n bp added to the left chunk at each break point, and m bp on the right chunk. 
-    --new-name OUT1 [OUT2 ...]
-                        Output chunk name(s) with support for placeholders `%n` (next) and `%u`/`%U` (unique). If only 
-                        OUT1 is provided, it will be reused with new placeholders for each chunk. 
-                        Default: "<INPUT>.%n"
-    --new-sample SAMPLE Do not replace the INPUT but place output chunks in a new sample. Supports placeholders. 
-    --force             Allow variable regions at breakpoints and in overlaps. Warning: edges that span chunk boundaries 
-                        will be dropped.
+--breakpoints POS1 [POS2 ...]
+Split the sequence graph at specific positions on a reference path.
+--chunksize LENGTH Place breakpoints at regularly spaced intervals. Mutually exclusive with --breakpoints.
+--backbone PATH Interpret or compute breakpoints in the context of a path other than the default reference path.
+--sample SAMPLE Input graph is associated to a specific sample.
+--overlap FWD[:BWD] [FWD[:BWD]] ...
+Make chunks overlap by n bp added to the left chunk at each break point, and m bp on the right chunk.
+--new-name OUT1 [OUT2 ...]
+Output chunk name(s) with support for placeholders `%n` (next) and `%u`/`%U` (unique). If only
+OUT1 is provided, it will be reused with new placeholders for each chunk.
+Default: ".%n"
+--new-sample SAMPLE Associate the output chunks to one or more new samples, or the null sample if not specified.
+--force Allow variable regions at breakpoints and in overlaps. Warning: edges that span chunk boundaries
+will be dropped.
 ```
 
-A sequence graph can be split into pieces to enable a synthesis or cloning campaign using the `make chunks` subcommand,
-which can be used, for example, as follows:
+A sequence graph can be split into pieces to enable a synthesis or cloning campaign using the `derive chunks`
+subcommand, which can be used, for example, as follows:
 
-`gen make chunks chr1 --breakpoints 100 200 300 —-overlap 20`
+`gen derive chunks chr1 --breakpoints 100 200 300 —-overlap 20`
 
 This command can be interpreted as "split the sequence graph called chr1 into chunks by introducing breakpoints at
 positions 100, 200 and 300, using the designated linear path associated with ch1 as the coordinate reference frame and
-including a 20 bp overhang". 
+including a 20 bp overhang".
 
 The positions at which the graph should be split can either be given explicitly (`--breakpoints`), or they can be
 calculated automatically (`--chunksize`). In both cases, positions are interpreted as linear coordinates on the
@@ -100,7 +178,7 @@ is distributed to both sides as `--overlap 2:2`.
 The same overlap is applied at each breakpoint if only one length (pair) is provided. Multiple overlap arguments can be
 given to specify the overlap at each breakpoint individually. In that case the number of overlap arguments must be equal
 to the number of breakpoints. This can be used to create outwardly extended overlaps from a center chunk for example:
-`--breakpoints 100 200 --overlaps 0:4 4:0` 
+`--breakpoints 100 200 --overlaps 0:4 4:0`
 
 Giving users a choice in overlap design allows them to model their specific cloning protocol as they see fit. It also
 helps prevent overlaps from running into a variable region, which normally causes an error. The `--force` flag overrides
@@ -108,9 +186,7 @@ this check, but it is important to note that any variable region that spans chun
 terms of the graph: the breakpoints (shifted to account for overlap) induce a subgraph that contains only the edges and
 blocks that can be reached on walks between the (shifted) breakpoints.
 
-By default, `make chunks` replaces the input graph, but this can be avoided by directing the output to a sample instead
-(`--new-sample`). Chunks are named after their parent (chr1 becomes chr1.1, chr1.2, chr1.3), but users can also specify
-names as a list and/or with wildcards (`--new-names`).
+By default, chunks are named after their parent (chr1 becomes chr1.1, chr1.2, chr1.3) and stored in the null sample, but users can also specify graph and sample names as a list and/or with wildcards (`--new-names`). 
 
 
 <figure style="margin-left: auto; margin-right: auto">
@@ -134,33 +210,6 @@ Left and right chunk with a forward and backward overlap of 2 nucleotides, or 4 
 </figcaption>
 </figure>
 
-### Stitch [WIP]
-The stitch operation provides a general-purpose representation of molecular cloning workflows in a graph sequence model.
-Supporting specific protocols like Gibson assembly is considered out of scope for the gen client, but users are
-encouraged to leverage gen for the underlying primitives. 
-
-TODO
-
-<figure  width=800 >
-<img src="./figures/operators/stitches.png" width=600 alt="Figure X" >
-<figcaption><b>Figure X</b>:</figcaption>
-</figure>
-
-
-
-### Splice [WIP]
-Whereas `stitch` operations take place at the ends of a graph, `splice` works on the _inside_. graph.
-
-TODO
-
-### Deletion/Insertion/Substitution [TBD]
-Shorthand for splice commands to improve discoverability and avoid errors. TBD
-
-### Circle [TBD]
-TBD
-
-## Derive
-
 ### Union [WIP]
 ```console
 Usage: gen derive union S1 S2 [S3 ...] [--new-sample OUTPUT]
@@ -181,8 +230,6 @@ if both samples contain just 'chr1', the output sample will comprise a single se
 variants of 'chr1'. If the input samples contain sequence graphs with different names, the output sample will contain
 multiple sequence graphs. For example, the union of sample 'S1' which contains 'chr1', with 'S2' containing 'chr2'
 results in a sample that contains both 'chr1' and 'chr2'.
-
-
 
 ### Intersection [WIP]
 The complementary operation to a union, is to retain only the edges that are present in both, i.e. the intersection. 
@@ -219,76 +266,26 @@ Options:
     --scaffold 
 ```
 
+## Make
 
-### Subgraph [WIP]
-Pangenome graphs can get rather big and unwieldy, but by deriving a subgraph we can extract a specific region to work on
-in a sequence editor, and later on merge it back into the complete sequence. Because a subgraph does not include edges
-and nodes that are no longer relevant to the user, it can be exported to a file that is much smaller in size and is
-generally easier to visualize or edit. To illustrate, the first panel in Figure X represents a sequence in which an
-insertion and substitution have taken place. We want to take a closer look at the region indicated in bold, and use the
-`derive subgraph` command as follows:
+### Stitch [WIP]
+The stitch operation provides a general-purpose representation of molecular cloning workflows in a graph sequence model.
+Supporting specific protocols like Gibson assembly is considered out of scope for the gen client, but users are
+encouraged to leverage gen for the underlying primitives.
 
-```console
-gen derive subgraph —-sample S1 —-region chr1:7-12 —-new-sample my_locus
-```
+TODO
 
-The region string can be read as “the sequence from position 7 through 12 (but not including 12) on the main linear path
-of the graph with the name chr1”. An error will be raised if the sequence graph does not have a designated path. If we
-wanted to use a different path on chr1, we would also specify the name of that path as `—-backbone` argument along with
-the region.  It must be noted that even though the region definition is linear, the derived subgraph is not. Instead,
-the ends of the region induce a subgraph consisting of all the blocks and edges that can be accessed by walks between
-both points. Any edges to or from blocks that are outside of the subgraph will be rewritten to edges to the end and
-start dummy nodes, respectively. 
 
-Alternatively, users can specify the boundaries directly by entering a pair of block identifiers using the
-`—-start-block` and `—-end-block` options. Block identifiers can be obtained from visualizations or exported GFA files,
-where they take the role of segment names. They currently follow the format `m.n`, where m and n refer to the node ID in
-the sequence graph, and starting coordinate of the block on that node, respectively. This ensures consistency between
-multiple versions of the sequence graph, since node IDs do not change when new blocks are created. The end coordinate of
-the block can be derived from its length, but this may be made explicit in the future if advantageous (for example
-`m.n.l` where l is equal to the block length). Blocks are not stored in the database directly, but are instead inferred
-from nodes and edges as needed. This also means that a block does not have to exist _a priori_ when specifying a start
-or end block to create the subgraph. For example: if your graph contains a 10kb long block with ID 1.0 and you don't
-want to include the entire block, then you can enter 1.5000 as start block even though there are currently no edges that
-connect to that coordinate.
 
-Lastly, users can define a subgraph through a named accession instead. An accession also defines a part of the graph
-through coordinates on a linear path, but they are stored by name in the gen database. and referenced through the
-`-—accession` option of the extract command. The accession does not have to be defined in the sample from which you
-derive a subgraph, it is automatically translated from the coordinate frame of the sample in which it was originally
-defined. This is only possible if the graphs are related trough the sample lineage, and an error will be raised if they
-are not.
+<figure  width=800 >
+<img src="./figures/operators/stitches.png" width=600 alt="Figure X" >
+<figcaption><b>Figure X</b>:</figcaption>
+</figure>
 
-The `--sample` option specifies which sample to take a subgraph from, if it is not specified the graphs not associated
-with a sample will be used (also known as the _null sample_). In the example above we also use the `—-new-sample` option
-to create a new sample called 'my_locus' for the output, otherwise gen will store it in the null sample. While we could
-always roll back to the previous contents, it can still be useful to create a new sample and keep the original sample as
-a reference scaffold. As long as the bases (or residues) at the very ends of the subgraph remain intact, edited
-subgraphs can be easily imported and re-attached to a larger scaffold graph using the `derive supergraph` command.
 
-By default, subgraphs retain the name of their parent graph: the graph contained in the 'my_locus' sample created by the
-example command above is still called 'chr1', since it can be seen as a window into the 'chr1' sequence. If you want to
-include the extracted subgraph as part of a synthetic design, however, it can be useful to save the subgraph itself
-under a new name using `--new-name`. This complicates the use of other 'derive' operations later on, but makes it
-possible to use a subgraph in 'make' operations.
+### Splice [WIP]
+Whereas `stitch` operations take place at the ends of a graph, `splice` works on the _inside_ of a graph. It can be used to model a substitution genome edit, but also to reintegrate an extracted subgraph.
 
-### Supergraph [WIP]
-Extracted subgraphs and their descendants can be (re)attached to the sequence graph they were derived from, or any graph
-that shares at least the boundaries of the subgraph. This is done using the supergraph operation and a scaffold sample
-that represents the original context. First, the boundary blocks of the input graph are used to induce an analogous
-subgraph in the scaffold sample. Like in the subset operation, this subgraph consists of all blocks and edges that can
-be visited between the given boundaries. Whereas the `derive subgraph` command extracts a subgraph and discards the
-surrounding blocks, `derive supergraph` discards the induced subgraph and adds the surrounding blocks and edges to the
-input graph. The listing below demonstrates how to use it:
-
-``` console
-gen derive supergraph —-sample my_locus —-scaffold S1 —-new-sample S2
-```
-
-This command restores the sequence context of the 'my_locus' sample using sample 'S1' as base, and saves the result as a
-new sample 'S2'. The scaffold sample 'S1' remained unchanged when deriving the supergraph, and by using the
-`--new-sample` option the input sample is retained as well. Note that the scaffold sample can contain more than one
-sequence graph, for example to represent multiple chromosomes; all of these will end up in the supergraph output sample.
 
 <figure style="margin-left: auto; margin-right: auto">
 <img src="./figures/operators/subgraph-supergraph.png" width=800 alt="Figure 1">
@@ -299,12 +296,20 @@ A and A. c) Scaffold graph with the terminal blocks from panel b highlighted in 
 subgraph in panel b and the scaffold in panel c.</figcaption>
 </figure>
 
-Even though the union and superset operations both provide a means to merge sequence graphs, they cannot be used
-interchangeably as illustrated in Figure X
 
-<figure style="margin-left: auto; margin-right: auto">
-<img src="./figures/operators/supergraph-union.png" width=800 alt="Figure 3">
-<figcaption width=800><b>Figure x</b>:</figcaption>
-</figure>
+
+TODO
+
+### Delete [WIP]
+TODO
+
+### Insert [WIP]
+TODO
+
+
+### Circle [TBD]
+TBD
+
+
 
 
