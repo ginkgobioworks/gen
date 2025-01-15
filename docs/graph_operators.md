@@ -2,10 +2,8 @@
 
 In addition to _update_ commands that incorporate variants from external data, gen also provides a set of operations for
 graph manipulation within the client. The operations are organized into two categories: _derive_ commands and _make_
-commands.
-
-The _derive_ command family computes subgraphs and combinations through various analytical operations. The following
-subcommands are available:
+commands. The _derive_ command family computes subgraphs and combinations through various analytical operations. The
+following subcommands are available:
 
 - `derive subgraph`: extracts a region or subset based on specific criteria
 - `derive chunks`: partitions a graph into multiple (overlapping) subgraphs
@@ -87,17 +85,15 @@ ends of the region induce a subgraph consisting of all the blocks and edges that
 points. Any edges to or from blocks that are outside of the subgraph will be rewritten to edges to the end and start
 dummy nodes, respectively.
 
-Alternatively, users can specify the boundaries directly by entering a pair of block identifiers using the
-`—-start-block` and `—-end-block` options. Block identifiers can be obtained from visualizations or exported GFA files,
-where they take the role of segment names. They currently follow the format `m.n`, where m and n refer to the node ID in
-the sequence graph, and starting coordinate of the block on that node, respectively. This ensures consistency between
-multiple versions of the sequence graph, since node IDs do not change when new blocks are created. The end coordinate of
-the block can be derived from its length, but this may be made explicit in the future if advantageous (for example
-`m.n.l` where l is equal to the block length). Blocks are not stored in the database directly, but are instead inferred
-from nodes and edges as needed. This also means that a block does not have to exist _a priori_ when specifying a start
-or end block to create the subgraph. For example: if your graph contains a 10kb long block with ID 1.0 and you don't
-want to include the entire block, then you can enter 1.5000 as start block even though there are currently no edges that
-connect to that coordinate.
+Alternatively, users can specify the boundaries directly by entering a pair of block coordinates as the `—-start` and
+`—-end` options. Block coordinates follow the format `m.n`, where m and n refer to the node ID in the sequence graph,
+and the position on that node, respectively. This ensures consistency between multiple versions of the sequence graph,
+since node IDs do not change as the graph grows. This is very similar to the format used by block identifiers that can
+be found in visualizations or exported GFA files, where they take the role of segment names. In a visualization a block
+may be labeled as 2:10-20 in the visualization, indicating that it refers to positions 10 through 20 on node 2. In the
+GFA file the corresponding identifier would be 2.10, the second coordinate can be derived from the length of the
+segment. Therefore, to indicate a block coordinate at position 5 on a block labeled 2:10-20 in a visualization, a user
+would enter 2.15.
 
 Lastly, users can define a subgraph through a named accession instead. An accession also defines a part of the graph
 through coordinates on a linear path, but they are stored by name in the gen database. and referenced through the
@@ -106,11 +102,12 @@ derive a subgraph, it is automatically translated from the coordinate frame of t
 defined. This is only possible if the graphs are related trough the sample lineage, and an error will be raised if they
 are not.
 
-The `--sample` option specifies which sample to take a subgraph from, if it is not specified graphs from the _null sample_. In the example above we also use the `—-new-sample` option
-to create a new sample called 'my_locus' for the output, otherwise gen will store it in the null sample. While we could
-always roll back to the previous contents, it can still be useful to create a new sample and keep the original sample as
-a reference scaffold. As long as the bases (or residues) at the very ends of the subgraph remain intact, edited
-subgraphs can be easily imported and re-attached to a larger scaffold graph using the `derive supergraph` command.
+The `--sample` option specifies which sample to take a subgraph from, if it is not specified graphs from the _null
+sample_. In the example above we also use the `—-new-sample` option to create a new sample called 'my_locus' for the
+output, otherwise gen will store it in the null sample. While we could always roll back to the previous contents, it can
+still be useful to create a new sample and keep the original sample as a reference scaffold. As long as the bases (or
+residues) at the very ends of the subgraph remain intact, edited subgraphs can be easily imported and re-attached to a
+larger scaffold graph using the `derive supergraph` command.
 
 By default, subgraphs retain the name of their parent graph: the graph contained in the 'my_locus' sample created by the
 example command above is still called 'chr1', since it can be seen as a window into the 'chr1' sequence. If you want to
@@ -186,7 +183,8 @@ this check, but it is important to note that any variable region that spans chun
 terms of the graph: the breakpoints (shifted to account for overlap) induce a subgraph that contains only the edges and
 blocks that can be reached on walks between the (shifted) breakpoints.
 
-By default, chunks are named after their parent (chr1 becomes chr1.1, chr1.2, chr1.3) and stored in the null sample, but users can also specify graph and sample names as a list and/or with wildcards (`--new-names`). 
+By default, chunks are named after their parent (chr1 becomes chr1.1, chr1.2, chr1.3) and stored in the null sample, but
+users can also specify graph and sample names as a list and/or with wildcards (`--new-names`). 
 
 
 <figure style="margin-left: auto; margin-right: auto">
@@ -232,7 +230,9 @@ multiple sequence graphs. For example, the union of sample 'S1' which contains '
 results in a sample that contains both 'chr1' and 'chr2'.
 
 ### Intersection [WIP]
-The complementary operation to a union, is to retain only the edges that are present in both, i.e. the intersection. 
+The complementary operation to a union, is to retain only the edges that are present in both, i.e. the intersection.
+This requires special handling of boundary edges that represent the wildtype in a heterozygous genome, because these are
+implied rather than made directly. 
 
 <figure style="margin-left: auto; margin-right: auto">
 <img src="./figures/operators/intersect-union-difference.png" width=800 alt="Figure 2">
@@ -242,11 +242,11 @@ The complementary operation to a union, is to retain only the edges that are pre
 ```console
 Usage: gen derive intersection S1 S2 [S3 ...] [-o, --output SAMPLE]
             
-        Combines the contents of two or more samples, merging sequence graphs based on their name and printing statistics to the screen.
+        ...
 
 Options:
-    --output SAMPLE 
-        Direct output to existing or new sample, replacing previous contents witht he same name. Supports placeholders. 
+    --new-sample OUTPUT Store output as a new sample. Supports placeholders. 
+
 ```
 
 ### Difference [WIP]
@@ -259,10 +259,10 @@ Options:
 ```console
 Usage: gen derive intersection S1 S2 [S3 ...] [-o, --output SAMPLE]
             
-        Combines the contents of two or more samples, merging sequence graphs based on their name and printing statistics to the screen.
+        ...
 
 Options:
-    --output SAMPLE  Store output as a new sample. Supports placeholders. 
+    --new-sample OUTPUT Store output as a new sample. Supports placeholders. 
     --scaffold 
 ```
 
@@ -284,7 +284,8 @@ TODO
 
 
 ### Splice [WIP]
-Whereas `stitch` operations take place at the ends of a graph, `splice` works on the _inside_ of a graph. It can be used to model a substitution genome edit, but also to reintegrate an extracted subgraph.
+Whereas `stitch` operations take place at the ends of a graph, `splice` works on the _inside_ of a graph. It can be used
+to model a substitution genome edit, but also to reintegrate an extracted subgraph.
 
 
 <figure style="margin-left: auto; margin-right: auto">
