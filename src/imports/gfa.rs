@@ -172,17 +172,24 @@ pub fn import_gfa<'a>(
     let bar = progress_bar.add(get_time_elapsed_bar());
     bar.set_message("Creating Gen Objects");
     let edge_ids = Edge::bulk_create(conn, &edges.into_iter().collect::<Vec<EdgeData>>());
-    let new_block_group_edges = edge_ids
+    let block_group_edges = edge_ids
         .iter()
         .map(|edge_id| BlockGroupEdgeData {
             block_group_id: block_group.id,
             edge_id: *edge_id,
             chromosome_index: 0,
             phased: 0,
+            source_phase_layer_id: 0,
+            target_phase_layer_id: 0,
         })
         .collect::<Vec<_>>();
 
-    BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
+    let block_group_edge_ids = BlockGroupEdge::bulk_create(conn, &block_group_edges);
+    let block_group_edge_ids_by_edge_id = block_group_edge_ids
+        .iter()
+        .enumerate()
+        .map(|(index, block_group_edge_id)| (edge_ids[index], block_group_edge_id))
+        .collect::<HashMap<_, _>>();
 
     let saved_edges = Edge::bulk_load(conn, &edge_ids);
     let mut edge_ids_by_data = HashMap::new();
@@ -229,7 +236,11 @@ pub fn import_gfa<'a>(
         );
         let edge_id = *edge_ids_by_data.get(&key).unwrap();
         path_edge_ids.push(edge_id);
-        Path::create(conn, path_name, block_group.id, &path_edge_ids);
+        let path_block_group_edge_ids = path_edge_ids
+            .iter()
+            .map(|edge_id| **block_group_edge_ids_by_edge_id.get(edge_id).unwrap())
+            .collect::<Vec<_>>();
+        Path::create(conn, path_name, block_group.id, &path_block_group_edge_ids);
     }
 
     for input_walk in &gfa.walk {
@@ -264,7 +275,11 @@ pub fn import_gfa<'a>(
         );
         let edge_id = *edge_ids_by_data.get(&key).unwrap();
         path_edge_ids.push(edge_id);
-        Path::create(conn, path_name, block_group.id, &path_edge_ids);
+        let path_block_group_edge_ids = path_edge_ids
+            .iter()
+            .map(|edge_id| **block_group_edge_ids_by_edge_id.get(edge_id).unwrap())
+            .collect::<Vec<_>>();
+        Path::create(conn, path_name, block_group.id, &path_block_group_edge_ids);
     }
     bar.finish();
 }

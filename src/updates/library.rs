@@ -8,9 +8,9 @@ use std::io::BufReader;
 use std::str;
 
 use crate::models::block_group::BlockGroup;
+use crate::models::block_group_edge::{BlockGroupEdge, BlockGroupEdgeData};
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::file_types::FileTypes;
-use crate::models::new_block_group_edge::{NewBlockGroupEdge, NewBlockGroupEdgeData};
 use crate::models::node::Node;
 use crate::models::operations::{OperationFile, OperationInfo};
 use crate::models::phase_layer::{PhaseLayer, UNPHASED_CHROMOSOME_INDEX};
@@ -132,12 +132,8 @@ pub fn update_with_library(
 
     let mut new_edges = HashSet::new();
     let mut phase_layers_by_node_id = HashMap::new();
-    let unphased_layer_id1 = PhaseLayer::create(conn, UNPHASED_CHROMOSOME_INDEX, 0);
-    let unphased_layer_id2 = PhaseLayer::create(conn, UNPHASED_CHROMOSOME_INDEX, 0);
-    // TODO: Change path to use block group edges instead of edges,
-    // then use the phase layer of the start and end nodes here instead of the unphased one
-    phase_layers_by_node_id.insert(start_block.node_id, unphased_layer_id1);
-    phase_layers_by_node_id.insert(end_block.node_id, unphased_layer_id2);
+    phase_layers_by_node_id.insert(start_block.node_id, start_block.phase_layer_id);
+    phase_layers_by_node_id.insert(end_block.node_id, end_block.phase_layer_id);
 
     for parts in parts_list.iter() {
         for part in parts.iter() {
@@ -196,9 +192,9 @@ pub fn update_with_library(
 
     let new_edge_ids = Edge::bulk_create(conn, &new_edges.iter().cloned().collect());
     let new_edges = Edge::bulk_load(conn, &new_edge_ids);
-    let new_block_group_edges = new_edges
+    let block_group_edges = new_edges
         .iter()
-        .map(|edge| NewBlockGroupEdgeData {
+        .map(|edge| BlockGroupEdgeData {
             block_group_id: path.block_group_id,
             edge_id: edge.id,
             chromosome_index: 0,
@@ -207,7 +203,7 @@ pub fn update_with_library(
             target_phase_layer_id: *phase_layers_by_node_id.get(&edge.target_node_id).unwrap(),
         })
         .collect::<Vec<_>>();
-    NewBlockGroupEdge::bulk_create(conn, &new_block_group_edges);
+    BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
     let summary_str = format!("{region_name}: {path_changes_count} changes.\n");
     operation_management::end_operation(

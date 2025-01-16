@@ -330,39 +330,49 @@ mod tests {
             Strand::Forward,
         );
 
-        let new_block_group_edges = vec![
+        let block_group_edges = vec![
             BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id: edge1.id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             },
             BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id: edge2.id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             },
             BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id: edge3.id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             },
             BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id: edge4.id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             },
             BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id: edge5.id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             },
         ];
-        BlockGroupEdge::bulk_create(&conn, &new_block_group_edges);
+        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
         Path::create(
             &conn,
@@ -495,6 +505,7 @@ mod tests {
             path_start: 7,
             path_end: 15,
             strand: Strand::Forward,
+            phase_layer_id: 0,
         };
         let change = PathChange {
             block_group_id,

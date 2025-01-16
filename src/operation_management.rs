@@ -392,6 +392,8 @@ pub fn load_changeset_models(changeset: &mut ChangesetIter) -> ChangesetModels {
                     edge_id: parse_number(item, 2),
                     chromosome_index: parse_number(item, 3),
                     phased: parse_number(item, 4),
+                    source_phase_layer_id: parse_number(item, 5),
+                    target_phase_layer_id: parse_number(item, 6),
                 }),
                 _ => {}
             }
@@ -595,7 +597,16 @@ pub fn apply_changeset(
                     let edge_id = item.new_value(2).unwrap().as_i64().unwrap();
                     let chromosome_index = item.new_value(3).unwrap().as_i64().unwrap();
                     let phased = item.new_value(4).unwrap().as_i64().unwrap();
-                    insert_block_group_edges.push((bg_id, edge_id, chromosome_index, phased));
+                    let source_phase_layer_id = item.new_value(5).unwrap().as_i64().unwrap();
+                    let target_phase_layer_id = item.new_value(6).unwrap().as_i64().unwrap();
+                    insert_block_group_edges.push(BlockGroupEdgeData {
+                        block_group_id: bg_id,
+                        edge_id,
+                        chromosome_index,
+                        phased,
+                        source_phase_layer_id,
+                        target_phase_layer_id,
+                    });
                 }
                 "collections" => {
                     Collection::create(
@@ -695,35 +706,32 @@ pub fn apply_changeset(
         edge_id_map.insert(sorted_edge_ids[index], *edge_id);
     }
 
-    let mut block_group_edges: HashMap<i64, Vec<(i64, i64, i64)>> = HashMap::new();
+    let mut block_group_edges = vec![];
 
-    for (bg_id, edge_id, chromosome_index, phased) in insert_block_group_edges {
+    for block_group_edge_data in insert_block_group_edges {
         let bg_id = *dep_bg_map
-            .get(&bg_id)
-            .or(blockgroup_map.get(&bg_id).or(Some(&bg_id)))
+            .get(&block_group_edge_data.block_group_id)
+            .or(blockgroup_map
+                .get(&block_group_edge_data.block_group_id)
+                .or(Some(&block_group_edge_data.block_group_id)))
             .unwrap();
         let edge_id = dep_edge_map
-            .get(&edge_id)
-            .or(edge_id_map.get(&edge_id).or(Some(&edge_id)))
+            .get(&block_group_edge_data.edge_id)
+            .or(edge_id_map
+                .get(&block_group_edge_data.edge_id)
+                .or(Some(&block_group_edge_data.edge_id)))
             .unwrap();
-        block_group_edges
-            .entry(bg_id)
-            .or_default()
-            .push((*edge_id, chromosome_index, phased));
+        block_group_edges.push(BlockGroupEdgeData {
+            block_group_id: bg_id,
+            edge_id: *edge_id,
+            chromosome_index: block_group_edge_data.chromosome_index,
+            phased: block_group_edge_data.phased,
+            source_phase_layer_id: block_group_edge_data.source_phase_layer_id,
+            target_phase_layer_id: block_group_edge_data.target_phase_layer_id,
+        });
     }
 
-    for (bg_id, edges) in block_group_edges.iter() {
-        let new_block_group_edges = edges
-            .iter()
-            .map(|(edge_id, chromosome_index, phased)| BlockGroupEdgeData {
-                block_group_id: *bg_id,
-                edge_id: *edge_id,
-                chromosome_index: *chromosome_index,
-                phased: *phased,
-            })
-            .collect::<Vec<_>>();
-        BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
-    }
+    BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
     for path in insert_paths {
         let mut sorted_edges = vec![];
@@ -1534,6 +1542,8 @@ mod tests {
             edge_id: new_edge.id,
             chromosome_index: 0,
             phased: 0,
+            source_phase_layer_id: 0,
+            target_phase_layer_id: 0,
         };
         BlockGroupEdge::bulk_create(conn, &[block_group_edge]);
         let operation = end_operation(

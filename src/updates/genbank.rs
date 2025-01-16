@@ -93,7 +93,7 @@ where
                         0,
                         Strand::Forward,
                     );
-                    BlockGroupEdge::bulk_create(
+                    let block_group_edge_ids = BlockGroupEdge::bulk_create(
                         conn,
                         &[
                             BlockGroupEdgeData {
@@ -101,21 +101,20 @@ where
                                 edge_id: edge_into.id,
                                 chromosome_index: 0,
                                 phased: 0,
+                                source_phase_layer_id: 0,
+                                target_phase_layer_id: 0,
                             },
                             BlockGroupEdgeData {
                                 block_group_id: block_group.id,
                                 edge_id: edge_out_of.id,
                                 chromosome_index: 0,
                                 phased: 0,
+                                source_phase_layer_id: 0,
+                                target_phase_layer_id: 0,
                             },
                         ],
                     );
-                    Path::create(
-                        conn,
-                        &locus.name,
-                        block_group.id,
-                        &[edge_into.id, edge_out_of.id],
-                    )
+                    Path::create(conn, &locus.name, block_group.id, &block_group_edge_ids)
                 };
                 for edit in locus.changes_to_wt() {
                     let start = edit.start;
@@ -154,6 +153,7 @@ where
                                     path_start: start,
                                     path_end: end + change_seq.length,
                                     strand: Strand::Forward,
+                                    phase_layer_id: 0,
                                 },
                                 chromosome_index: 0,
                                 phased: 0,
@@ -174,6 +174,7 @@ where
                                 path_start: start,
                                 path_end: end,
                                 strand: Strand::Forward,
+                                phase_layer_id: 0,
                             },
                             chromosome_index: 0,
                             phased: 0,

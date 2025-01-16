@@ -1,4 +1,4 @@
-use crate::models::block_group_edge::AugmentedEdgeData;
+use crate::models::block_group_edge::NewAugmentedEdgeData;
 use crate::models::strand::Strand;
 use crate::models::traits::*;
 use rusqlite::types::Value;
@@ -60,8 +60,8 @@ impl From<&AccessionEdge> for AccessionEdgeData {
     }
 }
 
-impl From<&AugmentedEdgeData> for AccessionEdgeData {
-    fn from(item: &AugmentedEdgeData) -> Self {
+impl From<&NewAugmentedEdgeData> for AccessionEdgeData {
+    fn from(item: &NewAugmentedEdgeData) -> Self {
         AccessionEdgeData {
             source_node_id: item.edge_data.source_node_id,
             source_coordinate: item.edge_data.source_coordinate,

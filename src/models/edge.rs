@@ -8,7 +8,7 @@ use std::hash::{Hash, RandomState};
 use std::rc::Rc;
 
 use crate::graph::{GraphEdge, GraphNode};
-use crate::models::block_group_edge::AugmentedEdge;
+use crate::models::block_group_edge::NewAugmentedEdge;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::sequence::{cached_sequence, Sequence};
 use crate::models::strand::Strand;
@@ -294,7 +294,7 @@ impl Edge {
             .collect::<Vec<i64>>()
     }
 
-    pub fn blocks_from_edges(conn: &Connection, edges: &[AugmentedEdge]) -> Vec<GroupBlock> {
+    pub fn blocks_from_edges(conn: &Connection, edges: &[NewAugmentedEdge]) -> Vec<GroupBlock> {
         let mut node_ids = HashSet::new();
         let mut edges_by_source_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
         let mut edges_by_target_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
@@ -374,7 +374,7 @@ impl Edge {
     }
 
     pub fn build_graph(
-        edges: &Vec<AugmentedEdge>,
+        edges: &Vec<NewAugmentedEdge>,
         blocks: &Vec<GroupBlock>,
     ) -> (DiGraphMap<GraphNode, GraphEdge>, HashMap<(i64, i64), Edge>) {
         let blocks_by_start = blocks
@@ -463,7 +463,7 @@ impl Edge {
         (graph, edges_by_node_pair)
     }
 
-    pub fn boundary_edges_from_sequences(blocks: &[GroupBlock]) -> Vec<AugmentedEdge> {
+    pub fn boundary_edges_from_sequences(blocks: &[GroupBlock]) -> Vec<NewAugmentedEdge> {
         let node_blocks_by_id: HashMap<i64, Vec<&GroupBlock>> =
             blocks.iter().fold(HashMap::new(), |mut acc, block| {
                 acc.entry(block.node_id)
@@ -476,7 +476,7 @@ impl Edge {
             for (previous_block, next_block) in node_blocks.iter().tuple_windows() {
                 // NOTE: Most of this data is bogus, the Edge struct is just a convenient wrapper
                 // for the data we need to set up boundary edges in the block group graph
-                boundary_edges.push(AugmentedEdge {
+                boundary_edges.push(NewAugmentedEdge {
                     edge: Edge {
                         id: -1,
                         source_node_id: previous_block.node_id,
@@ -486,8 +486,11 @@ impl Edge {
                         target_coordinate: next_block.start,
                         target_strand: Strand::Forward,
                     },
+                    block_group_edge_id: -1,
                     chromosome_index: 0,
                     phased: 0,
+                    source_phase_layer_id: 0,
+                    target_phase_layer_id: 0,
                 });
             }
         }
@@ -750,6 +753,7 @@ mod tests {
             path_start: 7,
             path_end: 15,
             strand: Strand::Forward,
+            phase_layer_id: 0,
         };
         let change = PathChange {
             block_group_id,

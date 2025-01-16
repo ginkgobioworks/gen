@@ -5,7 +5,6 @@ pub mod collection;
 pub mod edge;
 pub mod file_types;
 pub mod metadata;
-pub mod new_block_group_edge;
 pub mod node;
 pub mod operations;
 pub mod path;

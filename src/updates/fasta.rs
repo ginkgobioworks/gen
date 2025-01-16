@@ -90,6 +90,7 @@ pub fn update_with_fasta(
         path_start: start_coordinate,
         path_end: end_coordinate,
         strand: Strand::Forward,
+        phase_layer_id: 0,
     };
 
     let path_change = PathChange {
@@ -118,15 +119,17 @@ pub fn update_with_fasta(
         rusqlite::params!(SQLValue::from(node_id)),
     )[0]
     .clone();
-    let new_path = path.new_path_with(
-        conn,
-        start_coordinate,
-        end_coordinate,
-        &edge_to_new_node,
-        &edge_from_new_node,
-    );
+    // TODO: Uncomment
+    // let new_path = path.new_path_with(
+    //     conn,
+    //     start_coordinate,
+    //     end_coordinate,
+    //     &edge_to_new_node,
+    //     &edge_from_new_node,
+    // );
 
-    let summary_str = format!(" {}: 1 change", new_path.name);
+    //    let summary_str = format!(" {}: 1 change", new_path.name);
+    let summary_str = format!(" {}: 1 change", "foo");
     operation_management::end_operation(
         conn,
         operation_conn,

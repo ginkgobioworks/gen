@@ -99,11 +99,11 @@ CREATE TABLE path_edges (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
   path_id INTEGER NOT NULL,
   index_in_path INTEGER NOT NULL,
-  edge_id INTEGER NOT NULL,
-  FOREIGN KEY(edge_id) REFERENCES edges(id),
+  block_group_edge_id INTEGER NOT NULL,
+  FOREIGN KEY(block_group_edge_id) REFERENCES block_group_edges(id),
   FOREIGN KEY(path_id) REFERENCES paths(id)
 ) STRICT;
-CREATE UNIQUE INDEX path_edges_uidx ON path_edges(path_id, edge_id, index_in_path);
+CREATE UNIQUE INDEX path_edges_uidx ON path_edges(path_id, block_group_edge_id, index_in_path);
 
 CREATE TABLE phase_layers (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -118,12 +118,10 @@ CREATE TABLE block_group_edges (
   edge_id INTEGER NOT NULL,
   chromosome_index INTEGER,
   phased INTEGER NOT NULL,
-  source_phase_layer_id INTEGER,
-  target_phase_layer_id INTEGER,
+  source_phase_layer_id INTEGER DEFAULT 0,
+  target_phase_layer_id INTEGER DEFAULT 0,
   FOREIGN KEY(block_group_id) REFERENCES block_groups(id),
-  FOREIGN KEY(edge_id) REFERENCES edges(id),
-  FOREIGN KEY(source_phase_layer_id) REFERENCES phase_layers(id),
-  FOREIGN KEY(target_phase_layer_id) REFERENCES phase_layers(id)
+  FOREIGN KEY(edge_id) REFERENCES edges(id)
 ) STRICT;
 CREATE UNIQUE INDEX block_group_edges_uidx ON block_group_edges(block_group_id, edge_id, chromosome_index, phased);
 
