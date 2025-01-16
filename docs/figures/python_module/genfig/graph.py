@@ -170,12 +170,22 @@ class Graph:
         cur = con.cursor()
 
         # Build a query to get the edges
-        query = '''SELECT source_node_id, source_coordinate, target_node_id, target_coordinate 
+        query = '''SELECT source_node_id, source_coordinate, target_node_id, target_coordinate,
+                          block_group_edges.chromosome_index as bge_chrom_index,
+                          block_group_edges.phased,
+                          block_group_edges.source_phase_layer_id,
+                          block_group_edges.target_phase_layer_id,
+                          source_phase_layers.is_reference as source_is_reference,
+                          target_phase_layers.is_reference as target_is_reference
                  FROM edges
                  JOIN block_group_edges
                  ON block_group_edges.edge_id = edges.id
                  JOIN block_groups
-                 ON block_groups.id = block_group_edges.block_group_id'''
+                 ON block_groups.id = block_group_edges.block_group_id
+                 JOIN phase_layers source_phase_layers
+                 ON source_phase_layers.id = block_group_edges.source_phase_layer_id
+                 JOIN phase_layers target_phase_layers
+                 ON target_phase_layers.id = block_group_edges.target_phase_layer_id'''
 
         filters = []
         if collection_name:
@@ -190,7 +200,7 @@ class Graph:
 
         cur.execute(query)
         edges = cur.fetchall()
-
+        
         # Get the nodes
         node_ids = set([e[0] for e in edges] + [e[2] for e in edges])
         query = f'''SELECT id, sequence
@@ -511,7 +521,7 @@ class Graph:
         for edge in agraph.iteredges():
             # Get the attributes from the corresponding edge in the segment graph
             edge_data = self.block_graph.edges[edge[0], edge[1]]
-
+            print(edge_data)
             # If the edge is a reference edge, make it dashed
             if edge_data.get('reference', False):
                 edge.attr['style'] = 'dashed'
