@@ -86,7 +86,7 @@ class Graph:
 
         return self
 
-    def add_edge(self, source, target):
+    def add_edge(self, source, target, metadata={}):
         """
         Adds an edge to the graph with port information stored as edge attributes.
 
@@ -96,7 +96,7 @@ class Graph:
         """
         (source, from_pos), (target, to_pos) = source, target
 
-        self.graph.add_edge(f'{source}', f'{target}', from_pos=from_pos, to_pos=to_pos)
+        self.graph.add_edge(f'{source}', f'{target}', from_pos=from_pos, to_pos=to_pos, **metadata)
 
         return self
 
@@ -171,7 +171,7 @@ class Graph:
 
         # Build a query to get the edges
         query = '''SELECT source_node_id, source_coordinate, target_node_id, target_coordinate,
-                          block_group_edges.chromosome_index as bge_chrom_index,
+                          block_group_edges.chromosome_index as chrom_index,
                           block_group_edges.phased,
                           block_group_edges.source_phase_layer_id,
                           block_group_edges.target_phase_layer_id,
@@ -182,9 +182,9 @@ class Graph:
                  ON block_group_edges.edge_id = edges.id
                  JOIN block_groups
                  ON block_groups.id = block_group_edges.block_group_id
-                 JOIN phase_layers source_phase_layers
+                 LEFT JOIN phase_layers source_phase_layers
                  ON source_phase_layers.id = block_group_edges.source_phase_layer_id
-                 JOIN phase_layers target_phase_layers
+                 LEFT JOIN phase_layers target_phase_layers
                  ON target_phase_layers.id = block_group_edges.target_phase_layer_id'''
 
         filters = []
@@ -225,13 +225,17 @@ class Graph:
 
         # In the Rust code, from_pos is considered to be exclusive to the range of the block, 
         # so we need to subtract 1 to get the conventional position in the sequence.
-        for source, from_pos, target, to_pos in edges:
+        for e in edges:
+            source, from_pos, target, to_pos = e[0:4]
+            metadata_keys = ['chrom_index', 'phased', 'src_phase_layer', 'tgt_phase_layer', 'src_is_ref', 'tgt_is_ref']
+            metadata = {k: v for k, v in zip(metadata_keys, e[4:])}
+
             if source == source_node or from_pos == 0:
                 self.connect_to_source(target, to_pos)
             elif target == sink_node:
                 self.connect_to_sink(source, from_pos-1)
             else:
-                self.add_edge((source, from_pos-1), (target, to_pos))
+                self.add_edge((source, from_pos-1), (target, to_pos), metadata)
     
     def make_block_graph(self, prune=True):
         # Split up all nodes into blocks (i.e. contiguous subsequences)
@@ -285,10 +289,16 @@ class Graph:
             assert len(source_blocks) == 1
             assert len(target_blocks) == 1
 
+            # Other relevant data from the original edge
+            metadata_keys = ['chrom_index', 'phased', 'src_phase_layer', 'tgt_phase_layer', 'src_is_ref', 'tgt_is_ref']
+            metadata = {k: data.get(k, None) for k in metadata_keys}
+
             self.block_graph.add_edge(source_blocks[0], target_blocks[0], 
                                       original_edge=((source,data.get('from_pos',-1)),(target,data.get('to_pos',0))),
                                       reference=False, 
-                                      highlight=data.get('highlight', False))
+                                      highlight=data.get('highlight', False),
+                                      **metadata
+                                      )
             
         # Prune the block graph to remove nodes that are not connected to the main start and end node
         if prune:
@@ -444,15 +454,19 @@ class Graph:
         return self.render_dot(agraph, filename, format)
 
 
-    def render_block_graph(self, filename=None, format='svg', minimize=False, splines = True, align_blocks = True, 
-                            ranksep = 0.5, hide_nodes=[], prune = True,
-                            node_attributes = {}, edge_attributes = {}, graph_attributes = {}):
-        # Todo: refactor to break out a node -> segment function instead of make_block_graph
-        self.make_block_graph(prune=prune)
-
+    def render_block_graph(self, filename=None, format='svg', minimize=False, splines=True, align_blocks=True, 
+                            ranksep=0.5, hide_nodes=[], prune=True, edge_label=None,
+                            node_attributes={}, edge_attributes={}, graph_attributes={}):
         # Ensure that the file format is one of the supported formats
         if format not in ['svg', 'png', 'dot']:
             raise ValueError(f'Unsupported file format: {format}')
+        
+        # Ensure edge_label is one of the allowed values
+        if edge_label not in [None, 'index', 'phase_layer']:
+            raise ValueError(f'Unsupported edge_label: {edge_label}')
+
+        # Todo: refactor to break out a node -> segment function instead of make_block_graph
+        self.make_block_graph(prune=prune)
 
         # Create an AGraph to hold Graphviz attributes, based on the topology of the original graph
         agraph = pygraphviz.AGraph(directed=True)
@@ -488,7 +502,6 @@ class Graph:
             start = node_data.get('start', 0)
             end = node_data.get('end', len(sequence)-1)
 
-
             label = f"<<TABLE BORDER='0'>"
             if bgcolor:
                 label += f"<TR><TD BORDER='1' ALIGN='CENTER' PORT='seq' BGCOLOR='{bgcolor}'>"
@@ -521,7 +534,6 @@ class Graph:
         for edge in agraph.iteredges():
             # Get the attributes from the corresponding edge in the segment graph
             edge_data = self.block_graph.edges[edge[0], edge[1]]
-            print(edge_data)
             # If the edge is a reference edge, make it dashed
             if edge_data.get('reference', False):
                 edge.attr['style'] = 'dashed'
@@ -545,7 +557,12 @@ class Graph:
                 edge.attr['tailport'] = 'e'
             else:
                 edge.attr['tailport'] = 'seq:e'
-              
+
+            # Generate an edge label based on the edge_label parameter
+            if edge_label == 'index' and edge_data.get('chrom_index', False):
+                edge.attr['label'] = f"{edge_data.get('chrom_index', '')}"
+            elif edge_label == 'phase_layer' and (edge_data.get('src_phase_layer', False) or edge_data.get('tgt_phase_layer', False)):
+                edge.attr['label'] = f"{edge_data.get('src_phase_layer', '')} → {edge_data.get('tgt_phase_layer', '')}"
 
         # Set the graph-level attributes that will be used by the dot rendering engine
         agraph.graph_attr.update(rankdir=graph_attributes.get('rankdir', 'LR'), 
@@ -672,6 +689,7 @@ def main():
     parser.add_argument("--lines", help="Use straight lines instead of splines for edges", action="store_true")
     parser.add_argument("--flex", help="Do not attempt to align blocks from the same segment as a row", action="store_true")
     parser.add_argument("--hide_nodes", help="Comma-separated list of nodes to hide", default="")
+    parser.add_argument("--edge_label", help="Label the edges with the given attribute", choices=[None, 'index', 'phase_layer'], default=None)
     parser.add_argument("--graph_attributes", help="JSON string of a dictionary of additional graph attributes", default="{}")
     parser.add_argument("--node_attributes", help="JSON string of a nested dictionary of additional node attributes", default="{}")
     parser.add_argument("--edge_attributes", help="JSON string of a nested dictionary of additional edge attributes", default="{}")
@@ -684,6 +702,9 @@ def main():
         edge_attributes = json.loads(args.edge_attributes)
     except json.JSONDecodeError:
         print("Error: could not decode JSON string")
+        print(graph_attributes)
+
+        return
     
     g = Graph(db=args.db, 
               collection_name=args.collection, 
@@ -706,6 +727,7 @@ def main():
                                splines= not(args.lines),
                                align_blocks= not(args.flex),
                                hide_nodes=args.hide_nodes.split(',') if args.hide_nodes else [],
+                               edge_label=args.edge_label,
                                graph_attributes=graph_attributes,
                                node_attributes=node_attributes,
                                edge_attributes=edge_attributes)
