@@ -62,8 +62,38 @@ design of experiments), users should feel empowered to combine operations as nee
 from a large pangenome graph can make a design task more manageable by hiding overlapping or irrelevant variants. The
 original sequence context can be restored afterwards by performing a splice operation at the same location.
 
+## Example workflow: pooled cloning
+Pooled (a.k.a. multiplex, one-pot) experiments can be a very cost-effective way to generate a large amount of data. Instead
+of building or testing each variant in a separate liquid sample throughout the experiment, pooled workflows combine
+many variants per sample at various stages in the workflow. In the domain of DNA cloning this is particularly attractive for combinatorial sequence assembly: combining 10 variants of part A, with 10 variants of part B results in a total diversity
+of 100 unique sequences, but requires synthesis of only 20 fragments. For larger and more complex design this advantage
+becomes even greater. The resulting library can then be turned into isolates for an arrayed screening assay, or 
+handled as pool in a multiplex assay like cell sorting. These assays generally involve coupling a desired phenotype to
+a signal that can be read out at the single cell level (for example fluoresence), and then sorting cells into bins based
+on that signal. These bins can then be further analyzed with Next Generation Sequencing (NGS) methods to determine which
+variants are enriched in one population over another.
 
-## Derive
+The Gen graph datamodel lends itself well to the design and analysis of pooled experiments. [...]
+
+### Import library
+
+### Make paths
+
+### Export fasta
+
+### Derive chunks
+
+### Make stitch
+
+### Derive subgraph
+
+
+
+
+
+
+
+## Derive commands
 
 ### Subgraph [WIP]
 Pangenome graphs can get rather big and unwieldy, but by deriving a subgraph we can extract a specific region to work on
