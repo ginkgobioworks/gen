@@ -73,19 +73,50 @@ a signal that can be read out at the single cell level (for example fluoresence)
 on that signal. These bins can then be further analyzed with Next Generation Sequencing (NGS) methods to determine which
 variants are enriched in one population over another.
 
-The Gen graph datamodel lends itself well to the design and analysis of pooled experiments. [...]
+Despite the advantages to scale and cost, pooled workflows are not yet widely adopted in the field. One of the main barriers to entry is a, real or perceived, lack of software support: genetic design tools and sequence management systems are built
+around an assumption that each digital sequence maps to an isolated sample and its replicates. Or vice versa, that each experimental sample maps to one expected digital sequence. This user interface has worked well for smaller experiments, 
+but it does not scale to high throughput experiments unless the user has the computational expertise to automate design 
+and analysis tasks. The Gen data model does not make such assumptions, and by treating a sample as a graph of possible
+sequences, Gen lends itself well to the design and analysis of pooled experiments. An example pooled Type IIs restriction/ligation workflow, commonly known as Golden Gate cloning, is described below:
 
 ### Import library
+- Currently this is an "update" command that creates a combinatorial library based on a set of sequences (fasta) and a
+library layout (csv). By making this an "import" users can create a library from scratch, and not as an edit to an
+existing sequence.
+- At this point the user is mainly thinking about the final design they want to test, not how they will be cloning it.
 
 ### Make paths
+- Exposes the internal make-all-paths functionality to the user, with a flag to limit the number of paths generated. The
+last path becomes the "current path", which can then be exported to serve as a linear reference frame for later operations.
+- In this case the flag `-n 1` would mean: "get the first path from start to end, and make that the current reference path"
 
-### Export fasta
+### Export fasta (or genbank)
+- Exports the current path to a format that users can work with in the environment they are used to.
+- Highlighting the blocks that act as "articulation points" (a.k.a. "cut vertices") would be very helpful to select good
+junction sites for the assembly. Ideally as annotations, or by showing only those subsequences in upper case. 
 
 ### Derive chunks
+- See further in this document for description. The current path is used as the linear reference by which the user
+specifies the breakpoints. You can think of this as designing the assembly workflow in reverse.
 
 ### Make stitch
+- Virtual ligation operation to attach adapters containing a TypeIIS restriction site, appropriate spacers, and
+possibly priming sites for PCR. 
+- The resulting sequences are what's ordered as linear DNA, or alternatively as plasmid DNA by stitching to a vector
+instead of adapters.
+
+The design workflow may end here, but many users like to simulate the cloning process as a sanity check before pulling
+the trigger on their synthesis order. In our case that would be the reverse set of operations:
 
 ### Derive subgraph
+- Extracts the subgraph between the adapters
+
+### Make stitch
+- Overlap-aware ligation of the generated subgraphs
+- Raises an error if overlaps are not correct
+
+### Make paths
+- Generate an example sequence to crossreference to the design.
 
 
 
