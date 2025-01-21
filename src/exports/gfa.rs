@@ -372,14 +372,9 @@ mod tests {
                 target_phase_layer_id: 0,
             },
         ];
-        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
-        Path::create(
-            &conn,
-            "1234",
-            block_group.id,
-            &[edge1.id, edge2.id, edge3.id, edge4.id, edge5.id],
-        );
+        Path::create(&conn, "1234", block_group.id, &block_group_edge_ids);
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group.id, false);
 

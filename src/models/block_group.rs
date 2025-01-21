@@ -581,7 +581,6 @@ impl BlockGroup {
         }
 
         let mut edge_data_map = HashMap::new();
-
         for (block_group_id, new_augmented_edges) in new_augmented_edges_by_block_group {
             let new_edges = new_augmented_edges
                 .iter()
@@ -637,7 +636,7 @@ impl BlockGroup {
         conn: &Connection,
         change: &PathChange,
         tree: &IntervalTree<i64, NodeIntervalBlock>,
-    ) {
+    ) -> Vec<i64> {
         let new_augmented_edges = BlockGroup::set_up_new_edges(change, tree);
         let new_edges = new_augmented_edges
             .iter()
@@ -656,7 +655,7 @@ impl BlockGroup {
                 target_phase_layer_id: new_augmented_edges[i].target_phase_layer_id,
             })
             .collect::<Vec<_>>();
-        BlockGroupEdge::bulk_create(conn, &block_group_edges);
+        BlockGroupEdge::bulk_create(conn, &block_group_edges)
     }
 
     fn set_up_new_edges(

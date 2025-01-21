@@ -3,11 +3,12 @@ use crate::models::traits::*;
 use rusqlite;
 use rusqlite::types::Value;
 use rusqlite::{Connection, Result as SQLResult, Row};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::hash::RandomState;
 use std::rc::Rc;
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct BlockGroupEdge {
     pub id: i64,
     pub block_group_id: i64,

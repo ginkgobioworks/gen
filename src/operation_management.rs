@@ -60,6 +60,7 @@ pub struct DependencyModels {
     pub paths: Vec<Path>,
     pub accessions: Vec<Accession>,
     pub accession_edges: Vec<AccessionEdge>,
+    pub block_group_edges: Vec<BlockGroupEdge>,
 }
 
 #[derive(Debug)]
@@ -101,6 +102,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
     let mut previous_nodes = HashSet::new();
     let mut previous_sequences = HashSet::new();
     let mut previous_accession_edges = HashSet::new();
+    let mut previous_block_group_edges = HashSet::new();
     let mut created_block_groups = HashSet::new();
     let mut created_paths = HashSet::new();
     let mut created_accessions = HashSet::new();
@@ -108,6 +110,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
     let mut created_accession_edges = HashSet::new();
     let mut created_nodes = HashSet::new();
     let mut created_sequences: HashSet<String> = HashSet::new();
+    let mut created_block_group_edges = HashSet::new();
 
     while let Some(item) = iter.next().unwrap() {
         let op = item.op().unwrap();
@@ -164,16 +167,18 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                 }
                 "path_edges" => {
                     let path_id = item.new_value(1).unwrap().as_i64().unwrap();
-                    let edge_id = item.new_value(3).unwrap().as_i64().unwrap();
+                    let block_group_edge_id = item.new_value(3).unwrap().as_i64().unwrap();
                     if !created_paths.contains(&path_id) {
                         previous_paths.insert(path_id);
                     }
-                    if !created_edges.contains(&edge_id) {
-                        previous_edges.insert(edge_id);
+                    if !created_block_group_edges.contains(&block_group_edge_id) {
+                        previous_block_group_edges.insert(block_group_edge_id);
                     }
                 }
                 "block_group_edges" => {
                     // make sure blockgroup_map has blockgroups for bg ids made in external changes.
+                    let block_group_edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
+                    created_block_group_edges.insert(block_group_edge_pk);
                     let bg_id = item.new_value(1).unwrap().as_i64().unwrap();
                     let edge_id = item.new_value(2).unwrap().as_i64().unwrap();
                     if !created_edges.contains(&edge_id) {
@@ -273,6 +278,14 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
             &format!(
                 "select * from accession_edges where id in ({ids})",
                 ids = previous_accession_edges.iter().join(",")
+            ),
+            rusqlite::params!(),
+        ),
+        block_group_edges: BlockGroupEdge::query(
+            conn,
+            &format!(
+                "select * from block_group_edges where id in ({ids})",
+                ids = previous_block_group_edges.iter().join(",")
             ),
             rusqlite::params!(),
         ),
@@ -442,6 +455,22 @@ pub fn apply_changeset(
     );
     for (index, edge_id) in new_edges.iter().enumerate() {
         dep_edge_map.insert(&dependencies.edges[index].id, *edge_id);
+    }
+
+    let mut dep_block_group_edge_map = HashMap::new();
+    let new_block_group_edge_ids = BlockGroupEdge::bulk_create(
+        conn,
+        &dependencies
+            .block_group_edges
+            .iter()
+            .map(BlockGroupEdgeData::from)
+            .collect::<Vec<BlockGroupEdgeData>>(),
+    );
+    for (index, block_group_edge_id) in new_block_group_edge_ids.iter().enumerate() {
+        dep_block_group_edge_map.insert(
+            &dependencies.block_group_edges[index].id,
+            *block_group_edge_id,
+        );
     }
 
     let mut dep_path_map = HashMap::new();

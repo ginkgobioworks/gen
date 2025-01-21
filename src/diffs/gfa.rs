@@ -573,9 +573,9 @@ mod tests {
                 target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
-        let _path1 = Path::create(&conn, "test path", block_group.id, &edge_ids);
+        let _path1 = Path::create(&conn, "test path", block_group.id, &block_group_edge_ids);
 
         let temp_dir = tempdir().unwrap();
         let gfa_path = temp_dir.path().join("diff-against-nothing.gfa");
@@ -662,9 +662,9 @@ mod tests {
                 target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
-        let _path1 = Path::create(&conn, "test path", block_group.id, &edge_ids);
+        let _path1 = Path::create(&conn, "test path", block_group.id, &block_group_edge_ids);
 
         let temp_dir = tempdir().unwrap();
         let gfa_path = temp_dir.path().join("self-diff.gfa");
@@ -753,9 +753,9 @@ mod tests {
                 target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
-        let _path1 = Path::create(&conn, "parent", block_group.id, &edge_ids);
+        let _path1 = Path::create(&conn, "parent", block_group.id, &block_group_edge_ids);
 
         let _sample2 = Sample::get_or_create(&conn, "sample2");
         let block_group2 = BlockGroup::create(
@@ -815,9 +815,9 @@ mod tests {
                 target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
-        let _path2 = Path::create(&conn, "parent", block_group2.id, &edge_ids);
+        let _path2 = Path::create(&conn, "parent", block_group2.id, &block_group_edge_ids);
 
         let temp_dir = tempdir().unwrap();
         let gfa_path = temp_dir.path().join("unrelated-diff.gfa");
@@ -907,9 +907,9 @@ mod tests {
                 target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
-        let _path1 = Path::create(&conn, "parent", block_group.id, &edge_ids);
+        let _path1 = Path::create(&conn, "parent", block_group.id, &block_group_edge_ids);
 
         let _sample2 = Sample::get_or_create(&conn, "sample2");
         let block_group2 =
@@ -965,9 +965,9 @@ mod tests {
                 target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
-        let _path2 = Path::create(&conn, "parent", block_group2.id, &edge_ids);
+        let _path2 = Path::create(&conn, "parent", block_group2.id, &block_group_edge_ids);
 
         let temp_dir = tempdir().unwrap();
         let gfa_path = temp_dir.path().join("unrelated-diff.gfa");
@@ -1042,9 +1042,11 @@ mod tests {
                 target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let bge1_id = block_group_edge_ids[0];
+        let bge2_id = block_group_edge_ids[1];
 
-        let _path1 = Path::create(&conn, "parent", block_group.id, &[edge1.id, edge2.id]);
+        let _path1 = Path::create(&conn, "parent", block_group.id, &[bge1_id, bge2_id]);
 
         // Set up child
         let _child_sample = Sample::get_or_create_child(&conn, collection_name, "child", None);
