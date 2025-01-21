@@ -23,64 +23,62 @@ available for Linux and OSX platforms.
 
 # Methods
 
-## Graph Data Model
-
-The core data model of Gen is an append-only ledger of edges. An edge is represented as a (source_node,
-source_coordinate, source_strand) to a (target_node, target_coordinate, target_strand). This allows us to reference a
-position within a node without having to create a new node. A common alternative is to use a segment graph, where a long
-sequence is broken up into new chunks as changes are incorporated into it. An update to a segment graph requires
-identifying where the change will be inserted, splitting the prior chunk in half, and updating the edges from the
-previous segment to the new segment. The edge model requires no updates, only the addition of new edges. This has
-significant speed advantages, as no queries and updates are required of the database.
-
 ## Graph Representation
 
-Fundamentally, gen captures the pan-genome graph model by storing sequences and edges between the sequences, but the
-model is a little more complicated, as we'll see. Each edge has a coordinate of one sequence as a source, and a
-coordinate of a sequence (possibly the same one) as a target. Gen creates new sequences and edges whenever importing or
-updating from a file and adds them to the appropriate graph structure. One important additional data model is a node.
-Each node corresponds to a sequence, but a sequence may have multiple nodes. The reason for this is that if a file
-specifies multiple copies of the same sequence in a row, say two "T" segments, we need to represent the T with two
-copies. Otherwise, if gen used the same sequence to represent them, gen would create an edge from the T sequence to
-itself, creating an unintentional loop. Instead, gen creates two nodes, each referencing the T sequence, and creates an
-edge between the two nodes. In this way gen can faithfully represent duplicate segments. So each edge links from a
-source coordinate on a node to a target coordinate on a node. Source and target node coordinates implicitly refer to
-the sequence the node is associated with.
+Fundamentally, Gen's data model is similar to most graph models where sequences are encoded as vertices with
+edges connecting sequences in various orientations. Gen expands on this common model by defining an edge as a
+connection between positions and strands within nodes. This enables Gen to model changes in an append-only mode,
+where changes to the graph require only addition of data. This is a significant advantage, as the traditional model
+requires splitting nodes into sub-nodes when changes are made (fig. [graph_model](graph_model/final.svg)).
 
-Coordinates in gen are 0-based, and ranges are closed/open. For instance, (0, 5) represents the first five base pairs of
-a sequence, and (10, 11) represents the eleventh base pair.
+On importing data, Gen creates a Sequence object, which is a unique database entry. Nodes are then created which
+reference a slice of the stored Sequence. This separation has several uses. One is data compression where the same
+sequence or subsequence may be referenced by multiple nodes. The other is to resolve cases where an identical
+sequence is referenced multiple times within the same graph. For instance, if multiple copies of the same sequence
+are repeated, without the node intermediate, Gen would create an unintentional loop by creating an edge between the
+same sequence. Instead, Gen creates a node for each repeat, with a unique edge between each. In this way gen can
+faithfully represent duplicate segments.
 
-Gen represents an insertion or replacement by creating a new sequence, a corresponding node, and two edges. The first
+As previously mentioned, updates to the graph requires only the addition of new data. There are no updates required.
+Insertions or replacements of sequence is represented by creating a new sequence, a corresponding node, and two edges (
+fig.
+[graph_updates a](graph_updates/final.svg)). The first
 edge has its source as the start of the region being replaced (or the coordinate of the insertion start) on the source
 node, and its target as the start of the created node. The second edge has its source as the end of the created node,
 and its target as the end of the region being replaced (or the coordinate of the insertion start plus one).
 
-Gen represents a deletion as just one new edge, from the start coordinate of the region being deleted to the end
-coordinate of that region.
+Deletions can be encoded as just one new edge, from the start coordinate of the region being deleted to
+the end coordinate of that region [graph_updates b](graph_updates/final.svg)).
 
-Gen represents one contig, say a chromosome, using one directed graph of nodes and edges. The internal gen data model
-for a graph is called a block group. Gen uses a join table between one block group and multiple edges to record all the
-edges (and infer all the nodes and sequences) in a block group. Because of the additive nature of insertions,
+Gen represents one contig, such as a chromosome, using one directed graph of nodes and edges. This grouping is 
+termed a Block Group and a join table between Block Groups and Edges is used to record all the
+edges in a block group. Because of the additive nature of insertions,
 replacements, and deletions, block groups can only grow over time. The block group represents all possible sequences
 that can be generated from the graph.
 
-Gen defines a virtual start node and a virtual end node which each represent an empty sequence, and which every block
-group uses to record the first and last nodes in the group. Gen creates an edge from the virtual start node to each
-node that actually occurs at the beginning of the graph, and similarly creates an edge from each real node that occurs
-at the end of a graph to the virtual end node.
+## Graph Traversal
 
-A path specifies a unique way to traverse edges from the virtual start node to the virtual end of a block group. The
-path specification is a list of edges. Each pair of contiguous edges in the path must share the same node as the target
-of the previous edge and the source of the next edge. The stretch of sequence between the two node coordinates is taken
-to be a subsequence of the path. Each edge also has a source strand and a target strand. Each pair of contiguous edges
-in a path must have the same strand. If the strand is forward, the stretch of sequence between the two edges is on the
-forward strand, and if the shared strand of the edges is reverse, the sequence between the edges is on the reverse
-strand.
+Several conventions and models are used to facilitate graph traversal. Problems that are common in biological 
+sequence graphs are: having a defined beginning and end point, predefined paths, and indexing into the graph.
 
-A block group may have multiple paths. If so, the most recent one is treated as the "current" path, and represents the
-current canonical sequence for the block group.
+Without a defined beginning and end point, traversing a graph requires enumerating all nodes and edges and 
+identifying which have no incoming edges (start nodes) and which have no outgoing edges (end nodes). To facilitate 
+this, Gen defines a virtual start node and a virtual end node to avoid enumerating all nodes to identify starts 
+and ends.
 
-An accession is a way of specifying a subgraph.
+Next, several paths are commonly used in a graph, such as the sequence and coordinates corresponding to the reference 
+genome. Paths specify an ordered list of edges to traverse, from a start node to an edge node. Paths have a unique 
+name per collection and sample, meaning the chr1 path can exist only once within a sample. 
+
+While paths are able to provide paths from the beginning to the end of a graph, it is just as useful to index 
+within a graph. Accessions provide a system for relative coordinates within a graph. An accession is a named list of 
+ordered edges within a graph. Accessions are almost identical to paths but do not have to run from a start node to 
+end node.
+
+## Coordinates and indexing
+
+Coordinates in gen are 0-based, and ranges are closed/open. For instance, (0, 5) represents the first five base pairs of
+a sequence, and (10, 11) represents the eleventh base pair.
 
 ## Phasing, Ploidyness, and Haplotypes
 

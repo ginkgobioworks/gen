@@ -1,0 +1,1 @@
+**Overview of Graph data model.** *a.* Traditional graph where sequences are encoded as nodes and edges connect two nodes together. **b.** Gen data model where sequences are encoded as nodes and edges connect positions within nodes together.

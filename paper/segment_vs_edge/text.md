@@ -1,0 +1,1 @@
+**Comparison of segment graphs and edge graphs.** *a.* A segment graph with a insert operation applied.  **b.** An edge graph.
