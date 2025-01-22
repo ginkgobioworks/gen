@@ -119,28 +119,37 @@ deletions, only a new single edge is required to represent the new path.
 
 ## Updating the Graph
 
-Updating a graph has varying levels of difficulty. Gen's data model allows scenarios where it may not be possible to
-have a consistent index into a sequence. For example, if a heterozygous change is present at base 15 of
-chromosome 1, all positions after that position may not be unambiguously indexable. For this, various operations are
-possible to address the increasing levels of complexity.
+Updating a graph has varying levels of difficulty. Linear sequences can be indexed in an intuitive way by coordinates 
+whereas graphs are indexed by nodes. Sequence graphs are difficult to refer to specific positions within the 
+graph because positions are dependent upon the edges traversed to each position. Thus, the trivial graph with only a 
+single path can be treated like a linear sequence, but graphs full of heterozygous changes require far more effort 
+as changes of unequal length create ambiguity into positions conditionally on which edges were traversed.
+For this, various approaches are possible to address the increasing levels of complexity. Where possible, existing 
+standards were used or expanded upon.
 
-A vcf file may be provided to the `update` command to incorporate any changes identified.
+A vcf file of alternative alleles can be used to incorporate changes with multiple samples supported. Accessions may 
+also be encoded into the VCF file via the INFO tag, where the GAN and GAA tag can be used to provide the accession 
+name and the allele index for the named accession (fig. [vcf_example a](vcf_example/final.svg). If an accession has 
+been made, it can be used in subsequent changes to refer to a relative region within the graph ((fig. [vcf_example b]
+(vcf_example/final.svg))
 
-Accessions can be created as part of updates to provide areas of a graph that can be referenced unambiguously.
+A graph alignment format (GAF) can be used to insert aligned sequences into the graph (fig. [gaf_example]
+(gaf_example/final.svg). Here, a csv file can be 
+used to provide anchoring sequences to identify a position for a change to be inserted between. The transform 
+command will take this csv, and produce a fasta file that can be aligned via available graph alignment tools such 
+as minigraph or vg. Then, the resulting GAF and csv file can be provided to the update command to apply these 
+changes to the graph. Additionally, the GAF file can be manually edited to fine tune the precise update location as 
+graph aligners may not fully match what users want.
 
-Alignments may be used to insert new sequences into a graph.
+A graphical fragment assembly (GFA) can be used to augment a graph. Here, xxxx.
 
-A GFA may be provided with updates to a path.
+For simple graphs such as a plasmid or haploid organisms where linear indexing is possible, a fasta file may be 
+provided to insert its contents ito a given position.
 
-A fasta file may be inserted at a given position.
-
-A custom library format may be provided.
+For pooled updates, a custom library format may be provided.
 
 A GenBank file can be provided with changes annotated. Currently, we only support changes encoded in the Geneious
 format.
-
-Changes can be made with respect to the initially imported sequence (often the reference sequence), or to a derived
-sample graph.
 
 ## Sample Lineage
 
