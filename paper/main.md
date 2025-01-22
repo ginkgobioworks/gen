@@ -190,6 +190,10 @@ into the coordinates of new samples. Coordinates are translated with the followi
   a replacement wiped out the stretch of the reference sequence that contained the end), gen truncates the translated
   annotation range to only include the stretch of sequence that the reference shares with the later sample.
 
+## Exports
+
+About data exports
+
 ## Distribution and Collaboration
 
 Gen is designed to facilitate collaboration across teams in a distributed manner. Changes can be shared by creating
