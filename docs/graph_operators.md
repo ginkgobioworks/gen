@@ -63,47 +63,76 @@ from a large pangenome graph can make a design task more manageable by hiding ov
 original sequence context can be restored afterwards by performing a splice operation at the same location.
 
 ## Example workflow: pooled cloning
-Pooled (a.k.a. multiplex, one-pot) experiments can be a very cost-effective way to generate a large amount of data. Instead
-of building or testing each variant in a separate liquid sample throughout the experiment, pooled workflows combine
-many variants per sample at various stages in the workflow. In the domain of DNA cloning this is particularly attractive for combinatorial sequence assembly: combining 10 variants of part A, with 10 variants of part B results in a total diversity
-of 100 unique sequences, but requires synthesis of only 20 fragments. For larger and more complex design this advantage
-becomes even greater. The resulting library can then be turned into isolates for an arrayed screening assay, or 
-handled as pool in a multiplex assay like cell sorting. These assays generally involve coupling a desired phenotype to
-a signal that can be read out at the single cell level (for example fluoresence), and then sorting cells into bins based
-on that signal. These bins can then be further analyzed with Next Generation Sequencing (NGS) methods to determine which
-variants are enriched in one population over another.
+Pooled (a.k.a. multiplex, one-pot) experiments can be a very cost-effective way to generate a large amount of data.
+Instead of building or testing each variant in a separate liquid sample throughout the experiment, pooled workflows
+combine many variants per sample at various stages in the workflow. In the domain of DNA cloning this is particularly
+attractive for combinatorial sequence assembly: combining 10 variants of part A, with 10 variants of part B results in a
+total diversity of 100 unique sequences, but requires synthesis of only 20 fragments. For larger and more complex design
+this advantage becomes even greater. The resulting library can then be turned into isolates for an arrayed screening
+assay, or handled as pool in a multiplex assay like cell sorting. These assays generally involve coupling a desired
+phenotype to a signal that can be read out at the single cell level (for example fluoresence), and then sorting cells
+into bins based on that signal. These bins can then be further analyzed with Next Generation Sequencing (NGS) methods to
+determine which variants are enriched in one population over another.
 
-Despite the advantages to scale and cost, pooled workflows are not yet widely adopted in the field. One of the main barriers to entry is a, real or perceived, lack of software support: genetic design tools and sequence management systems are built
-around an assumption that each digital sequence maps to an isolated sample and its replicates. Or vice versa, that each experimental sample maps to one expected digital sequence. This user interface has worked well for smaller experiments, 
-but it does not scale to high throughput experiments unless the user has the computational expertise to automate design 
-and analysis tasks. The Gen data model does not make such assumptions, and by treating a sample as a graph of possible
-sequences, Gen lends itself well to the design and analysis of pooled experiments. An example pooled Type IIs restriction/ligation workflow, commonly known as Golden Gate cloning, is described below:
+Despite the advantages to scale and cost, pooled workflows are not yet widely adopted in the field. One of the main
+barriers to entry is a, real or perceived, lack of software support: genetic design tools and sequence management
+systems are built around an assumption that each digital sequence maps to an isolated sample and its replicates. Or vice
+versa, that each experimental sample maps to one expected digital sequence. This user interface has worked well for
+smaller experiments, but it does not scale to high throughput experiments unless the user has the computational
+expertise to automate design and analysis tasks. The Gen data model does not make such assumptions, and by treating a
+sample as a graph of possible sequences, Gen lends itself well to the design and analysis of pooled experiments. An
+example pooled Type IIs restriction/ligation workflow, commonly known as Golden Gate cloning, is described below:
 
-### Import library
+### 1. Import library
 - Currently this is an "update" command that creates a combinatorial library based on a set of sequences (fasta) and a
 library layout (csv). By making this an "import" users can create a library from scratch, and not as an edit to an
 existing sequence.
 - At this point the user is mainly thinking about the final design they want to test, not how they will be cloning it.
+It could be helpful to (in the future) provide an `--affix` option to merge common prefixes and suffixes to make good
+cloning sites more obvious. Many genetic parts naturally start or end the same way, which should be represented in the
+graph structure. For example, a combination of ribosome binding sites that all end in A, with coding sequences that
+start with ATG.
+```
+Before:                         After:
+...AGGAGGA, ATGAAA...           ...AGGAGG, AATG, AAA...
+...AGGTGTA, ATGTGT...           ...AGGTGT,     , TGT...
+...AGGCGGA, ATGCTA...           ...AGGCGG,     , CTA...
+...       , ATGGGC...           ...      ,     , GGC...
+```
+(Implementation note: this happens at the node level, sequences don't have to be literally trimmed).
 
-### Make paths
-- Exposes the internal make-all-paths functionality to the user, with a flag to limit the number of paths generated. The
-last path becomes the "current path", which can then be exported to serve as a linear reference frame for later operations.
-- In this case the flag `-n 1` would mean: "get the first path from start to end, and make that the current reference path"
 
-### Export fasta (or genbank)
+### 2. Make paths
+- Exposes the internal make-all-paths functionality to the user, with a flag to limit the number of paths generated.
+Limiting the number of paths avoids a combinatorial explosion when a design has many variable parts. The last path
+becomes the "current path", which can then be exported to serve as a linear reference frame for later operations.
+- In this case the flag `-n 1` would mean: "get the first path from start to end, and make that the current path"
+- The %u and %n placeholders described above are used to ensure unique path names.
+
+### 3. Export fasta (or genbank)
 - Exports the current path to a format that users can work with in the environment they are used to.
 - Highlighting the blocks that act as "articulation points" (a.k.a. "cut vertices") would be very helpful to select good
 junction sites for the assembly. Ideally as annotations, or by showing only those subsequences in upper case. 
 
-### Derive chunks
+### 4. Derive chunks
 - See further in this document for description. The current path is used as the linear reference by which the user
 specifies the breakpoints. You can think of this as designing the assembly workflow in reverse.
 
-### Make stitch
-- Virtual ligation operation to attach adapters containing a TypeIIS restriction site, appropriate spacers, and
-possibly priming sites for PCR. 
-- The resulting sequences are what's ordered as linear DNA, or alternatively as plasmid DNA by stitching to a vector
-instead of adapters.
+### 5. Make stitch
+- Virtual ligation operation to attach adapters containing a TypeIIS restriction site, appropriate spacers, and possibly
+priming sites for PCR. 
+- These sequences will be ordered as linear DNA, or alternatively as plasmid DNA by stitching to a vector instead of
+adapters.
+
+### 6. Make paths
+- Generate all possible paths for the chunks with adapters. If the breakpoints in step 4 were chosen correctly, path
+counts should be manageable since there is no combinatorial explosion for individual chunks. 
+
+### 7. Export fasta
+- Saves linear sequences to send to synthesis provider.
+
+### 8. Export GFA
+- Saves the graph of the assembled DNA for visualization and read mapping.
 
 The design workflow may end here, but many users like to simulate the cloning process as a sanity check before pulling
 the trigger on their synthesis order. In our case that would be the reverse set of operations:
