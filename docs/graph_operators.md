@@ -93,11 +93,13 @@ cloning sites more obvious. Many genetic parts naturally start or end the same w
 graph structure. For example, a combination of ribosome binding sites that all end in A, with coding sequences that
 start with ATG.
 ```
-Before:                         After:
-...AGGAGGA, ATGAAA...           ...AGGAGG, AATG, AAA...
-...AGGTGTA, ATGTGT...           ...AGGTGT,     , TGT...
-...AGGCGGA, ATGCTA...           ...AGGCGG,     , CTA...
-...       , ATGGGC...           ...      ,     , GGC...
+Effect of --affix option when generating combinatorial libraries, demonstrated through a CSV table representation where columns denote genetic parts and rows variants.
+
+   Before:                         After:
+   ...AGGAGGA, ATGAAA...           ...AGGAGG, AATG, AAA...
+   ...AGGTGTA, ATGTGT...           ...AGGTGT,     , TGT...
+   ...AGGCGGA, ATGCTA...           ...AGGCGG,     , CTA...
+   ...       , ATGGGC...           ...      ,     , GGC...
 ```
 (Implementation note: this happens at the node level, sequences don't have to be literally trimmed).
 
@@ -132,7 +134,7 @@ counts should be manageable since there is no combinatorial explosion for indivi
 - Saves linear sequences to send to synthesis provider.
 
 ### 8. Export GFA
-- Saves the graph of the assembled DNA for visualization and read mapping.
+- Saves the graph of the assembled DNA for visualization and read mapping by graph aware sequence alignment tools.
 
 The design workflow may end here, but many users like to simulate the cloning process as a sanity check before pulling
 the trigger on their synthesis order. In our case that would be the reverse set of operations:
