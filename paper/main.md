@@ -215,6 +215,16 @@ Another consideration for sqlite is it can be accessed via web assembly (WASM), 
 an Amazon s3 bucket can be accessed without any dedicated servers. Thus, applications can be developed and ran entirely
 on the client side.
 
+# Results
+
+## Performance Benchmarks
+
+1000 genomes data. Time for variant updates, size on disk of db.
+
+translating annotations
+
+data export time
+
 # Discussion
 
 * The lack of a growable database. Minor changes required regenerating the entire graph and re-exporting it. Graph
