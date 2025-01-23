@@ -50,7 +50,7 @@ and its target as the end of the region being replaced (or the coordinate of the
 Deletions can be encoded as just one new edge, from the start coordinate of the region being deleted to
 the end coordinate of that region [graph_updates b](graph_updates/final.svg)).
 
-Gen represents one contig, such as a chromosome, using one directed graph of nodes and edges. This grouping is 
+Gen represents one contig, such as a chromosome, using one directed graph of nodes and edges. This grouping is
 termed a Block Group and a join table between Block Groups and Edges is used to record all the
 edges in a block group. Because of the additive nature of insertions,
 replacements, and deletions, block groups can only grow over time. The block group represents all possible sequences
@@ -58,21 +58,21 @@ that can be generated from the graph.
 
 ## Graph Traversal
 
-Several conventions and models are used to facilitate graph traversal. Problems that are common in biological 
+Several conventions and models are used to facilitate graph traversal. Problems that are common in biological
 sequence graphs are: having a defined beginning and end point, predefined paths, and indexing into the graph.
 
-Without a defined beginning and end point, traversing a graph requires enumerating all nodes and edges and 
-identifying which have no incoming edges (start nodes) and which have no outgoing edges (end nodes). To facilitate 
-this, Gen defines a virtual start node and a virtual end node to avoid enumerating all nodes to identify starts 
+Without a defined beginning and end point, traversing a graph requires enumerating all nodes and edges and
+identifying which have no incoming edges (start nodes) and which have no outgoing edges (end nodes). To facilitate
+this, Gen defines a virtual start node and a virtual end node to avoid enumerating all nodes to identify starts
 and ends.
 
-Next, several paths are commonly used in a graph, such as the sequence and coordinates corresponding to the reference 
-genome. Paths specify an ordered list of edges to traverse, from a start node to an edge node. Paths have a unique 
-name per collection and sample, meaning the chr1 path can exist only once within a sample. 
+Next, several paths are commonly used in a graph, such as the sequence and coordinates corresponding to the reference
+genome. Paths specify an ordered list of edges to traverse, from a start node to an edge node. Paths have a unique
+name per collection and sample, meaning the chr1 path can exist only once within a sample.
 
-While paths are able to provide paths from the beginning to the end of a graph, it is just as useful to index 
-within a graph. Accessions provide a system for relative coordinates within a graph. An accession is a named list of 
-ordered edges within a graph. Accessions are almost identical to paths but do not have to run from a start node to 
+While paths are able to provide paths from the beginning to the end of a graph, it is just as useful to index
+within a graph. Accessions provide a system for relative coordinates within a graph. An accession is a named list of
+ordered edges within a graph. Accessions are almost identical to paths but do not have to run from a start node to
 end node.
 
 ## Coordinates and indexing
@@ -119,31 +119,31 @@ deletions, only a new single edge is required to represent the new path.
 
 ## Updating the Graph
 
-Updating a graph has varying levels of difficulty. Linear sequences can be indexed in an intuitive way by coordinates 
-whereas graphs are indexed by nodes. Sequence graphs are difficult to refer to specific positions within the 
-graph because positions are dependent upon the edges traversed to each position. Thus, the trivial graph with only a 
-single path can be treated like a linear sequence, but graphs full of heterozygous changes require far more effort 
+Updating a graph has varying levels of difficulty. Linear sequences can be indexed in an intuitive way by coordinates
+whereas graphs are indexed by nodes. Sequence graphs are difficult to refer to specific positions within the
+graph because positions are dependent upon the edges traversed to each position. Thus, the trivial graph with only a
+single path can be treated like a linear sequence, but graphs full of heterozygous changes require far more effort
 as changes of unequal length create ambiguity into positions conditionally on which edges were traversed.
-For this, various approaches are possible to address the increasing levels of complexity. Where possible, existing 
+For this, various approaches are possible to address the increasing levels of complexity. Where possible, existing
 standards were used or expanded upon.
 
-A vcf file of alternative alleles can be used to incorporate changes with multiple samples supported. Accessions may 
-also be encoded into the VCF file via the INFO tag, where the GAN and GAA tag can be used to provide the accession 
-name and the allele index for the named accession (fig. [vcf_example a](vcf_example/final.svg). If an accession has 
+A vcf file of alternative alleles can be used to incorporate changes with multiple samples supported. Accessions may
+also be encoded into the VCF file via the INFO tag, where the GAN and GAA tag can be used to provide the accession
+name and the allele index for the named accession (fig. [vcf_example a](vcf_example/final.svg). If an accession has
 been made, it can be used in subsequent changes to refer to a relative region within the graph ((fig. [vcf_example b]
 (vcf_example/final.svg))
 
 A graph alignment format (GAF) can be used to insert aligned sequences into the graph (fig. [gaf_example]
-(gaf_example/final.svg). Here, a csv file can be 
-used to provide anchoring sequences to identify a position for a change to be inserted between. The transform 
-command will take this csv, and produce a fasta file that can be aligned via available graph alignment tools such 
-as minigraph or vg. Then, the resulting GAF and csv file can be provided to the update command to apply these 
-changes to the graph. Additionally, the GAF file can be manually edited to fine tune the precise update location as 
+(gaf_example/final.svg). Here, a csv file can be
+used to provide anchoring sequences to identify a position for a change to be inserted between. The transform
+command will take this csv, and produce a fasta file that can be aligned via available graph alignment tools such
+as minigraph or vg. Then, the resulting GAF and csv file can be provided to the update command to apply these
+changes to the graph. Additionally, the GAF file can be manually edited to fine tune the precise update location as
 graph aligners may not fully match what users want.
 
 A graphical fragment assembly (GFA) can be used to augment a graph. Here, xxxx.
 
-For simple graphs such as a plasmid or haploid organisms where linear indexing is possible, a fasta file may be 
+For simple graphs such as a plasmid or haploid organisms where linear indexing is possible, a fasta file may be
 provided to insert its contents ito a given position.
 
 For pooled updates, a custom library format may be provided.
@@ -175,24 +175,24 @@ Add details about how gen represents pooling.
 
 ## Operations
 
-There are various methods to change a graph, which we term an operation. Each command that alters the data model 
+There are various methods to change a graph, which we term an operation. Each command that alters the data model
 such as update or import is recorded as an operation. Operations are analogous to a commit in git and many git-like functionalities are present in Gen.
 
-Branches allow work to be carried out in parallel. By default, Gen creates a main branch operations are recorded 
-against. Operations form a simple tree structure, with each operation having a single parent operation at this 
-time. Branches may be created off any operation, and nested branches are supported. Branches can be merged into one 
-another via the merge command. This workflow enables parallel work by teams and easy experimentation. Operations 
-may be reverted and individual operations can be applied across branches, similar to the git cherry-pick command 
+Branches allow work to be carried out in parallel. By default, Gen creates a main branch operations are recorded
+against. Operations form a simple tree structure, with each operation having a single parent operation at this
+time. Branches may be created off any operation, and nested branches are supported. Branches can be merged into one
+another via the merge command. This workflow enables parallel work by teams and easy experimentation. Operations
+may be reverted and individual operations can be applied across branches, similar to the git cherry-pick command
 (fig [operations_view](operations_view/final.svg)).
 
-A set of operations can be collected into a patch, which is analogous to the git patch which represents a diff of 
+A set of operations can be collected into a patch, which is analogous to the git patch which represents a diff of
 how the codebase is changed (fig.
-[dot_example](dot_example/final.svg)). However, due to the purely additive data model of 
-Gen, diffs are much 
-simpler to create 
-as there are no rewrites. Patches are stored as a gzip file and can be shared to distribute changes. Viewing of 
-patches is possible via the patch-view command, which will render a dot graph of changes within the patch. By 
-commiting these patches and changes into git, this workflow enables many features common to software 
+[dot_example](dot_example/final.svg)). However, due to the purely additive data model of
+Gen, diffs are much
+simpler to create
+as there are no rewrites. Patches are stored as a gzip file and can be shared to distribute changes. Viewing of
+patches is possible via the patch-view command, which will render a dot graph of changes within the patch. By
+commiting these patches and changes into git, this workflow enables many features common to software
 development such as code review and continuous integration testing.
 
 ## Translating coordinate schemes
@@ -200,35 +200,35 @@ development such as code review and continuous integration testing.
 Annotations can be propagated through the graph structure. Thus, annotations on the reference genome can be translated
 into the coordinates of new samples. Coordinates are translated with the following rules:
 
-* If the start and end of the annotation range on the reference map to valid coordinates on the sample sequence, gen
+- If the start and end of the annotation range on the reference map to valid coordinates on the sample sequence, gen
   translates the entire annotation to the later sample. Gen does this even if there is a gap in the middle of the later
   sequence that doesn't correspond to anything in the reference sequence, say if a subsequence were replaced.
-* If say the start of the range translates to a valid coordinate on the later sample, but the end does not (say because
+- If say the start of the range translates to a valid coordinate on the later sample, but the end does not (say because
   a replacement wiped out the stretch of the reference sequence that contained the end), gen truncates the translated
   annotation range to only include the stretch of sequence that the reference shares with the later sample.
 
 ## Exports
 
-A design goal of Gen was to not replace existing formats, but to complement them. Gen can export its data into a 
-variety of formats for subsequent use by 3rd party tools. Because graphs can vary significantly in their complexity, 
+A design goal of Gen was to not replace existing formats, but to complement them. Gen can export its data into a
+variety of formats for subsequent use by 3rd party tools. Because graphs can vary significantly in their complexity,
 several export options are available to accommodate the varying degrees.
 
-Graphs can be exported into the Graphical Fragment Assembly (GFA) format. Nodes in the Gen graph are translated into 
-GFA segment ids and paths are exported as well. Gen nodes are converted into segments by concatenating the Gen 
-node id with the sequence coordinates the node maps to. For example, node 5 which references positions 9-20 of a 
-sequence will be exported as 5.9.20. The lineage of a sample can also be encoded as a GFA file, where changes from a 
-parent sample to a descendent will be exported. This is incredibly useful for representing and tracking iterative 
+Graphs can be exported into the Graphical Fragment Assembly (GFA) format. Nodes in the Gen graph are translated into
+GFA segment ids and paths are exported as well. Gen nodes are converted into segments by concatenating the Gen
+node id with the sequence coordinates the node maps to. For example, node 5 which references positions 9-20 of a
+sequence will be exported as 5.9.20. The lineage of a sample can also be encoded as a GFA file, where changes from a
+parent sample to a descendent will be exported. This is incredibly useful for representing and tracking iterative
 strain engineering.
 
-Simple graphs can be exported into a GenBank format. Due to the limited information encoded in GenBanks, only simple 
-graphs such as plasmid or haploid samples will produce a meaningful output. The data export for GenBank currently 
-uses the 
-Geneious 
-conventions for 
+Simple graphs can be exported into a GenBank format. Due to the limited information encoded in GenBanks, only simple
+graphs such as plasmid or haploid samples will produce a meaningful output. The data export for GenBank currently
+uses the
+Geneious
+conventions for
 encoding changes to a sequence, so data can be imported and exported into Geneious for sequence editing.
 
-Paths within a graph may be exported to a fasta format. This is commonly used to generate a fasta file of a 
-reference genome or simple graphs where changes are unambiguous (for example, changes to a haploid organism). 
+Paths within a graph may be exported to a fasta format. This is commonly used to generate a fasta file of a
+reference genome or simple graphs where changes are unambiguous (for example, changes to a haploid organism).
 
 ## Database
 
@@ -254,11 +254,11 @@ data export time
 
 # Discussion
 
-* The lack of a growable database. Minor changes required regenerating the entire graph and re-exporting it. Graph
+- The lack of a growable database. Minor changes required regenerating the entire graph and re-exporting it. Graph
   genomes grow at a rate faster than a linear alignment. For example, a single copy of hg38 sufficies for analyses of
   many samples. Whereas with sample specific graphs, each sample requires its own graph as an additional tracked asset.
   This also made it difficult to compare across analyses, as nodes which may be in common between two graph samples
   would have different labels. This could be mitigated by creating a graph encompassing all samples, but this approach
   simply delays the inevitable addition of a new sample, a derivative lineage, or an updated set of variant calls.
 
-*  
+-
