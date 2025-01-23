@@ -13,6 +13,7 @@ use petgraph::Direction;
 use rusqlite::session::ChangesetIter;
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
+use bs58;
 
 pub fn view_patches(patches: &[OperationPatch]) -> HashMap<String, HashMap<i64, String>> {
     // For each blockgroup in a patch, a
@@ -152,6 +153,7 @@ pub fn view_patches(patches: &[OperationPatch]) -> HashMap<String, HashMap<i64, 
             let mut dot = "digraph {\n    rankdir=LR\n    node [shape=none]\n".to_string();
             for (node_id, start, end) in block_graph.nodes() {
                 let segment_id = format!("{node_id}.{start}.{end}");
+
                 if Node::is_terminal(node_id) {
                     let label = if Node::is_start_node(node_id) {
                         "start"
@@ -178,7 +180,9 @@ pub fn view_patches(patches: &[OperationPatch]) -> HashMap<String, HashMap<i64, 
                     seq.get_sequence(start, end + 1)
                 };
 
-                let coordinates = format!("{node_id}:{start}-{end}");
+                let node_id_trimmed = node_id.to_be_bytes().iter().skip_while(|&&x| x == 0).copied().collect::<Vec<_>>();
+                let node_id_bs58 = bs58::encode(node_id_trimmed).into_string();
+                let coordinates = format!("{node_id_bs58}:{start}-{end}");
 
                 let label = format!(
                     "<\
