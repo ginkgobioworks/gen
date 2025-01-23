@@ -4,3 +4,6 @@
 
 layout: home
 ---
+The project is called {{ site.github.project_title }}
+
+The latest release can be downloaded at {{ site.github.latest_release.html_url }}
