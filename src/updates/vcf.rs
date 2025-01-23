@@ -940,7 +940,11 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(s.elapsed().as_secs() < 20);
+        let elapsed = s.elapsed().as_secs();
+        assert!(
+            elapsed < 20,
+            "VCF import benchmark failed: Elapsed time is {elapsed}."
+        );
     }
 
     #[test]

@@ -480,6 +480,10 @@ mod tests {
         for _ in 1..1_000_000 {
             sequence.get_sequence(1, 20);
         }
-        assert!(s.elapsed().as_secs() < 5);
+        let elapsed = s.elapsed().as_secs();
+        assert!(
+            elapsed < 5,
+            "Cached sequence benchmark failed: {elapsed}s elapsed"
+        );
     }
 }
