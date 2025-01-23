@@ -208,13 +208,26 @@ into the coordinates of new samples. Coordinates are translated with the followi
 
 ## Exports
 
-About data exports
+A design goal of Gen was to not replace existing formats, but to complement them. Gen can export its data into a 
+variety of formats for subsequent use by 3rd party tools. Because graphs can vary significantly in their complexity, 
+several export options are available to accommodate the varying degrees.
 
-GFA export option. Info about segment ids and why. How GFA exports can work for modeling lineage.
+Graphs can be exported into the Graphical Fragment Assembly (GFA) format. Nodes in the Gen graph are translated into 
+GFA segment ids and paths are exported as well. Gen nodes are converted into segments by concatenating the Gen 
+node id with the sequence coordinates the node maps to. For example, node 5 which references positions 9-20 of a 
+sequence will be exported as 5.9.20. The lineage of a sample can also be encoded as a GFA file, where changes from a 
+parent sample to a descendent will be exported. This is incredibly useful for representing and tracking iterative 
+strain engineering.
 
-Genbank export option. Info about how changes are encoded.
+Simple graphs can be exported into a GenBank format. Due to the limited information encoded in GenBanks, only simple 
+graphs such as plasmid or haploid samples will produce a meaningful output. The data export for GenBank currently 
+uses the 
+Geneious 
+conventions for 
+encoding changes to a sequence, so data can be imported and exported into Geneious for sequence editing.
 
-Fasta export option.
+Paths within a graph may be exported to a fasta format. This is commonly used to generate a fasta file of a 
+reference genome or simple graphs where changes are unambiguous (for example, changes to a haploid organism). 
 
 ## Distribution and Collaboration
 
