@@ -101,7 +101,7 @@ Effect of --affix option when generating combinatorial libraries, demonstrated t
    ...AGGCGGA, ATGCTA...           ...AGGCGG,     , CTA...
    ...       , ATGGGC...           ...      ,     , GGC...
 ```
-(Implementation note: this happens at the node level, sequences don't have to be literally trimmed).
+(Implementation note: this happens at the node level, sequences don't have to be literally trimmed. The suffix/prefix may be a separate sequence & node to avoid any issues with library edits down the line, for example if the first sequence is dropped. See fixtures/affix_* for an example fasta and csv file.)
 
 
 ### 2. Make paths
