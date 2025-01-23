@@ -28,3 +28,5 @@ repos:
     rev: 0.7.21  # Use the ref you want to point at
     hooks:
       - id: mdformat
+        additional_dependencies:
+          - mdformat-gfm
