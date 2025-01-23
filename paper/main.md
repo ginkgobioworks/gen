@@ -186,7 +186,8 @@ may be reverted and individual operations can be applied across branches, simila
 (fig [operations_view](operations_view/final.svg)).
 
 A set of operations can be collected into a patch, which is analogous to the git patch which represents a diff of 
-how the codebase is changed (fig [diff_view](diff_view/final.svg)). However, due to the purely additive data model of 
+how the codebase is changed (fig.
+[dot_example](dot_example/final.svg)). However, due to the purely additive data model of 
 Gen, diffs are much 
 simpler to create 
 as there are no rewrites. Patches are stored as a gzip file and can be shared to distribute changes. Viewing of 
@@ -228,15 +229,6 @@ encoding changes to a sequence, so data can be imported and exported into Geneio
 
 Paths within a graph may be exported to a fasta format. This is commonly used to generate a fasta file of a 
 reference genome or simple graphs where changes are unambiguous (for example, changes to a haploid organism). 
-
-## Distribution and Collaboration
-
-Gen is designed to facilitate collaboration across teams in a distributed manner. Changes can be shared by creating
-patches from operations and treated like a git patch. A patch contains models to add as well as upstream dependencies of
-changes.
-
-For visualizing patches, the `patch-view` command can be used to generate a DOT formated graph (fig.
-[dot_example](dot_example/final.svg)).
 
 ## Database
 

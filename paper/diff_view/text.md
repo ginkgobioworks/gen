@@ -1,1 +1,0 @@
-**Visual representation of changes present in a patch** Changes present in a patch can be rendered to a DOT formated file. The top most figure shows a simple set of changes in a patch and the bottom figure shows a patch containing a pooled assembly.
