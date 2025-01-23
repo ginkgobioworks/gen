@@ -68,6 +68,7 @@ pub fn export_gfa(
                 sequence: block.sequence(),
                 node_id: block.node_id,
                 sequence_start: block.start,
+                sequence_end: block.end,
                 // NOTE: We can't easily get the value for strand, but it doesn't matter
                 // because this value is only used for writing segments
                 strand: Strand::Forward,
@@ -83,12 +84,14 @@ pub fn export_gfa(
                 sequence: "".to_string(),
                 node_id: source.node_id,
                 sequence_start: source.sequence_start,
+                sequence_end: source.sequence_end,
                 strand: edge_info.source_strand,
             };
             let target_segment = Segment {
                 sequence: "".to_string(),
                 node_id: target.node_id,
                 sequence_start: target.sequence_start,
+                sequence_end: target.sequence_end,
                 strand: edge_info.target_strand,
             };
 
@@ -124,12 +127,12 @@ fn segments_for_edges(
     let mut node_ids = vec![];
     #[allow(clippy::while_immutable_condition)]
     while current_block.id != end_block.id {
-        node_ids.push(format!("{}.{}", current_block.node_id, current_block.start));
+        node_ids.push(format!("{}.{}.{}", current_block.node_id, current_block.start, current_block.end));
         current_block = blocks_by_node_and_start
             .get(&(current_block.node_id, current_block.end))
             .unwrap();
     }
-    node_ids.push(format!("{}.{}", end_block.node_id, end_block.start));
+    node_ids.push(format!("{}.{}.{}", end_block.node_id, end_block.start, end_block.end));
 
     node_ids
 }
