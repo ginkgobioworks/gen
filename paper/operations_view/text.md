@@ -1,0 +1,1 @@
+**Operations** **a.** Tree structure formed by a series of operations in different branches. **b.** Summary of commands related to operations and their similar git equivalents. 

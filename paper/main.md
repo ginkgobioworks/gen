@@ -175,8 +175,24 @@ Add details about how gen represents pooling.
 
 ## Operations
 
-There are various methods to change a graph, which we term an operation. Each operation is analogous to a commit in git.
-It is recorded under the operations command, and can be exported to a patch for sharing.
+There are various methods to change a graph, which we term an operation. Each command that alters the data model 
+such as update or import is recorded as an operation. Operations are analogous to a commit in git and many git-like functionalities are present in Gen.
+
+Branches allow work to be carried out in parallel. By default, Gen creates a main branch operations are recorded 
+against. Operations form a simple tree structure, with each operation having a single parent operation at this 
+time. Branches may be created off any operation, and nested branches are supported. Branches can be merged into one 
+another via the merge command. This workflow enables parallel work by teams and easy experimentation. Operations 
+may be reverted and individual operations can be applied across branches, similar to the git cherry-pick command 
+(fig [operations_view](operations_view/final.svg)).
+
+A set of operations can be collected into a patch, which is analogous to the git patch which represents a diff of 
+how the codebase is changed (fig [diff_view](diff_view/final.svg)). However, due to the purely additive data model of 
+Gen, diffs are much 
+simpler to create 
+as there are no rewrites. Patches are stored as a gzip file and can be shared to distribute changes. Viewing of 
+patches is possible via the patch-view command, which will render a dot graph of changes within the patch. By 
+commiting these patches and changes into git, this workflow enables many features common to software 
+development such as code review and continuous integration testing.
 
 ## Translating coordinate schemes
 
@@ -193,6 +209,12 @@ into the coordinates of new samples. Coordinates are translated with the followi
 ## Exports
 
 About data exports
+
+GFA export option. Info about segment ids and why. How GFA exports can work for modeling lineage.
+
+Genbank export option. Info about how changes are encoded.
+
+Fasta export option.
 
 ## Distribution and Collaboration
 
