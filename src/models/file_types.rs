@@ -11,6 +11,7 @@ pub enum FileTypes {
     VCF,
     Changeset,
     CSV,
+    None,
 }
 
 impl ToSql for FileTypes {
@@ -23,6 +24,7 @@ impl ToSql for FileTypes {
             FileTypes::Changeset => "changeset".into(),
             FileTypes::CSV => "csv".into(),
             FileTypes::GAF => "gaf".into(),
+            FileTypes::None => "none".into(),
         };
         Ok(result)
     }
@@ -38,6 +40,7 @@ impl From<FileTypes> for Value {
             FileTypes::Changeset => "changeset",
             FileTypes::CSV => "csv",
             FileTypes::GAF => "gaf",
+            FileTypes::None => "none",
         };
         Value::Text(result.to_string())
     }
@@ -53,6 +56,7 @@ impl FromSql for FileTypes {
             Ok("changeset") => FileTypes::Changeset,
             Ok("csv") => FileTypes::CSV,
             Ok("gaf") => FileTypes::GAF,
+            Ok("none") => FileTypes::None,
             _ => panic!("Invalid entry in database"),
         };
         Ok(result)
