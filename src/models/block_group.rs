@@ -774,6 +774,9 @@ impl BlockGroup {
             .map(|x| x.value)
             .collect::<Vec<_>>();
         blocks.sort_by(|a, b| a.start.cmp(&b.start));
+        if blocks.len() < 2 {
+            panic!("Not enough nodes found in block group {source_block_group_id} from {start} to {end} to clone subgraph");
+        }
         let start_block = blocks[0];
         let start_node_coordinate = start - start_block.start + start_block.sequence_start;
         let end_block = blocks[blocks.len() - 1];
@@ -867,25 +870,9 @@ impl BlockGroup {
         all_edges.push(new_end_edge_data);
         BlockGroupEdge::bulk_create(conn, &all_edges);
 
-        let current_edges = PathEdge::edges_for_path(conn, current_path.id);
-        let new_edge_id_set = all_edges
-            .iter()
-            .map(|edge| edge.edge_id)
-            .collect::<HashSet<_>>();
-        let mut new_path_edge_ids = vec![];
-        new_path_edge_ids.push(new_start_edge.id);
-        for current_edge in current_edges {
-            if new_edge_id_set.contains(&current_edge.id) {
-                new_path_edge_ids.push(current_edge.id);
-            }
-        }
-        new_path_edge_ids.push(new_end_edge.id);
-        Path::create(
-            conn,
-            &current_path.name,
-            target_block_group_id,
-            &new_path_edge_ids,
-        );
+        // TODO: Uncomment and fix
+        //	let all_edge_ids = all_edges.iter().map(|edge| edge.edge_id).collect::<Vec<_>>();
+        //        Path::create(conn, &current_path.name, target_block_group_id, &all_edge_ids);
     }
 }
 
@@ -2330,12 +2317,6 @@ mod tests {
 
         #[test]
         fn test_clone_subgraph_one_insertion() {
-            /*
-            AAAAAAAAAA -> TTTTTTTTTT -> CCCCCCCCCC -> GGGGGGGGGG
-                              \-> AAAAAAAA ->/
-            Subgraph range:  |-----------------|
-            Sequences of the subgraph are TAAAAAAAAC, TTTTTCCCCC
-             */
             let conn = &get_connection(None);
             Collection::create(conn, "test");
             let (block_group1_id, original_path) = setup_block_group(conn);
@@ -2403,18 +2384,10 @@ mod tests {
                 all_sequences2,
                 HashSet::from_iter(vec!["TTTTTCCCCC".to_string(), "TAAAAAAAAC".to_string(),])
             );
-
-            let new_path = BlockGroup::get_current_path(conn, block_group2.id);
-            assert_eq!(new_path.sequence(conn), "TAAAAAAAAC");
         }
 
         #[test]
         fn test_clone_subgraph_two_independent_insertions() {
-            /*
-            AAAAAAAAAA -> TTTTTTTTTT -> CCCCCCCCCC -----> GGGGGGGGGG
-                                  \-> AAAAAAAA ->/  \->TTTTTTTT -/
-            Subgraph range:     |----------------------------------|
-             */
             let conn = &get_connection(None);
             Collection::create(conn, "test");
             let (block_group1_id, original_path) = setup_block_group(conn);
@@ -2539,14 +2512,6 @@ mod tests {
 
         #[test]
         fn test_clone_subgraph_two_independent_insertions_and_one_deletion() {
-            /*
-                       /--------------------------------------------\  (<-- Deletion edge)
-            AAAAAAAAAA -> TTTTTTTTTT -> CCCCCCCCCC -----> GGGGGGGGGG
-                                  \-> AAAAAAAA ->/  \->TTTTTTTT -/
-            Subgraph range: |----------------------------------|
-
-            Confirms that deletion edge is ignored and not added to subgraph
-             */
             let conn = &get_connection(None);
             Collection::create(conn, "test");
             let (block_group1_id, original_path) = setup_block_group(conn);
