@@ -12,15 +12,15 @@ ______________________________________________________________________
 
 The conventional digital representation of a genetic sequence as a string of characters assumes that a species is
 sufficiently defined by a single reference genome. As whole genome sequencing has become more accessible, limitations of
-this model have become increasingly apparent. The field of _pangenomics_ has emerged in response, bringing
-new data models and software tools to work with datasets representing genetic diversity from thousands of individuals
-[@eizengaPangenomeGraphs2020]. Thus far, these tools have been predominantly applied to fundamental biology, but a similar
-problem exists in engineering biology. Developing a microbial strain, plant cultivar, cell line, or engineered protein
-also involves hundreds to thousands genetic variants obtained from environmental samples, breeding, mutagenesis, or
-genetic engineering. An additional challenge for genetic engineering is the distinction between _observed_ and _intended_
-sequence variants. Digital tools tend to emphasize one type over the other: a synthetic biology workflow may involve
-DNA sequencing to confirm that an intended genome edit took place, but discard any additional observed mutations. Likewise,
-a variant calling pipeline may identify all observed mutations, but lose the engineering context.
+this model have become increasingly apparent. The field of _pangenomics_ has emerged in response, bringing new data
+models and software tools to work with datasets representing genetic diversity from thousands of individuals
+[@eizengaPangenomeGraphs2020]. Thus far, these tools have been predominantly applied to fundamental biology, but a
+similar problem exists in engineering biology. Developing a microbial strain, plant cultivar, cell line, or engineered
+protein also involves hundreds to thousands genetic variants obtained from environmental samples, breeding, mutagenesis,
+or genetic engineering. An additional challenge for genetic engineering is the distinction between _observed_ and
+_intended_ sequence variants. Digital tools tend to emphasize one type over the other: a synthetic biology workflow may
+involve DNA sequencing to confirm that an intended genome edit took place, but discard any additional observed
+mutations. Likewise, a variant calling pipeline may identify all observed mutations, but lose the engineering context.
 
 In synthetic biology, a common workflow is iterative engineering. This is where a strain is subject to multiple,
 sequential rounds of engineering to arrive at desired states. Pangenomes are an underutilized but highly useful tool for
@@ -29,13 +29,13 @@ sophisticated analyses. However, while representing changes as a graph enables a
 data models are not optimal for representing this type of iterative engineering. Thus, we set out on a data model which
 could be a common, growable database of both reference and sample-specific sequences.
 
-While not related to biology, we saw another opportunity to couple graph models with another common need in
-synthetic biology -- tracking engineering. The current state of sharing the evolution of a strain to its final state is
-ad-hoc. We realized that the addition of variants to a graph can be captured as a set of changes. And if we can annotate
-these set of changes, we are able to devise a git-like system for tracking changes to samples. This enables workflows
-common in software engineering, such as continuous integration and code review. Additionally, this naturally links the
-process of genetic engineering with tracking the work that was done. This provides an easier path for follow-up work
-such as patent applications and regulatory compliance.
+While not related to biology, we saw another opportunity to couple graph models with another common need in synthetic
+biology -- tracking engineering. The current state of sharing the evolution of a strain to its final state is ad-hoc. We
+realized that the addition of variants to a graph can be captured as a set of changes. And if we can annotate these set
+of changes, we are able to devise a git-like system for tracking changes to samples. This enables workflows common in
+software engineering, such as continuous integration and code review. Additionally, this naturally links the process of
+genetic engineering with tracking the work that was done. This provides an easier path for follow-up work such as patent
+applications and regulatory compliance.
 
 For these two purposes, Gen was created. Gen offers a growable database of tracking changes to a sequence. Changes are
 recorded and can be gathered into a patch, allowing for sharing of work, code review, and testing. Other git-like
@@ -47,75 +47,72 @@ available for Linux and OSX platforms.
 
 ## Graph Representation
 
-Fundamentally, Gen's data model is similar to most graph models where sequences are encoded as vertices with
-edges connecting sequences in various orientations. Gen expands on this common model by defining an edge as a
-connection between positions and strands within nodes. This enables Gen to model changes in an append-only mode,
-where changes to the graph require only addition of data. This is a significant advantage, as the traditional model
-requires splitting nodes into sub-nodes when changes are made, introducing computational overhead for many operations
-(fig. [graph_model](graph_model/final.svg)).
+Fundamentally, Gen's data model is similar to most graph models where sequences are encoded as vertices with edges
+connecting sequences in various orientations. Gen expands on this common model by defining an edge as a connection
+between positions and strands within nodes. This enables Gen to model changes in an append-only mode, where changes to
+the graph require only addition of data. This is a significant advantage, as the traditional model requires splitting
+nodes into sub-nodes when changes are made, introducing computational overhead for many operations (fig.
+[graph_model](graph_model/final.svg)).
 
 On importing data, Gen creates a Sequence object, which is a unique database entry. Nodes are then created which
 reference a slice of the stored Sequence. This separation has several uses. One is data compression where the same
-sequence or subsequence may be referenced by multiple nodes. The other is to resolve cases where an identical
-sequence is referenced multiple times within the same graph. For instance, if multiple copies of the same sequence
-are repeated, without the node intermediate, Gen would create an unintentional loop by creating an edge between the
-same sequence. Instead, Gen creates a node for each repeat, with a unique edge between each. In this way gen can
-faithfully represent duplicate segments.
+sequence or subsequence may be referenced by multiple nodes. The other is to resolve cases where an identical sequence
+is referenced multiple times within the same graph. For instance, if multiple copies of the same sequence are repeated,
+without the node intermediate, Gen would create an unintentional loop by creating an edge between the same sequence.
+Instead, Gen creates a node for each repeat, with a unique edge between each. In this way gen can faithfully represent
+duplicate segments.
 
 As previously mentioned, updates to the graph requires only the addition of new data. There are no updates required.
 Insertions or replacements of sequence is represented by creating a new sequence, a corresponding node, and two edges (
-fig.
-[graph_updates a](graph_updates/final.svg)). The first
-edge has its source as the start of the region being replaced (or the coordinate of the insertion start) on the source
-node, and its target as the start of the created node. The second edge has its source as the end of the created node,
-and its target as the end of the region being replaced (or the coordinate of the insertion start plus one).
+fig. [graph_updates a](graph_updates/final.svg)). The first edge has its source as the start of the region being
+replaced (or the coordinate of the insertion start) on the source node, and its target as the start of the created node.
+The second edge has its source as the end of the created node, and its target as the end of the region being replaced
+(or the coordinate of the insertion start plus one).
 
-Deletions can be encoded as just one new edge, from the start coordinate of the region being deleted to
-the end coordinate of that region [graph_updates b](graph_updates/final.svg)).
+Deletions can be encoded as just one new edge, from the start coordinate of the region being deleted to the end
+coordinate of that region [graph_updates b](graph_updates/final.svg)).
 
-Gen represents one contig, such as a chromosome, using one directed graph of nodes and edges. This grouping is
-termed a Block Group and a join table between Block Groups and Edges is used to record all the
-edges in a block group. Because of the additive nature of insertions,
-replacements, and deletions, block groups can only grow over time. The block group represents all possible sequences
-that can be generated from the graph.
+Gen represents one contig, such as a chromosome, using one directed graph of nodes and edges. This grouping is termed a
+Block Group and a join table between Block Groups and Edges is used to record all the edges in a block group. Because of
+the additive nature of insertions, replacements, and deletions, block groups can only grow over time. The block group
+represents all possible sequences that can be generated from the graph.
 
-An example of importing a fasta and applying a vcf is used to show these formats are translated into the Gen data
-model (fig. [import_example](import_example/final.svg)). First, for each record such as chr1 and chr2, a node is
-created of the entire sequence. Two new edges
-are added to the new node, connecting the start of the sequence to a source node and the end to a sink node. These nodes
-are used to simplify the process of finding the starts and end of a graph. When a vcf is applied, for non-deletions, a
-new node is created with the alternative sequence and two new edges are created -- an edge from the reference sequence's
-source node (such as chr1) to the new node, and an edge from the end of the new node back to the reference sequence. For
-deletions, only a new single edge is required to represent the new path.
+An example of importing a fasta and applying a vcf is used to show these formats are translated into the Gen data model
+(fig. [import_example](import_example/final.svg)). First, for each record such as chr1 and chr2, a node is created of
+the entire sequence. Two new edges are added to the new node, connecting the start of the sequence to a source node and
+the end to a sink node. These nodes are used to simplify the process of finding the starts and end of a graph. When a
+vcf is applied, for non-deletions, a new node is created with the alternative sequence and two new edges are created --
+an edge from the reference sequence's source node (such as chr1) to the new node, and an edge from the end of the new
+node back to the reference sequence. For deletions, only a new single edge is required to represent the new path.
 
 ## Graph Traversal
 
-Several conventions and models are used to facilitate graph traversal. Problems that are common in biological
-sequence graphs are: having a defined beginning and end point, predefined paths, and indexing into the graph.
+Several conventions and models are used to facilitate graph traversal. Problems that are common in biological sequence
+graphs are: having a defined beginning and end point, predefined paths, and indexing into the graph.
 
-Without a defined beginning and end point, traversing a graph requires enumerating all nodes and edges and
-identifying which have no incoming edges (start nodes) and which have no outgoing edges (end nodes). To facilitate
-this, Gen defines a virtual start node and a virtual end node to avoid enumerating all nodes to identify starts
-and ends. On imports and updates, edges are added to these virtual nodes as needed.
+Without a defined beginning and end point, traversing a graph requires enumerating all nodes and edges and identifying
+which have no incoming edges (start nodes) and which have no outgoing edges (end nodes). To facilitate this, Gen defines
+a virtual start node and a virtual end node to avoid enumerating all nodes to identify starts and ends. On imports and
+updates, edges are added to these virtual nodes as needed.
 
 Next, several paths are commonly used in a graph, such as the sequence and coordinates corresponding to the reference
-genome. Paths specify an ordered list of edges to traverse, from a start node to an edge node. Paths have a unique
-name per collection and sample, meaning the chr1 path can exist only once within a sample.
+genome. Paths specify an ordered list of edges to traverse, from a start node to an edge node. Paths have a unique name
+per collection and sample, meaning the chr1 path can exist only once within a sample.
 
-While paths are able to provide paths from the beginning to the end of a graph, it is just as useful to index
-within a graph. Accessions provide a system for relative coordinates within a graph. An accession is a named list of
-ordered edges within a graph. Accessions are almost identical to paths but do not have to run from a start node to
-end node. Common use of accessions are to identify useful regions in a graph, such as landing pads for genetic
-modification or genes of interest.
+While paths are able to provide paths from the beginning to the end of a graph, it is just as useful to index within a
+graph. Accessions provide a system for relative coordinates within a graph. An accession is a named list of ordered
+edges within a graph. Accessions are almost identical to paths but do not have to run from a start node to end node.
+Common use of accessions are to identify useful regions in a graph, such as landing pads for genetic modification or
+genes of interest.
 
 ## Phasing, Ploidyness, and Haplotypes
 
-While we continually add new edges, we need to indicate which edges belong together. Phasing is supported and
-changes on the same chromatid will be exported together. Phasing is stored as the chromosome_index field, xx, and yyy.
+While we continually add new edges, we need to indicate which edges belong together. Phasing is supported and changes on
+the same chromatid will be exported together. Phasing is stored as the chromosome_index field, xx, and yyy.
 
 A similar need for phasing is within combinatorial assembly. This is where a set of parts are engineered in series,
-leading to a massive diversity of end products. However, in many cases users want a desired set of paths through
-these parts. This is another form of phasing, where a set of parts are linked together much like a haplotype.
+leading to a massive diversity of end products. However, in many cases users want a desired set of paths through these
+parts. This is another form of phasing, where a set of parts are linked together much like a haplotype.
 
 To support both of these cases, the concept of a phase layer is utilized. A phase layer groups together variants
 representing both haplotypes and linked parts.
@@ -140,31 +137,30 @@ graph is said to be part of the _null_ sample.
 ## Updating the Graph
 
 Updating a graph has varying levels of difficulty. Linear sequences can be indexed in an intuitive way by coordinates
-whereas graphs are indexed by nodes. Sequence graphs are difficult to refer to specific positions within the
-graph because positions are dependent upon the edges traversed to each position. Thus, the trivial graph with only a
-single path can be treated like a linear sequence, but graphs full of heterozygous changes require far more effort
-as changes of unequal length create ambiguity into positions conditionally on which edges were traversed.
-For this, various approaches are possible to address the increasing levels of complexity. Where possible, existing
-standards were used or expanded upon.
+whereas graphs are indexed by nodes. Sequence graphs are difficult to refer to specific positions within the graph
+because positions are dependent upon the edges traversed to each position. Thus, the trivial graph with only a single
+path can be treated like a linear sequence, but graphs full of heterozygous changes require far more effort as changes
+of unequal length create ambiguity into positions conditionally on which edges were traversed. For this, various
+approaches are possible to address the increasing levels of complexity. Where possible, existing standards were used or
+expanded upon.
 
 A vcf file of alternative alleles can be used to incorporate changes with multiple samples supported. Accessions may
-also be encoded into the VCF file via the INFO tag, where the GAN and GAA tag can be used to provide the accession
-name and the allele index for the named accession (fig. [vcf_example a](vcf_example/final.svg). If an accession has
-been made, it can be used in subsequent changes to refer to a relative region within the graph ((fig. [vcf_example b]
+also be encoded into the VCF file via the INFO tag, where the GAN and GAA tag can be used to provide the accession name
+and the allele index for the named accession (fig. [vcf_example a](vcf_example/final.svg). If an accession has been
+made, it can be used in subsequent changes to refer to a relative region within the graph ((fig. [vcf_example b]
 (vcf_example/final.svg))
 
 A graph alignment format (GAF) can be used to insert aligned sequences into the graph (fig. [gaf_example]
-(gaf_example/final.svg). Here, a csv file can be
-used to provide anchoring sequences to identify a position for a change to be inserted between. The transform
-command will take this csv, and produce a fasta file that can be aligned via available graph alignment tools such
-as minigraph or vg. Then, the resulting GAF and csv file can be provided to the update command to apply these
-changes to the graph. Additionally, the GAF file can be manually edited to fine tune the precise update location as
-graph aligners may not fully match what users want.
+(gaf_example/final.svg). Here, a csv file can be used to provide anchoring sequences to identify a position for a change
+to be inserted between. The transform command will take this csv, and produce a fasta file that can be aligned via
+available graph alignment tools such as minigraph or vg. Then, the resulting GAF and csv file can be provided to the
+update command to apply these changes to the graph. Additionally, the GAF file can be manually edited to fine tune the
+precise update location as graph aligners may not fully match what users want.
 
 A graphical fragment assembly (GFA) can be used to augment a graph. Here, xxxx.
 
-For simple graphs such as a plasmid or haploid organisms where linear indexing is possible, a fasta file may be
-provided to insert its contents ito a given position.
+For simple graphs such as a plasmid or haploid organisms where linear indexing is possible, a fasta file may be provided
+to insert its contents ito a given position.
 
 For pooled updates, a custom library format may be provided.
 
@@ -195,25 +191,23 @@ Add details about how gen represents pooling.
 
 ## Operations
 
-There are various methods to change a graph, which we term an operation. Each command that alters the data model
-such as update or import is recorded as an operation. Operations are analogous to a commit in git and many git-like functionalities are present in Gen.
+There are various methods to change a graph, which we term an operation. Each command that alters the data model such as
+update or import is recorded as an operation. Operations are analogous to a commit in git and many git-like
+functionalities are present in Gen.
 
 Branches allow work to be carried out in parallel. By default, Gen creates a main branch operations are recorded
-against. Operations form a simple tree structure, with each operation having a single parent operation at this
-time. Branches may be created off any operation, and nested branches are supported. Branches can be merged into one
-another via the merge command. This workflow enables parallel work by teams and easy experimentation. Operations
-may be reverted and individual operations can be applied across branches, similar to the git cherry-pick command
-(fig [operations_view](operations_view/final.svg)).
+against. Operations form a simple tree structure, with each operation having a single parent operation at this time.
+Branches may be created off any operation, and nested branches are supported. Branches can be merged into one another
+via the merge command. This workflow enables parallel work by teams and easy experimentation. Operations may be reverted
+and individual operations can be applied across branches, similar to the git cherry-pick command (fig
+[operations_view](operations_view/final.svg)).
 
-A set of operations can be collected into a patch, which is analogous to the git patch which represents a diff of
-how the codebase is changed (fig.
-[dot_example](dot_example/final.svg)). However, due to the purely additive data model of
-Gen, diffs are much
-simpler to create
-as there are no rewrites. Patches are stored as a gzip file and can be shared to distribute changes. Viewing of
-patches is possible via the patch-view command, which will render a dot graph of changes within the patch. By
-commiting these patches and changes into git, this workflow enables many features common to software
-development such as code review and continuous integration testing.
+A set of operations can be collected into a patch, which is analogous to the git patch which represents a diff of how
+the codebase is changed (fig. [dot_example](dot_example/final.svg)). However, due to the purely additive data model of
+Gen, diffs are much simpler to create as there are no rewrites. Patches are stored as a gzip file and can be shared to
+distribute changes. Viewing of patches is possible via the patch-view command, which will render a dot graph of changes
+within the patch. By commiting these patches and changes into git, this workflow enables many features common to
+software development such as code review and continuous integration testing.
 
 ## Translating coordinate schemes
 
@@ -229,26 +223,23 @@ into the coordinates of new samples. Coordinates are translated with the followi
 
 ## Exports
 
-A design goal of Gen was to not replace existing formats, but to complement them. Gen can export its data into a
-variety of formats for subsequent use by 3rd party tools. Because graphs can vary significantly in their complexity,
-several export options are available to accommodate the varying degrees.
+A design goal of Gen was to not replace existing formats, but to complement them. Gen can export its data into a variety
+of formats for subsequent use by 3rd party tools. Because graphs can vary significantly in their complexity, several
+export options are available to accommodate the varying degrees.
 
-Graphs can be exported into the Graphical Fragment Assembly (GFA) format. Nodes in the Gen graph are translated into
-GFA segment ids and paths are exported as well. Gen nodes are converted into segments by concatenating the Gen
-node id with the sequence coordinates the node maps to. For example, node 5 which references positions 9-20 of a
-sequence will be exported as 5.9.20. The lineage of a sample can also be encoded as a GFA file, where changes from a
-parent sample to a descendent will be exported. This is incredibly useful for representing and tracking iterative
-strain engineering.
+Graphs can be exported into the Graphical Fragment Assembly (GFA) format. Nodes in the Gen graph are translated into GFA
+segment ids and paths are exported as well. Gen nodes are converted into segments by concatenating the Gen node id with
+the sequence coordinates the node maps to. For example, node 5 which references positions 9-20 of a sequence will be
+exported as 5.9.20. The lineage of a sample can also be encoded as a GFA file, where changes from a parent sample to a
+descendent will be exported. This is incredibly useful for representing and tracking iterative strain engineering.
 
 Simple graphs can be exported into a GenBank format. Due to the limited information encoded in GenBanks, only simple
-graphs such as plasmid or haploid samples will produce a meaningful output. The data export for GenBank currently
-uses the
-Geneious
-conventions for
-encoding changes to a sequence, so data can be imported and exported into Geneious for sequence editing.
+graphs such as plasmid or haploid samples will produce a meaningful output. The data export for GenBank currently uses
+the Geneious conventions for encoding changes to a sequence, so data can be imported and exported into Geneious for
+sequence editing.
 
-Paths within a graph may be exported to a fasta format. This is commonly used to generate a fasta file of a
-reference genome or simple graphs where changes are unambiguous (for example, changes to a haploid organism).
+Paths within a graph may be exported to a fasta format. This is commonly used to generate a fasta file of a reference
+genome or simple graphs where changes are unambiguous (for example, changes to a haploid organism).
 
 ## Database
 
@@ -266,9 +257,8 @@ on the client side.
 
 ## Performance Benchmarks
 
-While extensive benchmarking and performance tuning has not been carried out, owing to the use of Rust, Gen is
-fairly performant without much attention to optimizations.
-1000 genomes data. Time for variant updates, size on disk of db.
+While extensive benchmarking and performance tuning has not been carried out, owing to the use of Rust, Gen is fairly
+performant without much attention to optimizations. 1000 genomes data. Time for variant updates, size on disk of db.
 
 translating annotations
 
