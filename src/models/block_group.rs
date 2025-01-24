@@ -1,3 +1,4 @@
+use core::ops::Range;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
@@ -8,7 +9,8 @@ use rusqlite::{params, params_from_iter, types::Value as SQLValue, Connection, R
 use serde::{Deserialize, Serialize};
 
 use crate::graph::{
-    all_reachable_nodes, all_simple_paths, flatten_to_interval_tree, GraphEdge, GraphNode,
+    all_intermediate_edges, all_reachable_nodes, all_simple_paths, flatten_to_interval_tree,
+    GraphEdge, GraphNode,
 };
 use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group_edge::{AugmentedEdgeData, BlockGroupEdge, BlockGroupEdgeData};
@@ -756,6 +758,121 @@ impl BlockGroup {
             rusqlite::params!(SQLValue::from(block_group_id)),
         );
         paths[0].clone()
+    }
+
+    pub fn clone_subgraph(
+        conn: &Connection,
+        source_block_group_id: i64,
+        start: i64,
+        end: i64,
+        target_block_group_id: i64,
+    ) {
+        let current_path = BlockGroup::get_current_path(conn, source_block_group_id);
+        let current_intervaltree = current_path.intervaltree(conn);
+        let mut blocks = current_intervaltree
+            .query(Range { start, end })
+            .map(|x| x.value)
+            .collect::<Vec<_>>();
+        blocks.sort_by(|a, b| a.start.cmp(&b.start));
+        if blocks.len() < 2 {
+            panic!("Not enough nodes found in block group {source_block_group_id} from {start} to {end} to clone subgraph");
+        }
+        let start_block = blocks[0];
+        let start_node_coordinate = start - start_block.start + start_block.sequence_start;
+        let end_block = blocks[blocks.len() - 1];
+        let end_node_coordinate = end - end_block.start + end_block.sequence_start;
+
+        let current_graph = BlockGroup::get_graph(conn, source_block_group_id);
+        let start_node = current_graph
+            .nodes()
+            .find(|node| {
+                node.node_id == start_block.node_id
+                    && node.sequence_start == start_block.sequence_start
+            })
+            .unwrap();
+        let end_node = current_graph
+            .nodes()
+            .find(|node| {
+                node.node_id == end_block.node_id && node.sequence_start == end_block.sequence_start
+            })
+            .unwrap();
+        let subgraph_edges = all_intermediate_edges(&current_graph, start_node, end_node);
+
+        // Filter out internal edges (boundary edges) that don't exist in the database
+        let subgraph_edge_ids = subgraph_edges
+            .iter()
+            .map(|(_to, _from, edge_info)| edge_info.edge_id)
+            .collect::<Vec<_>>();
+        let source_edges = Edge::bulk_load(conn, &subgraph_edge_ids);
+
+        let source_block_group_edges =
+            BlockGroupEdge::edges_for_block_group(conn, source_block_group_id);
+        let source_edge_ids = source_edges
+            .iter()
+            .map(|edge| edge.id)
+            .collect::<HashSet<_>>();
+        let source_block_group_edges = source_block_group_edges
+            .iter()
+            .filter(|block_group_edge| source_edge_ids.contains(&block_group_edge.edge.id))
+            .collect::<Vec<_>>();
+        let source_block_group_edges_by_edge_id = source_block_group_edges
+            .iter()
+            .map(|block_group_edge| (block_group_edge.edge.id, block_group_edge))
+            .collect::<HashMap<_, _>>();
+
+        let subgraph_edge_inputs = source_block_group_edges
+            .iter()
+            .map(|edge| {
+                let block_group_edge = source_block_group_edges_by_edge_id
+                    .get(&edge.edge.id)
+                    .unwrap();
+                BlockGroupEdgeData {
+                    block_group_id: target_block_group_id,
+                    edge_id: edge.edge.id,
+                    chromosome_index: block_group_edge.chromosome_index,
+                    phased: block_group_edge.phased,
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let new_start_edge = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            start_block.node_id,
+            start_node_coordinate,
+            start_block.strand,
+        );
+        let new_start_edge_data = BlockGroupEdgeData {
+            block_group_id: target_block_group_id,
+            edge_id: new_start_edge.id,
+            chromosome_index: 0,
+            phased: 0,
+        };
+        let new_end_edge = Edge::create(
+            conn,
+            end_block.node_id,
+            end_node_coordinate,
+            end_block.strand,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+        );
+        let new_end_edge_data = BlockGroupEdgeData {
+            block_group_id: target_block_group_id,
+            edge_id: new_end_edge.id,
+            chromosome_index: 0,
+            phased: 0,
+        };
+        let mut all_edges = subgraph_edge_inputs.clone();
+        all_edges.push(new_start_edge_data);
+        all_edges.push(new_end_edge_data);
+        BlockGroupEdge::bulk_create(conn, &all_edges);
+
+        // TODO: Uncomment and fix
+        //	let all_edge_ids = all_edges.iter().map(|edge| edge.edge_id).collect::<Vec<_>>();
+        //        Path::create(conn, &current_path.name, target_block_group_id, &all_edge_ids);
     }
 }
 
@@ -2191,5 +2308,351 @@ mod tests {
         // take out an entire block.
         let tree = BlockGroup::intervaltree_for(conn, gc_bg_id, true);
         BlockGroup::insert_change(conn, &change, &tree);
+    }
+
+    mod test_clone_subgraph {
+        use super::*;
+        use crate::models::{collection::Collection, node::Node, sequence::Sequence};
+        use crate::test_helpers::{get_connection, setup_block_group};
+
+        #[test]
+        fn test_clone_subgraph_one_insertion() {
+            let conn = &get_connection(None);
+            Collection::create(conn, "test");
+            let (block_group1_id, original_path) = setup_block_group(conn);
+
+            let intervaltree = original_path.intervaltree(conn);
+            let insert_start_node_id = intervaltree.query_point(16).next().unwrap().value.node_id;
+            let insert_end_node_id = intervaltree.query_point(24).next().unwrap().value.node_id;
+
+            let insert_sequence = Sequence::new()
+                .sequence_type("DNA")
+                .sequence("AAAAAAAA")
+                .save(conn);
+            let insert_node_id = Node::create(conn, insert_sequence.hash.as_str(), None);
+            let edge_into_insert = Edge::create(
+                conn,
+                insert_start_node_id,
+                6,
+                Strand::Forward,
+                insert_node_id,
+                0,
+                Strand::Forward,
+            );
+            let edge_out_of_insert = Edge::create(
+                conn,
+                insert_node_id,
+                8,
+                Strand::Forward,
+                insert_end_node_id,
+                4,
+                Strand::Forward,
+            );
+
+            let edge_ids = [edge_into_insert.id, edge_out_of_insert.id];
+            let block_group_edges = edge_ids
+                .iter()
+                .map(|edge_id| BlockGroupEdgeData {
+                    block_group_id: block_group1_id,
+                    edge_id: *edge_id,
+                    chromosome_index: 0,
+                    phased: 0,
+                })
+                .collect::<Vec<BlockGroupEdgeData>>();
+            BlockGroupEdge::bulk_create(conn, &block_group_edges);
+
+            let insert_path =
+                original_path.new_path_with(conn, 16, 24, &edge_into_insert, &edge_out_of_insert);
+            assert_eq!(
+                insert_path.sequence(conn),
+                "AAAAAAAAAATTTTTTAAAAAAAACCCCCCGGGGGGGGGG"
+            );
+
+            let all_sequences = BlockGroup::get_all_sequences(conn, block_group1_id, false);
+            assert_eq!(
+                all_sequences,
+                HashSet::from_iter(vec![
+                    "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                    "AAAAAAAAAATTTTTTAAAAAAAACCCCCCGGGGGGGGGG".to_string(),
+                ])
+            );
+
+            let block_group2 = BlockGroup::create(conn, "test", None, "chr1.1");
+            BlockGroup::clone_subgraph(conn, block_group1_id, 15, 25, block_group2.id);
+            let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id, false);
+            assert_eq!(
+                all_sequences2,
+                HashSet::from_iter(vec!["TTTTTCCCCC".to_string(), "TAAAAAAAAC".to_string(),])
+            );
+        }
+
+        #[test]
+        fn test_clone_subgraph_two_independent_insertions() {
+            let conn = &get_connection(None);
+            Collection::create(conn, "test");
+            let (block_group1_id, original_path) = setup_block_group(conn);
+
+            let intervaltree = original_path.intervaltree(conn);
+            let insert_start_node_id = intervaltree.query_point(16).next().unwrap().value.node_id;
+            let insert_end_node_id = intervaltree.query_point(24).next().unwrap().value.node_id;
+
+            let insert_sequence = Sequence::new()
+                .sequence_type("DNA")
+                .sequence("AAAAAAAA")
+                .save(conn);
+            let insert_node_id = Node::create(conn, insert_sequence.hash.as_str(), None);
+            let edge_into_insert = Edge::create(
+                conn,
+                insert_start_node_id,
+                6,
+                Strand::Forward,
+                insert_node_id,
+                0,
+                Strand::Forward,
+            );
+            let edge_out_of_insert = Edge::create(
+                conn,
+                insert_node_id,
+                8,
+                Strand::Forward,
+                insert_end_node_id,
+                4,
+                Strand::Forward,
+            );
+
+            let edge_ids = [edge_into_insert.id, edge_out_of_insert.id];
+            let block_group_edges = edge_ids
+                .iter()
+                .map(|edge_id| BlockGroupEdgeData {
+                    block_group_id: block_group1_id,
+                    edge_id: *edge_id,
+                    chromosome_index: 0,
+                    phased: 0,
+                })
+                .collect::<Vec<BlockGroupEdgeData>>();
+            BlockGroupEdge::bulk_create(conn, &block_group_edges);
+
+            let insert_path =
+                original_path.new_path_with(conn, 16, 24, &edge_into_insert, &edge_out_of_insert);
+            assert_eq!(
+                insert_path.sequence(conn),
+                "AAAAAAAAAATTTTTTAAAAAAAACCCCCCGGGGGGGGGG"
+            );
+
+            let insert2_start_node_id = intervaltree.query_point(28).next().unwrap().value.node_id;
+            let insert2_end_node_id = intervaltree.query_point(32).next().unwrap().value.node_id;
+
+            let insert2_sequence = Sequence::new()
+                .sequence_type("DNA")
+                .sequence("TTTTTTTT")
+                .save(conn);
+            let insert2_node_id = Node::create(conn, insert2_sequence.hash.as_str(), None);
+            let edge_into_insert2 = Edge::create(
+                conn,
+                insert2_start_node_id,
+                6,
+                Strand::Forward,
+                insert2_node_id,
+                0,
+                Strand::Forward,
+            );
+            let edge_out_of_insert2 = Edge::create(
+                conn,
+                insert2_node_id,
+                8,
+                Strand::Forward,
+                insert2_end_node_id,
+                4,
+                Strand::Forward,
+            );
+
+            let edge_ids = [edge_into_insert2.id, edge_out_of_insert2.id];
+            let block_group_edges = edge_ids
+                .iter()
+                .map(|edge_id| BlockGroupEdgeData {
+                    block_group_id: block_group1_id,
+                    edge_id: *edge_id,
+                    chromosome_index: 0,
+                    phased: 0,
+                })
+                .collect::<Vec<BlockGroupEdgeData>>();
+            BlockGroupEdge::bulk_create(conn, &block_group_edges);
+
+            let insert2_path =
+                insert_path.new_path_with(conn, 28, 32, &edge_into_insert2, &edge_out_of_insert2);
+            assert_eq!(
+                insert2_path.sequence(conn),
+                "AAAAAAAAAATTTTTTAAAAAAAACCTTTTTTTTGGGGGG"
+            );
+
+            let all_sequences = BlockGroup::get_all_sequences(conn, block_group1_id, false);
+            assert_eq!(
+                all_sequences,
+                HashSet::from_iter(vec![
+                    "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                    "AAAAAAAAAATTTTTTAAAAAAAACCCCCCGGGGGGGGGG".to_string(),
+                    "AAAAAAAAAATTTTTTTTTTCCCCCCTTTTTTTTGGGGGG".to_string(),
+                    "AAAAAAAAAATTTTTTAAAAAAAACCTTTTTTTTGGGGGG".to_string(),
+                ])
+            );
+
+            let block_group2 = BlockGroup::create(conn, "test", None, "chr1.1");
+            BlockGroup::clone_subgraph(conn, block_group1_id, 15, 36, block_group2.id);
+            let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id, false);
+            assert_eq!(
+                all_sequences2,
+                HashSet::from_iter(vec![
+                    "TTTTTCCCCCCCCCCGGGGGG".to_string(),
+                    "TAAAAAAAACCCCCCGGGGGG".to_string(),
+                    "TTTTTCCCCCCTTTTTTTTGG".to_string(),
+                    "TAAAAAAAACCTTTTTTTTGG".to_string(),
+                ])
+            );
+        }
+
+        #[test]
+        fn test_clone_subgraph_two_independent_insertions_and_one_deletion() {
+            let conn = &get_connection(None);
+            Collection::create(conn, "test");
+            let (block_group1_id, original_path) = setup_block_group(conn);
+
+            let intervaltree = original_path.intervaltree(conn);
+            let insert_start_node_id = intervaltree.query_point(16).next().unwrap().value.node_id;
+            let insert_end_node_id = intervaltree.query_point(24).next().unwrap().value.node_id;
+
+            let insert_sequence = Sequence::new()
+                .sequence_type("DNA")
+                .sequence("AAAAAAAA")
+                .save(conn);
+            let insert_node_id = Node::create(conn, insert_sequence.hash.as_str(), None);
+            let edge_into_insert = Edge::create(
+                conn,
+                insert_start_node_id,
+                6,
+                Strand::Forward,
+                insert_node_id,
+                0,
+                Strand::Forward,
+            );
+            let edge_out_of_insert = Edge::create(
+                conn,
+                insert_node_id,
+                8,
+                Strand::Forward,
+                insert_end_node_id,
+                4,
+                Strand::Forward,
+            );
+
+            let edge_ids = [edge_into_insert.id, edge_out_of_insert.id];
+            let block_group_edges = edge_ids
+                .iter()
+                .map(|edge_id| BlockGroupEdgeData {
+                    block_group_id: block_group1_id,
+                    edge_id: *edge_id,
+                    chromosome_index: 0,
+                    phased: 0,
+                })
+                .collect::<Vec<BlockGroupEdgeData>>();
+            BlockGroupEdge::bulk_create(conn, &block_group_edges);
+
+            let insert_path =
+                original_path.new_path_with(conn, 16, 24, &edge_into_insert, &edge_out_of_insert);
+            assert_eq!(
+                insert_path.sequence(conn),
+                "AAAAAAAAAATTTTTTAAAAAAAACCCCCCGGGGGGGGGG"
+            );
+
+            let insert2_start_node_id = intervaltree.query_point(28).next().unwrap().value.node_id;
+            let insert2_end_node_id = intervaltree.query_point(32).next().unwrap().value.node_id;
+
+            let insert2_sequence = Sequence::new()
+                .sequence_type("DNA")
+                .sequence("TTTTTTTT")
+                .save(conn);
+            let insert2_node_id = Node::create(conn, insert2_sequence.hash.as_str(), None);
+            let edge_into_insert2 = Edge::create(
+                conn,
+                insert2_start_node_id,
+                6,
+                Strand::Forward,
+                insert2_node_id,
+                0,
+                Strand::Forward,
+            );
+            let edge_out_of_insert2 = Edge::create(
+                conn,
+                insert2_node_id,
+                8,
+                Strand::Forward,
+                insert2_end_node_id,
+                4,
+                Strand::Forward,
+            );
+
+            let edge_ids = [edge_into_insert2.id, edge_out_of_insert2.id];
+            let block_group_edges = edge_ids
+                .iter()
+                .map(|edge_id| BlockGroupEdgeData {
+                    block_group_id: block_group1_id,
+                    edge_id: *edge_id,
+                    chromosome_index: 0,
+                    phased: 0,
+                })
+                .collect::<Vec<BlockGroupEdgeData>>();
+            BlockGroupEdge::bulk_create(conn, &block_group_edges);
+
+            let insert2_path =
+                insert_path.new_path_with(conn, 28, 32, &edge_into_insert2, &edge_out_of_insert2);
+            assert_eq!(
+                insert2_path.sequence(conn),
+                "AAAAAAAAAATTTTTTAAAAAAAACCTTTTTTTTGGGGGG"
+            );
+
+            let deletion_end_node_id = intervaltree.query_point(38).next().unwrap().value.node_id;
+            let deletion_edge = Edge::create(
+                conn,
+                insert_node_id,
+                8,
+                Strand::Forward,
+                deletion_end_node_id,
+                8,
+                Strand::Forward,
+            );
+            let block_group_edge = BlockGroupEdgeData {
+                block_group_id: block_group1_id,
+                edge_id: deletion_edge.id,
+                chromosome_index: 0,
+                phased: 0,
+            };
+            BlockGroupEdge::bulk_create(conn, &[block_group_edge]);
+
+            let all_sequences = BlockGroup::get_all_sequences(conn, block_group1_id, false);
+            assert_eq!(
+                all_sequences,
+                HashSet::from_iter(vec![
+                    "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+                    "AAAAAAAAAATTTTTTAAAAAAAACCCCCCGGGGGGGGGG".to_string(),
+                    "AAAAAAAAAATTTTTTTTTTCCCCCCTTTTTTTTGGGGGG".to_string(),
+                    "AAAAAAAAAATTTTTTAAAAAAAACCTTTTTTTTGGGGGG".to_string(),
+                    "AAAAAAAAAATTTTTTAAAAAAAAGG".to_string(), // Sequence including deletion
+                ])
+            );
+
+            let block_group2 = BlockGroup::create(conn, "test", None, "chr1.1");
+            BlockGroup::clone_subgraph(conn, block_group1_id, 15, 36, block_group2.id);
+            let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id, false);
+            assert_eq!(
+                all_sequences2,
+                // The deletion is not included in the cloned subgraph since one end of it is
+                // outside the specified range
+                HashSet::from_iter(vec![
+                    "TTTTTCCCCCCCCCCGGGGGG".to_string(),
+                    "TAAAAAAAACCCCCCGGGGGG".to_string(),
+                    "TTTTTCCCCCCTTTTTTTTGG".to_string(),
+                    "TAAAAAAAACCTTTTTTTTGG".to_string(),
+                ])
+            );
+        }
     }
 }
