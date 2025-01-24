@@ -1,7 +1,12 @@
 [package]
 name = "gen"
+description = "A sequence graph and version control system."
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/ginkgobioworks/gen"
+homepage = "https://genhub.bio"
+license = "Apache-2.0"
+include = ["/src", "LICENSE", "migrations"]
 
 [features]
 benchmark=[]
@@ -37,4 +42,4 @@ html-escape = "0.2.13"
 
 [dev-dependencies]
 cargo-llvm-cov = "0.6.14"
-cargo-deny = "0.16.2"
+cargo-deny = "0.16.4"
