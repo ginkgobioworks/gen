@@ -206,8 +206,16 @@ pub fn view_patches(patches: &[OperationPatch]) -> HashMap<String, HashMap<i64, 
                 // Edges between adjacent blocks from the same node don't have an arrowhead
                 // and are dashed because they represent the reference and can't be traversed.
                 // TODO: In a heterozygous genome this isn't true. Check needs to be expanded.
-                let style = if src == dest && d_fp == s_tp + 1 { "dashed" } else { "solid" };
-                let arrow = if src == dest && d_fp == s_tp + 1 { "none" } else { "normal" };
+                let style = if src == dest && d_fp == s_tp + 1 {
+                    "dashed"
+                } else {
+                    "solid"
+                };
+                let arrow = if src == dest && d_fp == s_tp + 1 {
+                    "none"
+                } else {
+                    "normal"
+                };
                 let headport = if Node::is_end_node(dest) {
                     "w"
                 } else {
