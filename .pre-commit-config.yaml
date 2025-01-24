@@ -30,7 +30,7 @@ repos:
         entry: bash -c 'cd paper && ./build.sh'
         language: system
         pass_filenames: false
-        files: ^paper/.*
+        files: ^paper/.*\.(md|bib|svg)$
   - repo: https://github.com/hukkin/mdformat
     rev: 0.7.21  # Use the ref you want to point at
     hooks:
