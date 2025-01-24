@@ -1,41 +1,48 @@
 ______________________________________________________________________
 
 # header to make pandoc create a bibliography
+#  - pdf: pandoc -C main.md -o main.pdf  
+#  - md: pandoc -t gfm -C --wrap preserve main.md
+title: "Gen: a version control system for biology"
+bibliography: bibliography/zotero.bib
+csl: bibliography/chicago-author-date.csl
+documentclass: paper # alternatively: article
+classoption:
+- twocolumn
+abstract: ...
 
-# - pdf: pandoc -C main.md -o main.pdf
-
-# - md: pandoc -t gfm -C --wrap preserve main.md
-
-## title: "Gen: a version control system for biology" bibliography: bibliography/zotero.bib csl: bibliography/chicago-author-date.csl
+---
 
 # Introduction
 
 The conventional digital representation of a genetic sequence as a string of characters assumes that a species is
 sufficiently defined by a single reference genome. As whole genome sequencing has become more accessible, limitations of
-this model have become increasingly apparent. The field of _pangenomics_ has emerged in response, bringing new data
-models and software tools to work with datasets representing genetic diversity from thousands of individuals
-[@eizengaPangenomeGraphs2020]. Thus far, these tools have been predominantly applied to fundamental biology, but a
-similar problem exists in engineering biology. Developing a microbial strain, plant cultivar, cell line, or engineered
-protein also involves hundreds to thousands genetic variants obtained from environmental samples, breeding, mutagenesis,
-or genetic engineering. An additional challenge for genetic engineering is the distinction between _observed_ and
-_intended_ sequence variants. Digital tools tend to emphasize one type over the other: a synthetic biology workflow may
-involve DNA sequencing to confirm that an intended genome edit took place, but discard any additional observed
-mutations. Likewise, a variant calling pipeline may identify all observed mutations, but lose the engineering context.
+this model have become increasingly apparent. The field of _pangenomics_ has emerged in response, bringing software
+tools and data models that represent genetic diversity from thousands of individuals at once in the form of a graph
+structure [@eizengaPangenomeGraphs2020]. Thus far, these tools have been predominantly applied to fundamental biology,
+but a similar problem exists in engineering biology. Developing a microbial strain, plant cultivar, cell line, or
+engineered protein also involves hundreds to thousands genetic variants obtained from environmental samples, breeding,
+mutagenesis, or genetic engineering. An additional challenge for genetic engineering is the distinction between
+_observed_ and _intended_ sequence variants. Digital tools tend to emphasize one type over the other: a synthetic
+biology workflow may involve DNA sequencing to confirm that an intended genome edit took place, but discard any
+additonal observed mutations. Likewise, a variant calling pipeline may identify all observed mutations, but lose the
+engineering context.
 
-In synthetic biology, a common workflow is iterative engineering. This is where a strain is subject to multiple,
-sequential rounds of engineering to arrive at desired states. Pangenomes are an underutilized but highly useful tool for
-modeling iterative engineering. The graph simultaneously represents the edits to the genome as well as enabling
-sophisticated analyses. However, while representing changes as a graph enables analyses of this workflow, the existing
-data models are not optimal for representing this type of iterative engineering. Thus, we set out on a data model which
-could be a common, growable database of both reference and sample-specific sequences.
+Sequence management in engineering biology is further complicated by the iterative nature of the development process.
+Organisms or biological parts are commonly subject to multiple, sequential rounds of engineering to arrive at a desired
+state. Pangenomes are an underutilized but highly useful tool for modeling iterative engineering. A graph structure can
+also represent sequence edits made over time, in addition to the variants that are studied in one experiment. However,
+the existing data models are not optimal for representing this type of iterative engineering. Thus, we set out on a data
+model which could be a common, growable database of both reference and sample-specific sequences.
 
-While not related to biology, we saw another opportunity to couple graph models with another common need in synthetic
-biology -- tracking engineering. The current state of sharing the evolution of a strain to its final state is ad-hoc. We
-realized that the addition of variants to a graph can be captured as a set of changes. And if we can annotate these set
-of changes, we are able to devise a git-like system for tracking changes to samples. This enables workflows common in
-software engineering, such as continuous integration and code review. Additionally, this naturally links the process of
-genetic engineering with tracking the work that was done. This provides an easier path for follow-up work such as patent
-applications and regulatory compliance.
+While not directly related to pangenomes, we saw another opportunity to couple graph models with another common need in
+synthetic biology -- tracking the engineering process itself. The current state of sharing the evolution of a strain to
+its final state is ad-hoc. We saw that the addition of variants to a graph can be captured as a set of changes. And if
+we can annotate these sets of changes, we are able to devise a version control system for genetic sequences analogous to
+_git_ in software engineering. Such a system enables workflows common in software engineering, such as continuous
+integration and code review. Additionally, this naturally links the process of genetic engineering with tracking the
+work that was done. This provides an easier path for follow-up work such as patent applications and regulatory
+compliance.
 
 For these two purposes, Gen was created. Gen offers a growable database of tracking changes to a sequence. Changes are
 recorded and can be gathered into a patch, allowing for sharing of work, code review, and testing. Other git-like
