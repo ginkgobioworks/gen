@@ -1,5 +1,4 @@
-______________________________________________________________________
-
+---
 # header to make pandoc create a bibliography
 #  - pdf: pandoc -C main.md -o main.pdf  
 #  - md: pandoc -t gfm -C --wrap preserve main.md
@@ -10,7 +9,6 @@ documentclass: paper # alternatively: article
 classoption:
 - twocolumn
 abstract: ...
-
 ---
 
 # Introduction
@@ -50,6 +48,7 @@ functions are also included, such as the ability to create new branches and merg
 work in parallel and incorporate changes across branches when necessary. Gen is written in rust and binaries are
 available for Linux and OSX platforms.
 
+
 # Methods
 
 ## Graph Representation
@@ -59,7 +58,9 @@ connecting sequences in various orientations. Gen expands on this common model b
 between positions and strands within nodes. This enables Gen to model changes in an append-only mode, where changes to
 the graph require only addition of data. This is a significant advantage, as the traditional model requires splitting
 nodes into sub-nodes when changes are made, introducing computational overhead for many operations (fig.
-[graph_model](graph_model/final.svg)).
+X).
+
+![graph_model](dot_example/final.svg)
 
 On importing data, Gen creates a Sequence object, which is a unique database entry. Nodes are then created which
 reference a slice of the stored Sequence. This separation has several uses. One is data compression where the same
