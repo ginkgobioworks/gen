@@ -1,8 +1,8 @@
----
+______________________________________________________________________
+
 # use build.sh to convert this file into PDF, HTML, ...
-title: "Gen: a version control system for biology"
-abstract: ... lorem ipsum4 ...
----
+
+## title: "Gen: a version control system for biology" abstract: ... lorem ipsum4 ...
 
 # Introduction
 
@@ -41,7 +41,6 @@ functions are also included, such as the ability to create new branches and merg
 work in parallel and incorporate changes across branches when necessary. Gen is written in rust and binaries are
 available for Linux and OSX platforms.
 
-
 # Methods
 
 ## Graph Representation
@@ -50,8 +49,7 @@ Fundamentally, Gen's data model is similar to most graph models where sequences 
 connecting sequences in various orientations. Gen expands on this common model by defining an edge as a connection
 between positions and strands within nodes. This enables Gen to model changes in an append-only mode, where changes to
 the graph require only addition of data. This is a significant advantage, as the traditional model requires splitting
-nodes into sub-nodes when changes are made, introducing computational overhead for many operations (fig.
-X).
+nodes into sub-nodes when changes are made, introducing computational overhead for many operations (fig. X).
 
 ![graph_model](dot_example/final.svg){starred=true}
 
@@ -260,6 +258,16 @@ on the client side.
 
 While extensive benchmarking and performance tuning has not been carried out, owing to the use of Rust, Gen is fairly
 performant without much attention to optimizations. 1000 genomes data. Time for variant updates, size on disk of db.
+
+| Task                                                                          | Time     | Storage        |
+| ----------------------------------------------------------------------------- | -------- | -------------- |
+| Importing GrCh38 (shallow)                                                    | 7s       | 496kb          |
+| Importing GrCh38 (full)                                                       | 49s      | 3.0 Gb         |
+| Adding variants from chr22 of 1000 genomes project (HG00096 sample)           | 11s      | 22.9 Mb        |
+| Adding variants from chr22 of 1000 genomes project (HG00096 + HG00097 sample) | 11s + 6s | 22.9 + 11.7 Mb |
+
+- the gzipped vcf input file was 17Mb for each sample, more samples lead to less data created as fewer new edges are
+  needed
 
 translating annotations
 
