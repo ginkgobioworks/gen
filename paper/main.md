@@ -1,13 +1,6 @@
 ---
-# header to make pandoc create a bibliography
-#  - pdf: pandoc -C main.md -o main.pdf  
-#  - md: pandoc -t gfm -C --wrap preserve main.md
+# use build.sh to convert this file into PDF, HTML, ...
 title: "Gen: a version control system for biology"
-bibliography: bibliography/zotero.bib
-csl: bibliography/chicago-author-date.csl
-documentclass: paper # alternatively: article
-classoption:
-- twocolumn
 abstract: ...
 ---
 
@@ -60,7 +53,7 @@ the graph require only addition of data. This is a significant advantage, as the
 nodes into sub-nodes when changes are made, introducing computational overhead for many operations (fig.
 X).
 
-![graph_model](dot_example/final.svg)
+![graph_model](dot_example/final.svg){starred=true}
 
 On importing data, Gen creates a Sequence object, which is a unique database entry. Nodes are then created which
 reference a slice of the stored Sequence. This separation has several uses. One is data compression where the same
