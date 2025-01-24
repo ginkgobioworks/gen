@@ -1,4 +1,24 @@
+---
+# header to make pandoc create a bibliography
+#  - pdf: pandoc -C main.md -o main.pdf  
+#  - md: pandoc -t gfm -C --wrap preserve main.md
+title: "Gen: a version control system for biology"
+bibliography: bibliography/zotero.bib
+csl: bibliography/chicago-author-date.csl
+---
+
 # Introduction
+The conventional digital representation of a genetic sequence as a string of characters assumes that a species is
+sufficiently defined by a single reference genome. As whole genome sequencing has become more accessible, limitations of
+this model have become increasingly apparent. The field of _pangenomics_ has emerged in response, bringing
+new data models and software tools to work with datasets representing genetic diversity from thousands of individuals
+[@eizengaPangenomeGraphs2020]. Thus far, these tools have been predominantly applied to fundamental biology, but a similar
+problem exists in engineering biology. Developing a microbial strain, plant cultivar, cell line, or engineered protein 
+also involves hundreds to thousands genetic variants obtained from environmental samples, breeding, mutagenesis, or
+genetic engineering. An additional challenge for genetic engineering is the distinction between _observed_ and _intended_
+sequence variants. Digital tools tend to emphasize one type over the other: a synthetic biology workflow may involve
+DNA sequencing to confirm that an intended genome edit took place, but discard any additonal observed mutations. Likewise,
+a variant calling pipeline may identify all observed mutations, but lose the engineering context.
 
 In synthetic biology, a common workflow is iterative engineering. This is where a strain is subject to multiple,
 sequential rounds of engineering to arrive at desired states. Pangenomes are an underutilized but highly useful tool for
@@ -262,3 +282,5 @@ data export time
   simply delays the inevitable addition of a new sample, a derivative lineage, or an updated set of variant calls.
 
 -
+
+# References
