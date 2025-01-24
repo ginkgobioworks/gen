@@ -24,13 +24,13 @@ repos:
         files: Cargo\.(toml|lock)
         pass_filenames: false
         args: ["--all-features", "check"]
-      - id: build-paper
-        name: Build paper
-        description: Build the paper
-        entry: bash -c 'cd paper && ./build.sh'
-        language: system
-        pass_filenames: false
-        files: ^paper/.*\.(md|bib|svg)$
+#      - id: build-paper
+#        name: Build paper
+#        description: Build the paper
+#        entry: bash -c 'cd paper && ./build.sh'
+#        language: system
+#        pass_filenames: false
+#        files: ^paper/.*\.(md|bib|svg)$
   - repo: https://github.com/hukkin/mdformat
     rev: 0.7.21  # Use the ref you want to point at
     hooks:
