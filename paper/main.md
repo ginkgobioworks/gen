@@ -1,23 +1,25 @@
----
+______________________________________________________________________
+
 # header to make pandoc create a bibliography
-#  - pdf: pandoc -C main.md -o main.pdf  
-#  - md: pandoc -t gfm -C --wrap preserve main.md
-title: "Gen: a version control system for biology"
-bibliography: bibliography/zotero.bib
-csl: bibliography/chicago-author-date.csl
----
+
+# - pdf: pandoc -C main.md -o main.pdf
+
+# - md: pandoc -t gfm -C --wrap preserve main.md
+
+## title: "Gen: a version control system for biology" bibliography: bibliography/zotero.bib csl: bibliography/chicago-author-date.csl
 
 # Introduction
+
 The conventional digital representation of a genetic sequence as a string of characters assumes that a species is
 sufficiently defined by a single reference genome. As whole genome sequencing has become more accessible, limitations of
 this model have become increasingly apparent. The field of _pangenomics_ has emerged in response, bringing
 new data models and software tools to work with datasets representing genetic diversity from thousands of individuals
 [@eizengaPangenomeGraphs2020]. Thus far, these tools have been predominantly applied to fundamental biology, but a similar
-problem exists in engineering biology. Developing a microbial strain, plant cultivar, cell line, or engineered protein 
+problem exists in engineering biology. Developing a microbial strain, plant cultivar, cell line, or engineered protein
 also involves hundreds to thousands genetic variants obtained from environmental samples, breeding, mutagenesis, or
 genetic engineering. An additional challenge for genetic engineering is the distinction between _observed_ and _intended_
 sequence variants. Digital tools tend to emphasize one type over the other: a synthetic biology workflow may involve
-DNA sequencing to confirm that an intended genome edit took place, but discard any additonal observed mutations. Likewise,
+DNA sequencing to confirm that an intended genome edit took place, but discard any additional observed mutations. Likewise,
 a variant calling pipeline may identify all observed mutations, but lose the engineering context.
 
 In synthetic biology, a common workflow is iterative engineering. This is where a strain is subject to multiple,
@@ -27,9 +29,9 @@ sophisticated analyses. However, while representing changes as a graph enables a
 data models are not optimal for representing this type of iterative engineering. Thus, we set out on a data model which
 could be a common, growable database of both reference and sample-specific sequences.
 
-While not directly related to GFAs, we saw another opportunity to couple graph models with another common need in
+While not related to biology, we saw another opportunity to couple graph models with another common need in
 synthetic biology -- tracking engineering. The current state of sharing the evolution of a strain to its final state is
-ad-hoc. We saw that the addition of variants to a graph can be captured as a set of changes. And if we can annotate
+ad-hoc. We realized that the addition of variants to a graph can be captured as a set of changes. And if we can annotate
 these set of changes, we are able to devise a git-like system for tracking changes to samples. This enables workflows
 common in software engineering, such as continuous integration and code review. Additionally, this naturally links the
 process of genetic engineering with tracking the work that was done. This provides an easier path for follow-up work
@@ -49,7 +51,8 @@ Fundamentally, Gen's data model is similar to most graph models where sequences 
 edges connecting sequences in various orientations. Gen expands on this common model by defining an edge as a
 connection between positions and strands within nodes. This enables Gen to model changes in an append-only mode,
 where changes to the graph require only addition of data. This is a significant advantage, as the traditional model
-requires splitting nodes into sub-nodes when changes are made (fig. [graph_model](graph_model/final.svg)).
+requires splitting nodes into sub-nodes when changes are made, introducing computational overhead for many operations
+(fig. [graph_model](graph_model/final.svg)).
 
 On importing data, Gen creates a Sequence object, which is a unique database entry. Nodes are then created which
 reference a slice of the stored Sequence. This separation has several uses. One is data compression where the same
@@ -76,6 +79,15 @@ edges in a block group. Because of the additive nature of insertions,
 replacements, and deletions, block groups can only grow over time. The block group represents all possible sequences
 that can be generated from the graph.
 
+An example of importing a fasta and applying a vcf is used to show these formats are translated into the Gen data
+model (fig. [import_example](import_example/final.svg)). First, for each record such as chr1 and chr2, a node is
+created of the entire sequence. Two new edges
+are added to the new node, connecting the start of the sequence to a source node and the end to a sink node. These nodes
+are used to simplify the process of finding the starts and end of a graph. When a vcf is applied, for non-deletions, a
+new node is created with the alternative sequence and two new edges are created -- an edge from the reference sequence's
+source node (such as chr1) to the new node, and an edge from the end of the new node back to the reference sequence. For
+deletions, only a new single edge is required to represent the new path.
+
 ## Graph Traversal
 
 Several conventions and models are used to facilitate graph traversal. Problems that are common in biological
@@ -84,7 +96,7 @@ sequence graphs are: having a defined beginning and end point, predefined paths,
 Without a defined beginning and end point, traversing a graph requires enumerating all nodes and edges and
 identifying which have no incoming edges (start nodes) and which have no outgoing edges (end nodes). To facilitate
 this, Gen defines a virtual start node and a virtual end node to avoid enumerating all nodes to identify starts
-and ends.
+and ends. On imports and updates, edges are added to these virtual nodes as needed.
 
 Next, several paths are commonly used in a graph, such as the sequence and coordinates corresponding to the reference
 genome. Paths specify an ordered list of edges to traverse, from a start node to an edge node. Paths have a unique
@@ -93,12 +105,8 @@ name per collection and sample, meaning the chr1 path can exist only once within
 While paths are able to provide paths from the beginning to the end of a graph, it is just as useful to index
 within a graph. Accessions provide a system for relative coordinates within a graph. An accession is a named list of
 ordered edges within a graph. Accessions are almost identical to paths but do not have to run from a start node to
-end node.
-
-## Coordinates and indexing
-
-Coordinates in gen are 0-based, and ranges are closed/open. For instance, (0, 5) represents the first five base pairs of
-a sequence, and (10, 11) represents the eleventh base pair.
+end node. Common use of accessions are to identify useful regions in a graph, such as landing pads for genetic
+modification or genes of interest.
 
 ## Phasing, Ploidyness, and Haplotypes
 
@@ -128,14 +136,6 @@ experimental samples. Samples do not have to have a counterpart in the physical 
 refer to a digitally designed sequence or model-derived screening library. Multiple graphs can be associated to the same
 sample (e.g. all chromosomes in a genome), but not every graph has to be associated with a sample. If it is not, that
 graph is said to be part of the _null_ sample.
-
-Each graph is comprised of nodes and edges. An example of importing a fasta and applying a vcf is used to show how the
-model are added. First, for each record such as chr1 and chr2, a node is created of the entire sequence. Two new edges
-are added to the new node, connecting the start of the sequence to a source node and the end to a sink node. These nodes
-are used to simplify the process of finding the starts and end of a graph. When a vcf is applied, for non-deletions, a
-new node is created with the alternative sequence and two new edges are created -- an edge from the reference sequence's
-source node (such as chr1) to the new node, and an edge from the end of the new node back to the reference sequence. For
-deletions, only a new single edge is required to represent the new path.
 
 ## Updating the Graph
 
@@ -266,6 +266,8 @@ on the client side.
 
 ## Performance Benchmarks
 
+While extensive benchmarking and performance tuning has not been carried out, owing to the use of Rust, Gen is
+fairly performant without much attention to optimizations.
 1000 genomes data. Time for variant updates, size on disk of db.
 
 translating annotations
@@ -280,6 +282,13 @@ data export time
   This also made it difficult to compare across analyses, as nodes which may be in common between two graph samples
   would have different labels. This could be mitigated by creating a graph encompassing all samples, but this approach
   simply delays the inevitable addition of a new sample, a derivative lineage, or an updated set of variant calls.
+
+## Removed sections
+
+## Coordinates and indexing
+
+Coordinates in gen are 0-based, and ranges are closed/open. For instance, (0, 5) represents the first five base pairs of
+a sequence, and (10, 11) represents the eleventh base pair.
 
 -
 
