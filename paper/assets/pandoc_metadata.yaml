@@ -4,5 +4,5 @@ abstract: ... (write me in assets/pandoc_metadata.yaml)
 bibliography: assets/zotero.bib 
 csl: assets/chicago-author-date.csl
 documentclass: paper
-#classoption: twocolumn # Incompatible with longtable (see https://tex.stackexchange.com/a/224096 for workardound)
+classoption: twocolumn # (required custom preamble to make longtable work)
 ---

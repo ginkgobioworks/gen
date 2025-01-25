@@ -10,7 +10,9 @@ fi
 
 pandoc --citeproc  \
     --metadata-file=assets/pandoc_metadata.yaml \
-    --lua-filter=assets/pandoc_filter.lua --output main.pdf main.md
+    --lua-filter=assets/pandoc_filter.lua \
+    --include-in-header=assets/pandoc_preamble.tex \
+    --output main.pdf main.md
 
 exit_code=$?
 
