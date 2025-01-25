@@ -1,9 +1,7 @@
 ---
 title: "Gen: a version control system for biology"
-abstract: ... lorem ipsum4 ...
+abstract: ...
 ---
-
-## title: "Gen: a version control system for biology" abstract: ... lorem ipsum6 ...
 
 # Introduction
 
