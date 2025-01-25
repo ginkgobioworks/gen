@@ -1,8 +1,3 @@
----
-title: "Gen: a version control system for biology"
-abstract: ...
----
-
 # Introduction
 
 The conventional digital representation of a genetic sequence as a string of characters assumes that a species is

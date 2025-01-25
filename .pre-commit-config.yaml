@@ -28,7 +28,6 @@ repos:
     rev: 0.7.21  # Use the ref you want to point at
     hooks:
       - id: mdformat
-        exclude: ^paper/ # Mdformat breaks yaml headers for pandoc
         args: ["--wrap", "120"]
         additional_dependencies:
           - mdformat-gfm

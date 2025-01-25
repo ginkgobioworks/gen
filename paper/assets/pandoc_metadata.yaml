@@ -1,0 +1,8 @@
+---
+title: "Gen: a version control system for biology"
+abstract: ... (write me in assets/pandoc_metadata.yaml)
+bibliography: assets/zotero.bib 
+csl: assets/chicago-author-date.csl
+documentclass: paper
+#classoption: twocolumn # Incompatible with longtable (see https://tex.stackexchange.com/a/224096 for workardound)
+---

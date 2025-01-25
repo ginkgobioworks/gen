@@ -8,10 +8,18 @@ if ! command -v pandoc >/dev/null 2>&1; then
     exit 0 # Don't abort the commit
 fi
 
-pandoc --citeproc --bibliography=assets/zotero.bib --csl=assets/chicago-author-date.csl \
-    --variable documentclass=paper --variable classoption=twocolumn \
+pandoc --citeproc  \
+    --metadata-file=assets/pandoc_metadata.yaml \
     --lua-filter=assets/pandoc_filter.lua --output main.pdf main.md
 
-git add main.pdf
+exit_code=$?
+
+if [ $exit_code -eq 0 ]; then
+    echo "Pandoc run succeeded"
+    git add main.pdf
+else
+    echo "Pandoc failed with exit code: $exit_code"
+    exit 0 # Don't abort the commit
+fi
 
 echo "Done!"
