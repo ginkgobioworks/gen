@@ -1007,6 +1007,7 @@ pub fn end_operation<'a>(
             return Err(OperationError::NoChanges);
         }
         let mut hasher = Sha256::new();
+        hasher.update(&db_uuid[..]);
         hasher.update(&output[..]);
         hasher.update(&dependencies[..]);
         format!("{:x}", hasher.finalize())
