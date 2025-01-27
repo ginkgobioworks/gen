@@ -252,7 +252,9 @@ on the client side.
 
 While extensive benchmarking and performance tuning has not been carried out, owing to the use of Rust, Gen is fairly
 performant without much attention to optimizations. Benchmarks were carried out to evaluate the time and storage needs
-for importing the reference human genome and updating it with variant data from the 1000 genomes project.
+for importing the reference human genome and updating it with variant data from the 1000 genomes project. (See table @tbl:test)
+
+Table: my caption {#tbl:test}
 
 | Task                                                                          | Time  | Storage |
 | ----------------------------------------------------------------------------- | ----- | ------- |

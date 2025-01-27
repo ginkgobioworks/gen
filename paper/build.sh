@@ -25,9 +25,17 @@ current_dir=$(pwd)
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root/paper"
 
-pandoc --citeproc  \
-    --metadata-file=assets/pandoc_metadata.yaml \
+
+
+pandoc --metadata-file=assets/pandoc_metadata.yaml \
+    --citeproc  \
     --output main.pdf main.md
+
+#    --filter pandoc-tablenos \
+# Tablenos and other numbering filters require a separate install:
+# pip install git+https://github.com/TimothyElder/pandoc-xnos
+# (there's a bug in the main pandoc-tablenos repo that hasn't been fixed yet)
+# https://github.com/tomduck/pandoc-xnos/issues/28
 
 # Needed for two-column layout (see yaml metadata)
 #    --lua-filter=assets/pandoc_filter.lua \ 
