@@ -165,6 +165,10 @@ where
         outgoing_nodes.insert(outgoing_node);
     }
 
+    // This is a standard graph algorithm trick.  To get all nodes on paths from a source s to a
+    // target t, but not any other nodes, first find all nodes reachable from s.  Then reverse all
+    // the edges in the graph and find all nodes reachable from t.  The nodes in common between
+    // those two sets are the exactly the ones on some path from s to t.
     let reversed_graph = Reversed(&graph);
     let mut incoming_nodes = HashSet::new();
     incoming_nodes.insert(to);

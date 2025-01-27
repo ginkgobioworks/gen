@@ -870,9 +870,25 @@ impl BlockGroup {
         all_edges.push(new_end_edge_data);
         BlockGroupEdge::bulk_create(conn, &all_edges);
 
-        // TODO: Uncomment and fix
-        //	let all_edge_ids = all_edges.iter().map(|edge| edge.edge_id).collect::<Vec<_>>();
-        //        Path::create(conn, &current_path.name, target_block_group_id, &all_edge_ids);
+        let current_edges = PathEdge::edges_for_path(conn, current_path.id);
+        let new_edge_id_set = all_edges
+            .iter()
+            .map(|edge| edge.edge_id)
+            .collect::<HashSet<_>>();
+        let mut new_path_edge_ids = vec![];
+        new_path_edge_ids.push(new_start_edge.id);
+        for current_edge in current_edges {
+            if new_edge_id_set.contains(&current_edge.id) {
+                new_path_edge_ids.push(current_edge.id);
+            }
+        }
+        new_path_edge_ids.push(new_end_edge.id);
+        Path::create(
+            conn,
+            &current_path.name,
+            target_block_group_id,
+            &new_path_edge_ids,
+        );
     }
 }
 
@@ -2384,6 +2400,9 @@ mod tests {
                 all_sequences2,
                 HashSet::from_iter(vec!["TTTTTCCCCC".to_string(), "TAAAAAAAAC".to_string(),])
             );
+
+            let new_path = BlockGroup::get_current_path(conn, block_group2.id);
+            assert_eq!(new_path.sequence(conn), "TAAAAAAAAC");
         }
 
         #[test]
