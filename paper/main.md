@@ -251,17 +251,24 @@ on the client side.
 ## Performance Benchmarks
 
 While extensive benchmarking and performance tuning has not been carried out, owing to the use of Rust, Gen is fairly
-performant without much attention to optimizations. 1000 genomes data. Time for variant updates, size on disk of db.
+performant without much attention to optimizations. Benchmarks were carried out to evaluate the time and storage needs
+for importing the reference human genome and updating it with variant data from the 1000 genomes project.
 
-| Task                                                                          | Time     | Storage        |
-| ----------------------------------------------------------------------------- | -------- | -------------- |
-| Importing GrCh38 (shallow)                                                    | 7s       | 496kb          |
-| Importing GrCh38 (full)                                                       | 49s      | 3.0 Gb         |
-| Adding variants from chr22 of 1000 genomes project (HG00096 sample)           | 11s      | 22.9 Mb        |
-| Adding variants from chr22 of 1000 genomes project (HG00096 + HG00097 sample) | 11s + 6s | 22.9 + 11.7 Mb |
+| Task                                                                          | Time  | Storage |
+| ----------------------------------------------------------------------------- | ----- | ------- |
+| Importing GrCh38 (shallow)                                                    | 7s    | 496kb   |
+| Importing GrCh38 (full)                                                       | 49s   | 3.0 Gb  |
+| Adding variants from chr22 of 1000 genomes project (HG00096 sample)           | 7.7s  | 21.8 Mb |
+| Adding variants from chr22 of 1000 genomes project (HG00097 sample)           | 7.2s  | 21.7 Mb |
+| Adding variants from chr22 of 1000 genomes project (HG00096 + HG00097 sample) | 14.9s | 32.6 Mb |
 
-- the gzipped vcf input file was 17Mb for each sample, more samples lead to less data created as fewer new edges are
-  needed
+Shallow imports of data record only minimal information and do not store the genome sequence. This allows the database
+to work strictly off coordinates and fetch the sequence data from disk when needed. Notably, it is extremely useful for
+collaborating on large files and it enables a shallow working copy to be used and shared.
+
+For updating with variant data, the size of each vcf file was approximately 17.1 Mb. With addition of many samples
+within the same graph can lead to improved data compression as variants shared between samples require less data to be
+created.
 
 translating annotations
 
