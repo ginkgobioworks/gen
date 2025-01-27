@@ -25,9 +25,12 @@ use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
 use gen::updates::genbank::update_with_genbank;
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::{update_with_vcf, VcfError};
-use gen::views::patch::view_patches;
+use gen::views::block_group::view_block_group;
+use gen::views::patch::view_patches; // Commented out as it does not exist
+
 use itertools::Itertools;
 use noodles::core::Region;
+use noodles::gff::directive::name;
 use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
 use std::fs::File;
@@ -134,6 +137,19 @@ enum Commands {
         /// If a new entity is found, create it as a normal import
         #[arg(long, action, alias = "cm")]
         create_missing: bool,
+    },
+    /// Show a visual representation of a graph
+    #[command(arg_required_else_help(true))]
+    View {
+        /// The name of the graph to view
+        #[clap(index = 1)]
+        graph: String,
+        /// The name of the sample to view
+        #[arg(short, long)]
+        sample: Option<String>,
+        /// The name of the collection to view
+        #[arg(short, long)]
+        collection: Option<String>,
     },
     /// Update a sequence collecting using GAF results.
     #[command(name = "update-gaf", arg_required_else_help(true))]
@@ -467,6 +483,19 @@ fn main() {
             }
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
+        }
+        Some(Commands::View {
+            graph,
+            sample,
+            collection,
+        }) => {
+            conn.execute("BEGIN TRANSACTION", []).unwrap();
+            let collection_name = &collection
+                .clone()
+                .unwrap_or_else(|| get_default_collection(&operation_conn));
+
+            view_block_group(&conn, &*graph, sample.clone(), &*collection_name);
+            conn.execute("END TRANSACTION", []).unwrap();
         }
         Some(Commands::Update {
             name,
