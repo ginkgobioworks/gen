@@ -261,10 +261,12 @@ for importing the reference human genome and updating it with variant data from 
 | Adding variants from chr22 of 1000 genomes project (HG00096 sample)           | 7.7s  | 21.8 Mb |
 | Adding variants from chr22 of 1000 genomes project (HG00097 sample)           | 7.2s  | 21.7 Mb |
 | Adding variants from chr22 of 1000 genomes project (HG00096 + HG00097 sample) | 14.9s | 32.6 Mb |
+| Translating xxx from A to B (gff coordinate example)                          | 14.9s | 32.6 Mb |
+| Export of GFA stuff                                                           | 14.9s | 32.6 Mb |
 
 Shallow imports of data record only minimal information and do not store the genome sequence. This allows the database
 to work strictly off coordinates and fetch the sequence data from disk when needed. Notably, it is extremely useful for
-collaborating on large files and it enables a shallow working copy to be used and shared.
+collaborating on large files as it enables a shallow working copy to be used and shared.
 
 For updating with variant data, the size of each vcf file was approximately 17.1 Mb. With addition of many samples
 within the same graph can lead to improved data compression as variants shared between samples require less data to be
