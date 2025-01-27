@@ -2333,6 +2333,12 @@ mod tests {
 
         #[test]
         fn test_clone_subgraph_one_insertion() {
+            /*
+            AAAAAAAAAA -> TTTTTTTTTT -> CCCCCCCCCC -> GGGGGGGGGG
+                              \-> AAAAAAAA ->/
+            Subgraph range:  |-----------------|
+            Sequences of the subgraph are TAAAAAAAAC, TTTTTCCCCC
+             */
             let conn = &get_connection(None);
             Collection::create(conn, "test");
             let (block_group1_id, original_path) = setup_block_group(conn);
@@ -2407,6 +2413,11 @@ mod tests {
 
         #[test]
         fn test_clone_subgraph_two_independent_insertions() {
+            /*
+            AAAAAAAAAA -> TTTTTTTTTT -> CCCCCCCCCC -----> GGGGGGGGGG
+                                  \-> AAAAAAAA ->/  \->TTTTTTTT -/
+            Subgraph range:     |----------------------------------|
+             */
             let conn = &get_connection(None);
             Collection::create(conn, "test");
             let (block_group1_id, original_path) = setup_block_group(conn);
@@ -2531,6 +2542,14 @@ mod tests {
 
         #[test]
         fn test_clone_subgraph_two_independent_insertions_and_one_deletion() {
+            /*
+                       /--------------------------------------------\  (<-- Deletion edge)
+            AAAAAAAAAA -> TTTTTTTTTT -> CCCCCCCCCC -----> GGGGGGGGGG
+                                  \-> AAAAAAAA ->/  \->TTTTTTTT -/
+            Subgraph range: |----------------------------------|
+
+            Confirms that deletion edge is ignored and not added to subgraph
+             */
             let conn = &get_connection(None);
             Collection::create(conn, "test");
             let (block_group1_id, original_path) = setup_block_group(conn);
