@@ -22,13 +22,17 @@ fi
 
 # Execute pandoc from the paper directory to generate the pdf
 current_dir=$(pwd)
-cd paper
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root/paper"
 
 pandoc --citeproc  \
     --metadata-file=assets/pandoc_metadata.yaml \
-    --lua-filter=assets/pandoc_filter.lua \
-    --include-in-header=assets/pandoc_preamble.tex \
     --output main.pdf main.md
+
+# Needed for two-column layout (see yaml metadata)
+#    --lua-filter=assets/pandoc_filter.lua \ 
+#    --include-in-header=assets/pandoc_preamble.tex \ 
+
 
 # Check if pandoc run was successful
 exit_code=$?
