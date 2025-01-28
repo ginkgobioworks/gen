@@ -1,0 +1,58 @@
+strict digraph "" {
+	graph [fontnames=svg,
+		rankdir=LR,
+		splines=line,
+		ranksep=0.3
+	];
+	node [label="\N"];
+	
+	start	[fontsize=12,
+		height=0.3,
+		label=Start,
+		margin=0,
+		width=0.45];
+
+	start2	[fontsize=12,
+		height=0.3,
+		label=Start,
+		margin=0,
+		width=0.45];
+	
+    1	[label=<<TABLE BORDER='0'><TR><TD ALIGN='CENTER' BORDER='1' BGCOLOR='LIGHTCYAN' PORT='seq'><FONT POINT-SIZE='12' FACE='Monospace'>ATGAGTAAAGGAGAAG</FONT></TD></TR><TR><TD ALIGN='CENTER'><FONT POINT-SIZE='10'>1:0-15</FONT></TD></TR></TABLE>>,
+        shape=plain];
+
+	2 	[label=<<TABLE BORDER='0'><TR><TD ALIGN='CENTER' BORDER='1' PORT='seq' BGCOLOR='LIGHTCYAN'><FONT POINT-SIZE='12' FACE='Monospace'>AACT</FONT></TD></TR><TR><TD ALIGN='CENTER'><FONT POINT-SIZE='10'>1:16-19</FONT></TD></TR></TABLE>>,
+        shape=plain];
+
+	3   [label=<<TABLE BORDER='0'><TR><TD ALIGN='CENTER' BORDER='1' BGCOLOR='MISTYROSE' PORT='seq'><FONT POINT-SIZE='12' FACE='Monospace'>AACT</FONT></TD></TR><TR><TD ALIGN='CENTER'><FONT POINT-SIZE='10'>2:0-3</FONT></TD></TR></TABLE>>,
+        shape=plain,
+		margin=0];
+
+    4	[label=<<TABLE BORDER='0'><TR><TD BORDER='1' ALIGN='CENTER' BGCOLOR='MISTYROSE' PORT='seq'><FONT POINT-SIZE='12' FACE='Monospace'>TTTCACTGGAGT</FONT></TD></TR><TR><TD ALIGN='CENTER'><FONT POINT-SIZE='10'>2:4-15</FONT></TD></TR></TABLE>>,
+        shape=plain,
+		margin=0];
+
+	end	[fontsize=12,
+		height=0.3,
+		label=End,
+		margin=0,
+		width=0.45];
+
+	end2	[fontsize=12,
+		height=0.3,
+		label=End,
+		margin=0,
+		width=0.45];
+
+	start:e -> 1:seq:w;
+	1:seq:e -> 2:seq:w [arrowhead=none];
+	2:seq:e -> end:w;
+
+	start2:e -> 3:seq:w;
+	3:seq:e -> 4:seq:w [arrowhead=none];
+	4:seq:e -> end2:w;
+
+	start:s -> start2:n [constraint=false, style=invis];
+
+}
+

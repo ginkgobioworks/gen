@@ -1,0 +1,34 @@
+strict digraph "" {
+	graph [fontnames=svg,
+		rankdir=LR,
+		nodesep=0,
+		ranksep=0.3
+	];
+	node [label="\N"];
+	start	[fontsize=12,
+		height=0.3,
+		label=Start,
+		margin=0,
+		width=0.45];
+	1 	[label=<<TABLE BORDER='0'><TR><TD BORDER='1' ALIGN='CENTER' BGCOLOR='LIGHTCYAN' PORT='seq'><FONT POINT-SIZE='12' FACE='Monospace'>ATGAGTAAAGGAGAAGAACT</FONT></TD></TR><TR><TD ALIGN='CENTER'><FONT POINT-SIZE='10'>1:0-19</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	2	[label=<<TABLE BORDER='0'><TR><TD BORDER='1' ALIGN='CENTER' BGCOLOR='MISTYROSE' PORT='seq'><FONT POINT-SIZE='12' FACE='Monospace'>TTTCACTGGAGT</FONT></TD></TR><TR><TD BORDER='0' ALIGN='CENTER'><FONT POINT-SIZE='10'>2:4-15</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	3 	[label=<<TABLE BORDER='0'><TR><TD WIDTH='120'></TD><TD ALIGN='CENTER' BORDER='1' BGCOLOR='MISTYROSE' PORT='seq'><FONT POINT-SIZE='12' FACE='Monospace'>AACT</FONT></TD></TR><TR><TD></TD><TD ALIGN='CENTER'><FONT POINT-SIZE='10'>2:0-3</FONT></TD></TR></TABLE>>,
+		margin=0,
+		shape=none];
+	end	[fontsize=12,
+		height=0.3,
+		label=End,
+		margin=0,
+		width=0.45];
+
+	start:e -> 1:seq:w;
+	1:seq:e -> 2:seq:w [weight=10];
+	3:seq:e -> 2:seq:w [style=dashed, arrowhead=none];
+	2:seq:e -> end:w;
+
+}
+
