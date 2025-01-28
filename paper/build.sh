@@ -20,6 +20,12 @@ if ! command -v pandoc >/dev/null 2>&1; then
     exit 0 # Don't abort the commit
 fi
 
+if ! command -v pandoc-crossref >/dev/null 2>&1; then
+    echo "Error: pandoc-crossref is not installed or not in PATH"
+    echo "Please install pandoc-crossref: https://github.com/lierdakil/pandoc-crossref"
+    exit 0 # Don't abort the commit
+fi
+
 # Execute pandoc from the paper directory to generate the pdf
 current_dir=$(pwd)
 repo_root=$(git rev-parse --show-toplevel)
@@ -29,6 +35,7 @@ cd "$repo_root/paper"
 
 pandoc --metadata-file=assets/pandoc_metadata.yaml \
     --citeproc  \
+    --filter pandoc-crossref \
     --output main.pdf main.md
 
 #    --filter pandoc-tablenos \
