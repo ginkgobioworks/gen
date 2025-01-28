@@ -228,6 +228,31 @@ impl Path {
         )
     }
 
+    pub fn query_for_collection_and_sample(
+        conn: &Connection,
+        collection_name: &str,
+        sample_name: Option<String>,
+    ) -> Vec<Path> {
+        if let Some(actual_sample_name) = sample_name {
+            let query = "SELECT * FROM paths JOIN block_groups ON paths.block_group_id = block_groups.id WHERE block_groups.collection_name = ?1 AND block_groups.sample_name = ?2";
+            Path::query(
+                conn,
+                query,
+                rusqlite::params!(
+                    Value::from(collection_name.to_string()),
+                    Value::from(actual_sample_name)
+                ),
+            )
+        } else {
+            let query = "SELECT * FROM paths JOIN block_groups ON paths.block_group_id = block_groups.id WHERE block_groups.collection_name = ?1 AND block_groups.sample_name IS NULL";
+            Path::query(
+                conn,
+                query,
+                rusqlite::params!(Value::from(collection_name.to_string())),
+            )
+        }
+    }
+
     pub fn sequence(&self, conn: &Connection) -> String {
         let blocks = self.blocks(conn);
         blocks
