@@ -60,10 +60,10 @@
          y="72.943565">b</tspan></text><g
        id="graph0"
        class="graph"
-       transform="matrix(0.35277778,0,0,0.35277778,17.538444,67.621416)"><polygon
+       transform="matrix(0.35277778,0,0,0.35277778,16.057557,108.62238)"><polygon
          fill="#ffffff"
          stroke="none"
-         points="394,-112 394,4 -4,4 -4,-112 "
+         points="-4,-112 394,-112 394,4 -4,4 "
          id="polygon1" /><!-- source --><g
          id="node1"
          class="node"><title
@@ -92,7 +92,7 @@
            id="text2">1: </text><polygon
            fill="none"
            stroke="#000000"
-           points="104.38,-101.25 104.38,-78.75 90.12,-78.75 90.12,-101.25 "
+           points="90.12,-101.25 104.38,-101.25 104.38,-78.75 90.12,-78.75 "
            id="polygon2" /><text
            text-anchor="start"
            x="93.120003"
@@ -103,7 +103,7 @@
            id="text3">A</text><polygon
            fill="none"
            stroke="#000000"
-           points="118.62,-101.25 118.62,-78.75 104.38,-78.75 104.38,-101.25 "
+           points="104.38,-101.25 118.62,-101.25 118.62,-78.75 104.38,-78.75 "
            id="polygon3" /><text
            text-anchor="start"
            x="107.38"
@@ -114,7 +114,7 @@
            id="text4">T</text><polygon
            fill="none"
            stroke="#000000"
-           points="132.88,-101.25 132.88,-78.75 118.62,-78.75 118.62,-101.25 "
+           points="118.62,-101.25 132.88,-101.25 132.88,-78.75 118.62,-78.75 "
            id="polygon4" /><text
            text-anchor="start"
            x="121.62"
@@ -125,7 +125,7 @@
            id="text5">G</text><polygon
            fill="none"
            stroke="#000000"
-           points="147.12,-101.25 147.12,-78.75 132.88,-78.75 132.88,-101.25 "
+           points="132.88,-101.25 147.12,-101.25 147.12,-78.75 132.88,-78.75 "
            id="polygon5" /><text
            text-anchor="start"
            x="135.88"
@@ -136,7 +136,7 @@
            id="text6">T</text><polygon
            fill="none"
            stroke="#000000"
-           points="161.38,-101.25 161.38,-78.75 147.12,-78.75 147.12,-101.25 "
+           points="147.12,-101.25 161.38,-101.25 161.38,-78.75 147.12,-78.75 "
            id="polygon6" /><text
            text-anchor="start"
            x="150.12"
@@ -147,7 +147,7 @@
            id="text7">A</text><polygon
            fill="none"
            stroke="#000000"
-           points="175.62,-101.25 175.62,-78.75 161.38,-78.75 161.38,-101.25 "
+           points="161.38,-101.25 175.62,-101.25 175.62,-78.75 161.38,-78.75 "
            id="polygon7" /><text
            text-anchor="start"
            x="164.38"
@@ -158,7 +158,7 @@
            id="text8">T</text><polygon
            fill="none"
            stroke="#000000"
-           points="189.88,-101.25 189.88,-78.75 175.62,-78.75 175.62,-101.25 "
+           points="175.62,-101.25 189.88,-101.25 189.88,-78.75 175.62,-78.75 "
            id="polygon8" /><text
            text-anchor="start"
            x="178.62"
@@ -169,7 +169,7 @@
            id="text9">A</text><polygon
            fill="none"
            stroke="#000000"
-           points="204.12,-101.25 204.12,-78.75 189.88,-78.75 189.88,-101.25 "
+           points="189.88,-101.25 204.12,-101.25 204.12,-78.75 189.88,-78.75 "
            id="polygon9" /><text
            text-anchor="start"
            x="192.88"
@@ -180,7 +180,7 @@
            id="text10">C</text><polygon
            fill="none"
            stroke="#000000"
-           points="218.38,-101.25 218.38,-78.75 204.12,-78.75 204.12,-101.25 "
+           points="204.12,-101.25 218.38,-101.25 218.38,-78.75 204.12,-78.75 "
            id="polygon10" /><text
            text-anchor="start"
            x="207.12"
@@ -190,7 +190,7 @@
            id="text11">A</text><polygon
            fill="none"
            stroke="#000000"
-           points="232.62,-101.25 232.62,-78.75 218.38,-78.75 218.38,-101.25 "
+           points="218.38,-101.25 232.62,-101.25 232.62,-78.75 218.38,-78.75 "
            id="polygon11" /><text
            text-anchor="start"
            x="221.38"
@@ -200,7 +200,7 @@
            id="text12">T</text><polygon
            fill="none"
            stroke="#000000"
-           points="246.88,-101.25 246.88,-78.75 232.62,-78.75 232.62,-101.25 "
+           points="232.62,-101.25 246.88,-101.25 246.88,-78.75 232.62,-78.75 "
            id="polygon12" /><text
            text-anchor="start"
            x="235.62"
@@ -211,7 +211,7 @@
            id="text13">C</text><polygon
            fill="none"
            stroke="#000000"
-           points="261.12,-101.25 261.12,-78.75 246.88,-78.75 246.88,-101.25 "
+           points="246.88,-101.25 261.12,-101.25 261.12,-78.75 246.88,-78.75 "
            id="polygon13" /><text
            text-anchor="start"
            x="249.88"
@@ -222,7 +222,7 @@
            id="text14">A</text><polygon
            fill="none"
            stroke="#000000"
-           points="275.38,-101.25 275.38,-78.75 261.12,-78.75 261.12,-101.25 "
+           points="261.12,-101.25 275.38,-101.25 275.38,-78.75 261.12,-78.75 "
            id="polygon14" /><text
            text-anchor="start"
            x="264.12"
@@ -233,7 +233,7 @@
            id="text15">C</text><polygon
            fill="none"
            stroke="#000000"
-           points="289.62,-101.25 289.62,-78.75 275.38,-78.75 275.38,-101.25 "
+           points="275.38,-101.25 289.62,-101.25 289.62,-78.75 275.38,-78.75 "
            id="polygon15" /><text
            text-anchor="start"
            x="278.38"
@@ -244,7 +244,7 @@
            id="text16">G</text><polygon
            fill="none"
            stroke="#000000"
-           points="303.88,-101.25 303.88,-78.75 289.62,-78.75 289.62,-101.25 "
+           points="289.62,-101.25 303.88,-101.25 303.88,-78.75 289.62,-78.75 "
            id="polygon16" /><text
            text-anchor="start"
            x="292.62"
@@ -255,7 +255,7 @@
            id="text17">G</text><polygon
            fill="none"
            stroke="#000000"
-           points="318.12,-101.25 318.12,-78.75 303.88,-78.75 303.88,-101.25 "
+           points="303.88,-101.25 318.12,-101.25 318.12,-78.75 303.88,-78.75 "
            id="polygon17" /><text
            text-anchor="start"
            x="306.88"
@@ -313,7 +313,7 @@
            id="text21">2: </text><polygon
            fill="none"
            stroke="#000000"
-           points="218.12,-29.25 218.12,-6.75 203.88,-6.75 203.88,-29.25 "
+           points="203.88,-29.25 218.12,-29.25 218.12,-6.75 203.88,-6.75 "
            id="polygon21" /><text
            text-anchor="start"
            x="206.88"
@@ -324,7 +324,7 @@
            id="text22">T</text><polygon
            fill="none"
            stroke="#000000"
-           points="232.38,-29.25 232.38,-6.75 218.12,-6.75 218.12,-29.25 "
+           points="218.12,-29.25 232.38,-29.25 232.38,-6.75 218.12,-6.75 "
            id="polygon22" /><text
            text-anchor="start"
            x="221.12"
@@ -357,10 +357,10 @@
            id="polygon24" /></g></g><g
        id="graph0-7"
        class="graph"
-       transform="matrix(0.35277779,0,0,0.35277779,16.295934,110.03084)"><polygon
+       transform="matrix(0.35277779,0,0,0.35277779,16.057557,61.401801)"><polygon
          fill="#ffffff"
          stroke="none"
-         points="501.75,-94 501.75,4 -4,4 -4,-94 "
+         points="-4,4 -4,-94 501.75,-94 501.75,4 "
          id="polygon1-5" /><!-- 1.0 --><g
          id="node1-3"
          class="node"><title
@@ -373,7 +373,7 @@
            id="text1-6">1.0: </text><polygon
            fill="none"
            stroke="#000000"
-           points="190.75,-56.25 190.75,-33.75 118.75,-33.75 118.75,-56.25 "
+           points="118.75,-33.75 118.75,-56.25 190.75,-56.25 190.75,-33.75 "
            id="polygon2-2" /><text
            text-anchor="start"
            x="121.75"
@@ -393,7 +393,7 @@
            id="text3-7">1.8: </text><polygon
            fill="none"
            stroke="#000000"
-           points="279.38,-83.25 279.38,-60.75 256.88,-60.75 256.88,-83.25 "
+           points="256.88,-60.75 256.88,-83.25 279.38,-83.25 279.38,-60.75 "
            id="polygon3-0" /><text
            text-anchor="start"
            x="259.88"
@@ -411,7 +411,7 @@
            id="path4" /><polygon
            fill="#000000"
            stroke="#000000"
-           points="214.73,-71.5 225.32,-71.5 217.04,-64.89 "
+           points="217.04,-64.89 214.73,-71.5 225.32,-71.5 "
            id="polygon4-6" /></g><!-- 2.0 --><g
          id="node3-0"
          class="node"><title
@@ -424,7 +424,7 @@
            id="text5-6">2.0: </text><polygon
            fill="none"
            stroke="#000000"
-           points="279.38,-29.25 279.38,-6.75 256.88,-6.75 256.88,-29.25 "
+           points="256.88,-6.75 256.88,-29.25 279.38,-29.25 279.38,-6.75 "
            id="polygon5-2" /><text
            text-anchor="start"
            x="259.88"
@@ -442,7 +442,7 @@
            id="path6" /><polygon
            fill="#000000"
            stroke="#000000"
-           points="217.04,-25.11 225.32,-18.5 214.73,-18.5 "
+           points="214.73,-18.5 217.04,-25.11 225.32,-18.5 "
            id="polygon6-8" /></g><!-- 1.10 --><g
          id="node4-7"
          class="node"><title
@@ -455,7 +455,7 @@
            id="text7-9">1.10: </text><polygon
            fill="none"
            stroke="#000000"
-           points="407.75,-56.25 407.75,-33.75 352.25,-33.75 352.25,-56.25 "
+           points="352.25,-33.75 352.25,-56.25 407.75,-56.25 407.75,-33.75 "
            id="polygon7-2" /><text
            text-anchor="start"
            x="355.25"
@@ -474,7 +474,7 @@
            id="path8" /><polygon
            fill="#000000"
            stroke="#000000"
-           points="307.04,-52.11 315.32,-45.5 304.73,-45.5 "
+           points="304.73,-45.5 307.04,-52.11 315.32,-45.5 "
            id="polygon8-3" /></g><!-- 2.0&#45;&gt;1.10 --><g
          id="edge4-7"
          class="edge"><title
@@ -485,7 +485,7 @@
            id="path9" /><polygon
            fill="#000000"
            stroke="#000000"
-           points="304.73,-44.5 315.32,-44.5 307.04,-37.89 "
+           points="307.04,-37.89 304.73,-44.5 315.32,-44.5 "
            id="polygon9-5" /></g><!-- end --><g
          id="node6"
          class="node"><title
@@ -512,7 +512,7 @@
            id="path11" /><polygon
            fill="#000000"
            stroke="#000000"
-           points="432.24,-48.5 442.24,-45 432.24,-41.5 "
+           points="432.24,-41.5 432.24,-48.5 442.24,-45 "
            id="polygon11-2" /></g><!-- start --><g
          id="node5"
          class="node"><title
@@ -539,5 +539,5 @@
            id="path13" /><polygon
            fill="#000000"
            stroke="#000000"
-           points="78.49,-48.5 88.49,-45 78.49,-41.5 "
+           points="78.49,-41.5 78.49,-48.5 88.49,-45 "
            id="polygon13-8" /></g></g></g></svg>
