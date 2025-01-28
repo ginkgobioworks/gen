@@ -768,6 +768,10 @@ impl BlockGroup {
         target_block_group_id: i64,
     ) {
         let current_path = BlockGroup::get_current_path(conn, source_block_group_id);
+        let current_path_length = current_path.sequence(conn).len() as i64;
+        if (start < 0 || start > current_path_length) || (end < 0 || end > current_path_length) {
+            panic!("Start and/or end coordinates are out of range for the current path.");
+        }
         let current_intervaltree = current_path.intervaltree(conn);
         let mut blocks = current_intervaltree
             .query(Range { start, end })
