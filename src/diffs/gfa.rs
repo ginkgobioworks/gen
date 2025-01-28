@@ -182,6 +182,7 @@ fn segments_from_blocks(node_blocks: &Vec<NodeIntervalBlock>, sequence: &str) ->
             sequence: sequence[start..end].to_string(),
             node_id: block.node_id,
             sequence_start: block.sequence_start,
+            sequence_end: block.sequence_end,
             strand: block.strand,
         };
         segments.push(segment.clone());
@@ -197,12 +198,14 @@ fn links_from_blocks(node_blocks: &[NodeIntervalBlock]) -> Vec<Link> {
             sequence: "".to_string(),
             node_id: block1.node_id,
             sequence_start: block1.sequence_start,
+            sequence_end: block1.sequence_end,
             strand: block1.strand,
         };
         let target_segment = Segment {
             sequence: "".to_string(),
             node_id: block2.node_id,
             sequence_start: block2.sequence_start,
+            sequence_end: block2.sequence_end,
             strand: block2.strand,
         };
 

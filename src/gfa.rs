@@ -8,6 +8,7 @@ pub struct Segment {
     pub sequence: String,
     pub node_id: i64,
     pub sequence_start: i64,
+    pub sequence_end: i64,
     pub strand: Strand,
 }
 
@@ -28,7 +29,10 @@ pub struct Path {
 
 impl Segment {
     pub fn segment_id(&self) -> String {
-        format!("{}.{}", self.node_id, self.sequence_start)
+        format!(
+            "{}.{}.{}",
+            self.node_id, self.sequence_start, self.sequence_end
+        )
     }
 }
 
