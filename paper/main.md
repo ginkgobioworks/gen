@@ -45,7 +45,9 @@ between positions and strands within nodes. This enables Gen to model changes in
 the graph require only addition of data. This is a significant advantage, as the traditional model requires splitting
 nodes into sub-nodes when changes are made, introducing computational overhead for many operations (@fig:graph_model).
 
-![Overview of Graph data model.a. Traditional graph where sequences are encoded as nodes and edges connect two nodes together. b. Gen data model where sequences are encoded as nodes and edges connect positions within nodes together. ](graph_model/final.svg){#fig:graph_model}
+![**Overview of Graph data model**\
+**a.** Traditional graph where sequences are encoded as nodes and edges connect two nodes together.
+**b.** Gen data model where sequences are encoded as nodes and edges connect positions within nodes together. ](graph_model/final.svg){#fig:graph_model}
 
 On importing data, Gen creates a Sequence object, which is a unique database entry. Nodes are then created which
 reference a slice of the stored Sequence. This separation has several uses. One is data compression where the same

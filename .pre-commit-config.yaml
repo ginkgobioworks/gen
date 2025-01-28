@@ -24,13 +24,6 @@ repos:
         files: Cargo\.(toml|lock)
         pass_filenames: false
         args: ["--all-features", "check"]
-  - repo: https://github.com/hukkin/mdformat
-    rev: 0.7.21  # Use the ref you want to point at
-    hooks:
-      - id: mdformat
-        args: ["--wrap", "120"]
-        additional_dependencies:
-          - mdformat-gfm
   - repo: local
     hooks:
       - id: build-paper
