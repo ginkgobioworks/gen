@@ -16,6 +16,7 @@ target/
 
 # Python notebooks and environment used to generate unit tests
 fixtures/*.ipynb
+**/.ipynb_checkpoints/
 .venv/
 
 # Mac droppings
@@ -24,4 +25,10 @@ fixtures/*.ipynb
 # Gen tracking dir
 .gen/
 
-**/.ipynb_checkpoints/
+# Large files used in the examples
+examples/yeast_crosses/*.tgz
+examples/yeast_crosses/*.gz
+examples/yeast_crosses/*.vcf
+examples/yeast_crosses/S288C_reference_genome_R64-1-1_20110203/*
+
+
