@@ -29,17 +29,18 @@ pub fn export_gfa(
     let block_groups = Collection::get_block_groups(conn, collection_name);
 
     let mut edge_set = HashSet::new();
-    if let Some(sample) = sample_name {
-        let sample_block_groups = Sample::get_block_groups(conn, collection_name, Some(&sample));
+    if let Some(sample) = sample_name.as_deref() {
+        let sample_block_groups = Sample::get_block_groups(conn, collection_name, Some(sample));
         if sample_block_groups.is_empty() {
             panic!(
                 "No block groups found for collection {} and sample {}",
                 collection_name, sample
             );
         }
-        let block_group_id = sample_block_groups[0].id;
-        let block_group_edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
-        edge_set.extend(block_group_edges);
+        for block_group in sample_block_groups {
+            let block_group_edges = BlockGroupEdge::edges_for_block_group(conn, block_group.id);
+            edge_set.extend(block_group_edges);
+        }
     } else {
         for block_group in block_groups {
             let block_group_edges = BlockGroupEdge::edges_for_block_group(conn, block_group.id);
@@ -104,7 +105,7 @@ pub fn export_gfa(
         }
     }
     write_links(&mut writer, &links);
-    write_paths(&mut writer, conn, collection_name, &blocks);
+    write_paths(&mut writer, conn, collection_name, sample_name, &blocks);
 }
 
 // NOTE: A path is an immutable list of edges, but the sequence between the target of one edge and
@@ -147,9 +148,10 @@ fn write_paths(
     writer: &mut BufWriter<File>,
     conn: &Connection,
     collection_name: &str,
+    sample_name: Option<String>,
     blocks: &[GroupBlock],
 ) {
-    let paths = Path::query_for_collection(conn, collection_name);
+    let paths = Path::query_for_collection_and_sample(conn, collection_name, sample_name);
     let edges_by_path_id =
         PathEdge::edges_for_paths(conn, paths.iter().map(|path| path.id).collect());
 

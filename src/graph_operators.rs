@@ -23,17 +23,24 @@ pub fn derive_subgraph(
     let mut parent_block_group_id = 0;
     let mut new_block_group_id = 0;
     for block_group in block_groups {
-        let new_bg_id = BlockGroup::get_or_create_sample_block_group(
-            conn,
-            collection_name,
-            new_sample_name,
-            &block_group.name,
-            parent_sample_name,
-        )
-        .unwrap();
         if block_group.name == region_name {
             parent_block_group_id = block_group.id;
-            new_block_group_id = new_bg_id;
+            let new_block_group = BlockGroup::create(
+                conn,
+                collection_name,
+                Some(new_sample_name),
+                &block_group.name,
+            );
+            new_block_group_id = new_block_group.id;
+        } else {
+            let _new_bg_id = BlockGroup::get_or_create_sample_block_group(
+                conn,
+                collection_name,
+                new_sample_name,
+                &block_group.name,
+                parent_sample_name,
+            )
+            .unwrap();
         }
     }
 

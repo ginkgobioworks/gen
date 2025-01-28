@@ -293,8 +293,10 @@ enum Commands {
         #[arg(short, long)]
         output_gff: String,
     },
+    /// List all samples in the current collection
     ListSamples {},
     #[command(arg_required_else_help(true))]
+    /// List all regions/contigs in the current collection and given sample
     ListGraphs {
         /// The name of the collection to list graphs for
         #[arg(short, long)]
@@ -340,6 +342,7 @@ enum Commands {
         #[arg(long)]
         gfa: String,
     },
+    /// Replace a sequence graph with a subgraph in the range of the specified coordinates
     DeriveSubgraph {
         /// The name of the collection to derive the subgraph from
         #[arg(short, long)]
@@ -988,6 +991,8 @@ fn main() {
             new_sample,
             region,
         }) => {
+            conn.execute("BEGIN TRANSACTION", []).unwrap();
+            operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
             let name = &name
                 .clone()
                 .unwrap_or_else(|| get_default_collection(&operation_conn));
@@ -1007,6 +1012,8 @@ fn main() {
                 start_coordinate,
                 end_coordinate,
             );
+            conn.execute("END TRANSACTION", []).unwrap();
+            operation_conn.execute("END TRANSACTION", []).unwrap();
         }
     }
 }
