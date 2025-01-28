@@ -87,7 +87,7 @@ the contigs in the reference fasta file to `chromosome` followed by an index num
 
 ```console
 seqtk rename S288C_reference_sequence_R64-1-1_20110203.fsa chromosome > S288C_reference_renamed.fa
-
+```
 Now we can import the refernce sequence into to our gen repository:
 
 ```console
@@ -106,21 +106,34 @@ We can now load the individual VCF files into gen using an `update` command. Gen
 names in the VCF file to find the appropriate graphs to update or create. In our case we want to combine the variants,
 so we tell gen to create a sample called F1.
 
-(BUG: trying to specify a sample when the VCF already has samples should error out, or redirect the variants (if the
-count matches), see bug report in Notion)
-
 ```console
 gen update --vcf BRQ.vcf --sample F1
 gen update --vcf CFD.vcf --sample F1
 ```
+(BUG: trying to specify a sample when the VCF already has samples should redirect the variants or error out, see bug report in Notion. Specifying the genotype tag shouldn't be necessary)
 
 Workaround:
 ```
-bcftools reheader -s sample_mapping.txt -o BRQ2.vcf BRQ.vcf
-bcftools reheader -s sample_mapping.txt -o CFD2.vcf CFD.vcf
+echo "BRQ F1" | bcftools reheader -s - -o BRQ2.vcf BRQ.vcf
+echo "CFD F1" | bcftools reheader -s - -o CFD2.vcf CFD.vcf
+
+gen update --vcf BRQ2.vcf
+gen update --vcf CFD2.vcf
 ```
 
-Next we use the `derive subgraph` command to study part of the graph in detail: the FLO5 gene. We specify it as a region linear space on the reference path. The coordinates we obtain from the reference annotation track GFF file. 
+Workaround once gen supports stdin for files:
+```
+echo "BRQ F1" | bcftools reheader -s - BRQ.vcf | gen update --vcf -
+echo "CFD F1" | bcftools reheader -s - CFD.vcf | gen update --vcf -
+```
+
+Let's take a look at which samples our database contains now:
+```console
+gen list-samples
+```
+There is only one sample (F1), which makes sense because our reference genome got imported into the null sample, and our variants were redirected to F1.
+
+Next we use the `derive subgraph` command to study part of the graph in detail: the FLO5 gene. We specify it as a region in linear space on the reference path. The coordinates we obtain from the reference annotation track GFF file. 
 
 ```console
 grep FLO8 S288C_reference_genome_R64-1-1_20110203/*gff
@@ -131,14 +144,13 @@ chrV	SGD	gene	375215	377614	.	-	.	ID=YER109C;Name=YER109C;gene=FLO8;Alias=FLO8,P
 chrV	SGD	CDS	375215	377614	.	-	0	Parent=YER109C;Name=YER109C;gene=FLO8;Alias=FLO8,PHD5,YER108C;Ontology_term=GO:0000501,GO:0001403,GO:0003704,GO:0005634,GO:0005737,GO:0007124,GO:0010552,GO:0042710;Note=Transcription%20factor%20required%20for%20flocculation%2C%20diploid%20filamentous%20growth%2C%20and%20haploid%20invasive%20growth%3B%20genome%20reference%20strain%20S288C%20and%20most%20laboratory%20strains%20have%20a%20mutation%20in%20this%20gene;dbxref=SGD:S000000911;orf_classification=Verified
 ```
 
-From this we get coordinates 375215	377614 on chrV. 
+From this we get coordinates 375215	to 377614 on chrV, which leads to the following command:
 
 ```console
-gen derive-subgraph --new-sample extract --region 'chromosome5:375215-377614'
+gen derive-subgraph --sample F1 --new-sample extract --region 'chromosome5:375215-377614' 
 ```
 
-error: Not enough nodes found in block group 5 from 375215 to 377614 to clone subgraph
-
+BUG: this doesn't give the correct sequence currently, David is working on a fix.
 
 
 
