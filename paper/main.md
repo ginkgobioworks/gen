@@ -150,15 +150,19 @@ available graph alignment tools such as minigraph or vg. Then, the resulting GAF
 update command to apply these changes to the graph. Additionally, the GAF file can be manually edited to fine tune the
 precise update location as graph aligners may not fully match what users want.
 
-A graphical fragment assembly (GFA) can be used to augment a graph. Here, xxxx.
+A graphical fragment assembly (GFA) can be used to augment a graph. Here, we add any new nodes and paths in the supplied
+GFA and identify which nodes and paths overlap between the existing database and GFA. Changes to the overlapping nodes
+and paths are identified and the database is updated to reflect the additional information.
 
 For simple graphs such as a plasmid or haploid organisms where linear indexing is possible, a fasta file may be provided
-to insert its contents ito a given position.
-
-For pooled updates, a custom library format may be provided.
+to insert its contents ito a given position. This syntax can also be utilized for complex examples if a linear reference
+path is established through the graph. For example, a human genome may have many heterozygous changes, but chr1 can
+still correspond to the reference genome's path and be used as an index into the graph.
 
 A GenBank file can be provided with changes annotated. Currently, we only support changes encoded in the Geneious
-format.
+format. Thus, GenBanks can be modified in Geneious and exported to Gen. A similar GenBank export exists where changes
+are encoded in a Geneious compatible format so bidirectional information transfer is possible. This allows users to edit
+their sequences using a GUI and leverage Gen for tracking of work and graph based analyses.
 
 ## Sample Lineage
 
@@ -252,7 +256,8 @@ on the client side.
 
 While extensive benchmarking and performance tuning has not been carried out, owing to the use of Rust, Gen is fairly
 performant without much attention to optimizations. Benchmarks were carried out to evaluate the time and storage needs
-for importing the reference human genome and updating it with variant data from the 1000 genomes project. (See table @tbl:test)
+for importing the reference human genome and updating it with variant data from the 1000 genomes project. (See table
+@tbl:test)
 
 Table: my caption {#tbl:test}
 
@@ -263,8 +268,8 @@ Table: my caption {#tbl:test}
 | Adding variants from chr22 of 1000 genomes project (HG00096 sample)           | 7.7s  | 21.8 Mb |
 | Adding variants from chr22 of 1000 genomes project (HG00097 sample)           | 7.2s  | 21.7 Mb |
 | Adding variants from chr22 of 1000 genomes project (HG00096 + HG00097 sample) | 14.9s | 32.6 Mb |
-| Translating xxx from A to B (gff coordinate example)                          | 14.9s | 32.6 Mb |
-| Export of GFA stuff                                                           | 14.9s | 32.6 Mb |
+| Translating xxx from A to B (gff coordinate example)                          | xxxs  | yyy Mb  |
+| Export of GFA stuff                                                           | xxxs  | yyy Mb  |
 
 Shallow imports of data record only minimal information and do not store the genome sequence. This allows the database
 to work strictly off coordinates and fetch the sequence data from disk when needed. Notably, it is extremely useful for
@@ -288,6 +293,22 @@ data export time
   simply delays the inevitable addition of a new sample, a derivative lineage, or an updated set of variant calls.
 
 ## Removed sections
+
+## Inroduction
+
+- observation about in many genetic analyses, the genome doesn't change among samples, the same reference genome is used
+  for each. It's good enough for many applications, but syn bio has genomes that change often. The lack of an updateable
+  graph format is a major hindrance here, where regenerating a GFA is time consuming and makes it difficult to compare
+  across analyses. So we worked on a format where the reference genome could be uodated In many conexs whee he efeence
+  genome is used, he pae of updaes is infequen, where the genome is unchanged or slowly changing. This is why there are
+  so many examples where hg18 and hg19 are still utilized. Conversely, in scenarios where the genome is changing often,
+  such as in synthetic biology where multiple generations of a strain is generated, the reference genome is updating.
+  Thus, the previous approaches of a largely static genome are unsuitable. This makes it difficult to compare analyses
+  across generations
+
+## Updating Graph section
+
+- Removed `For pooled updates, a custom library format may be provided.`. Should put pooled stuff in its own section.
 
 ## Coordinates and indexing
 
