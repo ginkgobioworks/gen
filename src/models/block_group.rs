@@ -774,9 +774,6 @@ impl BlockGroup {
             .map(|x| x.value)
             .collect::<Vec<_>>();
         blocks.sort_by(|a, b| a.start.cmp(&b.start));
-        if blocks.len() < 2 {
-            panic!("Not enough nodes found in block group {source_block_group_id} from {start} to {end} to clone subgraph");
-        }
         let start_block = blocks[0];
         let start_node_coordinate = start - start_block.start + start_block.sequence_start;
         let end_block = blocks[blocks.len() - 1];
