@@ -110,21 +110,38 @@ so we tell gen to create a sample called F1.
 count matches), see bug report in Notion)
 
 ```console
-gen update --vcf BRQ_2.vcf --sample F1
-gen update --vcf CFD_2.vcf --sample F1
+gen update --vcf BRQ.vcf --sample F1
+gen update --vcf CFD.vcf --sample F1
 ```
 
 Workaround:
 ```
-bcftools reheader -s sample_mapping.txt -o BRQ_3.vcf BRQ_2.vcf
-bcftools reheader -s sample_mapping.txt -o CFD_3.vcf CFD_2.vcf
+bcftools reheader -s sample_mapping.txt -o BRQ2.vcf BRQ.vcf
+bcftools reheader -s sample_mapping.txt -o CFD2.vcf CFD.vcf
 ```
 
-If we want to study a specific region in detail, we can extract it using the `derive subgraph` command:
+Next we use the `derive subgraph` command to study part of the graph in detail: the FLO5 gene. We specify it as a region linear space on the reference path. The coordinates we obtain from the reference annotation track GFF file. 
 
 ```console
+grep FLO8 S288C_reference_genome_R64-1-1_20110203/*gff
+```
 
 ```
+chrV	SGD	gene	375215	377614	.	-	.	ID=YER109C;Name=YER109C;gene=FLO8;Alias=FLO8,PHD5,YER108C;Ontology_term=GO:0000501,GO:0001403,GO:0003704,GO:0005634,GO:0005737,GO:0007124,GO:0010552,GO:0042710;Note=Transcription%20factor%20required%20for%20flocculation%2C%20diploid%20filamentous%20growth%2C%20and%20haploid%20invasive%20growth%3B%20genome%20reference%20strain%20S288C%20and%20most%20laboratory%20strains%20have%20a%20mutation%20in%20this%20gene;dbxref=SGD:S000000911;orf_classification=Verified
+chrV	SGD	CDS	375215	377614	.	-	0	Parent=YER109C;Name=YER109C;gene=FLO8;Alias=FLO8,PHD5,YER108C;Ontology_term=GO:0000501,GO:0001403,GO:0003704,GO:0005634,GO:0005737,GO:0007124,GO:0010552,GO:0042710;Note=Transcription%20factor%20required%20for%20flocculation%2C%20diploid%20filamentous%20growth%2C%20and%20haploid%20invasive%20growth%3B%20genome%20reference%20strain%20S288C%20and%20most%20laboratory%20strains%20have%20a%20mutation%20in%20this%20gene;dbxref=SGD:S000000911;orf_classification=Verified
+```
+
+From this we get coordinates 375215	377614 on chrV. 
+
+```console
+gen derive-subgraph --new-sample extract --region 'chromosome5:375215-377614'
+```
+
+error: Not enough nodes found in block group 5 from 375215 to 377614 to clone subgraph
+
+
+
+
 
 Lastly, we export the F1 sample to a GFA file that can be used by graph-aware sequence aligners.
 
