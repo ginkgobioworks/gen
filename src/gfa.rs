@@ -84,3 +84,11 @@ pub fn write_links(writer: &mut BufWriter<File>, links: &Vec<Link>) {
             });
     }
 }
+
+pub fn bool_to_strand(direction: bool) -> Strand {
+    if direction {
+        Strand::Forward
+    } else {
+        Strand::Reverse
+    }
+}
