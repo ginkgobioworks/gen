@@ -145,7 +145,7 @@ pub fn update_with_gfa(
             for segment_id in walk.segments.iter() {
                 matched_path_name_by_segment_id
                     .entry(segment_id)
-                    .or_insert(HashSet::new())
+                    .or_insert_with(HashSet::new)
                     .insert(walk_name);
             }
         } else {
