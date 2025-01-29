@@ -7,6 +7,7 @@ use crate::models::{
     file_types::FileTypes,
     node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
     operations::OperationInfo,
+    path::Path,
     sample::Sample,
     sequence::Sequence,
     strand::Strand,
@@ -146,6 +147,7 @@ pub fn import_library<'a>(
     path_changes_count *= end_parts.len();
 
     let new_edge_ids = Edge::bulk_create(conn, &new_edges.iter().cloned().collect());
+
     let new_block_group_edges = new_edge_ids
         .iter()
         .map(|edge_id| BlockGroupEdgeData {
@@ -156,6 +158,34 @@ pub fn import_library<'a>(
         })
         .collect::<Vec<_>>();
     BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
+
+    let mut path_node_ids = vec![];
+    path_node_ids.push(PATH_START_NODE_ID);
+    for parts in &parts_list {
+        path_node_ids.push(*parts[0]);
+    }
+    path_node_ids.push(PATH_END_NODE_ID);
+
+    let new_edges = Edge::bulk_load(conn, &new_edge_ids);
+    let new_edge_ids_by_source_and_target_node = new_edges
+        .iter()
+        .map(|edge| ((edge.source_node_id, edge.target_node_id), edge.id))
+        .collect::<HashMap<_, _>>();
+    let path_edge_ids = path_node_ids
+        .iter()
+        .tuple_windows()
+        .map(|(source_node_id, target_node_id)| {
+            *new_edge_ids_by_source_and_target_node
+                .get(&(*source_node_id, *target_node_id))
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    Path::create(
+        conn,
+        format!("{} default path", region_name).as_str(),
+        new_block_group.id,
+        &path_edge_ids,
+    );
 
     let summary_str = format!("{region_name}: {path_changes_count} changes.\n");
     operation_management::end_operation(
@@ -231,5 +261,11 @@ mod tests {
 
         let actual_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
         assert_eq!(actual_sequences, expected_sequences);
+
+        let current_path = BlockGroup::get_current_path(conn, block_group.id);
+        assert_eq!(
+            current_path.sequence(conn),
+            "TCTAGAGAAAGAGGGGACAAACTAGATGCGTAAAGGAGAAGAACTTTAA"
+        );
     }
 }
