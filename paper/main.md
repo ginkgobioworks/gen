@@ -59,13 +59,19 @@ duplicate segments.
 
 As previously mentioned, updates to the graph requires only the addition of new data. There are no updates required.
 Insertions or replacements of sequence is represented by creating a new sequence, a corresponding node, and two edges (
-fig. [graph_updates a](graph_updates/final.svg)). The first edge has its source as the start of the region being
+@fig:graph_updates a). The first edge has its source as the start of the region being
 replaced (or the coordinate of the insertion start) on the source node, and its target as the start of the created node.
 The second edge has its source as the end of the created node, and its target as the end of the region being replaced
 (or the coordinate of the insertion start plus one).
 
 Deletions can be encoded as just one new edge, from the start coordinate of the region being deleted to the end
-coordinate of that region [graph_updates b](graph_updates/final.svg)).
+coordinate of that region (@fig:graph_updates b).
+
+![**Graph updates**\
+**a.** Additions of a sequence and deletion to the graph. Inserts and swaps of sequences are handled by the same logic.
+**b.** Database representation of additions and deletions. Models are simplified to illustrate the essential parts. 
+The first 2 rows of edges correspond to the addition of the TG sequence and the 3rd edge corresponds to the deletion.
+Coordinate is abbreviated Coord in column headers.](graph_updates/final.svg){#fig:graph_updates}
 
 Gen represents one contig, such as a chromosome, using one directed graph of nodes and edges. This grouping is termed a
 Block Group and a join table between Block Groups and Edges is used to record all the edges in a block group. Because of
