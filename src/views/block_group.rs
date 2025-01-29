@@ -17,8 +17,9 @@ use noodles::vcf::header;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::prelude::GraphMap;
 use rusqlite::Connection;
+use ruzstd::blocks;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, BTreeMap};
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufWriter, Stdout, Write};
@@ -48,38 +49,99 @@ use rust_sugiyama::{configure::Config, from_edges};
 ///   - If `scale` = 0.5, each cell is 0.5 data units (you see *less* data, zoomed in).
 struct ScrollState {
     offset_x: f64,
-    offset_y: f64,
-    scale: f64,
+    offset_y: f64
 }
 
 /// Holds data for the viewer.
 struct Viewer {
     blocks: Vec<GroupBlock>,
     block_pairs: Vec<(u32, u32)>,        // Real edges and boundary edges
-    coordinates: Vec<(u32, (f64, f64))>, // Block ID to (x, y) coordinates
+    coordinates: HashMap<u32, (f64, f64)>, // Block ID to (x, y) coordinates
     graph_width: f64,
     graph_height: f64,
-    margin: f64,
     scroll: ScrollState,
+    zoom_level: u8
 }
 
-/// Draw the canvas. Note that we compute the coordinate range
-/// from the current `offset`, the `scale`, and the widget `size`.
-fn draw_scrollable_canvas(frame: &mut ratatui::Frame, viewer: &Viewer) {
-    // The number of cells in each direction is obtained from the frame area.
-    // We multiply by `scale` (data units per cell) to find how wide/tall
-    // the visible data range is.
-    let data_width = frame.area().width as f64 * viewer.scroll.scale;
-    let data_height = frame.area().height as f64 * viewer.scroll.scale;
+/// Convert the coordinates from the layout algorithm to canvas coordinates.
+/// This depends on widest label in each rank.
+fn stretch_layout(
+    layout: &Vec<(u32, (f64, f64))>,
+    labels: &HashMap<u32, String>,) -> HashMap<u32, (f64, f64)> {
 
+
+    // Find the widest label in each rank (y-coordinate because layouts are top to bottomn)
+    let mut rank_widths = BTreeMap::new();
+    for (block_id, (_, rank)) in layout {
+        let label = labels.get(block_id).unwrap();
+        let label_width = label.len();
+        let max_width = rank_widths.entry(*rank).or_insert(1);
+        *max_width = std::cmp::max(*max_width, label_width);
+    }
+
+    // Build a BTreeMap of cumulative rank widths (keys are rank, values are cumulative width)
+    let cumulative_widths: BTreeMap<f64, usize> = rank_widths
+        .into_iter()
+        .sorted_by(|a, b| a.0.partial_cmp(&b.0).unwrap())
+        .scan(0, |accumulator, (rank, width)| {
+            *accumulator += width;
+            Some((rank, *accumulator))
+        })
+        .collect();
+
+    // Loop over the blocks and:
+    // - transpose the coordinates so we go to a left-to-right layout
+    // - increment the new x-coordinate by the cumulative width of that rank - 1
+    // - horizontally center the block in the rank
+    // - store the results in a hashmap instead of a vector
+    let mut coordinates = HashMap::new();
+    for (block_id, (x, y)) in layout {
+        let rank_offset = cumulative_widths.get(y).unwrap() as f64 - 1.0;
+        let centering_offset = (rank_widths.get(y).unwrap() - labels.get(block_id).unwrap().len()) as f64 / 2.0;
+        let new_x = ;
+        let new_y = *x;
+        coordinates.insert(*block_id, (*y + rank_offset + centering_offset, 
+                                                *x));
+    }
+
+    coordinates
+}
+
+/// Generate labels for the blocks depending on the zoom level and the block sequence.
+/// - If the zoom level is 1, show only one character: o.
+/// - If the zoom level is 2, show the 3 first and 3 last characters of the block sequence, separated by an ellipsis.
+/// - If the zoom level is 3, show the entire block sequence.
+fn make_labels(blocks: &Vec<GroupBlock>, zoom_level: u8) -> HashMap<u32, String> {
+    let mut labels = HashMap::new();
+    for block in blocks {
+        let label = match zoom_level {
+            1 => "●".to_string(),
+            2 => {
+                let sequence = block.sequence();
+                if sequence.len() > 6 {
+                    format!("{}…{}", &sequence[0..3], &sequence[sequence.len() - 3..])
+                } else {
+                    sequence
+                }
+            }
+            3 => block.sequence(),
+            _ => panic!("Invalid zoom level: {}", zoom_level),
+        };
+        labels.insert(block.node_id as u32, label);
+    }
+    labels
+}
+
+
+
+/// Draw the canvas. Note that we compute the coordinate range
+/// from the current `offset` and the widget `size`.
+fn draw_scrollable_canvas(frame: &mut ratatui::Frame, viewer: &Viewer) {
     // The top-left corner of our view is (offset_x, offset_y).
     let x_start = viewer.scroll.offset_x;
-    let x_end = x_start + data_width;
+    let x_end = x_start + frame.area().width as f64;
     let y_start = viewer.scroll.offset_y;
-    let y_end = y_start + data_height;
-
-    // Get the edges corresponding to the blocks
-    //let edges = viewer.graph.edges().collect::<Vec<_>>();
+    let y_end = y_start + frame.area().height as f64;
 
     // Create the canvas
     let canvas = Canvas::default()
@@ -143,34 +205,7 @@ fn draw_scrollable_canvas(frame: &mut ratatui::Frame, viewer: &Viewer) {
         });
     frame.render_widget(canvas, frame.area());
 
-    // FIXME: the widgets below aren't rendered in the proper coordinate reference compared to the canvas
-    /*for (block_id, (x, y)) in &viewer.coordinates {
-        // Get the sequence of the block
-        // TODO: figure out why not all blocks from the coordinates are in the viewer.blocks (starter block?)
-        if let Some(block) = viewer.blocks.iter().find(|b| b.node_id == *block_id as i64) {
-            let sequence = block.sequence();
-            // If the sequence is longer than 9 characters, only show the first and last 3, separated by ellipsis
-            let seq_label = if sequence.len() > 9 {
-                format!("{}...{}", &sequence[0..3], &sequence[sequence.len()-3..])
-            } else {
-                sequence
-            };
-
-            // Draw the block ID from the layout as text.
-            let widget_width = (seq_label.len() as f64 + 2.0);
-            let widget_height = 3.0;
-            let area = Rect {
-                x: (x_start + (*x - widget_width/2.0)) as u16,
-                y: (y_start + (*y - widget_height/2.0)) as u16,
-                width: widget_width as u16,
-                height: widget_height as u16,
-            };
-            frame.render_widget(Paragraph::new(seq_label).block(Block::bordered()), area);
-
-        }
-
-    }
-    */
+   
 }
 
 pub fn view_block_group(
@@ -233,13 +268,8 @@ pub fn view_block_group(
 
     let (layout, width, height) = &layouts[0];
 
-    // Get coordinates from the layout by transposing the x and y values (the layout is vertical by default)
-    let coordinates = layout
-        .iter()
-        .map(|(id, (x, y))| (*id as u32, (*y, *x)))
-        .collect::<Vec<_>>();
-    // Width and height are also transposed
-    let (width, height) = (*height, *width);
+    // Make the labels for the blocks
+    let labels = make_labels(&blocks,2);
 
     //println!("Coordinates: {:?}", coordinates);
     //println!("width: {width}, height: {height}");
@@ -256,14 +286,14 @@ pub fn view_block_group(
     let mut viewer = Viewer {
         blocks: blocks,
         block_pairs: block_pairs_u32,
-        coordinates: coordinates,
+        coordinates: coordinates.into_iter()
+                                .collect::<HashMap<_, _>>(),
         graph_width: width,
         graph_height: height,
-        margin: margin,
         scroll: ScrollState {
             offset_x: margin,
             offset_y: margin,
-            scale: 1.0,
+            zoom_level: 2
         },
     };
 
@@ -303,22 +333,14 @@ pub fn view_block_group(
                     KeyCode::Down => {
                         viewer.scroll.offset_y -= 5.0;
                     }
-                    // Zoom in => smaller scale => see less data => "magnified"
                     KeyCode::Char('+') => {
-                        // If we interpret "zoom in" as "fewer data units per cell":
-                        // scale *= 0.9 => 0.9 units per cell (less data).
-                        viewer.scroll.scale *= 0.9;
-                        if viewer.scroll.scale < 0.01 {
-                            viewer.scroll.scale = 0.01;
-                        }
+                        // Switch to a higher zoom level, but max out at 3
+                        viewer.scroll.zoom_level = std::cmp::min(viewer.scroll.zoom_level + 1, 3);
                     }
                     // Zoom out => bigger scale => see more data => "less magnified"
                     KeyCode::Char('-') => {
-                        // scale *= 1.1 => 1.1 units per cell (more data).
-                        viewer.scroll.scale *= 1.1;
-                        if viewer.scroll.scale > 100.0 {
-                            viewer.scroll.scale = 100.0;
-                        }
+                        // Switch to a lower zoom level, but min out at 0
+                        viewer.scroll.zoom_level = std::cmp::max(viewer.scroll.zoom_level - 1, 0);
                     }
                     _ => {}
                 }
