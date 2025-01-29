@@ -2,9 +2,9 @@
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
-   width="151.69933mm"
-   height="93.743141mm"
-   viewBox="0 0 151.69932 93.743144"
+   width="150.99068mm"
+   height="93.568413mm"
+   viewBox="0 0 150.99067 93.568416"
    version="1.1"
    id="svg1"
    xml:space="preserve"
@@ -23,9 +23,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="1.3235996"
-     inkscape:cx="348.29263"
-     inkscape:cy="221.74379"
+     inkscape:zoom="1.6194592"
+     inkscape:cx="214.88655"
+     inkscape:cy="199.75804"
      inkscape:window-width="1920"
      inkscape:window-height="1131"
      inkscape:window-x="0"
@@ -46,10 +46,10 @@
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1"
-     transform="translate(-12.527542,-29.574783)"><g
+     transform="translate(-13.681171,-29.574783)"><g
        id="graph0"
        class="graph"
-       transform="matrix(0.35277779,0,0,0.35277779,4.7077645,61.421398)"><!-- source --><!-- 1 --><!-- source&#45;&gt;1 --><!-- 1&#45;&gt;1 --><!-- sink --><g
+       transform="matrix(0.35277779,0,0,0.35277779,12.824466,61.421398)"><!-- source --><!-- 1 --><!-- source&#45;&gt;1 --><!-- 1&#45;&gt;1 --><!-- sink --><g
          id="node3"
          class="node"><title
            id="title20">sink</title></g><!-- 1&#45;&gt;sink --><g
@@ -61,7 +61,7 @@
          transform="translate(26.166299,57.726135)"><polygon
            fill="#ffffff"
            stroke="none"
-           points="-4,-148 397.66,-148 397.66,4 -4,4 "
+           points="-4,4 -4,-148 397.66,-148 397.66,4 "
            id="polygon1-0" /><!-- source --><g
            id="node1"
            class="node"><title
@@ -71,7 +71,7 @@
              id="title2">1</title><polygon
              fill="none"
              stroke="#000000"
-             points="91.65,-101.4 106.05,-101.4 106.05,-78.6 91.65,-78.6 "
+             points="91.65,-78.6 91.65,-101.4 106.05,-101.4 106.05,-78.6 "
              id="polygon2" /><text
              text-anchor="start"
              x="94.650002"
@@ -82,7 +82,7 @@
              id="text3">A</text><polygon
              fill="none"
              stroke="#000000"
-             points="106.05,-101.4 120.45,-101.4 120.45,-78.6 106.05,-78.6 "
+             points="106.05,-78.6 106.05,-101.4 120.45,-101.4 120.45,-78.6 "
              id="polygon3" /><text
              text-anchor="start"
              x="109.05"
@@ -93,7 +93,7 @@
              id="text4">T</text><polygon
              fill="none"
              stroke="#000000"
-             points="120.45,-101.4 134.85,-101.4 134.85,-78.6 120.45,-78.6 "
+             points="120.45,-78.6 120.45,-101.4 134.85,-101.4 134.85,-78.6 "
              id="polygon4" /><text
              text-anchor="start"
              x="123.45"
@@ -104,7 +104,7 @@
              id="text5">G</text><polygon
              fill="none"
              stroke="#000000"
-             points="134.85,-101.4 149.25,-101.4 149.25,-78.6 134.85,-78.6 "
+             points="134.85,-78.6 134.85,-101.4 149.25,-101.4 149.25,-78.6 "
              id="polygon5" /><text
              text-anchor="start"
              x="137.85001"
@@ -115,7 +115,7 @@
              id="text6">T</text><polygon
              fill="none"
              stroke="#000000"
-             points="149.25,-101.4 163.65,-101.4 163.65,-78.6 149.25,-78.6 "
+             points="149.25,-78.6 149.25,-101.4 163.65,-101.4 163.65,-78.6 "
              id="polygon6" /><text
              text-anchor="start"
              x="152.25"
@@ -126,7 +126,7 @@
              id="text7">A</text><polygon
              fill="none"
              stroke="#000000"
-             points="163.65,-101.4 178.05,-101.4 178.05,-78.6 163.65,-78.6 "
+             points="163.65,-78.6 163.65,-101.4 178.05,-101.4 178.05,-78.6 "
              id="polygon7" /><text
              text-anchor="start"
              x="166.64999"
@@ -137,7 +137,7 @@
              id="text8">T</text><polygon
              fill="none"
              stroke="#000000"
-             points="178.05,-101.4 192.46,-101.4 192.46,-78.6 178.05,-78.6 "
+             points="178.05,-78.6 178.05,-101.4 192.46,-101.4 192.46,-78.6 "
              id="polygon8" /><text
              text-anchor="start"
              x="181.05"
@@ -155,7 +155,7 @@
              id="text9-0">A</text><polygon
              fill="none"
              stroke="#000000"
-             points="192.46,-101.4 206.86,-101.4 206.86,-78.6 192.46,-78.6 "
+             points="192.46,-78.6 192.46,-101.4 206.86,-101.4 206.86,-78.6 "
              id="polygon9" /><text
              text-anchor="start"
              x="195.46001"
@@ -166,15 +166,15 @@
              id="text10">C</text><polygon
              fill="none"
              stroke="#000000"
-             points="206.86,-101.4 221.26,-101.4 221.26,-78.6 206.86,-78.6 "
+             points="206.86,-78.6 206.86,-101.4 221.26,-101.4 221.26,-78.6 "
              id="polygon10" /><polygon
              fill="none"
              stroke="#000000"
-             points="221.26,-101.4 235.66,-101.4 235.66,-78.6 221.26,-78.6 "
+             points="221.26,-78.6 221.26,-101.4 235.66,-101.4 235.66,-78.6 "
              id="polygon11" /><polygon
              fill="none"
              stroke="#000000"
-             points="235.66,-101.4 250.06,-101.4 250.06,-78.6 235.66,-78.6 "
+             points="235.66,-78.6 235.66,-101.4 250.06,-101.4 250.06,-78.6 "
              id="polygon12" /><text
              text-anchor="start"
              x="238.66"
@@ -205,16 +205,10 @@
              id="title21-0">1:15-&gt;sink:w</title></g><!-- 2 --><g
            id="node4"
            class="node"><title
-             id="title22">2</title><text
-             text-anchor="start"
-             x="169.07001"
-             y="-13.8"
-             font-family="Times, serif"
-             font-size="14px"
-             id="text22">2:</text><polygon
+             id="title22">2</title><polygon
              fill="none"
              stroke="#000000"
-             points="185.46,-29.4 199.86,-29.4 199.86,-6.6 185.46,-6.6 "
+             points="185.46,-6.6 185.46,-29.4 199.86,-29.4 199.86,-6.6 "
              id="polygon22" /><text
              text-anchor="start"
              x="188.46001"
@@ -225,7 +219,7 @@
              id="text23">T</text><polygon
              fill="none"
              stroke="#000000"
-             points="199.86,-29.4 214.26,-29.4 214.26,-6.6 199.86,-6.6 "
+             points="199.86,-6.6 199.86,-29.4 214.26,-29.4 214.26,-6.6 "
              id="polygon23" /><text
              text-anchor="start"
              x="202.86"
@@ -289,7 +283,7 @@
            y="117.39553"
            id="tspan30" /></text></g><text
        text-anchor="start"
-       x="32.869099"
+       x="41.335773"
        y="50.84737"
        font-family="'Courier New'"
        font-size="4.93889px"
@@ -307,7 +301,7 @@
        inkscape:transform-center-y="-8.9453996"
        style="stroke-width:0.352778">a</text><text
        text-anchor="start"
-       x="16.056118"
+       x="18.805559"
        y="89.513428"
        font-family="'Courier New'"
        font-size="4.93889px"
@@ -316,24 +310,24 @@
        inkscape:transform-center-y="-8.9453996"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:Monospace;-inkscape-font-specification:Monospace;stroke-width:0.352778"><tspan
          sodipodi:role="line"
-         x="16.056118"
+         x="18.805559"
          y="89.513428"
          id="tspan34">#CHROM POS ID REF ALT QUAL FILTER INFO FORMAT foo</tspan><tspan
          sodipodi:role="line"
-         x="16.056118"
+         x="18.805559"
          y="95.687042"
          id="tspan37">chr1 5 . ATA A . . GAN=del1;GAA=1;TYPE=del GT 0/1</tspan><tspan
          sodipodi:role="line"
-         x="16.056118"
+         x="18.805559"
          y="101.86065"
          id="tspan38">chr1 8 . C CTG . . GAN=ins1;GAA=1;TYPE=ins GT 1/1</tspan><tspan
          sodipodi:role="line"
-         x="16.056118"
+         x="18.805559"
          y="108.03426"
          id="tspan39" /></text><text
        text-anchor="start"
-       x="16.056118"
-       y="116.31688"
+       x="19.160292"
+       y="115.94225"
        font-family="'Courier New'"
        font-size="4.93889px"
        id="text11-0-6-5-2-7-1-1"
@@ -341,19 +335,19 @@
        inkscape:transform-center-y="-8.9453996"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:Monospace;-inkscape-font-specification:Monospace;stroke-width:0.352778"><tspan
          sodipodi:role="line"
-         x="16.056118"
-         y="116.31688"
+         x="19.160292"
+         y="115.94225"
          id="tspan34-7">#CHROM POS ID REF ALT QUAL FILTER INFO FORMAT bar</tspan><tspan
          sodipodi:role="line"
-         x="16.056118"
-         y="122.49049"
+         x="19.160292"
+         y="122.11587"
          id="tspan38-4">ins1 2. T A . . TYPE=snp GT 0/1</tspan><tspan
          sodipodi:role="line"
-         x="16.056118"
-         y="128.66411"
+         x="19.160292"
+         y="128.28947"
          id="tspan39-1" /></text><text
        text-anchor="start"
-       x="47.110531"
+       x="55.577206"
        y="44.741741"
        font-family="'Courier New'"
        font-size="4.93889px"
@@ -362,9 +356,9 @@
        inkscape:transform-center-y="-8.9453996"
        style="stroke-width:0.352778">0</text><g
        id="g1"
-       transform="translate(25.82214,0.84479633)"><text
+       transform="translate(21.357584,0.84479633)"><text
          text-anchor="start"
-         x="47.110531"
+         x="59.810543"
          y="44.741741"
          font-family="'Courier New'"
          font-size="4.93889px"
@@ -375,7 +369,7 @@
          id="g1-2"
          transform="translate(25.664584,-0.52916733)"><text
            text-anchor="start"
-           x="45.092369"
+           x="57.792381"
            y="44.965981"
            font-family="'Courier New'"
            font-size="4.93889px"
