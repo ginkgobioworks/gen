@@ -11,11 +11,13 @@ use crate::models::{
     strand::Strand,
 };
 
+use chrono::offset;
 use gb_io::seq;
 use itertools::Itertools;
 use noodles::vcf::header;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::prelude::GraphMap;
+use ratatui::Frame;
 use rusqlite::Connection;
 use ruzstd::blocks;
 
@@ -49,38 +51,33 @@ use rust_sugiyama::{configure::Config, from_edges};
 ///   - If `scale` = 0.5, each cell is 0.5 data units (you see *less* data, zoomed in).
 struct ScrollState {
     offset_x: f64,
-    offset_y: f64
+    offset_y: f64,
+    zoom_level: u8
 }
 
 /// Holds data for the viewer.
 struct Viewer {
-    blocks: Vec<GroupBlock>,
-    block_pairs: Vec<(u32, u32)>,        // Real edges and boundary edges
+    edges: Vec<(u32, u32)>, // Block ID pairs
+    labels: HashMap<u32, String>, // Block ID to label
     coordinates: HashMap<u32, (f64, f64)>, // Block ID to (x, y) coordinates
-    graph_width: f64,
-    graph_height: f64,
-    scroll: ScrollState,
-    zoom_level: u8
-}
+    scroll: ScrollState}
 
 /// Convert the coordinates from the layout algorithm to canvas coordinates.
 /// This depends on widest label in each rank.
 fn stretch_layout(
     layout: &Vec<(u32, (f64, f64))>,
-    labels: &HashMap<u32, String>,) -> HashMap<u32, (f64, f64)> {
-
-
+    label_lengths: &HashMap<u32, u32>,) -> HashMap<u32, (f64, f64)> {
     // Find the widest label in each rank (y-coordinate because layouts are top to bottomn)
     let mut rank_widths = BTreeMap::new();
-    for (block_id, (_, rank)) in layout {
-        let label = labels.get(block_id).unwrap();
-        let label_width = label.len();
-        let max_width = rank_widths.entry(*rank).or_insert(1);
-        *max_width = std::cmp::max(*max_width, label_width);
+    for (block_id, (_, y)) in layout {
+        let rank = *y as i32; // Convert to integer to use as key, since floats are hard to compare
+        let width = *label_lengths.get(block_id).unwrap() + 1;
+        let max_width = rank_widths.entry(rank).or_insert(1);
+        *max_width = std::cmp::max(*max_width, width);
     }
 
     // Build a BTreeMap of cumulative rank widths (keys are rank, values are cumulative width)
-    let cumulative_widths: BTreeMap<f64, usize> = rank_widths
+    let cumulative_widths: BTreeMap<i32, u32> = rank_widths.clone()
         .into_iter()
         .sorted_by(|a, b| a.0.partial_cmp(&b.0).unwrap())
         .scan(0, |accumulator, (rank, width)| {
@@ -96,15 +93,41 @@ fn stretch_layout(
     // - store the results in a hashmap instead of a vector
     let mut coordinates = HashMap::new();
     for (block_id, (x, y)) in layout {
-        let rank_offset = cumulative_widths.get(y).unwrap() as f64 - 1.0;
-        let centering_offset = (rank_widths.get(y).unwrap() - labels.get(block_id).unwrap().len()) as f64 / 2.0;
-        let new_x = ;
-        let new_y = *x;
+        let rank = *y as i32;
+        let rank_offset = *cumulative_widths.get(&rank).unwrap() as f64 - 1.0;
+        let centering_offset = (rank_widths.get(&rank).unwrap() - label_lengths.get(block_id).unwrap()) as f64 / 2.0;
         coordinates.insert(*block_id, (*y + rank_offset + centering_offset, 
-                                                *x));
+                                            *x));
     }
 
     coordinates
+}
+
+/// Convert the x-y offset between two coordinate schemes so that the same node stays centered
+/// - This is used when zooming in and out
+
+fn convert_offset( offset_x: f64, offset_y: f64,
+                   old_coordinates: &HashMap<u32, (f64, f64)>, 
+                   new_coordinates: &HashMap<u32, (f64, f64)>, 
+                   frame: Frame) -> (f64, f64) {
+    //  - Find the node (block) closest to the horizontal center 
+    let center_x = offset_x + frame.area().width as f64 / 2.0;
+    let center_y = offset_y + frame.area().height as f64 / 2.0;
+    let mut closest_node = 0;
+    let mut closest_distance = f64::MAX;
+    for (block_id, (x, y)) in old_coordinates {
+        let distance = (x - center_x).abs() + (y - center_y).abs();
+        if distance < closest_distance {
+            closest_distance = distance;
+            closest_node = *block_id;
+        }
+    }
+    //  - Set the new offset so that the same node is central again
+    // (we're not taking into account the width of the label here)
+    let (new_x, new_y) = new_coordinates.get(&closest_node).unwrap();
+    let new_offset_x = new_x - frame.area().width as f64 / 2.0;
+    let new_offset_y = new_y - frame.area().height as f64 / 2.0;
+    (new_offset_x, new_offset_y)
 }
 
 /// Generate labels for the blocks depending on the zoom level and the block sequence.
@@ -114,20 +137,25 @@ fn stretch_layout(
 fn make_labels(blocks: &Vec<GroupBlock>, zoom_level: u8) -> HashMap<u32, String> {
     let mut labels = HashMap::new();
     for block in blocks {
-        let label = match zoom_level {
-            1 => "●".to_string(),
-            2 => {
-                let sequence = block.sequence();
-                if sequence.len() > 6 {
-                    format!("{}…{}", &sequence[0..3], &sequence[sequence.len() - 3..])
-                } else {
-                    sequence
+        // If the block is a boundary block, just show a >
+        if block.sequence().is_empty() {
+            labels.insert(block.id as u32, ">".to_string());
+        } else {
+            let label = match zoom_level {
+                1 => "o".to_string(),
+                2 => {
+                    let sequence = block.sequence();
+                    if sequence.len() > 6 {
+                        format!("{}...{}", &sequence[0..3], &sequence[sequence.len() - 3..])
+                    } else {
+                        sequence
+                    }
                 }
-            }
-            3 => block.sequence(),
-            _ => panic!("Invalid zoom level: {}", zoom_level),
-        };
-        labels.insert(block.node_id as u32, label);
+                3 => block.sequence(),
+                _ => panic!("Invalid zoom level: {}", zoom_level),
+            };
+            labels.insert(block.id as u32, label);
+        }
     }
     labels
 }
@@ -155,52 +183,23 @@ fn draw_scrollable_canvas(frame: &mut ratatui::Frame, viewer: &Viewer) {
         .y_bounds([y_start, y_end])
         .paint(|ctx| {
             // Draw a line for each block pair
-            // TODO: change this to iterate over the blocks instead, using the petgraph graph to find outgoing edges
-            // (this will allow me to properly offset the lines to account for block width)
-            for (block_id1, block_id2) in &viewer.block_pairs {
-                let (x1, y1) = viewer
-                    .coordinates
-                    .iter()
-                    .find(|(id, _)| id == block_id1)
-                    .unwrap()
-                    .1;
-                let (x2, y2) = viewer
-                    .coordinates
-                    .iter()
-                    .find(|(id, _)| id == block_id2)
-                    .unwrap()
-                    .1;
+            for (block_id1, block_id2) in &viewer.edges {
+                let (x1, y1) = viewer.coordinates.get(block_id1).unwrap();
+                let (x2, y2) = viewer.coordinates.get(block_id2).unwrap();
+
                 ctx.draw(&Line {
-                    x1: x1 + 6.0 * viewer.scroll.scale, // Hack that assumes the width of the label
-                    y1: y1 / 3.0, // Squish the y-direction because cells are taller than they are wide
-                    x2: x2 - 6.0 * viewer.scroll.scale,
-                    y2: y2 / 3.0,
+                    x1: x1.clone() + viewer.labels.get(&block_id1).unwrap().len() as f64 - 1.0,
+                    y1: y1.clone() + 0.5,
+                    x2: x2.clone() - 1.0,
+                    y2: y2.clone() + 0.5,
                     color: Color::White,
                 });
             }
 
-            // Draw the block IDs from the layout as text.
-            // TODO: do this as widgets instead of directly on the canvas
+            // Draw the labels as text.
             for (block_id, (x, y)) in &viewer.coordinates {
-                // Get the sequence of the block
-                // TODO: figure out why not all blocks from the coordinates are in the viewer.blocks (starter block?)
-                if let Some(block) = viewer.blocks.iter().find(|b| b.node_id == *block_id as i64) {
-                    let sequence = block.sequence();
-                    // If the sequence is longer than 9 characters, only show the first and last 3, separated by ellipsis
-                    let seq_label = if sequence.len() > 9 {
-                        format!("{}...{}", &sequence[0..3], &sequence[sequence.len() - 3..])
-                    } else {
-                        sequence
-                    };
-                    // Center the label on the block coordinate, taking into account the current zoom level
-                    let label_offset_x = seq_label.len() as f64 / 2.0 * viewer.scroll.scale;
-                    let label_offset_y = 0.5 * viewer.scroll.scale;
-
-                    // Squish the y-direction because cells are taller than they are wide
-                    ctx.print(*x - label_offset_x, (*y - label_offset_y) / 3.0, seq_label);
-                } else {
-                    ctx.print(*x, *y, "X");
-                }
+                let label = viewer.labels.get(block_id).unwrap();
+                ctx.print(*x, *y, label.clone());
             }
         });
     frame.render_widget(canvas, frame.area());
@@ -236,6 +235,12 @@ pub fn view_block_group(
     let mut edges = edge_set.into_iter().collect::<Vec<_>>();
 
     let mut blocks = Edge::blocks_from_edges(conn, &edges);
+
+    // Panic if there are no blocks
+    if blocks.is_empty() {
+        panic!("No blocks found for block group {}", name);
+    }
+
     blocks.sort_by(|a, b| a.node_id.cmp(&b.node_id));
     let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
     edges.extend(boundary_edges.clone());
@@ -258,7 +263,7 @@ pub fn view_block_group(
         &block_pairs_u32,
         &Config {
             vertex_spacing: 8.0,
-            dummy_vertices: true,
+            dummy_vertices: false,
             ..Default::default()
         },
     );
@@ -266,13 +271,13 @@ pub fn view_block_group(
     // Confirm that there is only one layout, which means that the graph is connected
     assert_eq!(layouts.len(), 1);
 
-    let (layout, width, height) = &layouts[0];
+    // Store that one layout and convert the block ids from usize to u32
+    let layout: Vec<(u32, (f64, f64))> = layouts[0].0.iter().map(|(id, (x, y))| (*id as u32, (*x, *y))).collect();
 
-    // Make the labels for the blocks
-    let labels = make_labels(&blocks,2);
-
-    //println!("Coordinates: {:?}", coordinates);
-    //println!("width: {width}, height: {height}");
+    // Confirm that every block has a corresponding layout
+    for block in &blocks {
+        assert!(layout.iter().any(|(id, _)| *id == block.id as u32), "Block ID {} not found in layout", block.id);
+    }
 
     // Setup terminal
     enable_raw_mode()?;
@@ -282,18 +287,25 @@ pub fn view_block_group(
     let mut terminal = Terminal::new(backend)?;
 
     // Initialize viewer state
-    let margin = 2.0;
+    let mut zoom_level = 2;
+    let labels = make_labels(&blocks, zoom_level);
+    let label_lengths: HashMap<u32, u32> = labels.iter().map(|(&id, s)| (id, s.len() as u32)).collect();
+    let coordinates = stretch_layout(&layout, &label_lengths);
+    // Calculate the center point of the coordinates
+    let center_x = coordinates.values().map(|(x, _)| x).sum::<f64>() / coordinates.len() as f64;
+    let center_y = coordinates.values().map(|(_, y)| y).sum::<f64>() / coordinates.len() as f64;
+    // Set the initial offset so that the center point is in the center of the terminal
+    let offset_x = center_x - terminal.get_frame().area().width as f64 / 2.0;
+    let offset_y = center_y - terminal.get_frame().area().height as f64 / 2.0;
+
     let mut viewer = Viewer {
-        blocks: blocks,
-        block_pairs: block_pairs_u32,
-        coordinates: coordinates.into_iter()
-                                .collect::<HashMap<_, _>>(),
-        graph_width: width,
-        graph_height: height,
+        edges: block_pairs_u32,
+        labels: labels,
+        coordinates: coordinates,
         scroll: ScrollState {
-            offset_x: margin,
-            offset_y: margin,
-            zoom_level: 2
+            offset_x: offset_x,
+            offset_y: offset_y,
+            zoom_level: zoom_level
         },
     };
 
@@ -322,25 +334,49 @@ pub fn view_block_group(
                     }
                     // Scroll the data window
                     KeyCode::Left => {
-                        viewer.scroll.offset_x -= 5.0;
+                        viewer.scroll.offset_x -= 1.0;
                     }
                     KeyCode::Right => {
-                        viewer.scroll.offset_x += 5.0;
+                        viewer.scroll.offset_x += 1.0;
                     }
                     KeyCode::Up => {
-                        viewer.scroll.offset_y += 5.0;
+                        viewer.scroll.offset_y += 1.0;
                     }
                     KeyCode::Down => {
-                        viewer.scroll.offset_y -= 5.0;
+                        viewer.scroll.offset_y -= 1.0;
                     }
                     KeyCode::Char('+') => {
                         // Switch to a higher zoom level, but max out at 3
                         viewer.scroll.zoom_level = std::cmp::min(viewer.scroll.zoom_level + 1, 3);
-                    }
+                        // Regenerate labels and coordinates
+                        viewer.labels = make_labels(&blocks, viewer.scroll.zoom_level);
+                        let label_lengths: HashMap<u32, u32> = viewer.labels.iter().map(|(&id, s)| (id, s.len() as u32)).collect();
+                        let new_coordinates = stretch_layout(&layout, &label_lengths);
+                        // Convert the offset so that the same block stays centered
+                        let (new_offset_x, new_offset_y) = convert_offset(viewer.scroll.offset_x, 
+                            viewer.scroll.offset_y, 
+                            &viewer.coordinates,
+                            &new_coordinates, 
+                            terminal.get_frame());
+                        viewer.scroll.offset_x = new_offset_x;
+                        viewer.scroll.offset_y = new_offset_y;
+                    }   
                     // Zoom out => bigger scale => see more data => "less magnified"
                     KeyCode::Char('-') => {
-                        // Switch to a lower zoom level, but min out at 0
-                        viewer.scroll.zoom_level = std::cmp::max(viewer.scroll.zoom_level - 1, 0);
+                        // Switch to a lower zoom level, but min out at 1
+                        viewer.scroll.zoom_level = std::cmp::max(viewer.scroll.zoom_level - 1, 1);
+                        // Regenerate labels and coordinates
+                        viewer.labels = make_labels(&blocks, viewer.scroll.zoom_level);
+                        let label_lengths: HashMap<u32, u32> = viewer.labels.iter().map(|(&id, s)| (id, s.len() as u32)).collect();
+                        let new_coordinates = stretch_layout(&layout, &label_lengths);
+                        // Convert the offset so that the same block stays centered
+                        let (new_offset_x, new_offset_y) = convert_offset(viewer.scroll.offset_x, 
+                            viewer.scroll.offset_y, 
+                            &viewer.coordinates,
+                            &new_coordinates, 
+                            terminal.get_frame());
+                        viewer.scroll.offset_x = new_offset_x;
+                        viewer.scroll.offset_y = new_offset_y;
                     }
                     _ => {}
                 }
