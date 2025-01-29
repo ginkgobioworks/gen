@@ -127,12 +127,18 @@ fn segments_for_edges(
     let mut node_ids = vec![];
     #[allow(clippy::while_immutable_condition)]
     while current_block.id != end_block.id {
-        node_ids.push(format!("{}.{}.{}", current_block.node_id, current_block.start, current_block.end));
+        node_ids.push(format!(
+            "{}.{}.{}",
+            current_block.node_id, current_block.start, current_block.end
+        ));
         current_block = blocks_by_node_and_start
             .get(&(current_block.node_id, current_block.end))
             .unwrap();
     }
-    node_ids.push(format!("{}.{}.{}", end_block.node_id, end_block.start, end_block.end));
+    node_ids.push(format!(
+        "{}.{}.{}",
+        end_block.node_id, end_block.start, end_block.end
+    ));
 
     node_ids
 }
