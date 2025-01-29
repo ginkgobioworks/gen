@@ -1,0 +1,3 @@
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	foo
+chr1	5	.	ATA	A	.	.	GAN=del1;GAA=1;TYPE=del	GT	0/1
+chr1	8	.	C	CTG	.	.	GAN=ins1;GAA=1;TYPE=ins	GT	1/1

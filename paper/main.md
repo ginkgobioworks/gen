@@ -57,15 +57,12 @@ without the node intermediate, Gen would create an unintentional loop by creatin
 Instead, Gen creates a node for each repeat, with a unique edge between each. In this way gen can faithfully represent
 duplicate segments.
 
-As previously mentioned, updates to the graph requires only the addition of new data. There are no updates required.
-Insertions or replacements of sequence is represented by creating a new sequence, a corresponding node, and two edges (
-@fig:graph_updates a). The first edge has its source as the start of the region being
-replaced (or the coordinate of the insertion start) on the source node, and its target as the start of the created node.
-The second edge has its source as the end of the created node, and its target as the end of the region being replaced
-(or the coordinate of the insertion start plus one).
-
-Deletions can be encoded as just one new edge, from the start coordinate of the region being deleted to the end
-coordinate of that region (@fig:graph_updates b).
+To help illustrate this model, an insertion and deletion are shown in @fig:graph_updates. An insertion or 
+replacement of a sequence is represented by creating a new sequence, a corresponding node, and two 
+edges. The first edge has its source as the start of the region being replaced (the coordinate of the insertion start)
+on the source node, and its target as the start of the created node. The second edge has its source as the end of the 
+created node, and its target as the end of the region being replaced. Deletions can be encoded as just one new edge,
+from the start coordinate of the region being deleted to the end coordinate of that region.
 
 ![**Graph updates**\
 **a.** Additions of a sequence and deletion to the graph. Inserts and swaps of sequences are handled by the same logic.
@@ -73,18 +70,11 @@ coordinate of that region (@fig:graph_updates b).
 The first 2 rows of edges correspond to the addition of the TG sequence and the 3rd edge corresponds to the deletion.
 Coordinate is abbreviated Coord in column headers.](graph_updates/final.svg){#fig:graph_updates}
 
-Gen represents one contig, such as a chromosome, using one directed graph of nodes and edges. This grouping is termed a
-Block Group and a join table between Block Groups and Edges is used to record all the edges in a block group. Because of
-the additive nature of insertions, replacements, and deletions, block groups can only grow over time. The block group
-represents all possible sequences that can be generated from the graph.
-
-An example of importing a fasta and applying a vcf is used to show these formats are translated into the Gen data model
-(fig. [import_example](import_example/final.svg)). First, for each record such as chr1 and chr2, a node is created of
-the entire sequence. Two new edges are added to the new node, connecting the start of the sequence to a source node and
-the end to a sink node. These nodes are used to simplify the process of finding the starts and end of a graph. When a
-vcf is applied, for non-deletions, a new node is created with the alternative sequence and two new edges are created --
-an edge from the reference sequence's source node (such as chr1) to the new node, and an edge from the end of the new
-node back to the reference sequence. For deletions, only a new single edge is required to represent the new path.
+For modeling real world data, such as chromosomes, Gen represents a contig using one directed 
+graph of nodes and edges. This grouping is termed a Block Group and a join table between Block Groups and Edges is used 
+to record all the edges in a block group. Because of the additive nature of insertions, replacements, and deletions, 
+block groups can only grow over time. The block group represents all possible sequences that can be generated from the 
+graph.
 
 ## Graph Traversal
 
@@ -147,9 +137,17 @@ expanded upon.
 
 A vcf file of alternative alleles can be used to incorporate changes with multiple samples supported. Accessions may
 also be encoded into the VCF file via the INFO tag, where the GAN and GAA tag can be used to provide the accession name
-and the allele index for the named accession (fig. [vcf_example a](vcf_example/final.svg). If an accession has been
-made, it can be used in subsequent changes to refer to a relative region within the graph ((fig. [vcf_example b]
-(vcf_example/final.svg))
+and the allele index for the named accession (@fig:vcf_example a). If an 
+accession has been made, it can be used in subsequent changes to refer to a relative region within the graph 
+(@fig:vcf_example b).
+
+![**Updating a graph with a VCF**\
+**a.** A VCF file with the corresponding graph. An insertion and a deletion are encoded into a VCF file to apply to 
+chr1. 
+Each change is provided an accession (del1 and ins1, respectively) which enables future updates to refer to the 
+these regions. A new sample, foo, is created with these changes.
+**b.** Example VCF using the previously defined accession. A new sample, bar, is created from the previously defined 
+foo sample. The accession, ins1, is further modified in this new child sample.](vcf_example/final.svg){#fig:vcf_example}
 
 A graph alignment format (GAF) can be used to insert aligned sequences into the graph (fig. [gaf_example]
 (gaf_example/final.svg). Here, a csv file can be used to provide anchoring sequences to identify a position for a change
