@@ -32,15 +32,6 @@ pub fn derive_subgraph(
                 &block_group.name,
             );
             new_block_group_id = new_block_group.id;
-        } else {
-            let _new_bg_id = BlockGroup::get_or_create_sample_block_group(
-                conn,
-                collection_name,
-                new_sample_name,
-                &block_group.name,
-                parent_sample_name,
-            )
-            .unwrap();
         }
     }
 
