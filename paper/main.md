@@ -149,12 +149,18 @@ these regions. A new sample, foo, is created with these changes.
 **b.** Example VCF using the previously defined accession. A new sample, bar, is created from the previously defined 
 foo sample. The accession, ins1, is further modified in this new child sample.](vcf_example/final.svg){#fig:vcf_example}
 
-A graph alignment format (GAF) can be used to insert aligned sequences into the graph (fig. [gaf_example]
-(gaf_example/final.svg). Here, a csv file can be used to provide anchoring sequences to identify a position for a change
+A graph alignment format (GAF) can be used to insert aligned sequences into the graph (@fig:gaf_example). Here, a csv 
+file can be used to provide anchoring sequences to identify a position for a change
 to be inserted between. The transform command will take this csv, and produce a fasta file that can be aligned via
 available graph alignment tools such as minigraph or vg. Then, the resulting GAF and csv file can be provided to the
 update command to apply these changes to the graph. Additionally, the GAF file can be manually edited to fine tune the
 precise update location as graph aligners may not fully match what users want.
+
+![**Updating a graph with a GAF**\
+A csv file can be used to modifed a region of the graph. Anchoring sequences are transformed into a fasta file by 
+gen transform, which can then be fed into a graph aligner to identify graph nodes corresponding to the flanking 
+sequences. The specified sequence is then added to the graph between the aligned flanks. Deletions can be modeled by 
+a blank sequence to insert, and left or right flanks can be omitted to model edits at the extremes of a sequence.](gaf_example/final.svg){#fig:gaf_example}
 
 A graphical fragment assembly (GFA) can be used to augment a graph. Here, we add any new nodes and paths in the supplied
 GFA and identify which nodes and paths overlap between the existing database and GFA. Changes to the overlapping nodes

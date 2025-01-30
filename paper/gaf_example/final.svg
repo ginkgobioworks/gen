@@ -1,0 +1,400 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="210mm"
+   height="297mm"
+   viewBox="0 0 210 297"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4 (e7c3feb, 2024-10-09)"
+   sodipodi:docname="final.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="0.92676829"
+     inkscape:cx="294.57201"
+     inkscape:cy="527.10047"
+     inkscape:window-width="1920"
+     inkscape:window-height="1131"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1">
+    <marker
+       style="overflow:visible"
+       id="marker16"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="Triangle arrow"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path16" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="marker15"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="Triangle arrow"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path15" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="Triangle"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="Triangle arrow"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path135" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="Triangle-7"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="Triangle arrow"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path135-0" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="Triangle-7-4"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="Triangle arrow"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path135-0-5" />
+    </marker>
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <text
+       xml:space="preserve"
+       style="font-size:3.52777px;font-family:Monospace;-inkscape-font-specification:Monospace;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;stroke:#000000;stroke-width:0.264583"
+       x="49.736462"
+       y="66.631332"
+       id="text1"><tspan
+         sodipodi:role="line"
+         id="tspan1"
+         style="stroke-width:0.264583"
+         x="49.736462"
+         y="66.631332">...ATCATGTGAGCTATCGATATCGATCGATCAGTCAGTCACCAATTCATA...</tspan></text>
+    <rect
+       style="fill:none;stroke:#000000;stroke-width:0.264583"
+       id="rect1"
+       width="25.817539"
+       height="4.8313489"
+       x="64.561729"
+       y="63.207829" />
+    <rect
+       style="fill:none;stroke:#000000;stroke-width:0.245544"
+       id="rect2"
+       width="40.632591"
+       height="4.5490146"
+       x="102.90106"
+       y="62.971859" />
+    <text
+       xml:space="preserve"
+       style="font-size:3.52777px;font-family:Monospace;-inkscape-font-specification:Monospace;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;stroke:#000000;stroke-width:0.264583"
+       x="66.681068"
+       y="61.542599"
+       id="text2"><tspan
+         sodipodi:role="line"
+         id="tspan2"
+         style="stroke-width:0.264583"
+         x="66.681068"
+         y="61.542599">Left Flank</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:3.52777px;font-family:Monospace;-inkscape-font-specification:Monospace;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;stroke:#000000;stroke-width:0.264583"
+       x="112.5267"
+       y="61.207363"
+       id="text3"><tspan
+         sodipodi:role="line"
+         id="tspan3"
+         style="stroke-width:0.264583"
+         x="112.5267"
+         y="61.207363">Right Flank</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:3.52777px;font-family:Monospace;-inkscape-font-specification:Monospace;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;stroke:#000000;stroke-width:0.264583"
+       x="43.597641"
+       y="74.439049"
+       id="text4"><tspan
+         sodipodi:role="line"
+         id="tspan4"
+         style="stroke-width:0.264583"
+         x="43.597641"
+         y="74.439049">   Id,        Left,   Sequence,              Right</tspan><tspan
+         sodipodi:role="line"
+         style="stroke-width:0.264583"
+         x="43.597641"
+         y="78.848763"
+         id="tspan5"> test,TGTGAGCTATCG,ATGTAC..ACT,ATCGATCAGTCAGTCACCA</tspan></text>
+    <rect
+       style="fill:none;stroke:#000000;stroke-width:0.251521"
+       id="rect5"
+       width="108.39565"
+       height="14.197789"
+       x="44.378719"
+       y="69.266571"
+       rx="5.0006027" />
+    <text
+       xml:space="preserve"
+       style="font-size:3.52777px;font-family:Monospace;-inkscape-font-specification:Monospace;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;stroke:#000000;stroke-width:0.264583"
+       x="19.612087"
+       y="76.957367"
+       id="text6"><tspan
+         sodipodi:role="line"
+         id="tspan6"
+         style="stroke-width:0.264583"
+         x="19.612087"
+         y="76.957367">example.csv</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:3.52777px;font-family:Monospace;-inkscape-font-specification:Monospace;text-align:center;writing-mode:lr-tb;direction:ltr;text-anchor:middle;fill:none;stroke:#000000;stroke-width:0.264583"
+       x="100.1388"
+       y="105.48462"
+       id="text6-2"><tspan
+         sodipodi:role="line"
+         id="tspan6-9"
+         style="text-align:center;text-anchor:middle;stroke-width:0.264583"
+         x="84.458481"
+         y="105.48462">gen transform</tspan><tspan
+         sodipodi:role="line"
+         style="text-align:center;text-anchor:middle;stroke-width:0.264583"
+         x="84.458481"
+         y="109.89433"
+         id="tspan10">+</tspan><tspan
+         sodipodi:role="line"
+         style="text-align:center;text-anchor:middle;stroke-width:0.264583"
+         x="84.458481"
+         y="114.30405"
+         id="tspan12">graph alignment</tspan></text>
+    <path
+       style="fill:none;stroke:#000000;stroke-width:1.065;stroke-dasharray:none;marker-end:url(#Triangle)"
+       d="M 98.576546,83.338939 V 95.97868"
+       id="path6" />
+    <path
+       style="fill:none;stroke:#000000;stroke-width:1.065;stroke-dasharray:none;marker-end:url(#Triangle-7)"
+       d="m 98.576546,118.27045 v 12.63974"
+       id="path6-3" />
+    <path
+       style="fill:none;stroke:#000000;stroke-width:1.065;stroke-dasharray:none;marker-end:url(#Triangle-7-4)"
+       d="m 98.576545,153.68011 v 12.63974"
+       id="path6-3-5" />
+    <rect
+       style="fill:none;stroke:#000000;stroke-width:1.28357;stroke-dasharray:none"
+       id="rect6"
+       width="43.788692"
+       height="18.5881"
+       x="78.575043"
+       y="100.05938"
+       rx="7.3483663" />
+    <rect
+       style="fill:none;stroke:#000000;stroke-width:1.09347;stroke-dasharray:none"
+       id="rect6-2"
+       width="31.456861"
+       height="18.778204"
+       x="82.848114"
+       y="134.85912"
+       rx="5.2789097" />
+    <text
+       xml:space="preserve"
+       style="font-size:3.52777px;font-family:Monospace;-inkscape-font-specification:Monospace;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;stroke:#000000;stroke-width:1.065;stroke-dasharray:none"
+       x="82.622589"
+       y="106.50072"
+       id="text7"><tspan
+         sodipodi:role="line"
+         id="tspan7"
+         style="stroke-width:1.065"
+         x="82.622589"
+         y="106.50072" /></text>
+    <text
+       xml:space="preserve"
+       style="font-size:3.52777px;font-family:Monospace;-inkscape-font-specification:Monospace;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;stroke:#000000;stroke-width:0.264583"
+       x="83.844452"
+       y="144.99141"
+       id="text6-2-3"><tspan
+         sodipodi:role="line"
+         style="stroke-width:0.264583"
+         x="83.844452"
+         y="144.99141"
+         id="tspan8">gen update-gaf</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:3.52777px;font-family:Monospace;-inkscape-font-specification:Monospace;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;stroke:#000000;stroke-width:1.065;stroke-dasharray:none"
+       x="87.694046"
+       y="179.61432"
+       id="text9"><tspan
+         sodipodi:role="line"
+         id="tspan9"
+         style="stroke-width:1.065"></tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:3.52777px;font-family:Monospace;-inkscape-font-specification:Monospace;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;stroke:#000000;stroke-width:1.065;stroke-dasharray:none"
+       x="70.763489"
+       y="191.32349"
+       id="text16"><tspan
+         sodipodi:role="line"
+         id="tspan16"
+         style="stroke-width:1.065"></tspan></text>
+    <g
+       id="g17"
+       transform="translate(-1.2197287,-3.1607294)">
+      <text
+         xml:space="preserve"
+         style="font-size:3.52777px;font-family:Monospace;-inkscape-font-specification:Monospace;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;stroke:#000000;stroke-width:0.264583"
+         x="50.729481"
+         y="187.24048"
+         id="text1-6"><tspan
+           sodipodi:role="line"
+           id="tspan1-3"
+           style="stroke-width:0.264583"
+           x="50.729481"
+           y="187.24048">...ATCATGTGAGCTATCGATATCGATCGATCAGTCAGTCACCAATTCATA...</tspan></text>
+      <rect
+         style="fill:none;stroke:#000000;stroke-width:0.264583"
+         id="rect1-2"
+         width="25.817539"
+         height="4.8313489"
+         x="65.554741"
+         y="183.81699" />
+      <rect
+         style="fill:none;stroke:#000000;stroke-width:0.245544"
+         id="rect2-0"
+         width="40.632591"
+         height="4.5490146"
+         x="103.89408"
+         y="183.58099" />
+      <text
+         xml:space="preserve"
+         style="font-size:3.52777px;font-family:Monospace;-inkscape-font-specification:Monospace;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;stroke:#000000;stroke-width:0.264583"
+         x="67.67408"
+         y="182.15176"
+         id="text2-6"><tspan
+           sodipodi:role="line"
+           id="tspan2-1"
+           style="stroke-width:0.264583"
+           x="67.67408"
+           y="182.15176">Left Flank</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-size:3.52777px;font-family:Monospace;-inkscape-font-specification:Monospace;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;stroke:#000000;stroke-width:0.264583"
+         x="113.51971"
+         y="181.81651"
+         id="text3-5"><tspan
+           sodipodi:role="line"
+           id="tspan3-5"
+           style="stroke-width:0.264583"
+           x="113.51971"
+           y="181.81651">Right Flank</tspan></text>
+      <path
+         style="fill:none;stroke:#000000;stroke-width:0.665;stroke-dasharray:none;marker-end:url(#marker16)"
+         d="m 90.28328,188.51565 -3.348889,10.48347"
+         id="path13"
+         sodipodi:nodetypes="cc" />
+      <path
+         style="fill:none;stroke:#000000;stroke-width:0.665;stroke-dasharray:none;marker-end:url(#marker15)"
+         d="m 104.26125,187.64202 2.62087,11.93952"
+         id="path14"
+         sodipodi:nodetypes="cc" />
+      <text
+         xml:space="preserve"
+         style="font-size:3.52777px;font-family:Monospace;-inkscape-font-specification:Monospace;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;stroke:#000000;stroke-width:0.264583"
+         x="85.187172"
+         y="204.55923"
+         id="text4-5"><tspan
+           sodipodi:role="line"
+           style="stroke-width:0.264583"
+           x="85.187172"
+           y="204.55923"
+           id="tspan5-9">ATGTAC..ACT</tspan></text>
+      <rect
+         style="fill:none;stroke:#000000;stroke-width:0.665001;stroke-dasharray:none"
+         id="rect17"
+         width="121.57039"
+         height="34.528866"
+         x="45.089405"
+         y="173.5211"
+         rx="5" />
+    </g>
+    <text
+       xml:space="preserve"
+       style="font-size:3.52777px;font-family:Monospace;-inkscape-font-specification:Monospace;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;stroke:#000000;stroke-width:0.264583"
+       x="13.807434"
+       y="185.56578"
+       id="text6-3"><tspan
+         sodipodi:role="line"
+         id="tspan6-1"
+         style="stroke-width:0.264583"
+         x="13.807434"
+         y="185.56578">Updated Graph</tspan></text>
+  </g>
+</svg>
