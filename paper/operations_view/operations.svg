@@ -1,0 +1,104 @@
+<svg width="763pt" height="414pt" viewBox="0.00 0.00 763.00 414.40" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 410.4)">
+<title>G</title>
+<polygon fill="white" stroke="none" points="-4,4 -4,-410.4 759,-410.4 759,4 -4,4"/>
+<g id="clust1" class="cluster">
+<title>cluster_0</title>
+<polygon fill="none" stroke="black" points="170,-249.6 170,-398.4 334,-398.4 334,-249.6 170,-249.6"/>
+<text text-anchor="middle" x="252" y="-381.8" font-family="Times,serif" font-size="14.00">main</text>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_1</title>
+<polygon fill="none" stroke="black" points="8,-92.8 8,-241.6 238,-241.6 238,-92.8 8,-92.8"/>
+<text text-anchor="middle" x="123" y="-225" font-family="Times,serif" font-size="14.00">YFG-pathway</text>
+</g>
+<g id="clust3" class="cluster">
+<title>cluster_2</title>
+<polygon fill="none" stroke="black" points="319,-92.8 319,-241.6 539,-241.6 539,-92.8 319,-92.8"/>
+<text text-anchor="middle" x="429" y="-225" font-family="Times,serif" font-size="14.00">ferment-optimization</text>
+</g>
+<g id="clust4" class="cluster">
+<title>cluster_3</title>
+<polygon fill="none" stroke="black" points="523,-8 523,-84.8 747,-84.8 747,-8 523,-8"/>
+<text text-anchor="middle" x="635" y="-68.2" font-family="Times,serif" font-size="14.00">krebs-cflux</text>
+</g>
+<!-- a0 -->
+<g id="node1" class="node">
+<title>a0</title>
+<ellipse fill="none" stroke="black" cx="252" cy="-275.6" rx="74.32" ry="18"/>
+<text text-anchor="middle" x="252" y="-271.4" font-family="Times,serif" font-size="14.00">add-landing-pad</text>
+</g>
+<!-- b1 -->
+<g id="node2" class="node">
+<title>b1</title>
+<ellipse fill="none" stroke="black" cx="123" cy="-190.8" rx="54.22" ry="18"/>
+<text text-anchor="middle" x="123" y="-186.6" font-family="Times,serif" font-size="14.00">insert YFG</text>
+</g>
+<!-- a0&#45;&gt;b1 -->
+<g id="edge5" class="edge">
+<title>a0:w-&gt;b1:e</title>
+<path fill="none" stroke="black" d="M176.37,-275.6C144.26,-275.6 195.69,-214.11 188.38,-195.85"/>
+<polygon fill="black" stroke="black" points="190.3,-192.9 179.8,-191.49 187.13,-199.14 190.3,-192.9"/>
+</g>
+<!-- c1 -->
+<g id="node4" class="node">
+<title>c1</title>
+<ellipse fill="none" stroke="black" cx="429" cy="-190.8" rx="102.19" ry="18"/>
+<text text-anchor="middle" x="429" y="-186.6" font-family="Times,serif" font-size="14.00">increase temp tolerance</text>
+</g>
+<!-- a0&#45;&gt;c1 -->
+<g id="edge6" class="edge">
+<title>a0:e-&gt;c1:w</title>
+<path fill="none" stroke="black" d="M327.63,-275.6C359.74,-275.6 308.19,-214.11 315.46,-195.85"/>
+<polygon fill="black" stroke="black" points="316.71,-199.14 324.03,-191.49 313.53,-192.91 316.71,-199.14"/>
+</g>
+<!-- b2 -->
+<g id="node3" class="node">
+<title>b2</title>
+<ellipse fill="none" stroke="black" cx="123" cy="-118.8" rx="106.77" ry="18"/>
+<text text-anchor="middle" x="123" y="-114.6" font-family="Times,serif" font-size="14.00">add extra GAL promoter</text>
+</g>
+<!-- b1&#45;&gt;b2 -->
+<g id="edge2" class="edge">
+<title>b1-&gt;b2</title>
+<path fill="none" stroke="black" d="M123,-172.5C123,-165.21 123,-156.53 123,-148.34"/>
+<polygon fill="black" stroke="black" points="126.5,-148.42 123,-138.42 119.5,-148.42 126.5,-148.42"/>
+</g>
+<!-- c2 -->
+<g id="node5" class="node">
+<title>c2</title>
+<ellipse fill="none" stroke="black" cx="429" cy="-118.8" rx="101.67" ry="18"/>
+<text text-anchor="middle" x="429" y="-114.6" font-family="Times,serif" font-size="14.00">add methane utilization</text>
+</g>
+<!-- c1&#45;&gt;c2 -->
+<g id="edge3" class="edge">
+<title>c1-&gt;c2</title>
+<path fill="none" stroke="black" d="M429,-172.5C429,-165.21 429,-156.53 429,-148.34"/>
+<polygon fill="black" stroke="black" points="432.5,-148.42 429,-138.42 425.5,-148.42 432.5,-148.42"/>
+</g>
+<!-- d1 -->
+<g id="node6" class="node">
+<title>d1</title>
+<ellipse fill="none" stroke="black" cx="635" cy="-34" rx="103.54" ry="18"/>
+<text text-anchor="middle" x="635" y="-29.8" font-family="Times,serif" font-size="14.00">increase c-flux to Krebs</text>
+</g>
+<!-- c2&#45;&gt;d1 -->
+<g id="edge4" class="edge">
+<title>c2:e-&gt;d1:w</title>
+<path fill="none" stroke="black" d="M532.1,-118.8C564.21,-118.8 512.79,-57.31 520.09,-39.05"/>
+<polygon fill="black" stroke="black" points="521.35,-42.34 528.67,-34.69 518.17,-36.1 521.35,-42.34"/>
+</g>
+<!-- S288C -->
+<g id="node7" class="node">
+<title>S288C</title>
+<ellipse fill="none" stroke="black" cx="252" cy="-347.6" rx="37.33" ry="18"/>
+<text text-anchor="middle" x="252" y="-343.4" font-family="Times,serif" font-size="14.00">S288C</text>
+</g>
+<!-- S288C&#45;&gt;a0 -->
+<g id="edge1" class="edge">
+<title>S288C-&gt;a0</title>
+<path fill="none" stroke="black" d="M252,-329.3C252,-322.01 252,-313.33 252,-305.14"/>
+<polygon fill="black" stroke="black" points="255.5,-305.22 252,-295.22 248.5,-305.22 255.5,-305.22"/>
+</g>
+</g>
+</svg>

@@ -1,0 +1,31 @@
+digraph G {
+
+  a0 [label = "add-landing-pad"]
+  b1 [label = "insert YFG"]
+  b2 [label = "add extra GAL promoter"]
+  c1 [label = "increase temp tolerance"]
+  c2 [label = "add methane utilization"]
+  d1 [label = "increase c-flux to Krebs"]
+
+  subgraph cluster_0 {
+    S288C -> a0;
+    label = "main";
+  }
+
+  subgraph cluster_1 {
+    label = "YFG-pathway";
+    b1 -> b2;
+  }
+
+  subgraph cluster_2 {
+    label = "ferment-optimization";
+    c1 -> c2
+  }
+
+  subgraph cluster_3 {
+    label = "krebs-cflux";
+    c2:e -> d1:w
+  }
+  a0:w -> b1:e;
+  a0:e -> c1:w;
+}

@@ -208,15 +208,26 @@ Branches allow work to be carried out in parallel. By default, Gen creates a mai
 against. Operations form a simple tree structure, with each operation having a single parent operation at this time.
 Branches may be created off any operation, and nested branches are supported. Branches can be merged into one another
 via the merge command. This workflow enables parallel work by teams and easy experimentation. Operations may be reverted
-and individual operations can be applied across branches, similar to the git cherry-pick command (fig
-[operations_view](operations_view/final.svg)).
+and individual operations can be applied across branches, similar to the git cherry-pick command (@fig:operations_view).
+
+![**Operations**\
+**a.** Tree structure formed by a series of operations in different branches.
+**b.** Summary of commands related to operations and their similar git equivalents.
+](operations_view/final.svg){#fig:operations_view}
 
 A set of operations can be collected into a patch, which is analogous to the git patch which represents a diff of how
-the codebase is changed (fig. [dot_example](dot_example/final.svg)). However, due to the purely additive data model of
+the codebase is changed (@fig:dot_example). However, due to the purely 
+additive data model of
 Gen, diffs are much simpler to create as there are no rewrites. Patches are stored as a gzip file and can be shared to
 distribute changes. Viewing of patches is possible via the patch-view command, which will render a dot graph of changes
 within the patch. By commiting these patches and changes into git, this workflow enables many features common to
 software development such as code review and continuous integration testing.
+
+![**Changes to a sample created by patch-view and viewed in GraphViz.**\
+*a.* A simple basepair change, a sequence swap, and a deletion are shown. A dashed line indicates the path along the
+reference sequence whereas a solid line indicates paths adding sequences from other non-reference sources. 
+**b.** Viewing a combinatorial assembly of 6 parts across two
+segments.](dot_example/final.svg)){#fig:dot_example}
 
 ## Translating coordinate schemes
 
