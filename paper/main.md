@@ -68,7 +68,7 @@ from the start coordinate of the region being deleted to the end coordinate of t
 **a.** Additions of a sequence and deletion to the graph. Inserts and swaps of sequences are handled by the same logic.
 **b.** Database representation of additions and deletions. Models are simplified to illustrate the essential parts. 
 The first 2 rows of edges correspond to the addition of the TG sequence and the 3rd edge corresponds to the deletion.
-Coordinate is abbreviated Coord in column headers.](graph_updates/final.svg){#fig:graph_updates}
+](graph_updates/final.svg){#fig:graph_updates}
 
 For modeling real world data, such as chromosomes, Gen represents a contig using one directed 
 graph of nodes and edges. This grouping is termed a Block Group and a join table between Block Groups and Edges is used 
