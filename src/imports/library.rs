@@ -102,7 +102,7 @@ pub fn import_library<'a>(
     for start_part in *start_parts {
         let edge = EdgeData {
             source_node_id: PATH_START_NODE_ID,
-            source_coordinate: -1,
+            source_coordinate: 0,
             source_strand: Strand::Forward,
             target_node_id: **start_part,
             target_coordinate: 0,
@@ -153,7 +153,7 @@ pub fn import_library<'a>(
         .map(|edge_id| BlockGroupEdgeData {
             block_group_id: new_block_group.id,
             edge_id: *edge_id,
-            chromosome_index: 0,
+            chromosome_index: *edge_id, // TODO: This is a hack, clean it up with phase layers
             phased: 0,
         })
         .collect::<Vec<_>>();
