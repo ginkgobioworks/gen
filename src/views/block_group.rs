@@ -69,7 +69,8 @@ struct Viewer {
     edges: Vec<(u32, u32)>, // Block ID pairs
     labels: HashMap<u32, String>, // Block ID to label
     coordinates: HashMap<u32, (i32, i32)>, // Block ID to (x, y) coordinates
-    scroll: ScrollState}
+    scroll: ScrollState,
+    plot_area: Rect}
 
 /// Convert the coordinates from the layout algorithm to canvas coordinates.
 /// This depends on widest label in each rank.
@@ -156,26 +157,33 @@ fn convert_offset(
     offset_y: i32,
     old_coordinates: &HashMap<u32, (i32, i32)>,
     new_coordinates: &HashMap<u32, (i32, i32)>,
-    frame: Frame,
+    plot_area: Rect,
+    focus_block: Option<u32>
 ) -> (i32, i32) {
-    //  - Find the node (block) closest to the old center 
-    let center_x = offset_x + frame.area().width as i32 / 2;
-    let center_y = offset_y + frame.area().height as i32 / 2;
-    let mut closest_node = 0;
-    let mut closest_distance = i32::MAX;
-    for (block_id, (x, y)) in old_coordinates {
-        let distance = (x - center_x).abs() + (y - center_y).abs();
-        if distance < closest_distance {
-            closest_distance = distance;
-            closest_node = *block_id;
+    // Calculate the center of the plot area in the old coordinate system
+    let center_x = offset_x + plot_area.width as i32 / 2;
+    let center_y = offset_y + plot_area.height as i32 / 2;
+
+    // If a focus block is not specified, find the block closest to the center of the plot area
+    let selected_block = focus_block.or_else(|| {
+        // Find the node closest to the center of the plot area
+        let mut closest_node = 0;
+        let mut closest_distance = i32::MAX;
+        for (block_id, (x, y)) in old_coordinates {
+            let distance = (x - center_x).abs() + (y - center_y).abs();
+            if distance < closest_distance {
+                closest_distance = distance;
+                closest_node = *block_id;
+            }
         }
-    }
+        Some(closest_node)
+    });
 
-    // - Record the position of that node in each coordinate system
-    let (old_x, old_y) = old_coordinates.get(&closest_node).unwrap();
-    let (new_x, new_y) = new_coordinates.get(&closest_node).unwrap();
-
-    //  - Set the new offset so that, in screen coordinates, the node stays in place
+    // Change the offset so that position 1 of the selected block stays in the exact same spot
+    // in the new coordinate system
+    let selected_block = selected_block.unwrap();
+    let (old_x, old_y) = old_coordinates.get(&selected_block).unwrap();
+    let (new_x, new_y) = new_coordinates.get(&selected_block).unwrap();
     let new_offset_x = offset_x + (old_x - new_x);
     let new_offset_y = offset_y + (old_y - new_y);
 
@@ -216,18 +224,16 @@ fn make_labels(blocks: &Vec<GroupBlock>, length: u32) -> HashMap<u32, String> {
 
 
 
-/// Draw the canvas. Note that we compute the coordinate range
-/// from the current `offset` and the widget `size`.
+/// Draw the canvas, ensuring a 1 to 1 mapping between data units and terminal cells.
 fn draw_scrollable_canvas(frame: &mut ratatui::Frame, viewer: &Viewer) {
 
-    let plot_area = Rect::new(frame.area().left(), frame.area().top(), frame.area().width, frame.area().height);
+    let plot_area = viewer.plot_area;
 
     // The top-left corner of our view is (offset_x, offset_y).
     let x_start = viewer.scroll.offset_x;
     let x_end = x_start + plot_area.width as f64 - 3.0; // -1 because width is 1-based, -2 because of the border
     let y_start = viewer.scroll.offset_y;
     let y_end = y_start + plot_area.height as f64 - 3.0;
-
 
     // Create the canvas
     let canvas = Canvas::default()
@@ -268,7 +274,6 @@ fn draw_scrollable_canvas(frame: &mut ratatui::Frame, viewer: &Viewer) {
             }
         });
 
-    //frame.render_widget(canvas, frame.area());
     frame.render_widget(canvas, plot_area);
    
 }
@@ -327,6 +332,7 @@ pub fn view_block_group(
         .map(|(b1, b2)| (*b1 as u32, *b2 as u32))
         .collect::<Vec<_>>();
 
+    // Run the Sugiyama layout algorithm
     let layouts = from_edges(
         &block_pairs_u32,
         &Config {
@@ -355,10 +361,9 @@ pub fn view_block_group(
     let mut terminal = Terminal::new(backend)?;
 
     // Initialize viewer state
-    let label_length = 20;
-    let scale: f32 = 1.0;
+    let scale: f32 = 2.0;
     let aspect_ratio: f32 = 2.0;
-    let label_length = 10;
+    let label_length = 100;
     let labels = make_labels(&blocks, label_length);
     let coordinates = stretch_layout(&layout, &labels, scale, aspect_ratio);
     // Calculate the center point of the coordinates
@@ -377,8 +382,9 @@ pub fn view_block_group(
             offset_y: offset_y.round() as f64,
             scale: scale,
             aspect_ratio: aspect_ratio,
-            max_label: label_length
+            max_label: label_length,
         },
+        plot_area: Rect::default(),
     };
 
     // Basic event loop
@@ -390,6 +396,8 @@ pub fn view_block_group(
             let viewer = &mut viewer;
             // Here we just have a single widget, so we use the entire frame.
             // If you have multiple widgets, use `Layout` to split the frame area.
+            let plot_area = Rect::new(frame.area().left(), frame.area().top(), frame.area().width, frame.area().height);
+            viewer.plot_area = plot_area;
             draw_scrollable_canvas(frame, &viewer);
         })?;
 
@@ -418,7 +426,7 @@ pub fn view_block_group(
                         viewer.scroll.offset_y -= 5.0;
                     }
                      KeyCode::Char('+') => {
-                        // Increase how much of the sequence is shown in each block label: 10, 100, 1000.
+                        // Increase how much of the sequence is shown in each block label: 10 vs 100 vs 1000 characters.
                         // After 1000 it just becomes the full length, and any further zooming in starts increasing 
                         // the scale.
                         viewer.scroll.max_label = match viewer.scroll.max_label {
@@ -430,31 +438,60 @@ pub fn view_block_group(
                         if viewer.scroll.max_label == u32::MAX {
                             viewer.scroll.scale *= 2.0;
                         }
-
+                        
                         // Regenerate labels and coordinates
                         viewer.labels = make_labels(&blocks, viewer.scroll.max_label);
-                        let new_coordinates = stretch_layout(&layout, &viewer.labels, viewer.scroll.scale, viewer.scroll.aspect_ratio);
-                        /*// Convert the offset so that the same block stays centered
-                        terminal.draw(|frame| {
-                            let (new_offset_x, new_offset_y) = convert_offset(viewer.scroll.offset_x as f64, 
-                                viewer.scroll.offset_y as f64, 
-                                &viewer.coordinates,
-                                &new_coordinates, 
-                                frame);
-                            viewer.scroll.offset_x = new_offset_x;
-                            viewer.scroll.offset_y = new_offset_y;
-                        })?;*/
 
+                        // Stretch the graph (go back to the original layout)
+                        viewer.coordinates = stretch_layout(&layout, 
+                            &viewer.labels, viewer.scroll.scale, viewer.scroll.aspect_ratio);
+
+                        // Re-center the graph
+                            // Calculate the center point of the coordinates
+                        let center_x = viewer.coordinates.values().map(|(x, _)| x).sum::<i32>() as f64 / viewer.coordinates.len() as f64;
+                        let center_y = viewer.coordinates.values().map(|(_, y)| y).sum::<i32>() as f64 / viewer.coordinates.len() as f64;
+                            // Set the initial offset so that the center point is in the center of the terminal
+                        let offset_x = center_x - (terminal.get_frame().area().width as f64 / 2.0);
+                        let offset_y = center_y - (terminal.get_frame().area().height as f64 / 2.0);
+
+                        // Translate the graph so that the same block stays centered
+                        //let old_offset_x = viewer.scroll.offset_x as i32;
+                        //let old_offset_y = viewer.scroll.offset_y as i32;
+
+                        //let (new_offset_x, new_offset_y) = convert_offset(
+                        //    old_offset_x, 
+                        //   old_offset_y, 
+                        //    &viewer.coordinates,
+                        //    &new_coordinates, 
+                        //    viewer.plot_area,
+                        //   None);
+                        
+                        //
+
+                        //viewer.coordinates = new_coordinates;
+                        //viewer.scroll.offset_x = new_offset_x as f64;   
+                        //viewer.scroll.offset_y = new_offset_y as f64;                      
 
                     }    
                     // Zoom out => bigger scale => see more data => "less magnified"
                     KeyCode::Char('-') => {
-                        // Switch to a lower horizontal zoom level
-                        viewer.scroll.max_label = std::cmp::max(viewer.scroll.max_label - 1, 1);
+                        // Switch to a lower zoom level
+                        viewer.scroll.max_label = match viewer.scroll.max_label {
+                            u32::MAX => 1000,
+                            1000 => 100,
+                            100 => 10,
+                            _ => 0,
+                        };
+                        if viewer.scroll.max_label == u32::MAX {
+                            viewer.scroll.scale /= 2.0;
+                        }
+                        
                         // Regenerate labels and coordinates
                         viewer.labels = make_labels(&blocks, viewer.scroll.max_label);
-                        let new_coordinates = stretch_layout(&layout, &viewer.labels, viewer.scroll.scale, viewer.scroll.aspect_ratio);
-                        /* 
+
+                        // Stretch the graph (go back to the original layout)
+                        viewer.coordinates = stretch_layout(&layout, 
+                            &viewer.labels, viewer.scroll.scale, viewer.scroll.aspect_ratio);/* 
                         // Convert the offset so that the same block stays centered
                         let (new_offset_x, new_offset_y) = convert_offset(
                             viewer.scroll.offset_x as i32, 
