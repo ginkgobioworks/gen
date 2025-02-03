@@ -12,6 +12,7 @@ use crate::models::{
 };
 
 use chrono::offset;
+use crossterm::event::{KeyEventKind, MediaKeyCode};
 use gb_io::seq;
 use itertools::Itertools; // for tuple_windows
 use noodles::vcf::header;
@@ -22,6 +23,7 @@ use petgraph::graphmap::DiGraphMap;
 use petgraph::prelude::GraphMap;
 use petgraph::stable_graph::StableDiGraph;
 use ratatui::symbols::block;
+use ratatui::widgets::Widget;
 use ratatui::Frame;
 use rusqlite::Connection;
 use ruzstd::blocks;
@@ -35,23 +37,24 @@ use std::hash::Hash;
 use std::io::{BufWriter, Stdout, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+use std::u32;
 
 use log::{info, warn};
 
 
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent},
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout, Rect},
-    style::Color,
     widgets::canvas::{Canvas, Line, Points},
     widgets::{Block, Borders, Paragraph},
     Terminal,
-    symbols
+    style::{Color, Style},
+    text::{Text,Span},
 };
 use rust_sugiyama::{configure::Config, from_edges};
 
@@ -65,8 +68,8 @@ use rust_sugiyama::{configure::Config, from_edges};
 /// - `block_len` = how much of the sequence to show in each block label.
 /// 
 struct ScrollState {
-    offset_x: f64,
-    offset_y: f64
+    offset_x: i32,
+    offset_y: i32
 }
 
 /// Holds data for the viewer.
@@ -208,11 +211,10 @@ impl ScaledLayout {
             .map(|(source, target)| {
             let (source_label, source_x, source_y) = self.labels.get(source).unwrap();
             let (_, target_x, target_y) = self.labels.get(target).unwrap();
-            // Too much manual futzing to get these to look right:
-            let source_x = *source_x as f64 + source_label.len() as f64;
-            let source_y = *source_y as f64 + 0.25;
-            let target_x = *target_x as f64 - 2.0;
-            let target_y = *target_y as f64 + 0.25;
+            let source_x = *source_x as f64 + source_label.len() as f64 + 0.5;
+            let source_y = *source_y as f64;
+            let target_x = *target_x as f64 - 1.0;
+            let target_y = *target_y as f64;
             ((source_x, source_y), (target_x, target_y))
             })
             .collect();
@@ -292,9 +294,9 @@ fn draw_scrollable_canvas(frame: &mut ratatui::Frame, viewer: &Viewer) {
 
     // The top-left corner of our view is (offset_x, offset_y).
     let x_start = viewer.scroll.offset_x;
-    let x_end = x_start + plot_area.width as f64 - 3.0; // -1 because width is 1-based, -2 because of the border
+    let x_end = x_start + plot_area.width as i32 - 3; // -1 because width is 1-based, -2 because of the border
     let y_start = viewer.scroll.offset_y;
-    let y_end = y_start + plot_area.height as f64 - 3.0;
+    let y_end = y_start + plot_area.height as i32 - 3;
 
     // Create the canvas
     let canvas = Canvas::default()
@@ -304,8 +306,8 @@ fn draw_scrollable_canvas(frame: &mut ratatui::Frame, viewer: &Viewer) {
                 .borders(Borders::ALL),
         )
         // Adjust the x_bounds and y_bounds by the scroll offsets.
-        .x_bounds([x_start, x_end])
-        .y_bounds([y_start, y_end])
+        .x_bounds([x_start as f64, x_end as f64])
+        .y_bounds([y_start as f64, y_end as f64])
         .paint(|ctx| {
             // Draw the lines described in the processed layout
             for ((x1, y1), (x2, y2)) in &viewer.layout.lines {
@@ -323,11 +325,7 @@ fn draw_scrollable_canvas(frame: &mut ratatui::Frame, viewer: &Viewer) {
             }
 
         });
-
-
-
-    frame.render_widget(canvas, plot_area);
-   
+    frame.render_widget(canvas, plot_area);   
 }
 
 pub fn view_block_group(
@@ -387,6 +385,7 @@ pub fn view_block_group(
         .collect::<Vec<_>>();
 
     // Run the Sugiyama layout algorithm
+    // TODO: fix/remedy core dump when there are too many blocks)
     info!("Running Sugiyama layout algorithm");
     let layouts = from_edges(
         &block_pairs_u32,
@@ -441,8 +440,8 @@ pub fn view_block_group(
     // Set the initial offset so that the center point is in the center of the terminal
     // We haven't set up a canvas yet, so we don't know more about the plot area
     let initial_scroll_state = ScrollState {
-        offset_x: center_x - (terminal.get_frame().area().width as f64 / 2.0),
-        offset_y: center_y - (terminal.get_frame().area().height as f64 / 2.0),
+        offset_x: center_x.round() as i32 - (terminal.get_frame().area().width as f64 / 2.0).round() as i32,
+        offset_y: center_y.round() as i32 - (terminal.get_frame().area().height as f64 / 2.0).round() as i32,
     };
 
     let mut viewer = Viewer {
@@ -465,9 +464,12 @@ pub fn view_block_group(
             let viewer = &mut viewer;
             // Here we just have a single widget, so we use the entire frame.
             // If you have multiple widgets, use `Layout` to split the frame area.
-            let plot_area = Rect::new(frame.area().left(), frame.area().top(), frame.area().width, frame.area().height);
-            viewer.plot_area = plot_area;
+            viewer.plot_area = Rect::new(frame.area().left(), frame.area().top(), frame.area().width, frame.area().height);
             draw_scrollable_canvas(frame, &viewer);
+            
+            //let status_bar = Paragraph::new(Text::styled("Hello, world!", Style::default().bg(Color::DarkGray).fg(Color::White)));
+            //let status_bar_area = Rect::new(frame.area().left(), frame.area().bottom()-1, frame.area().width, 1);
+            //status_bar.render(status_bar_area, frame.buffer_mut());
         })?;
 
         // Handle input
@@ -475,63 +477,78 @@ pub fn view_block_group(
             .checked_sub(last_tick.elapsed())
             .unwrap_or_else(|| Duration::from_secs(0));
         if crossterm::event::poll(timeout)? {
-            if let Event::Key(KeyEvent { code, .. }) = event::read()? {
-                match code {
-                    KeyCode::Char('q') => {
-                        // Exit on 'q'
-                        break;
+            if let event::Event::Key(key) = event::read()? {
+                if key.kind == KeyEventKind::Press {
+                    match key.code {
+                        KeyCode::Char('q') => {
+                            // Exit on 'q'
+                            break;
+                        }
+                        KeyCode::Left => {
+                            // Scroll left
+                            if key.modifiers == KeyModifiers::SHIFT {
+                                viewer.scroll.offset_x -= 10;
+                            } else {
+                                viewer.scroll.offset_x -= 1;
+                            }
+                        }
+                        KeyCode::Right => {
+                            // Scroll right
+                            if key.modifiers == KeyModifiers::SHIFT {
+                                viewer.scroll.offset_x += 10;
+                            } else {
+                                viewer.scroll.offset_x += 1;
+                            }
+                        }
+                        KeyCode::Up => {
+                            // Scroll up
+                            viewer.scroll.offset_y += 1;
+                        }
+                        KeyCode::Down => {
+                            // Scroll down
+                            viewer.scroll.offset_y -= 1;
+                        }
+                        KeyCode::Char('+') | KeyCode::Char('=') => {
+                            // Increase how much of the sequence is shown in each block label: 0 vs 11 vs 100 characters.
+                            // 11 was picked as the default because it results in symmetrical labels.
+                            // After 100 it just becomes the full length.
+                            viewer.plot_parameters.label_width = match viewer.plot_parameters.label_width {
+                                0 => 11,
+                                11 => 100,
+                                100 => u32::MAX,
+                                _ => u32::MAX,
+                            };
+                            // Once we're at the full length, start increasing the scale instead
+                            if viewer.plot_parameters.label_width == u32::MAX {
+                                viewer.plot_parameters.scaling += 1;
+                            }
+                            viewer.layout.rescale(&viewer.plot_parameters);
+                        }
+                        KeyCode::Char('-') | KeyCode::Char('_') => {
+                            // Decrease how much of the sequence is shown in each block label: 11 vs 100 vs 1000 characters.
+                            // 11 was picked as the default because it results in symmetrical labels.
+                            // After 1000 it just becomes the full length.
+
+                            if viewer.plot_parameters.scaling > 1 {
+                                // Decrease the scale if we're not at the minimum scale (1)
+                                viewer.plot_parameters.scaling -= 1;
+                            } else {
+                                // If we're at the minimum scale, start decreasing the label width
+                                viewer.plot_parameters.label_width = match viewer.plot_parameters.label_width {
+                                    u32::MAX => 100,
+                                    100 => 11,
+                                    11 => 0,
+                                    _ => 0,
+                                };
+                            }
+                            viewer.layout.rescale(&viewer.plot_parameters);
+                        }
+                        _ => {}
                     }
-                    // Scroll the data window
-                    KeyCode::Left => {
-                        viewer.scroll.offset_x -= 1.0;
-                    }
-                    KeyCode::Right => {
-                        viewer.scroll.offset_x += 1.0;
-                    }
-                    KeyCode::Up => {
-                        viewer.scroll.offset_y += 1.0;
-                    }
-                    KeyCode::Down => {
-                        viewer.scroll.offset_y -= 1.0;
-                    }
-                    KeyCode::Char('+') => {
-                        // Increase how much of the sequence is shown in each block label: 11 vs 100 vs 1000 characters.
-                        // 11 was picked as the default because it results in symmetrical labels.
-                        // After 1000 it just becomes the full length.
-                        // This does not affect the "scale" parameters, alt-up/down would be used for that.
-                        viewer.plot_parameters.label_width = match viewer.plot_parameters.label_width {
-                            0 => 11,
-                            11 => 100,
-                            100 => 1000,
-                            1000 => u32::MAX,
-                            _ => u32::MAX,
-                        };
-                        
-                        // Re-process the layout with the new label width
-                        viewer.layout.rescale(&viewer.plot_parameters);
-  
-                        // TODO: convert the offset so that the same block stays centered                     
-                    }    
-                    // Zoom out => bigger scale => see more data => "less magnified"
-                    KeyCode::Char('-') => {
-                        viewer.plot_parameters.label_width = match viewer.plot_parameters.label_width {
-                            u32::MAX => 1000,
-                            1000 => 100,
-                            100 => 11,
-                            11 => 0,
-                            _ => 0,
-                        };
-                        
-                        // Re-process the layout with the new label width
-                        viewer.layout.rescale(&viewer.plot_parameters);
-  
-                        // TODO: convert the offset so that the same block stays centered   
-                    } 
-                    _ => {}
                 }
+                
             }
         }
-
         // Update tick
         if last_tick.elapsed() >= tick_rate {
             last_tick = Instant::now();
