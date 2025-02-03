@@ -25,3 +25,6 @@ fixtures/*.ipynb
 .gen/
 
 **/.ipynb_checkpoints/
+
+# IDE
+.vscode/*

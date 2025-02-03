@@ -354,6 +354,9 @@ enum Commands {
 }
 
 fn main() {
+    // Start logger (gets log level from RUST_LOG environment variable, sends output to stderr)
+    env_logger::init();
+
     let cli = Cli::parse();
 
     // commands not requiring a db connection are handled here
