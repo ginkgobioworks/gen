@@ -1,4 +1,3 @@
-use core::ops::Range;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
@@ -760,41 +759,30 @@ impl BlockGroup {
         paths[0].clone()
     }
 
-    pub fn clone_subgraph(
+    pub fn derive_subgraph(
         conn: &Connection,
         source_block_group_id: i64,
-        start: i64,
-        end: i64,
+        start_block: &NodeIntervalBlock,
+        end_block: &NodeIntervalBlock,
+        start_node_coordinate: i64,
+        end_node_coordinate: i64,
         target_block_group_id: i64,
-    ) {
-        let current_path = BlockGroup::get_current_path(conn, source_block_group_id);
-        let current_path_length = current_path.sequence(conn).len() as i64;
-        if (start < 0 || start > current_path_length) || (end < 0 || end > current_path_length) {
-            panic!("Start and/or end coordinates are out of range for the current path.");
-        }
-        let current_intervaltree = current_path.intervaltree(conn);
-        let mut blocks = current_intervaltree
-            .query(Range { start, end })
-            .map(|x| x.value)
-            .collect::<Vec<_>>();
-        blocks.sort_by(|a, b| a.start.cmp(&b.start));
-        let start_block = blocks[0];
-        let start_node_coordinate = start - start_block.start + start_block.sequence_start;
-        let end_block = blocks[blocks.len() - 1];
-        let end_node_coordinate = end - end_block.start + end_block.sequence_start;
-
+    ) -> i64 {
         let current_graph = BlockGroup::get_graph(conn, source_block_group_id);
         let start_node = current_graph
             .nodes()
             .find(|node| {
                 node.node_id == start_block.node_id
-                    && node.sequence_start == start_block.sequence_start
+                    && node.sequence_start <= start_node_coordinate
+                    && node.sequence_end >= start_node_coordinate
             })
             .unwrap();
         let end_node = current_graph
             .nodes()
             .find(|node| {
-                node.node_id == end_block.node_id && node.sequence_start == end_block.sequence_start
+                node.node_id == end_block.node_id
+                    && node.sequence_start <= end_node_coordinate
+                    && node.sequence_end >= end_node_coordinate
             })
             .unwrap();
         let subgraph_edges = all_intermediate_edges(&current_graph, start_node, end_node);
@@ -806,8 +794,11 @@ impl BlockGroup {
             .collect::<Vec<_>>();
         let source_edges = Edge::bulk_load(conn, &subgraph_edge_ids);
 
-        let source_block_group_edges =
-            BlockGroupEdge::edges_for_block_group(conn, source_block_group_id);
+        let source_block_group_edges = BlockGroupEdge::specific_edges_for_block_group(
+            conn,
+            source_block_group_id,
+            &subgraph_edge_ids,
+        );
         let source_edge_ids = source_edges
             .iter()
             .map(|edge| edge.id)
@@ -871,25 +862,7 @@ impl BlockGroup {
         all_edges.push(new_end_edge_data);
         BlockGroupEdge::bulk_create(conn, &all_edges);
 
-        let current_edges = PathEdge::edges_for_path(conn, current_path.id);
-        let new_edge_id_set = all_edges
-            .iter()
-            .map(|edge| edge.edge_id)
-            .collect::<HashSet<_>>();
-        let mut new_path_edge_ids = vec![];
-        new_path_edge_ids.push(new_start_edge.id);
-        for current_edge in current_edges {
-            if new_edge_id_set.contains(&current_edge.id) {
-                new_path_edge_ids.push(current_edge.id);
-            }
-        }
-        new_path_edge_ids.push(new_end_edge.id);
-        Path::create(
-            conn,
-            &current_path.name,
-            target_block_group_id,
-            &new_path_edge_ids,
-        );
+        target_block_group_id
     }
 }
 
@@ -910,6 +883,7 @@ mod tests {
     use super::*;
     use crate::models::{collection::Collection, node::Node, sample::Sample, sequence::Sequence};
     use crate::test_helpers::{get_connection, interval_tree_verify, setup_block_group};
+    use core::ops::Range;
 
     #[test]
     fn test_blockgroup_create() {
@@ -2327,13 +2301,13 @@ mod tests {
         BlockGroup::insert_change(conn, &change, &tree);
     }
 
-    mod test_clone_subgraph {
+    mod test_derive_subgraph {
         use super::*;
         use crate::models::{collection::Collection, node::Node, sequence::Sequence};
         use crate::test_helpers::{get_connection, setup_block_group};
 
         #[test]
-        fn test_clone_subgraph_one_insertion() {
+        fn test_derive_subgraph_one_insertion() {
             /*
             AAAAAAAAAA -> TTTTTTTTTT -> CCCCCCCCCC -> GGGGGGGGGG
                               \-> AAAAAAAA ->/
@@ -2400,20 +2374,35 @@ mod tests {
                 ])
             );
 
+            let mut blocks = intervaltree
+                .query(Range { start: 15, end: 25 })
+                .map(|x| x.value)
+                .collect::<Vec<_>>();
+            blocks.sort_by(|a, b| a.start.cmp(&b.start));
+            let start_block = blocks[0];
+            let start_node_coordinate = 15 - start_block.start + start_block.sequence_start;
+            let end_block = blocks[blocks.len() - 1];
+            let end_node_coordinate = 25 - end_block.start + end_block.sequence_start;
+
             let block_group2 = BlockGroup::create(conn, "test", None, "chr1.1");
-            BlockGroup::clone_subgraph(conn, block_group1_id, 15, 25, block_group2.id);
+            BlockGroup::derive_subgraph(
+                conn,
+                block_group1_id,
+                &start_block,
+                &end_block,
+                start_node_coordinate,
+                end_node_coordinate,
+                block_group2.id,
+            );
             let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id, false);
             assert_eq!(
                 all_sequences2,
                 HashSet::from_iter(vec!["TTTTTCCCCC".to_string(), "TAAAAAAAAC".to_string(),])
             );
-
-            let new_path = BlockGroup::get_current_path(conn, block_group2.id);
-            assert_eq!(new_path.sequence(conn), "TAAAAAAAAC");
         }
 
         #[test]
-        fn test_clone_subgraph_two_independent_insertions() {
+        fn test_derive_subgraph_two_independent_insertions() {
             /*
             AAAAAAAAAA -> TTTTTTTTTT -> CCCCCCCCCC -----> GGGGGGGGGG
                                   \-> AAAAAAAA ->/  \->TTTTTTTT -/
@@ -2527,8 +2516,26 @@ mod tests {
                 ])
             );
 
+            let mut blocks = intervaltree
+                .query(Range { start: 15, end: 36 })
+                .map(|x| x.value)
+                .collect::<Vec<_>>();
+            blocks.sort_by(|a, b| a.start.cmp(&b.start));
+            let start_block = blocks[0];
+            let start_node_coordinate = 15 - start_block.start + start_block.sequence_start;
+            let end_block = blocks[blocks.len() - 1];
+            let end_node_coordinate = 36 - end_block.start + end_block.sequence_start;
+
             let block_group2 = BlockGroup::create(conn, "test", None, "chr1.1");
-            BlockGroup::clone_subgraph(conn, block_group1_id, 15, 36, block_group2.id);
+            BlockGroup::derive_subgraph(
+                conn,
+                block_group1_id,
+                &start_block,
+                &end_block,
+                start_node_coordinate,
+                end_node_coordinate,
+                block_group2.id,
+            );
             let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id, false);
             assert_eq!(
                 all_sequences2,
@@ -2542,7 +2549,7 @@ mod tests {
         }
 
         #[test]
-        fn test_clone_subgraph_two_independent_insertions_and_one_deletion() {
+        fn test_derive_subgraph_two_independent_insertions_and_one_deletion() {
             /*
                        /--------------------------------------------\  (<-- Deletion edge)
             AAAAAAAAAA -> TTTTTTTTTT -> CCCCCCCCCC -----> GGGGGGGGGG
@@ -2678,8 +2685,26 @@ mod tests {
                 ])
             );
 
+            let mut blocks = intervaltree
+                .query(Range { start: 15, end: 36 })
+                .map(|x| x.value)
+                .collect::<Vec<_>>();
+            blocks.sort_by(|a, b| a.start.cmp(&b.start));
+            let start_block = blocks[0];
+            let start_node_coordinate = 15 - start_block.start + start_block.sequence_start;
+            let end_block = blocks[blocks.len() - 1];
+            let end_node_coordinate = 36 - end_block.start + end_block.sequence_start;
+
             let block_group2 = BlockGroup::create(conn, "test", None, "chr1.1");
-            BlockGroup::clone_subgraph(conn, block_group1_id, 15, 36, block_group2.id);
+            BlockGroup::derive_subgraph(
+                conn,
+                block_group1_id,
+                &start_block,
+                &end_block,
+                start_node_coordinate,
+                end_node_coordinate,
+                block_group2.id,
+            );
             let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id, false);
             assert_eq!(
                 all_sequences2,
