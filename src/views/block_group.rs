@@ -1,60 +1,35 @@
-use crate::graph::{GraphEdge, GraphNode};
 use crate::models::{
-    block_group::BlockGroup,
-    block_group_edge::{AugmentedEdge, BlockGroupEdge},
-    collection::Collection,
-    edge::{Edge, GroupBlock},
-    node::Node,
-    path::Path,
-    path_edge::PathEdge,
+    block_group_edge::BlockGroupEdge,
+    edge::Edge,
     sample::Sample,
-    strand::Strand,
 };
 
-use chrono::offset;
-use crossterm::event::{KeyEventKind, MediaKeyCode};
-use gb_io::seq;
+use crossterm::event::KeyEventKind;
 use itertools::Itertools; // for tuple_windows
-use noodles::vcf::header;
-use noodles::vcf::header::record::value::map::info;
-use petgraph::csr::Edges;
-use petgraph::dot::Dot;
-use petgraph::graphmap::DiGraphMap;
-use petgraph::prelude::GraphMap;
-use petgraph::stable_graph::StableDiGraph;
-use ratatui::symbols::block;
-use ratatui::widgets::Widget;
-use ratatui::Frame;
 use rusqlite::Connection;
-use ruzstd::blocks;
-use sha2::digest::core_api::TruncSide;
 
 use core::panic;
-use std::collections::{HashMap, HashSet, BTreeMap};
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::fs::File;
-use std::hash::Hash;
-use std::io::{BufWriter, Stdout, Write};
-use std::path::PathBuf;
+use std::io::Write;
 use std::time::{Duration, Instant};
 use std::u32;
 
-use log::{info, warn};
+use log::info;
 
 
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{self, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{
     backend::{Backend, CrosstermBackend},
-    layout::{Constraint, Direction, Layout, Rect},
-    widgets::canvas::{Canvas, Line, Points},
-    widgets::{Block, Borders, Paragraph},
+    layout::Rect,
+    widgets::canvas::{Canvas, Line},
+    widgets::{Block, Borders},
     Terminal,
-    style::{Color, Style},
-    text::{Text,Span},
+    style::Color,
 };
 use rust_sugiyama::{configure::Config, from_edges};
 
@@ -312,10 +287,10 @@ fn draw_scrollable_canvas(frame: &mut ratatui::Frame, viewer: &Viewer) {
             // Draw the lines described in the processed layout
             for ((x1, y1), (x2, y2)) in &viewer.layout.lines {
                 ctx.draw(&Line {
-                    x1: *x1 as f64,
-                    y1: *y1 as f64,
-                    x2: *x2 as f64,
-                    y2: *y2 as f64,
+                    x1: { *x1 },
+                    y1: { *y1 },
+                    x2: { *x2 },
+                    y2: { *y2 },
                     color: Color::White,
                 });
             }
@@ -418,7 +393,7 @@ pub fn view_block_group(
     // TODO: set up the viewer with sensible defaults and add parameters later
     // or borrow parameters instead
     // 
-    let mut initial_parameters = PlotParameters {
+    let initial_parameters = PlotParameters {
         label_width: 11,
         scaling: 2,
         aspect_ratio: 0.5
@@ -465,7 +440,7 @@ pub fn view_block_group(
             // Here we just have a single widget, so we use the entire frame.
             // If you have multiple widgets, use `Layout` to split the frame area.
             viewer.plot_area = Rect::new(frame.area().left(), frame.area().top(), frame.area().width, frame.area().height);
-            draw_scrollable_canvas(frame, &viewer);
+            draw_scrollable_canvas(frame, viewer);
             
             //let status_bar = Paragraph::new(Text::styled("Hello, world!", Style::default().bg(Color::DarkGray).fg(Color::White)));
             //let status_bar_area = Rect::new(frame.area().left(), frame.area().bottom()-1, frame.area().width, 1);
@@ -557,7 +532,7 @@ pub fn view_block_group(
 
     // Clean up terminal
     disable_raw_mode()?;
-    let mut stdout = terminal.backend_mut();
+    let stdout = terminal.backend_mut();
     execute!(stdout, LeaveAlternateScreen)?;
     Ok(())
 }
