@@ -13,7 +13,7 @@ init_test() {
 }
 
 get_size () {
-  local filesize_mb=$(python -c "import os;print(os.path.getsize('${GEN_DIR}/default.db') / (1024 * 1024))")
+  local filesize_mb=$(python -c "import os;size=os.path.getsize('${GEN_DIR}/default.db') / (1024 * 1024);print(f'{size:.4f}')")
   echo $filesize_mb
 }
 
