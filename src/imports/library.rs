@@ -202,7 +202,10 @@ pub fn import_library<'a>(
     )
     .unwrap();
 
-    println!("Imported library file: {}", library_file_path);
+    println!(
+        "Imported library file {} and parts file {}",
+        library_file_path, parts_file_path
+    );
 
     Ok(())
 }
