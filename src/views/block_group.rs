@@ -93,6 +93,9 @@ pub fn view_block_group(
 
     // Run the Sugiyama layout algorithm
     // (TODO: fix/remedy core dump when there are too many blocks)
+    if blocks.len() > 10000 {
+        panic!("Too many blocks to run the Sugiyama layout algorithm in one go");
+    }
     info!("Running Sugiyama layout algorithm");
     let layouts = from_edges(
         &block_pairs_u32,
@@ -170,10 +173,10 @@ pub fn view_block_group(
     loop {
         // Draw the UI
         terminal.draw(|frame| {
-            /// A layout consisting of a canvas and a status bar, with optionally a panel
-            /// - The canvas is where the graph is drawn
-            /// - The status bar is where the controls are displayed
-            /// - The panel is a scrollable paragraph that can be toggled on and off
+            // A layout consisting of a canvas and a status bar, with optionally a panel
+            // - The canvas is where the graph is drawn
+            // - The status bar is where the controls are displayed
+            // - The panel is a scrollable paragraph that can be toggled on and off
             
             let status_bar_height: u16 = 1;
 
