@@ -136,7 +136,9 @@ mod tests {
         block_group_edge::BlockGroupEdgeData, collection::Collection, edge::Edge, metadata,
         node::Node, operations::setup_db, sequence::Sequence, strand::Strand,
     };
-    use crate::test_helpers::{get_connection, get_operation_connection, setup_block_group};
+    use crate::test_helpers::{
+        get_connection, get_operation_connection, setup_block_group, setup_gen_dir,
+    };
 
     #[test]
     fn test_derive_subgraph_one_insertion() {
@@ -146,6 +148,7 @@ mod tests {
         Subgraph range:  |-----------------|
         Sequences of the subgraph are TAAAAAAAAC, TTTTTCCCCC
          */
+        setup_gen_dir();
         let conn = &get_connection(None);
         let op_conn = &get_operation_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
