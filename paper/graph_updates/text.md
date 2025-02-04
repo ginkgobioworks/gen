@@ -1,1 +1,0 @@
-**Graph updates** *a.* Additions of a sequence to the graph. Inserts and swaps of sequences are handled by the same logic. **b.** A deletion of a sequence. A single new edge is created to represent a deletion.
