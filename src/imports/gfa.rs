@@ -55,11 +55,16 @@ pub fn import_gfa<'a>(
 
     let mut edges = HashSet::new();
     let bar = progress_bar.add(get_progress_bar(gfa.links.len() as u64));
+    let mut source_refs_in_links = HashSet::new();
+    let mut target_refs_in_links = HashSet::new();
+
     bar.set_message("Parsing Links");
     for link in &gfa.links {
         let source = sequences_by_segment_id.get(&link.from).unwrap();
         let source_node_id = *node_ids_by_segment_id.get(&link.from).unwrap();
+        source_refs_in_links.insert(&link.from);
         let target_node_id = *node_ids_by_segment_id.get(&link.to).unwrap();
+        target_refs_in_links.insert(&link.to);
         edges.insert(edge_data_from_fields(
             source_node_id,
             source.length,
@@ -70,6 +75,35 @@ pub fn import_gfa<'a>(
         bar.inc(1);
     }
     bar.finish();
+
+    let pure_source_refs = source_refs_in_links
+        .difference(&target_refs_in_links)
+        .collect::<HashSet<_>>();
+    let pure_target_refs = target_refs_in_links
+        .difference(&source_refs_in_links)
+        .collect::<HashSet<_>>();
+    for source_ref in pure_source_refs {
+        let source_node_id = *node_ids_by_segment_id.get(source_ref).unwrap();
+        edges.insert(edge_data_from_fields(
+            PATH_START_NODE_ID,
+            0,
+            Strand::Forward,
+            source_node_id,
+            Strand::Forward,
+        ));
+    }
+
+    for target_ref in pure_target_refs {
+        let target_node_id = *node_ids_by_segment_id.get(target_ref).unwrap();
+        let target_sequence = sequences_by_segment_id.get(target_ref).unwrap();
+        edges.insert(edge_data_from_fields(
+            target_node_id,
+            target_sequence.length,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            Strand::Forward,
+        ));
+    }
 
     let bar = progress_bar.add(get_progress_bar(gfa.paths.len() as u64));
     bar.set_message("Parsing Paths");

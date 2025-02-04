@@ -228,6 +228,31 @@ impl Path {
         )
     }
 
+    pub fn query_for_collection_and_sample(
+        conn: &Connection,
+        collection_name: &str,
+        sample_name: Option<String>,
+    ) -> Vec<Path> {
+        if let Some(actual_sample_name) = sample_name {
+            let query = "SELECT * FROM paths JOIN block_groups ON paths.block_group_id = block_groups.id WHERE block_groups.collection_name = ?1 AND block_groups.sample_name = ?2";
+            Path::query(
+                conn,
+                query,
+                rusqlite::params!(
+                    Value::from(collection_name.to_string()),
+                    Value::from(actual_sample_name)
+                ),
+            )
+        } else {
+            let query = "SELECT * FROM paths JOIN block_groups ON paths.block_group_id = block_groups.id WHERE block_groups.collection_name = ?1 AND block_groups.sample_name IS NULL";
+            Path::query(
+                conn,
+                query,
+                rusqlite::params!(Value::from(collection_name.to_string())),
+            )
+        }
+    }
+
     pub fn sequence(&self, conn: &Connection) -> String {
         let blocks = self.blocks(conn);
         blocks
@@ -1045,6 +1070,127 @@ mod tests {
         assert_eq!(block4.start, 22);
         assert_eq!(block4.end, 29);
         assert_eq!(block4.strand, Strand::Forward);
+    }
+
+    #[test]
+    fn test_gets_sequence_with_edges_into_node_middles() {
+        // Tests that if the edge from the virtual start node goes into the middle of the first
+        // node, and the edge to the virtual end node comes from the middle of the last node, the
+        // sequence is correctly generated
+        let conn = &mut get_connection(None);
+        Collection::create(conn, "test collection");
+        let block_group = BlockGroup::create(conn, "test collection", None, "test block group");
+        let sequence1 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("ATCGATCG")
+            .save(conn);
+        let node1_id = Node::create(conn, sequence1.hash.as_str(), None);
+        let edge1 = Edge::create(
+            conn,
+            PATH_START_NODE_ID,
+            -1,
+            Strand::Forward,
+            node1_id,
+            4,
+            Strand::Forward,
+        );
+        let sequence2 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("AAAAAAAA")
+            .save(conn);
+        let node2_id = Node::create(conn, sequence2.hash.as_str(), None);
+        let edge2 = Edge::create(
+            conn,
+            node1_id,
+            8,
+            Strand::Forward,
+            node2_id,
+            0,
+            Strand::Forward,
+        );
+        let sequence3 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("CCCCCCCC")
+            .save(conn);
+        let node3_id = Node::create(conn, sequence3.hash.as_str(), None);
+        let edge3 = Edge::create(
+            conn,
+            node2_id,
+            8,
+            Strand::Forward,
+            node3_id,
+            0,
+            Strand::Forward,
+        );
+        let sequence4 = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("GGGGGGGG")
+            .save(conn);
+        let node4_id = Node::create(conn, sequence4.hash.as_str(), None);
+        let edge4 = Edge::create(
+            conn,
+            node3_id,
+            8,
+            Strand::Forward,
+            node4_id,
+            0,
+            Strand::Forward,
+        );
+        let edge5 = Edge::create(
+            conn,
+            node4_id,
+            4,
+            Strand::Forward,
+            PATH_END_NODE_ID,
+            -1,
+            Strand::Forward,
+        );
+
+        let edge_ids = vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id];
+        let block_group_edges = edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *edge_id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>();
+        BlockGroupEdge::bulk_create(conn, &block_group_edges);
+
+        let path = Path::create(conn, "chr1", block_group.id, &edge_ids);
+        let tree = path.intervaltree(conn);
+        let blocks1: Vec<NodeIntervalBlock> = tree.query_point(2).map(|x| x.value).collect();
+        assert_eq!(blocks1.len(), 1);
+        let block1 = &blocks1[0];
+        assert_eq!(block1.node_id, node1_id);
+        assert_eq!(block1.sequence_start, 4);
+        assert_eq!(block1.sequence_end, 8);
+        assert_eq!(block1.start, 0);
+        assert_eq!(block1.end, 4);
+        assert_eq!(block1.strand, Strand::Forward);
+
+        let blocks2: Vec<NodeIntervalBlock> = tree.query_point(10).map(|x| x.value).collect();
+        assert_eq!(blocks2.len(), 1);
+        let block2 = &blocks2[0];
+        assert_eq!(block2.node_id, node2_id);
+        assert_eq!(block2.sequence_start, 0);
+        assert_eq!(block2.sequence_end, 8);
+        assert_eq!(block2.start, 4);
+        assert_eq!(block2.end, 12);
+        assert_eq!(block2.strand, Strand::Forward);
+
+        let blocks4: Vec<NodeIntervalBlock> = tree.query_point(22).map(|x| x.value).collect();
+        assert_eq!(blocks4.len(), 1);
+        let block4 = &blocks4[0];
+        assert_eq!(block4.node_id, node4_id);
+        assert_eq!(block4.sequence_start, 0);
+        assert_eq!(block4.sequence_end, 4);
+        assert_eq!(block4.start, 20);
+        assert_eq!(block4.end, 24);
+        assert_eq!(block4.strand, Strand::Forward);
+
+        assert_eq!(path.sequence(conn), "ATCGAAAAAAAACCCCCCCCGGGG");
     }
 
     #[test]

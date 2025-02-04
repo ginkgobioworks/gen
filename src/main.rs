@@ -9,6 +9,7 @@ use gen::exports::fasta::export_fasta;
 use gen::exports::genbank::export_genbank;
 use gen::exports::gfa::export_gfa;
 use gen::get_connection;
+use gen::graph_operators::derive_subgraph;
 use gen::imports::fasta::{import_fasta, FastaError};
 use gen::imports::genbank::import_genbank;
 use gen::imports::gfa::import_gfa;
@@ -292,8 +293,10 @@ enum Commands {
         #[arg(short, long)]
         output_gff: String,
     },
+    /// List all samples in the current collection
     ListSamples {},
     #[command(arg_required_else_help(true))]
+    /// List all regions/contigs in the current collection and given sample
     ListGraphs {
         /// The name of the collection to list graphs for
         #[arg(short, long)]
@@ -338,6 +341,21 @@ enum Commands {
         /// The name of the output GFA file
         #[arg(long)]
         gfa: String,
+    },
+    /// Replace a sequence graph with a subgraph in the range of the specified coordinates
+    DeriveSubgraph {
+        /// The name of the collection to derive the subgraph from
+        #[arg(short, long)]
+        name: Option<String>,
+        /// The name of the parent sample
+        #[arg(short, long)]
+        sample: Option<String>,
+        /// The name of the new sample
+        #[arg(long)]
+        new_sample: String,
+        /// The name of the region to derive the subgraph from
+        #[arg(short, long)]
+        region: String,
     },
 }
 
@@ -966,6 +984,36 @@ fn main() {
                 sample1.as_deref(),
                 sample2.as_deref(),
             );
+        }
+        Some(Commands::DeriveSubgraph {
+            name,
+            sample,
+            new_sample,
+            region,
+        }) => {
+            conn.execute("BEGIN TRANSACTION", []).unwrap();
+            operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
+            let name = &name
+                .clone()
+                .unwrap_or_else(|| get_default_collection(&operation_conn));
+            let sample_name = sample.clone();
+            let new_sample_name = new_sample.clone();
+            let parsed_region = region.parse::<Region>().unwrap();
+            let interval = parsed_region.interval();
+            let start_coordinate = interval.start().unwrap().get() as i64;
+            let end_coordinate = interval.end().unwrap().get() as i64;
+            derive_subgraph(
+                &conn,
+                &operation_conn,
+                name,
+                sample_name.as_deref(),
+                &new_sample_name,
+                &parsed_region.name().to_string(),
+                start_coordinate,
+                end_coordinate,
+            );
+            conn.execute("END TRANSACTION", []).unwrap();
+            operation_conn.execute("END TRANSACTION", []).unwrap();
         }
     }
 }

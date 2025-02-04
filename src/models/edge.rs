@@ -275,25 +275,16 @@ impl Edge {
     fn get_block_boundaries(
         source_edges: Option<&Vec<&Edge>>,
         target_edges: Option<&Vec<&Edge>>,
-        sequence_length: i64,
     ) -> Vec<i64> {
         let mut block_boundary_coordinates = HashSet::new();
         if let Some(actual_source_edges) = source_edges {
             for source_edge in actual_source_edges {
-                if source_edge.source_coordinate > 0
-                    && source_edge.source_coordinate < sequence_length
-                {
-                    block_boundary_coordinates.insert(source_edge.source_coordinate);
-                }
+                block_boundary_coordinates.insert(source_edge.source_coordinate);
             }
         }
         if let Some(actual_target_edges) = target_edges {
             for target_edge in actual_target_edges {
-                if target_edge.target_coordinate > 0
-                    && target_edge.target_coordinate < sequence_length
-                {
-                    block_boundary_coordinates.insert(target_edge.target_coordinate);
-                }
+                block_boundary_coordinates.insert(target_edge.target_coordinate);
             }
         }
 
@@ -310,18 +301,19 @@ impl Edge {
         for edge in edges.iter().map(|edge| &edge.edge) {
             if edge.source_node_id != PATH_START_NODE_ID {
                 node_ids.insert(edge.source_node_id);
-                edges_by_source_node_id
-                    .entry(edge.source_node_id)
-                    .and_modify(|edges| edges.push(edge))
-                    .or_insert(vec![edge]);
             }
+            edges_by_source_node_id
+                .entry(edge.source_node_id)
+                .and_modify(|edges| edges.push(edge))
+                .or_insert(vec![edge]);
+
             if edge.target_node_id != PATH_END_NODE_ID {
                 node_ids.insert(edge.target_node_id);
-                edges_by_target_node_id
-                    .entry(edge.target_node_id)
-                    .and_modify(|edges| edges.push(edge))
-                    .or_insert(vec![edge]);
             }
+            edges_by_target_node_id
+                .entry(edge.target_node_id)
+                .and_modify(|edges| edges.push(edge))
+                .or_insert(vec![edge]);
         }
 
         let sequences_by_node_id =
@@ -338,25 +330,14 @@ impl Edge {
             let block_boundaries = Edge::get_block_boundaries(
                 edges_by_source_node_id.get(node_id),
                 edges_by_target_node_id.get(node_id),
-                sequence.length,
             );
 
             if !block_boundaries.is_empty() {
-                let start = 0;
-                let end = block_boundaries[0];
-                let first_block = GroupBlock::new(block_index, *node_id, sequence, start, end);
-                blocks.push(first_block);
-                block_index += 1;
                 for (start, end) in block_boundaries.clone().into_iter().tuple_windows() {
                     let block = GroupBlock::new(block_index, *node_id, sequence, start, end);
                     blocks.push(block);
                     block_index += 1;
                 }
-                let start = block_boundaries[block_boundaries.len() - 1];
-                let end = sequence.length;
-                let last_block = GroupBlock::new(block_index, *node_id, sequence, start, end);
-                blocks.push(last_block);
-                block_index += 1;
             } else {
                 blocks.push(GroupBlock::new(
                     block_index,
@@ -843,7 +824,7 @@ mod tests {
             Strand::Forward,
         );
 
-        let boundaries = Edge::get_block_boundaries(Some(&vec![&edge1]), Some(&vec![&edge2]), 10);
+        let boundaries = Edge::get_block_boundaries(Some(&vec![&edge1]), Some(&vec![&edge2]));
         assert_eq!(boundaries, vec![2, 3]);
     }
 
@@ -887,9 +868,9 @@ mod tests {
             Strand::Forward,
         );
 
-        let outgoing_boundaries = Edge::get_block_boundaries(Some(&vec![&edge1]), None, 10);
+        let outgoing_boundaries = Edge::get_block_boundaries(Some(&vec![&edge1]), None);
         assert_eq!(outgoing_boundaries, vec![2]);
-        let incoming_boundaries = Edge::get_block_boundaries(None, Some(&vec![&edge2]), 10);
+        let incoming_boundaries = Edge::get_block_boundaries(None, Some(&vec![&edge2]));
         assert_eq!(incoming_boundaries, vec![3]);
     }
 }

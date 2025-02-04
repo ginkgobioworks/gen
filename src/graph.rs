@@ -4,7 +4,10 @@ use interavl::IntervalTree as IT2;
 use intervaltree::IntervalTree;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::prelude::EdgeRef;
-use petgraph::visit::{GraphRef, IntoEdges, IntoNeighbors, IntoNeighborsDirected, NodeCount};
+use petgraph::visit::{
+    Dfs, GraphRef, IntoEdgeReferences, IntoEdges, IntoNeighbors, IntoNeighborsDirected, NodeCount,
+    Reversed,
+};
 use petgraph::Direction;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::{self, Debug};
@@ -143,6 +146,49 @@ where
         }
         None
     })
+}
+
+pub fn all_intermediate_edges<G>(
+    graph: G,
+    from: G::NodeId,
+    to: G::NodeId,
+) -> Vec<<G as IntoEdgeReferences>::EdgeRef>
+where
+    G: GraphRef + IntoEdges + petgraph::visit::IntoNeighborsDirected + petgraph::visit::Visitable,
+    G::NodeId: Eq + Hash + std::fmt::Display,
+{
+    let mut outgoing_nodes = HashSet::new();
+    outgoing_nodes.insert(from);
+    let mut dfs_outbound = Dfs::new(graph, from);
+
+    while let Some(outgoing_node) = dfs_outbound.next(graph) {
+        outgoing_nodes.insert(outgoing_node);
+    }
+
+    // This is a standard graph algorithm trick.  To get all nodes on paths from a source s to a
+    // target t, but not any other nodes, first find all nodes reachable from s.  Then reverse all
+    // the edges in the graph and find all nodes reachable from t.  The nodes in common between
+    // those two sets are the exactly the ones on some path from s to t.
+    let reversed_graph = Reversed(&graph);
+    let mut incoming_nodes = HashSet::new();
+    incoming_nodes.insert(to);
+    let mut dfs_inbound = Dfs::new(reversed_graph, to);
+    while let Some(incoming_node) = dfs_inbound.next(reversed_graph) {
+        incoming_nodes.insert(incoming_node);
+    }
+
+    let common_nodes: HashSet<&<G as petgraph::visit::GraphBase>::NodeId> =
+        outgoing_nodes.intersection(&incoming_nodes).collect();
+    let mut common_edgerefs = vec![];
+    for edge in graph.edge_references() {
+        let (source, target) = (edge.source(), edge.target());
+
+        if common_nodes.contains(&source) && common_nodes.contains(&target) {
+            common_edgerefs.push(edge);
+        }
+    }
+
+    common_edgerefs
 }
 
 pub fn all_simple_paths_by_edge<G>(
@@ -572,5 +618,119 @@ mod tests {
             all_reachable_nodes(&graph, &[5]),
             HashSet::from_iter(vec![5])
         );
+    }
+
+    mod test_all_intermediate_edges {
+        use super::*;
+        #[test]
+        fn test_one_part_group() {
+            //
+            //   1 -> 2 -> 3 -> 4 -> 5
+            //         \-> 6 /
+            //
+            let mut graph: DiGraphMap<i64, ()> = DiGraphMap::new();
+            graph.add_node(1);
+            graph.add_node(2);
+            graph.add_node(3);
+            graph.add_node(4);
+            graph.add_node(5);
+            graph.add_node(6);
+
+            graph.add_edge(1, 2, ());
+            graph.add_edge(2, 3, ());
+            graph.add_edge(3, 4, ());
+            graph.add_edge(4, 5, ());
+            graph.add_edge(2, 6, ());
+            graph.add_edge(6, 4, ());
+
+            let result_edges = all_intermediate_edges(&graph, 2, 4);
+            let intermediate_edges = result_edges
+                .iter()
+                .map(|(source, target, _weight)| (*source, *target))
+                .collect::<Vec<(i64, i64)>>();
+            assert_eq!(intermediate_edges, vec![(2, 3), (3, 4), (2, 6), (6, 4)]);
+        }
+
+        #[test]
+        fn test_two_part_groups() {
+            //
+            //   1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
+            //         \-> 8 /    \-> 9 /
+            //
+            let mut graph: DiGraphMap<i64, ()> = DiGraphMap::new();
+            graph.add_node(1);
+            graph.add_node(2);
+            graph.add_node(3);
+            graph.add_node(4);
+            graph.add_node(5);
+            graph.add_node(6);
+            graph.add_node(7);
+            graph.add_node(8);
+            graph.add_node(9);
+
+            graph.add_edge(1, 2, ());
+            graph.add_edge(2, 3, ());
+            graph.add_edge(3, 4, ());
+            graph.add_edge(4, 5, ());
+            graph.add_edge(5, 6, ());
+            graph.add_edge(6, 7, ());
+            graph.add_edge(2, 8, ());
+            graph.add_edge(8, 4, ());
+            graph.add_edge(4, 9, ());
+            graph.add_edge(9, 6, ());
+
+            let result_edges = all_intermediate_edges(&graph, 2, 6);
+            let intermediate_edges = result_edges
+                .iter()
+                .map(|(source, target, _weight)| (*source, *target))
+                .collect::<Vec<(i64, i64)>>();
+            assert_eq!(
+                intermediate_edges,
+                vec![
+                    (2, 3),
+                    (3, 4),
+                    (4, 5),
+                    (5, 6),
+                    (2, 8),
+                    (8, 4),
+                    (4, 9),
+                    (9, 6)
+                ]
+            );
+        }
+
+        #[test]
+        fn test_one_part_group_with_unrelated_edges() {
+            //
+            //        / ------- 7 \
+            //   1 -> 2 -> 3 -> 4 -> 5
+            //         \-> 6 /
+            //
+            // Because 7 has 5 as a target, it is excluded from the subgraph from 2 to 4
+            let mut graph: DiGraphMap<i64, ()> = DiGraphMap::new();
+            graph.add_node(1);
+            graph.add_node(2);
+            graph.add_node(3);
+            graph.add_node(4);
+            graph.add_node(5);
+            graph.add_node(6);
+            graph.add_node(7);
+
+            graph.add_edge(1, 2, ());
+            graph.add_edge(2, 3, ());
+            graph.add_edge(3, 4, ());
+            graph.add_edge(4, 5, ());
+            graph.add_edge(2, 6, ());
+            graph.add_edge(6, 4, ());
+            graph.add_edge(2, 7, ());
+            graph.add_edge(7, 5, ());
+
+            let result_edges = all_intermediate_edges(&graph, 2, 4);
+            let intermediate_edges = result_edges
+                .iter()
+                .map(|(source, target, _weight)| (*source, *target))
+                .collect::<Vec<(i64, i64)>>();
+            assert_eq!(intermediate_edges, vec![(2, 3), (3, 4), (2, 6), (6, 4)]);
+        }
     }
 }

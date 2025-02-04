@@ -11,6 +11,7 @@ pub mod genbank;
 pub mod gfa;
 pub mod gfa_reader;
 pub mod graph;
+pub mod graph_operators;
 pub mod imports;
 pub mod migrations;
 pub mod models;

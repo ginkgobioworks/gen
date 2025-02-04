@@ -4,6 +4,7 @@ use rusqlite;
 use rusqlite::types::Value;
 use rusqlite::{Connection, Row};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 #[derive(Clone, Debug)]
 pub struct BlockGroupEdge {
@@ -79,6 +80,49 @@ impl BlockGroupEdge {
             conn,
             "select * from block_group_edges where block_group_id = ?1;",
             rusqlite::params!(Value::from(block_group_id)),
+        );
+        let edge_ids = block_group_edges
+            .clone()
+            .into_iter()
+            .map(|block_group_edge| block_group_edge.edge_id)
+            .collect::<Vec<i64>>();
+        let chromosome_index_by_edge_id = block_group_edges
+            .clone()
+            .into_iter()
+            .map(|block_group_edge| (block_group_edge.edge_id, block_group_edge.chromosome_index))
+            .collect::<HashMap<i64, i64>>();
+        let phased_by_edge_id = block_group_edges
+            .into_iter()
+            .map(|block_group_edge| (block_group_edge.edge_id, block_group_edge.phased))
+            .collect::<HashMap<i64, i64>>();
+        let edges = Edge::bulk_load(conn, &edge_ids);
+        edges
+            .into_iter()
+            .map(|edge| AugmentedEdge {
+                edge: edge.clone(),
+                chromosome_index: *chromosome_index_by_edge_id.get(&edge.id).unwrap(),
+                phased: *phased_by_edge_id.get(&edge.id).unwrap(),
+            })
+            .collect()
+    }
+
+    pub fn specific_edges_for_block_group(
+        conn: &Connection,
+        block_group_id: i64,
+        edge_ids: &[i64],
+    ) -> Vec<AugmentedEdge> {
+        let block_group_edges = BlockGroupEdge::query(
+            conn,
+            "SELECT * FROM block_group_edges WHERE block_group_id = ?1 AND edge_id in rarray(?2);",
+            rusqlite::params!(
+                Value::from(block_group_id),
+                Rc::new(
+                    edge_ids
+                        .iter()
+                        .map(|x| Value::from(*x))
+                        .collect::<Vec<Value>>()
+                )
+            ),
         );
         let edge_ids = block_group_edges
             .clone()
