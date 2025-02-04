@@ -666,7 +666,7 @@ mod tests {
         //  -2   0 1 2 3 4 5 6 7 8 9 
         //  [        A B C]D E  
         let clipped = clip_label("ABCDE", 2, -2, 7);
-        assert_eq!(clipped, "AB.");
+        assert_eq!(clipped, "AB…");
     }
 
     #[test]
@@ -690,7 +690,7 @@ mod tests {
         // 0 1 2 3 4 5 6 7 8 9 
         //     A B[C D E F G H] 
         let clipped = clip_label("ABCDEFGH", 2, 4, 10);
-        assert_eq!(clipped, ".DEFGH");
+        assert_eq!(clipped, "…DEFGH");
     }
 
     #[test]
@@ -698,7 +698,7 @@ mod tests {
         // 0 1 2 3 4 5 6 7 8 9 
         //[    A B C D E]F G H
         let clipped = clip_label("ABCDEFGH", 2, 0, 7);
-        assert_eq!(clipped, "ABCD.");
+        assert_eq!(clipped, "ABCD…");
     }
 
     #[test]
@@ -706,7 +706,7 @@ mod tests {
         // 0 1 2 3 4 5 6 7 8 9 
         //     A B[C D E]F G H
         let clipped = clip_label("ABCDEFGH", 2, 4, 3);
-        assert_eq!(clipped, ".D.");
+        assert_eq!(clipped, "…D…");
     }
 
     #[test]
@@ -727,7 +727,6 @@ mod tests {
     fn test_inner_truncation_truncate_to_even_length() {
         let s = "hello world";
         let truncated = inner_truncation(s, 6);
-        println!("{}", truncated);
         assert_eq!(truncated, "he...d");
     }
 
@@ -883,7 +882,7 @@ mod tests {
             (1, ("IJKLMNOP".to_string(), 18, 5))]);
         assert_eq!(scaled_layout.labels, expected_labels);
 
-        let expected_lines = vec![((8.5, 5.), (17., 5.))];
+        let expected_lines = vec![((8.0, 5.5), (16.5, 5.5))];
         assert_eq!(scaled_layout.lines, expected_lines);
     }
 }
