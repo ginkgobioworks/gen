@@ -18,9 +18,9 @@ get_size () {
 }
 
 time_taken() {
-  local start_time=$(date +%s%3N)
+  local start_time=$(python -c "import time;print(round(time.time()*1000))")
   "$@" > /dev/null 2> /dev/null
-  local end_time=$(date +%s%3N)
+  local end_time=$(python -c "import time;print(round(time.time()*1000))")
   local duration=$((end_time - start_time))
   echo $duration
 }
