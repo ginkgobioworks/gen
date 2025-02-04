@@ -5,7 +5,8 @@ use crate::models::{
 };
 
 use crossterm::event::KeyEventKind;
-use itertools::Itertools; // for tuple_windows
+use itertools::Itertools; use noodles::vcf::header::record::value::map::info;
+// for tuple_windows
 use rusqlite::Connection;
 
 use core::panic;
@@ -24,12 +25,14 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{
+    init,
     backend::{Backend, CrosstermBackend},
     layout::Rect,
+    widgets::{Block, Borders, Paragraph, Wrap},
     widgets::canvas::{Canvas, Line},
-    widgets::{Block, Borders},
     Terminal,
-    style::Color,
+    style::{Style, Color},
+    text::{Span, Text},
 };
 use rust_sugiyama::{configure::Config, from_edges};
 
@@ -119,8 +122,8 @@ impl ScaledLayout {
             let layout: HashMap<u32, (u32, u32)> = layout.iter().map(|(id, (x, y))| (*id, (*x, *y))).collect();
             self.lines = self._edges.iter()
                 .map(|(source, target)| {
-                    let source_coord = layout.get(source).map(|&(x, y)| (x as f64, y as f64)).unwrap();
-                    let target_coord = layout.get(target).map(|&(x, y)| (x as f64, y as f64)).unwrap();
+                    let source_coord = layout.get(source).map(|&(x, y)| (x as f64 + 0.5, y as f64 + 0.25)).unwrap();
+                    let target_coord = layout.get(target).map(|&(x, y)| (x as f64 - 1.0, y as f64 + 0.25)).unwrap();
                     (source_coord, target_coord)
                 })
                 .collect();
@@ -152,7 +155,6 @@ impl ScaledLayout {
                 current_layer.push((*id, truncated_label, *y));
             } else {
                 // We switched to a new layer
-                info!("Processing layer: {:#?}", current_layer);
                 // Loop over the current layer and:
                 // - increment the x-coordinate by the cumulative offset so far
                 // - horizontally center the block in its layer
@@ -186,57 +188,15 @@ impl ScaledLayout {
             .map(|(source, target)| {
             let (source_label, source_x, source_y) = self.labels.get(source).unwrap();
             let (_, target_x, target_y) = self.labels.get(target).unwrap();
-            let source_x = *source_x as f64 + source_label.len() as f64 + 0.5;
-            let source_y = *source_y as f64;
-            let target_x = *target_x as f64 - 1.0;
-            let target_y = *target_y as f64;
+            let source_x = *source_x as f64 + source_label.len() as f64;
+            let source_y = *source_y as f64 + 0.5;
+            let target_x = *target_x as f64 - 1.5;
+            let target_y = *target_y as f64 + 0.5;
             ((source_x, source_y), (target_x, target_y))
             })
             .collect();
 
     }
-}
-
-
-/// Convert the x-y offset between two coordinate schemes so that the same node stays centered
-/// - This is used when zooming in and out
-
-fn convert_offset(
-    offset_x: i32,
-    offset_y: i32,
-    old_coordinates: &HashMap<u32, (i32, i32)>,
-    new_coordinates: &HashMap<u32, (i32, i32)>,
-    plot_area: Rect,
-    focus_block: Option<u32>
-) -> (i32, i32) {
-    // Calculate the center of the plot area in the old coordinate system
-    let center_x = offset_x + plot_area.width as i32 / 2;
-    let center_y = offset_y + plot_area.height as i32 / 2;
-
-    // If a focus block is not specified, find the block closest to the center of the plot area
-    let selected_block = focus_block.or_else(|| {
-        // Find the node closest to the center of the plot area
-        let mut closest_node = 0;
-        let mut closest_distance = i32::MAX;
-        for (block_id, (x, y)) in old_coordinates {
-            let distance = (x - center_x).abs() + (y - center_y).abs();
-            if distance < closest_distance {
-                closest_distance = distance;
-                closest_node = *block_id;
-            }
-        }
-        Some(closest_node)
-    });
-
-    // Change the offset so that position 1 of the selected block stays in the exact same spot
-    // in the new coordinate system
-    let selected_block = selected_block.unwrap();
-    let (old_x, old_y) = old_coordinates.get(&selected_block).unwrap();
-    let (new_x, new_y) = new_coordinates.get(&selected_block).unwrap();
-    let new_offset_x = offset_x + (old_x - new_x);
-    let new_offset_y = offset_y + (old_y - new_y);
-
-    (new_offset_x, new_offset_y)
 }
 
 /// Truncate a string to a certain length, adding an ellipsis in the middle
@@ -256,47 +216,56 @@ fn inner_truncation(s: &str, target_length: u32) -> String {
 }
 
 
-
-
-
-
 /// Draw the canvas, ensuring a 1 to 1 mapping between data units and terminal cells.
 fn draw_scrollable_canvas(frame: &mut ratatui::Frame, viewer: &Viewer) {
+    // Set up the coordinate systems for the window and the canvas
 
+    // Terminal window coordinates
     let plot_area = viewer.plot_area;
+    let block = Block::default().borders(Borders::ALL).title("graph viewer");
+    let usable_area = block.inner(plot_area);
 
-    // Ratatui block.inner method could avoid the manual accounting shown below
-
-    // The top-left corner of our view is (offset_x, offset_y).
-    let x_start = viewer.scroll.offset_x;
-    let x_end = x_start + plot_area.width as i32 - 3; // -1 because width is 1-based, -2 because of the border
-    let y_start = viewer.scroll.offset_y;
-    let y_end = y_start + plot_area.height as i32 - 3;
+    // Data coordinates (the top-left corner of our view is (offset_x, offset_y))
+    let viewport_left = viewer.scroll.offset_x;
+    let viewport_right = viewer.scroll.offset_x + usable_area.width as i32;
+    let viewport_top = viewer.scroll.offset_y;
+    let viewport_bottom = viewer.scroll.offset_y + usable_area.height as i32;
 
     // Create the canvas
     let canvas = Canvas::default()
-        .block(
-            Block::default()
-                .title("Graph Viewer (arrows=scroll, +/-=zoom, q=quit)")
-                .borders(Borders::ALL),
-        )
+        .block(block)
         // Adjust the x_bounds and y_bounds by the scroll offsets.
-        .x_bounds([x_start as f64, x_end as f64])
-        .y_bounds([y_start as f64, y_end as f64])
+        .x_bounds([viewport_left as f64, viewport_right as f64])
+        .y_bounds([viewport_top as f64, viewport_bottom as f64])
         .paint(|ctx| {
             // Draw the lines described in the processed layout
             for ((x1, y1), (x2, y2)) in &viewer.layout.lines {
-                ctx.draw(&Line {
-                    x1: { *x1 },
-                    y1: { *y1 },
-                    x2: { *x2 },
-                    y2: { *y2 },
-                    color: Color::White,
-                });
+                // Clip the line to the visible area, skip if it's not visible itself
+                if let Some(((x1c, y1c), (x2c, y2c))) = clip_line((*x1, *y1), (*x2, *y2), 
+                    (viewport_left as f64, viewport_top as f64), 
+                    (viewport_right as f64, viewport_bottom as f64)) {
+                    ctx.draw(&Line {
+                        x1: x1c,
+                        y1: y1c,
+                        x2: x2c,
+                        y2: y2c,
+                        color: Color::White,
+                    });
+                }
             }
             // Print the labels
             for (block_id, (label, x, y)) in &viewer.layout.labels {
-                ctx.print(*x as f64, *y as f64, label.clone());
+                // Skip labels that are not in the visible area (vertical)
+                // (note that the z-axis is upside down)
+                if (*y as i32) < viewport_top || (*y as i32) > viewport_bottom {
+                    continue;
+                }
+                // Clip labels that are potentially in the window (horizontal)
+                let clipped_label = clip_label(label, *x as isize, 
+                    viewport_left as isize, usable_area.width as usize);
+                if !clipped_label.is_empty() {
+                    ctx.print((*x as isize).max(viewport_left as isize) as f64, *y as f64, clipped_label.clone());
+                }
             }
 
         });
@@ -360,7 +329,7 @@ pub fn view_block_group(
         .collect::<Vec<_>>();
 
     // Run the Sugiyama layout algorithm
-    // TODO: fix/remedy core dump when there are too many blocks)
+    // (TODO: fix/remedy core dump when there are too many blocks)
     info!("Running Sugiyama layout algorithm");
     let layouts = from_edges(
         &block_pairs_u32,
@@ -386,8 +355,8 @@ pub fn view_block_group(
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+    let mut terminal = ratatui::init();
+
 
     // Initialize viewer state
     // TODO: set up the viewer with sensible defaults and add parameters later
@@ -436,15 +405,28 @@ pub fn view_block_group(
     loop {
         // Draw the UI
         terminal.draw(|frame| {
+            // Currently we have just 2 widgets: the canvas and the status bar
+            // For anything more complex we should use a Layout to split the frame area
+            let status_bar_height: u16 = 1;
+            let status_bar_area = Rect::new(frame.area().left(), 
+                                                frame.area().bottom()-status_bar_height, 
+                                                 frame.area().width, 
+                                                  status_bar_height);
+
+            // Canvas
             let viewer = &mut viewer;
-            // Here we just have a single widget, so we use the entire frame.
-            // If you have multiple widgets, use `Layout` to split the frame area.
-            viewer.plot_area = Rect::new(frame.area().left(), frame.area().top(), frame.area().width, frame.area().height);
+            viewer.plot_area = Rect::new(frame.area().left(), frame.area().top(), 
+                                frame.area().width, frame.area().height-status_bar_height); 
             draw_scrollable_canvas(frame, viewer);
-            
-            //let status_bar = Paragraph::new(Text::styled("Hello, world!", Style::default().bg(Color::DarkGray).fg(Color::White)));
-            //let status_bar_area = Rect::new(frame.area().left(), frame.area().bottom()-1, frame.area().width, 1);
-            //status_bar.render(status_bar_area, frame.buffer_mut());
+
+            // Status bar
+            let status_bar_contents = format!(
+                "{:width$}",
+                " arrows=scroll, +/-=zoom (hold shift to go faster), q=quit",
+                width = frame.area().width as usize);
+            let status_bar = Paragraph::new(Text::styled(status_bar_contents, 
+                Style::default().bg(Color::DarkGray).fg(Color::White)));
+            frame.render_widget(status_bar, status_bar_area);
         })?;
 
         // Handle input
@@ -477,11 +459,19 @@ pub fn view_block_group(
                         }
                         KeyCode::Up => {
                             // Scroll up
-                            viewer.scroll.offset_y += 1;
+                            if key.modifiers == KeyModifiers::SHIFT {
+                                viewer.scroll.offset_y += 10;
+                            } else {
+                                viewer.scroll.offset_y += 1;
+                            }
                         }
                         KeyCode::Down => {
                             // Scroll down
-                            viewer.scroll.offset_y -= 1;
+                            if key.modifiers == KeyModifiers::SHIFT {
+                                viewer.scroll.offset_y -= 10;
+                            } else {
+                                viewer.scroll.offset_y -= 1;
+                            }
                         }
                         KeyCode::Char('+') | KeyCode::Char('=') => {
                             // Increase how much of the sequence is shown in each block label: 0 vs 11 vs 100 characters.
@@ -512,8 +502,8 @@ pub fn view_block_group(
                                 viewer.plot_parameters.label_width = match viewer.plot_parameters.label_width {
                                     u32::MAX => 100,
                                     100 => 11,
-                                    11 => 0,
-                                    _ => 0,
+                                    11 => 1,
+                                    _ => 1,
                                 };
                             }
                             viewer.layout.rescale(&viewer.plot_parameters);
@@ -537,11 +527,187 @@ pub fn view_block_group(
     Ok(())
 }
 
+/// Clips a string to a specific window, indicating that it has been clipped.
+/// - If the string is empty, it returns an empty string.
+/// - If the string is shorter than the window, it returns the string.
+/// - If the string is longer than the window, it clips the string and replaces the last character with a period.
+/// - If the string is not within the window at all, it returns an empty string.
+pub fn clip_label(label: &str, label_start: isize, window_start: isize, window_width: usize) -> String {
+    if label.is_empty() {
+        return "".to_string();
+    }
+    let label_end = label_start + label.len() as isize - 1;
+    let window_end = window_start + window_width as isize - 1;
+    if label_end < window_start || label_start > window_end {
+        return "".to_string();
+    }
+ 
+    if label_start >= window_start && label_end <= window_end {
+        return label.to_string();
+    }
 
+    let mut clipped = label.to_string();
+
+    // Process the right side first so we don't lose alignment:
+    let delta_right = label_end - window_end;
+    if delta_right > 0 {
+        clipped.replace_range((label.len() as isize - delta_right - 1) as usize.., "…");
+    }
+    let delta_left = window_start - label_start;
+    if delta_left > 0 {
+        clipped.replace_range(..delta_left as usize + 1, "…");
+    }
+
+    clipped
+}
+
+/// Clip a line given as two points to a specific window, also given by two points
+/// - If the line is completely outside the window, it returns None.
+/// - If the line is completely inside the window, it returns the original line.
+/// - If the line is partially inside the window, it clips the line to the window.
+/// 
+/// This may be made more efficient through bitwise comparisons (see Cohen-Sutherland line clipping algorithm)
+pub fn clip_line(
+    (x1, y1): (f64, f64),
+    (x2, y2): (f64, f64),
+    (wx1, wy1): (f64, f64),
+    (wx2, wy2): (f64, f64),
+) -> Option<((f64, f64), (f64, f64))> {
+    let mut t0 = 0.0;
+    let mut t1 = 1.0;
+    let dx = x2 - x1;
+    let dy = y2 - y1;
+
+    let clip = |p: f64, q: f64, t0: &mut f64, t1: &mut f64| -> bool {
+        if p == 0.0 {
+            return q >= 0.0;
+        }
+        let r = q / p;
+        if p < 0.0 {
+            if r > *t1 {
+                return false;
+            }
+            if r > *t0 {
+                *t0 = r;
+            }
+        } else {
+            if r < *t0 {
+                return false;
+            }
+            if r < *t1 {
+                *t1 = r;
+            }
+        }
+        true
+    };
+
+    if clip(-dx, x1 - wx1, &mut t0, &mut t1)
+        && clip(dx, wx2 - x1, &mut t0, &mut t1)
+        && clip(-dy, y1 - wy1, &mut t0, &mut t1)
+        && clip(dy, wy2 - y1, &mut t0, &mut t1)
+    {
+        let nx1 = x1 + t0 * dx;
+        let ny1 = y1 + t0 * dy;
+        let nx2 = x1 + t1 * dx;
+        let ny2 = y1 + t1 * dy;
+        Some(((nx1, ny1), (nx2, ny2)))
+    } else {
+        None
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn test_clip_line_helper(
+        x1: f64,
+        y1: f64,
+        x2: f64,
+        y2: f64,
+        wx1: f64,
+        wy1: f64,
+        wx2: f64,
+        wy2: f64,
+        expected: Option<((f64, f64), (f64, f64))>,
+    ) {
+        let clipped = clip_line((x1, y1), (x2, y2), (wx1, wy1), (wx2, wy2));
+        assert_eq!(clipped, expected);
+    }
+
+    #[test]
+    fn test_clip_line_outside() {
+        test_clip_line_helper(0.0, 0.0,
+                              1.0, 1.0, 
+                              2.0, 2.0, 
+                              3.0, 3.0, 
+                              None);
+    }
+
+    #[test  ]
+    fn test_clip_line_inside() {
+        test_clip_line_helper(0.0, 0.0,
+                              1.0, 1.0, 
+                              -1.0, -1.0, 
+                              1.5, 1.5, 
+                              Some(((0.0, 0.0), (1.0, 1.0))));
+    }
+
+    #[test  ]
+    fn test_clip_line_partial() {
+        test_clip_line_helper(0.0, 0.0,
+                              1.0, 1.0, 
+                              0.5, 0.5, 
+                              1.5, 1.5, 
+                              Some(((0.5, 0.5), (1.0, 1.0))));
+    }
+
+    #[test]
+    fn test_clip_label_negative_offset() {
+        //  -2   0 1 2 3 4 5 6 7 8 9 
+        //  [        A B C]D E  
+        let clipped = clip_label("ABCDE", 2, -2, 7);
+        assert_eq!(clipped, "AB.");
+    }
+
+    #[test]
+    fn test_clip_label_internal() {
+        // 0 1 2 3 4 5 6 7 8 9 
+        //  [  A B C D E  ] 
+        let clipped = clip_label("ABCDE", 2, 1, 7);
+        assert_eq!(clipped, "ABCDE");
+    }
+
+    #[test]
+    fn test_clip_label_external() {
+        // 0 1 2 3 4 5 6 7 8 9 
+        //     A B  [     ] 
+        let clipped = clip_label("AB", 2, 5, 3);
+        assert_eq!(clipped, "");
+    }
+
+    #[test]
+    fn test_clip_label_left() {
+        // 0 1 2 3 4 5 6 7 8 9 
+        //     A B[C D E F G H] 
+        let clipped = clip_label("ABCDEFGH", 2, 4, 10);
+        assert_eq!(clipped, ".DEFGH");
+    }
+
+    #[test]
+    fn test_clip_label_right() {
+        // 0 1 2 3 4 5 6 7 8 9 
+        //[    A B C D E]F G H
+        let clipped = clip_label("ABCDEFGH", 2, 0, 7);
+        assert_eq!(clipped, "ABCD.");
+    }
+
+    #[test]
+    fn test_clip_label_both() {
+        // 0 1 2 3 4 5 6 7 8 9 
+        //     A B[C D E]F G H
+        let clipped = clip_label("ABCDEFGH", 2, 4, 3);
+        assert_eq!(clipped, ".D.");
+    }
 
     #[test]
     fn test_inner_truncation_no_truncation_needed() {
@@ -554,7 +720,7 @@ mod tests {
     fn test_inner_truncation_truncate_to_odd_length() {
         let s = "hello world";
         let truncated = inner_truncation(s, 5);
-        assert_eq!(truncated, "he…ld");
+        assert_eq!(truncated, "h...d");
     }
 
     #[test]
@@ -562,15 +728,7 @@ mod tests {
         let s = "hello world";
         let truncated = inner_truncation(s, 6);
         println!("{}", truncated);
-        assert_eq!(truncated, "hel…ld");
-    }
-
-    #[test]
-    #[should_panic(expected = "Length must be at least 3")]
-    fn test_inner_truncation_panic_on_length_two() {
-        let s = "hello";
-        inner_truncation(s, 2);
-    }
+        assert_eq!(truncated, "he...d");
     }
 
     #[test]
@@ -725,6 +883,7 @@ mod tests {
             (1, ("IJKLMNOP".to_string(), 18, 5))]);
         assert_eq!(scaled_layout.labels, expected_labels);
 
-        let expected_lines = vec![((8., 5.), (17., 5.))];
+        let expected_lines = vec![((8.5, 5.), (17., 5.))];
         assert_eq!(scaled_layout.lines, expected_lines);
     }
+}
