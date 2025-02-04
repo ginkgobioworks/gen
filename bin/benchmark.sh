@@ -7,13 +7,13 @@ GEN_DIR="${BASE_DIR}/.gen"
 GEN_BIN="${BASE_DIR}/target/release/gen"
 
 init_test() {
+  cd ${BASE_DIR}
   rm -rf ${GEN_DIR}
   ${GEN_BIN} init 2> /dev/null > /dev/null
 }
 
 get_size () {
-  local filesize_bytes=$(stat --printf="%s" "${GEN_DIR}/default.db")
-  local filesize_mb=$(echo "scale=4; $filesize_bytes / (1024 * 1024)" | bc)
+  local filesize_mb=$(python -c "import os;print(os.path.getsize('${GEN_DIR}/default.db') / (1024 * 1024))")
   echo $filesize_mb
 }
 
