@@ -4,12 +4,9 @@ use std::collections::{HashMap, HashSet};
 use std::u32;
 use log::info;
 use ratatui::{
-    init,
-    backend::{Backend, CrosstermBackend},
     layout::Rect,
     widgets::{Block, Borders, Paragraph, Wrap},
     widgets::canvas::{Canvas, Line},
-    Terminal,
     style::{Style, Color, Stylize, Modifier},
     text::{Span, Text},
 };

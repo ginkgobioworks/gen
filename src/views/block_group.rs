@@ -22,12 +22,8 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{
-    init,
-    backend::{Backend, CrosstermBackend},
     layout::{Rect, Constraint},
     widgets::{Block, Borders, Paragraph, Wrap, Clear},
-    widgets::canvas::{Canvas, Line},
-    Terminal,
     style::{Style, Color, Stylize},
     text::{Span, Text},
 };
@@ -369,8 +365,7 @@ pub fn view_block_group(
                             if let Some(selected_block) = viewer.scroll.selected_block {
                                 show_panel = true;
 
-                            }
-                            
+                            }     
                         }
                         _ => {}
                     }
@@ -390,7 +385,6 @@ pub fn view_block_group(
     execute!(stdout, LeaveAlternateScreen)?;
     Ok(())
 }
-
 
 
 #[cfg(test)]
