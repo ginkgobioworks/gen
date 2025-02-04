@@ -24,3 +24,13 @@ repos:
         files: Cargo\.(toml|lock)
         pass_filenames: false
         args: ["--all-features", "check"]
+  - repo: local
+    hooks:
+      - id: build-paper
+        name: Build paper
+        description: Build the paper
+        entry: paper/build.sh
+        language: script
+        pass_filenames: false
+        files: ^paper/.*\.(md|bib|svg|dot)$
+
