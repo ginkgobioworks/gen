@@ -223,13 +223,18 @@ pub fn clip_label(label: &str, label_start: isize, window_start: isize, window_w
     let mut clipped = label.to_string();
 
     // Process the right side first so we don't lose alignment:
-    let delta_right = label_end - window_end;
-    if delta_right > 0 {
-        clipped.replace_range((label.len() as isize - delta_right - 1) as usize.., "…");
+    if label_end > window_end {
+        let delta_right = label_end - window_end;
+        // Make sure we don't try to cut in the middle of a multibyte character
+        let character_cutoff = (label.chars().count() as isize - delta_right - 1) as usize;
+        let byte_cutoff = label.char_indices().nth(character_cutoff).map(|(i, _)| i).unwrap_or(label.len());
+        clipped.replace_range(byte_cutoff.., "…");
     }
-    let delta_left = window_start - label_start;
-    if delta_left > 0 {
-        clipped.replace_range(..delta_left as usize + 1, "…");
+    if window_start > window_end {
+        let delta_left = window_start - label_start;
+        let character_cutoff = delta_left as usize + 1;
+        let byte_cutoff = label.char_indices().nth(character_cutoff).map(|(i, _)| i).unwrap_or(label.len());
+        clipped.replace_range(..byte_cutoff, "…");
     }
 
     clipped
