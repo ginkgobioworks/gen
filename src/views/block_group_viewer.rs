@@ -247,10 +247,10 @@ pub fn clip_label(label: &str, label_start: isize, window_start: isize, window_w
 /// 
 /// This may be made more efficient through bitwise comparisons (see Cohen-Sutherland line clipping algorithm)
 pub fn clip_line(
-    (x1, y1): (f64, f64),
-    (x2, y2): (f64, f64),
-    (wx1, wy1): (f64, f64),
-    (wx2, wy2): (f64, f64),
+    (x1, y1): (f64, f64), // Line start
+    (x2, y2): (f64, f64), // Line end
+    (wx1, wy1): (f64, f64), // Window top left
+    (wx2, wy2): (f64, f64), // Window bottom right
 ) -> Option<((f64, f64), (f64, f64))> {
     let mut t0 = 0.0;
     let mut t1 = 1.0;

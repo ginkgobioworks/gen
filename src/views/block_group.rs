@@ -1,12 +1,15 @@
 use crate::models::{
+    block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
     edge::Edge,
     sample::Sample,
+    traits::Query
 };
+
 use crate::views::block_group_viewer::{Viewer, PlotParameters, ScrollState};
 use crate::views::block_layout::ScaledLayout;
 
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 
 use core::panic;
 use std::collections::{HashMap, HashSet};
@@ -37,26 +40,24 @@ pub fn view_block_group(
     sample_name: Option<String>,
     collection_name: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let mut edge_set = HashSet::new();
+    // Get the block group for two cases: with and without a sample
+    let block_group = if let Some(ref sample_name) = sample_name {
+        BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name = ?2 AND name = ?3", 
+                        params![collection_name, sample_name, name])
+    } else {
+        BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null AND name = ?2", params![collection_name, name])
+    };
 
-    let sample_block_groups =
-        Sample::get_block_groups(conn, collection_name, sample_name.as_deref());
-
-    let block_group = sample_block_groups.iter().find(|&bg| bg.name == name);
-
-    if block_group.is_none() {
+    if block_group.is_err() {
         panic!(
             "No block group found with name {} and sample {:?} in collection {} ",
-            name, sample_name, collection_name
+            name, sample_name.clone().unwrap_or_else(|| "null".to_string()), collection_name
         );
     }
 
     let block_group_id = block_group.unwrap().id;
 
-    let block_group_edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
-    edge_set.extend(block_group_edges);
-
-    let mut edges = edge_set.into_iter().collect::<Vec<_>>();
+    let mut edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
 
     let mut blocks = Edge::blocks_from_edges(conn, &edges);
 
@@ -68,11 +69,6 @@ pub fn view_block_group(
     blocks.sort_by(|a, b| a.node_id.cmp(&b.node_id));
     let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
     edges.extend(boundary_edges.clone());
-
-    //println!("edges: {:#?}", &edges[0..3]);
-    //println!();
-    //println!("blocks: {:#?}", &blocks[0..3]);
-    //println!();
 
     // TODO: somehow there are edges missing (particularly from the start node))
 
