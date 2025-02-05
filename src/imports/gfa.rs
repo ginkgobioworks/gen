@@ -53,6 +53,7 @@ pub fn import_gfa<'a>(
             .sequence_type("DNA")
             .sequence(input_sequence)
             .save(conn);
+        sequences_by_segment_id.insert(&segment.id, sequence.clone());
         let node_id = Node::create(conn, &sequence.hash, None);
         node_ids_by_segment_id.insert(&segment.id, node_id);
         bar.inc(1);
