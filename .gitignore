@@ -16,7 +16,9 @@ target/
 
 # Python notebooks and environment used to generate unit tests
 fixtures/*.ipynb
+**/.ipynb_checkpoints/
 .venv/
+
 
 # Mac droppings
 .DS_Store
@@ -24,4 +26,6 @@ fixtures/*.ipynb
 # Gen tracking dir
 .gen/
 
-**/.ipynb_checkpoints/
+# IDE
+.vscode/*
+flamegraph.svg

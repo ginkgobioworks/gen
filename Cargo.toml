@@ -39,6 +39,12 @@ gb-io = "0.7.1"
 thiserror = "1.0.69"
 indicatif = "0.17.9"
 html-escape = "0.2.13"
+rust-sugiyama = {git = "https://github.com/paddison/rust-sugiyama", rev = "4d15b35124adac1de3a3b2cc42af8d68290935f2" }
+ratatui = "0.29.0"
+color-eyre = "0.6.3"
+crossterm = "0.28.1"
+log = "0.4.25"
+env_logger = "0.11.6"
 
 [dev-dependencies]
 cargo-llvm-cov = "0.6.14"
