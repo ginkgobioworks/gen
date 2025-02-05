@@ -60,7 +60,7 @@ pub fn import_library<'a>(
             conn,
             &seq.hash,
             calculate_hash(&format!(
-                "{region_name}:{ref_start}-{ref_end}->{sequence_hash}",
+                "{region_name}:{name}:{ref_start}-{ref_end}->{sequence_hash}",
                 ref_start = 0,
                 ref_end = seq.length,
                 sequence_hash = seq.hash
