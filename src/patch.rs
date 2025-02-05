@@ -3,8 +3,7 @@ use crate::models::operations::{FileAddition, Operation, OperationInfo, Operatio
 use crate::models::traits::Query;
 use crate::operation_management;
 use crate::operation_management::{
-    apply_changeset, end_operation, load_changeset, load_changeset_dependencies, start_operation,
-    OperationError,
+    apply_changeset, end_operation, start_operation, OperationError,
 };
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -82,10 +81,10 @@ where
 pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[OperationPatch]) {
     for patch in patches.iter() {
         let op_info = &patch.operation;
-        let changeset = load_changeset(op_info);
+        let changeset = &patch.changeset;
         let input: &mut dyn Read = &mut changeset.as_slice();
         let mut iter = ChangesetIter::start_strm(&input).unwrap();
-        let dependencies = load_changeset_dependencies(op_info);
+        let dependencies = serde_json::from_slice(&patch.dependencies).unwrap();
         let mut session = start_operation(conn);
         apply_changeset(conn, &mut iter, &dependencies);
         match end_operation(
