@@ -2,7 +2,6 @@ use crate::models::{
     block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
     edge::Edge,
-    sample::Sample,
     traits::Query
 };
 
@@ -12,7 +11,7 @@ use crate::views::block_layout::ScaledLayout;
 use rusqlite::{params, Connection};
 
 use core::panic;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::error::Error;
 use std::time::{Duration, Instant};
 use std::u32;
