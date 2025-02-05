@@ -3683,7 +3683,7 @@ dependencies = [
 [[package]]
 name = "rust-sugiyama"
 version = "0.3.0"
-source = "git+https://github.com/paddison/rust-sugiyama?branch=main#4d15b35124adac1de3a3b2cc42af8d68290935f2"
+source = "git+https://github.com/paddison/rust-sugiyama?rev=4d15b35124adac1de3a3b2cc42af8d68290935f2#4d15b35124adac1de3a3b2cc42af8d68290935f2"
 dependencies = [
  "log",
  "petgraph",

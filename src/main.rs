@@ -497,7 +497,7 @@ fn main() {
                 .clone()
                 .unwrap_or_else(|| get_default_collection(&operation_conn));
 
-            view_block_group(&conn, &*graph, sample.clone(), &*collection_name);
+            view_block_group(&conn, graph, sample.clone(), collection_name);
             conn.execute("END TRANSACTION", []).unwrap();
         }
         Some(Commands::Update {
