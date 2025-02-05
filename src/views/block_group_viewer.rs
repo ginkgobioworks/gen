@@ -210,7 +210,8 @@ pub fn clip_label(label: &str, label_start: isize, window_start: isize, window_w
     if label.is_empty() {
         return "".to_string();
     }
-    let label_end = label_start + label.len() as isize - 1;
+
+    let label_end = label_start + label.chars().count() as isize - 1;
     let window_end = window_start + window_width as isize - 1;
     if label_end < window_start || label_start > window_end {
         return "".to_string();
@@ -293,6 +294,8 @@ pub fn clip_line(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+
     fn test_clip_line_helper(
         x1: f64,
         y1: f64,
@@ -333,6 +336,13 @@ mod tests {
                               0.5, 0.5, 
                               1.5, 1.5, 
                               Some(((0.5, 0.5), (1.0, 1.0))));
+    }
+
+    #[test]
+    fn test_clip_label_multibyte_character() {
+        // str.len() counts bytes, not characters (this is a bug in the original implementation)
+        let clipped = clip_label("●", 160, -6, 168);
+        assert_eq!(clipped, "●");
     }
 
     #[test]
