@@ -24,8 +24,8 @@ use crossterm::{
 use ratatui::{
     layout::{Rect, Constraint},
     widgets::{Block, Borders, Paragraph, Wrap, Clear},
-    style::{Style, Color, Stylize},
-    text::{Span, Text},
+    style::{Style, Color},
+    text::Text,
 };
 use rust_sugiyama::{configure::Config, from_edges};
 
@@ -77,7 +77,7 @@ pub fn view_block_group(
     // TODO: somehow there are edges missing (particularly from the start node))
 
     // Build a block graph
-    let (block_graph, block_pairs) = Edge::build_graph(&edges, &blocks);
+    let (_block_graph, block_pairs) = Edge::build_graph(&edges, &blocks);
 
     //println!("block_graph: {:#?}", &block_graph);
 
@@ -360,12 +360,9 @@ pub fn view_block_group(
                             }
                         }    
                         KeyCode::Enter => {
-                            // Show information on the selected block
-                            //viewer.show_block_info();
-                            if let Some(selected_block) = viewer.scroll.selected_block {
-                                show_panel = true;
+                            // Show information on the selected block, if there is one
+                            show_panel = viewer.scroll.selected_block != None
 
-                            }     
                         }
                         _ => {}
                     }
@@ -389,6 +386,6 @@ pub fn view_block_group(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    //use super::*;
  
 }

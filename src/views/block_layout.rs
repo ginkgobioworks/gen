@@ -1,8 +1,7 @@
-use crate::views::block_group_viewer::{Viewer, PlotParameters, ScrollState};
+use crate::views::block_group_viewer::PlotParameters;
 use itertools::Itertools; 
 use std::collections::HashMap;
 use std::u32;
-use log::info;
 
 /// Holds processed and scaled layout data.
 /// - `lines` = pairs of coordinates for each edge.
@@ -204,8 +203,6 @@ mod tests{
             aspect_ratio: 1.0
         };
         let scaled_layout = ScaledLayout::new(raw_layout, edges, &parameters, None);
-        info!("scaled_layout: {:#?}", scaled_layout.labels);
-
 
         // This should only round and transpose the coordinates
         let expected_labels = HashMap::from([
@@ -235,7 +232,6 @@ mod tests{
             aspect_ratio: 1.0
         };
         let scaled_layout = ScaledLayout::new(raw_layout, edges, &parameters, None);
-        info!("scaled_layout: {:#?}", scaled_layout.labels);
 
         let expected_labels = HashMap::from([
             (0, ("●".to_string(), 0, 100)),
@@ -268,7 +264,6 @@ mod tests{
             aspect_ratio: 1.0
         };
         let scaled_layout = ScaledLayout::new(raw_layout, edges, &parameters, Some(full_labels));
-        info!("scaled_layout: {:#?}", scaled_layout.labels);
 
         let expected_labels = HashMap::from([
             (0, ("ABCDEFGH".to_string(), 0, 10)),
@@ -298,7 +293,6 @@ mod tests{
             aspect_ratio: 1.0
         };
         let scaled_layout = ScaledLayout::new(raw_layout, edges, &parameters, Some(full_labels));
-        info!("scaled_layout: {:#?}", scaled_layout.labels);
 
         let expected_labels = HashMap::from([
             (0, ("A...H".to_string(), 0, 10)),

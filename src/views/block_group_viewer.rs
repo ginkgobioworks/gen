@@ -1,14 +1,13 @@
 use crate::views::block_layout::ScaledLayout;
 use core::panic;
-use std::collections::{HashMap, HashSet};
 use std::u32;
 use log::info;
 use ratatui::{
     layout::Rect,
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders},
     widgets::canvas::{Canvas, Line},
     style::{Style, Color, Stylize, Modifier},
-    text::{Span, Text},
+    text::Span,
 };
 
 
