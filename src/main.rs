@@ -26,7 +26,7 @@ use gen::updates::genbank::update_with_genbank;
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::{update_with_vcf, VcfError};
 use gen::views::block_group::view_block_group;
-use gen::views::patch::view_patches; // Commented out as it does not exist
+use gen::views::patch::view_patches;
 
 use itertools::Itertools;
 use noodles::core::Region;
@@ -138,16 +138,16 @@ enum Commands {
         #[arg(long, action, alias = "cm")]
         create_missing: bool,
     },
-    /// Show a visual representation of a graph
+    /// Show a visual representation of a graph in the terminal
     #[command(arg_required_else_help(true))]
     View {
         /// The name of the graph to view
         #[clap(index = 1)]
         graph: String,
-        /// The name of the sample to view
+        /// View the graph for a specific sample
         #[arg(short, long)]
         sample: Option<String>,
-        /// The name of the collection to view
+        /// Restrict the view to a specific collection
         #[arg(short, long)]
         collection: Option<String>,
     },

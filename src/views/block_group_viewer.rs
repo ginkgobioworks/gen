@@ -230,7 +230,7 @@ pub fn clip_label(label: &str, label_start: isize, window_start: isize, window_w
         let byte_cutoff = label.char_indices().nth(character_cutoff).map(|(i, _)| i).unwrap_or(label.len());
         clipped.replace_range(byte_cutoff.., "…");
     }
-    if window_start > window_end {
+    if window_start > label_start {
         let delta_left = window_start - label_start;
         let character_cutoff = delta_left as usize + 1;
         let byte_cutoff = label.char_indices().nth(character_cutoff).map(|(i, _)| i).unwrap_or(label.len());
