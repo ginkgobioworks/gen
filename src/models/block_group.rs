@@ -853,6 +853,8 @@ impl BlockGroup {
                     edge_id: edge.edge.id,
                     chromosome_index: block_group_edge.chromosome_index,
                     phased: block_group_edge.phased,
+                    source_phase_layer_id: block_group_edge.source_phase_layer_id,
+                    target_phase_layer_id: block_group_edge.target_phase_layer_id,
                 }
             })
             .collect::<Vec<_>>();
@@ -871,6 +873,8 @@ impl BlockGroup {
             edge_id: new_start_edge.id,
             chromosome_index: 0,
             phased: 0,
+            source_phase_layer_id: UNPHASED_CHROMOSOME_INDEX,
+            target_phase_layer_id: start_block.phase_layer_id,
         };
         let new_end_edge = Edge::create(
             conn,
@@ -886,6 +890,8 @@ impl BlockGroup {
             edge_id: new_end_edge.id,
             chromosome_index: 0,
             phased: 0,
+            source_phase_layer_id: end_block.phase_layer_id,
+            target_phase_layer_id: UNPHASED_CHROMOSOME_INDEX,
         };
         let mut all_edges = subgraph_edge_inputs.clone();
         all_edges.push(new_start_edge_data);
@@ -2421,12 +2427,20 @@ mod tests {
                     edge_id: *edge_id,
                     chromosome_index: 0,
                     phased: 0,
+                    source_phase_layer_id: 0,
+                    target_phase_layer_id: 0,
                 })
                 .collect::<Vec<BlockGroupEdgeData>>();
-            BlockGroupEdge::bulk_create(conn, &block_group_edges);
+            let block_group_edge_ids = BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
-            let insert_path =
-                original_path.new_path_with(conn, 16, 24, &edge_into_insert, &edge_out_of_insert);
+            let insert_path = original_path.new_path_with(
+                conn,
+                16,
+                24,
+                block_group_edge_ids[0],
+                block_group_edge_ids[1],
+                insert_node_id,
+            );
             assert_eq!(
                 insert_path.sequence(conn),
                 "AAAAAAAAAATTTTTTAAAAAAAACCCCCCGGGGGGGGGG"
@@ -2515,12 +2529,20 @@ mod tests {
                     edge_id: *edge_id,
                     chromosome_index: 0,
                     phased: 0,
+                    source_phase_layer_id: 0,
+                    target_phase_layer_id: 0,
                 })
                 .collect::<Vec<BlockGroupEdgeData>>();
-            BlockGroupEdge::bulk_create(conn, &block_group_edges);
+            let block_group_edge_ids = BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
-            let insert_path =
-                original_path.new_path_with(conn, 16, 24, &edge_into_insert, &edge_out_of_insert);
+            let insert_path = original_path.new_path_with(
+                conn,
+                16,
+                24,
+                block_group_edge_ids[0],
+                block_group_edge_ids[1],
+                insert_node_id,
+            );
             assert_eq!(
                 insert_path.sequence(conn),
                 "AAAAAAAAAATTTTTTAAAAAAAACCCCCCGGGGGGGGGG"
@@ -2561,12 +2583,20 @@ mod tests {
                     edge_id: *edge_id,
                     chromosome_index: 0,
                     phased: 0,
+                    source_phase_layer_id: 0,
+                    target_phase_layer_id: 0,
                 })
                 .collect::<Vec<BlockGroupEdgeData>>();
-            BlockGroupEdge::bulk_create(conn, &block_group_edges);
+            let block_group_edge_ids = BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
-            let insert2_path =
-                insert_path.new_path_with(conn, 28, 32, &edge_into_insert2, &edge_out_of_insert2);
+            let insert2_path = insert_path.new_path_with(
+                conn,
+                28,
+                32,
+                block_group_edge_ids[0],
+                block_group_edge_ids[1],
+                insert2_node_id,
+            );
             assert_eq!(
                 insert2_path.sequence(conn),
                 "AAAAAAAAAATTTTTTAAAAAAAACCTTTTTTTTGGGGGG"
@@ -2665,12 +2695,20 @@ mod tests {
                     edge_id: *edge_id,
                     chromosome_index: 0,
                     phased: 0,
+                    source_phase_layer_id: 0,
+                    target_phase_layer_id: 0,
                 })
                 .collect::<Vec<BlockGroupEdgeData>>();
-            BlockGroupEdge::bulk_create(conn, &block_group_edges);
+            let block_group_edge_ids = BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
-            let insert_path =
-                original_path.new_path_with(conn, 16, 24, &edge_into_insert, &edge_out_of_insert);
+            let insert_path = original_path.new_path_with(
+                conn,
+                16,
+                24,
+                block_group_edge_ids[0],
+                block_group_edge_ids[1],
+                insert_node_id,
+            );
             assert_eq!(
                 insert_path.sequence(conn),
                 "AAAAAAAAAATTTTTTAAAAAAAACCCCCCGGGGGGGGGG"
@@ -2711,12 +2749,20 @@ mod tests {
                     edge_id: *edge_id,
                     chromosome_index: 0,
                     phased: 0,
+                    source_phase_layer_id: 0,
+                    target_phase_layer_id: 0,
                 })
                 .collect::<Vec<BlockGroupEdgeData>>();
-            BlockGroupEdge::bulk_create(conn, &block_group_edges);
+            let block_group_edge_ids = BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
-            let insert2_path =
-                insert_path.new_path_with(conn, 28, 32, &edge_into_insert2, &edge_out_of_insert2);
+            let insert2_path = insert_path.new_path_with(
+                conn,
+                28,
+                32,
+                block_group_edge_ids[0],
+                block_group_edge_ids[1],
+                insert2_node_id,
+            );
             assert_eq!(
                 insert2_path.sequence(conn),
                 "AAAAAAAAAATTTTTTAAAAAAAACCTTTTTTTTGGGGGG"
@@ -2737,6 +2783,8 @@ mod tests {
                 edge_id: deletion_edge.id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             };
             BlockGroupEdge::bulk_create(conn, &[block_group_edge]);
 

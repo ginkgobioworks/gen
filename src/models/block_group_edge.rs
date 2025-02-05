@@ -272,7 +272,7 @@ impl BlockGroupEdge {
         conn: &Connection,
         block_group_id: i64,
         edge_ids: &[i64],
-    ) -> Vec<AugmentedEdge> {
+    ) -> Vec<NewAugmentedEdge> {
         let block_group_edges = BlockGroupEdge::query(
             conn,
             "SELECT * FROM block_group_edges WHERE block_group_id = ?1 AND edge_id in rarray(?2);",
@@ -291,22 +291,51 @@ impl BlockGroupEdge {
             .into_iter()
             .map(|block_group_edge| block_group_edge.edge_id)
             .collect::<Vec<i64>>();
+        let block_group_edge_ids = block_group_edges
+            .clone()
+            .into_iter()
+            .map(|block_group_edge| block_group_edge.id)
+            .collect::<Vec<i64>>();
         let chromosome_index_by_edge_id = block_group_edges
             .clone()
             .into_iter()
             .map(|block_group_edge| (block_group_edge.edge_id, block_group_edge.chromosome_index))
             .collect::<HashMap<i64, i64>>();
         let phased_by_edge_id = block_group_edges
+            .clone()
             .into_iter()
             .map(|block_group_edge| (block_group_edge.edge_id, block_group_edge.phased))
+            .collect::<HashMap<i64, i64>>();
+        let source_phase_layer_id_by_edge_id = block_group_edges
+            .clone()
+            .into_iter()
+            .map(|block_group_edge| {
+                (
+                    block_group_edge.edge_id,
+                    block_group_edge.source_phase_layer_id,
+                )
+            })
+            .collect::<HashMap<i64, i64>>();
+        let target_phase_layer_id_by_edge_id = block_group_edges
+            .into_iter()
+            .map(|block_group_edge| {
+                (
+                    block_group_edge.edge_id,
+                    block_group_edge.target_phase_layer_id,
+                )
+            })
             .collect::<HashMap<i64, i64>>();
         let edges = Edge::bulk_load(conn, &edge_ids);
         edges
             .into_iter()
-            .map(|edge| AugmentedEdge {
+            .enumerate()
+            .map(|(i, edge)| NewAugmentedEdge {
                 edge: edge.clone(),
+                block_group_edge_id: block_group_edge_ids[i],
                 chromosome_index: *chromosome_index_by_edge_id.get(&edge.id).unwrap(),
                 phased: *phased_by_edge_id.get(&edge.id).unwrap(),
+                source_phase_layer_id: *source_phase_layer_id_by_edge_id.get(&edge.id).unwrap(),
+                target_phase_layer_id: *target_phase_layer_id_by_edge_id.get(&edge.id).unwrap(),
             })
             .collect()
     }

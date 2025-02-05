@@ -1238,7 +1238,7 @@ mod tests {
             Strand::Forward,
         );
 
-        let edge_ids = vec![edge1.id, edge2.id, edge3.id, edge4.id, edge5.id];
+        let edge_ids = [edge1.id, edge2.id, edge3.id, edge4.id, edge5.id];
         let block_group_edges = edge_ids
             .iter()
             .map(|edge_id| BlockGroupEdgeData {
@@ -1246,11 +1246,13 @@ mod tests {
                 edge_id: *edge_id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
-        let path = Path::create(conn, "chr1", block_group.id, &edge_ids);
+        let path = Path::create(conn, "chr1", block_group.id, &block_group_edge_ids);
         let tree = path.intervaltree(conn);
         let blocks1: Vec<NodeIntervalBlock> = tree.query_point(2).map(|x| x.value).collect();
         assert_eq!(blocks1.len(), 1);

@@ -9,6 +9,7 @@ use crate::models::{
     file_types::FileTypes,
     node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
     path::Path,
+    phase_layer::UNPHASED_CHROMOSOME_INDEX,
     sample::Sample,
     sequence::Sequence,
     strand::Strand,
@@ -365,6 +366,8 @@ fn create_new_path_from_existing(
             edge_id: *edge_id,
             chromosome_index: 0,
             phased: 0,
+            source_phase_layer_id: UNPHASED_CHROMOSOME_INDEX,
+            target_phase_layer_id: UNPHASED_CHROMOSOME_INDEX,
         })
         .collect::<Vec<BlockGroupEdgeData>>();
     BlockGroupEdge::bulk_create(conn, &block_group_edges);
