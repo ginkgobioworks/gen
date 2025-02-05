@@ -13,6 +13,7 @@ use gen::graph_operators::derive_subgraph;
 use gen::imports::fasta::{import_fasta, FastaError};
 use gen::imports::genbank::import_genbank;
 use gen::imports::gfa::import_gfa;
+use gen::imports::library::import_library;
 use gen::models::block_group::BlockGroup;
 use gen::models::file_types::FileTypes;
 use gen::models::metadata;
@@ -87,6 +88,15 @@ enum Commands {
         /// Don't store the sequence in the database, instead store the filename
         #[arg(long, action)]
         shallow: bool,
+        /// The name of the region if importing a library
+        #[arg(long)]
+        region_name: Option<String>,
+        /// The path to the combinatorial library parts
+        #[arg(long)]
+        parts: Option<String>,
+        /// The path to the combinatorial library csv
+        #[arg(long)]
+        library: Option<String>,
     },
     /// Update a sequence collection with new data
     #[command(arg_required_else_help(true))]
@@ -433,6 +443,9 @@ fn main() {
             name,
             shallow,
             sample,
+            region_name,
+            parts,
+            library,
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
@@ -480,6 +493,17 @@ fn main() {
                     },
                 );
                 println!("Genbank imported.");
+            } else if region_name.is_some() && parts.is_some() && library.is_some() {
+                import_library(
+                    &conn,
+                    &operation_conn,
+                    name,
+                    sample.as_deref(),
+                    parts.as_deref().unwrap(),
+                    library.as_deref().unwrap(),
+                    region_name.as_deref().unwrap(),
+                )
+                .unwrap();
             } else {
                 conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
                 operation_conn.execute("ROLLBACK TRANSACTION;", []).unwrap();

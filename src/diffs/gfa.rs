@@ -226,7 +226,7 @@ fn links_from_blocks(node_blocks: &[NodeIntervalBlock]) -> Vec<Link> {
 }
 
 fn path_from_segments(sample_name: Option<&str>, path: &Path, segments: &[Segment]) -> GFAPath {
-    let path_name = if sample_name.unwrap_or("") != "" {
+    let path_name = if !sample_name.unwrap_or("").is_empty() {
         format!("{}.{}", sample_name.unwrap(), path.name)
     } else {
         path.name.clone()
