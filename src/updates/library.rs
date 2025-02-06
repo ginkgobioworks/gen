@@ -215,7 +215,7 @@ pub fn update_with_library(
         .map(|edge_id| BlockGroupEdgeData {
             block_group_id: path.block_group_id,
             edge_id: *edge_id,
-            chromosome_index: 0,
+            chromosome_index: *edge_id, // TODO: This is a hack, clean it up with phase layers
             phased: 0,
         })
         .collect::<Vec<_>>();

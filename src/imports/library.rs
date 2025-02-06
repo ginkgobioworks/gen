@@ -45,8 +45,8 @@ pub fn import_library<'a>(
 
     let mut parts_reader = fasta::io::reader::Builder.build_from_path(parts_file_path)?;
 
-    let mut node_ids_by_name = HashMap::new();
-    let mut sequence_lengths_by_node_id = HashMap::new();
+    let mut sequence_hashes_by_name = HashMap::new();
+    let mut sequence_lengths_by_hash = HashMap::new();
     for result in parts_reader.records() {
         let record = result?;
         let sequence = str::from_utf8(record.sequence().as_ref())
@@ -57,19 +57,9 @@ pub fn import_library<'a>(
             .sequence_type("DNA")
             .sequence(&sequence)
             .save(conn);
-        let node_id = Node::create(
-            conn,
-            &seq.hash,
-            calculate_hash(&format!(
-                "{region_name}:{name}:{ref_start}-{ref_end}->{sequence_hash}",
-                ref_start = 0,
-                ref_end = seq.length,
-                sequence_hash = seq.hash
-            )),
-        );
 
-        node_ids_by_name.insert(name, node_id);
-        sequence_lengths_by_node_id.insert(node_id, seq.length);
+        sequence_hashes_by_name.insert(name, seq.hash.clone());
+        sequence_lengths_by_hash.insert(seq.hash, seq.length);
     }
 
     let library_file = File::open(library_file_path)?;
@@ -80,12 +70,29 @@ pub fn import_library<'a>(
         .has_headers(false)
         .from_reader(library_reader);
     let mut max_index = 0;
+    let mut sequence_lengths_by_node_id = HashMap::new();
     for result in library_csv_reader.records() {
         let record = result?;
         for (index, part) in record.iter().enumerate() {
             if !part.is_empty() {
-                let part_id = node_ids_by_name.get(part).unwrap();
-                parts_by_index.entry(index).or_insert(vec![]).push(part_id);
+                let part_hash = sequence_hashes_by_name.get(part).unwrap();
+                let seq_length = sequence_lengths_by_hash.get(part_hash).unwrap();
+                let part_node_id = Node::create(
+                    conn,
+                    part_hash,
+                    calculate_hash(&format!(
+			"{region_name}:{part}:{ref_start}-{ref_end}->{sequence_hash}-column-{index}",
+			ref_start = 0,
+			ref_end = seq_length,
+			sequence_hash = part_hash
+		    )),
+                );
+                sequence_lengths_by_node_id.insert(part_node_id, *seq_length);
+
+                parts_by_index
+                    .entry(index)
+                    .or_insert(vec![])
+                    .push(part_node_id);
                 if index >= max_index {
                     max_index = index + 1;
                 }
@@ -105,7 +112,7 @@ pub fn import_library<'a>(
             source_node_id: PATH_START_NODE_ID,
             source_coordinate: 0,
             source_strand: Strand::Forward,
-            target_node_id: **start_part,
+            target_node_id: *start_part,
             target_coordinate: 0,
             target_strand: Strand::Forward,
         };
@@ -116,7 +123,7 @@ pub fn import_library<'a>(
     for end_part in *end_parts {
         let end_part_source_coordinate = sequence_lengths_by_node_id.get(end_part).unwrap();
         let edge = EdgeData {
-            source_node_id: **end_part,
+            source_node_id: *end_part,
             source_coordinate: *end_part_source_coordinate,
             source_strand: Strand::Forward,
             target_node_id: PATH_END_NODE_ID,
@@ -133,10 +140,10 @@ pub fn import_library<'a>(
             for part2 in *parts2 {
                 let part1_source_coordinate = sequence_lengths_by_node_id.get(part1).unwrap();
                 let edge = EdgeData {
-                    source_node_id: **part1,
+                    source_node_id: *part1,
                     source_coordinate: *part1_source_coordinate,
                     source_strand: Strand::Forward,
-                    target_node_id: **part2,
+                    target_node_id: *part2,
                     target_coordinate: 0,
                     target_strand: Strand::Forward,
                 };
@@ -163,7 +170,7 @@ pub fn import_library<'a>(
     let mut path_node_ids = vec![];
     path_node_ids.push(PATH_START_NODE_ID);
     for parts in &parts_list {
-        path_node_ids.push(*parts[0]);
+        path_node_ids.push(parts[0]);
     }
     path_node_ids.push(PATH_END_NODE_ID);
 
@@ -272,6 +279,89 @@ mod tests {
         assert_eq!(
             current_path.sequence(conn),
             "TCTAGAGAAAGAGGGGACAAACTAGATGCGTAAAGGAGAAGAACTTTAA"
+        );
+    }
+
+    #[test]
+    fn one_column_of_parts() {
+        setup_gen_dir();
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let collection = "test";
+
+        let mut parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        parts_path.push("fixtures/parts.fa");
+        let mut library_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        library_path.push("fixtures/single_column_design.csv");
+
+        let _ = import_library(
+            conn,
+            op_conn,
+            collection,
+            None,
+            parts_path.to_str().unwrap(),
+            library_path.to_str().unwrap(),
+            "m123",
+        );
+
+        let block_groups = Sample::get_block_groups(conn, collection, None);
+        let block_group = &block_groups[0];
+
+        let all_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "AAAA".to_string(),
+                "TAAT".to_string(),
+                "CAAC".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn two_columns_of_same_parts() {
+        setup_gen_dir();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let collection = "test";
+
+        let mut parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        parts_path.push("fixtures/parts.fa");
+        let mut library_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        library_path.push("fixtures/design_reusing_parts.csv");
+
+        let _ = import_library(
+            conn,
+            op_conn,
+            collection,
+            None,
+            parts_path.to_str().unwrap(),
+            library_path.to_str().unwrap(),
+            "m123",
+        );
+
+        let block_groups = Sample::get_block_groups(conn, collection, None);
+        let block_group = &block_groups[0];
+
+        let mut expected_sequences = vec![];
+        for part1 in ["AAAA", "TAAT", "CAAC"].iter() {
+            for part2 in ["AAAA", "TAAT", "CAAC"].iter() {
+                expected_sequences.push(part1.to_string() + part2);
+            }
+        }
+        let all_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
+        assert_eq!(
+            all_sequences,
+            expected_sequences
+                .into_iter()
+                .map(|x| x.to_string())
+                .collect()
         );
     }
 }
