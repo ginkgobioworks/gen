@@ -12,7 +12,7 @@ use crate::models::operations::{
 };
 use crate::models::path::Path;
 use crate::models::sample::Sample;
-use crate::models::sequence::Sequence;
+use crate::models::sequence::{NewSequence, Sequence};
 use crate::models::strand::Strand;
 use crate::models::traits::*;
 use fallible_streaming_iterator::FallibleStreamingIterator;
@@ -409,6 +409,9 @@ pub fn apply_changeset(
     changeset: &mut ChangesetIter,
     dependencies: &DependencyModels,
 ) {
+    for sequence in dependencies.sequences.iter() {
+        NewSequence::from(sequence).save(conn);
+    }
     for node in dependencies.nodes.iter() {
         if !Node::is_terminal(node.id) {
             assert!(Sequence::sequence_from_hash(conn, &node.sequence_hash).is_some());
