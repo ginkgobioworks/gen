@@ -12,6 +12,7 @@ use crate::models::strand::Strand;
 use crate::models::traits::Query;
 use crate::operation_management::{end_operation, start_operation};
 use gb_io::reader;
+use itertools::Itertools;
 use rusqlite::{params, types::Value, Connection};
 use std::io::Read;
 use std::str;
@@ -22,7 +23,7 @@ pub fn update_with_genbank<'a, R>(
     data: R,
     collection: impl Into<Option<&'a str>>,
     create_missing: bool,
-    operation_info: OperationInfo,
+    operation_info: &OperationInfo,
 ) -> Result<Operation, GenBankError>
 where
     R: Read,
@@ -185,13 +186,19 @@ where
             Err(e) => return Err(GenBankError::ParseError(format!("Failed to parse {}", e))),
         }
     }
-    let filename = operation_info.file_path.clone();
     end_operation(
         conn,
         op_conn,
         &mut session,
         operation_info,
-        &format!("Update with GenBank {filename}",),
+        &format!(
+            "Update with GenBank {files}.",
+            files = operation_info
+                .files
+                .iter()
+                .map(|f| f.file_path.clone())
+                .join(",")
+        ),
         None,
     )
     .map_err(GenBankError::OperationError)
@@ -202,7 +209,7 @@ mod tests {
     use super::*;
     use crate::models::file_types::FileTypes;
     use crate::models::metadata;
-    use crate::models::operations::setup_db;
+    use crate::models::operations::{setup_db, OperationFile};
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use noodles::fasta;
     use std::collections::HashSet;
@@ -234,9 +241,11 @@ mod tests {
                 BufReader::new("this is not valid".as_bytes()),
                 None,
                 false,
-                OperationInfo {
-                    file_path: "".to_string(),
-                    file_type: FileTypes::GenBank,
+                &OperationInfo {
+                    files: vec![OperationFile {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                    }],
                     description: "test".to_string(),
                 }
             ),
@@ -263,9 +272,11 @@ mod tests {
             BufReader::new(file),
             None,
             true,
-            OperationInfo {
-                file_path: path.to_str().unwrap().to_string(),
-                file_type: FileTypes::GenBank,
+            &OperationInfo {
+                files: vec![OperationFile {
+                    file_path: path.to_str().unwrap().to_string(),
+                    file_type: FileTypes::GenBank,
+                }],
                 description: "test".to_string(),
             },
         )
@@ -280,6 +291,7 @@ mod tests {
     mod geneious_genbanks {
         use super::*;
         use crate::imports::genbank::import_genbank;
+        use crate::models::operations::OperationFile;
 
         #[test]
         fn test_incorporates_updates() {
@@ -300,8 +312,10 @@ mod tests {
                 None,
                 None,
                 OperationInfo {
-                    file_path: "".to_string(),
-                    file_type: FileTypes::GenBank,
+                    files: vec![OperationFile {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                    }],
                     description: "test".to_string(),
                 },
             );
@@ -315,9 +329,11 @@ mod tests {
                 BufReader::new(file),
                 None,
                 true,
-                OperationInfo {
-                    file_path: "".to_string(),
-                    file_type: FileTypes::GenBank,
+                &OperationInfo {
+                    files: vec![OperationFile {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                    }],
                     description: "test".to_string(),
                 },
             );
@@ -352,8 +368,10 @@ mod tests {
                 None,
                 None,
                 OperationInfo {
-                    file_path: "".to_string(),
-                    file_type: FileTypes::GenBank,
+                    files: vec![OperationFile {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                    }],
                     description: "test".to_string(),
                 },
             );
@@ -367,9 +385,11 @@ mod tests {
                 BufReader::new(file),
                 None,
                 true,
-                OperationInfo {
-                    file_path: "".to_string(),
-                    file_type: FileTypes::GenBank,
+                &OperationInfo {
+                    files: vec![OperationFile {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                    }],
                     description: "test".to_string(),
                 },
             );
@@ -414,8 +434,10 @@ mod tests {
                 None,
                 None,
                 OperationInfo {
-                    file_path: "".to_string(),
-                    file_type: FileTypes::GenBank,
+                    files: vec![OperationFile {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                    }],
                     description: "test".to_string(),
                 },
             );
@@ -429,9 +451,11 @@ mod tests {
                 BufReader::new(file),
                 None,
                 false,
-                OperationInfo {
-                    file_path: "".to_string(),
-                    file_type: FileTypes::GenBank,
+                &OperationInfo {
+                    files: vec![OperationFile {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                    }],
                     description: "test".to_string(),
                 },
             );

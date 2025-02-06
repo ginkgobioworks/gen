@@ -12,7 +12,7 @@ use crate::models::block_group_edge::{BlockGroupEdge, BlockGroupEdgeData};
 use crate::models::edge::{Edge, EdgeData};
 use crate::models::file_types::FileTypes;
 use crate::models::node::Node;
-use crate::models::operations::OperationInfo;
+use crate::models::operations::{OperationFile, OperationInfo};
 use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
 use crate::models::strand::Strand;
@@ -195,9 +195,11 @@ pub fn update_with_library(
         conn,
         operation_conn,
         &mut session,
-        OperationInfo {
-            file_path: library_file_path.to_string(),
-            file_type: FileTypes::CSV,
+        &OperationInfo {
+            files: vec![OperationFile {
+                file_path: library_file_path.to_string(),
+                file_type: FileTypes::CSV,
+            }],
             description: "library_csv_update".to_string(),
         },
         &summary_str,

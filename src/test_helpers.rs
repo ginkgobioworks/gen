@@ -18,7 +18,7 @@ use crate::models::collection::Collection;
 use crate::models::edge::Edge;
 use crate::models::file_types::FileTypes;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
-use crate::models::operations::{Operation, OperationInfo};
+use crate::models::operations::{Operation, OperationFile, OperationInfo};
 use crate::models::path::Path;
 use crate::models::sample::Sample;
 use crate::models::sequence::Sequence;
@@ -238,9 +238,11 @@ pub fn create_operation<'a>(
         conn,
         op_conn,
         &mut session,
-        OperationInfo {
-            file_path: file_path.to_string(),
-            file_type,
+        &OperationInfo {
+            files: vec![OperationFile {
+                file_path: file_path.to_string(),
+                file_type,
+            }],
             description: description.to_string(),
         },
         "test operation",

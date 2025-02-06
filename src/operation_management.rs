@@ -8,7 +8,7 @@ use crate::models::file_types::FileTypes;
 use crate::models::metadata;
 use crate::models::node::Node;
 use crate::models::operations::{
-    Branch, FileAddition, Operation, OperationInfo, OperationState, OperationSummary,
+    Branch, FileAddition, Operation, OperationFile, OperationInfo, OperationState, OperationSummary,
 };
 use crate::models::path::Path;
 use crate::models::sample::Sample;
@@ -42,6 +42,8 @@ pub enum OperationError {
     NoChanges,
     #[error("Operation Already Exists")]
     OperationExists,
+    #[error("SQL Error: {0}")]
+    SQLError(String),
 }
 
 pub enum FileMode {
@@ -889,9 +891,11 @@ pub fn apply<'a>(
         conn,
         operation_conn,
         &mut session,
-        OperationInfo {
-            file_path: format!("{full_op_hash}.cs"),
-            file_type: FileTypes::Changeset,
+        &OperationInfo {
+            files: vec![OperationFile {
+                file_path: format!("{full_op_hash}.cs"),
+                file_type: FileTypes::Changeset,
+            }],
             description: "changeset_application".to_string(),
         },
         &format!("Applied changeset {full_op_hash}."),
@@ -989,7 +993,7 @@ pub fn end_operation<'a>(
     conn: &Connection,
     operation_conn: &Connection,
     session: &mut session::Session,
-    operation_info: OperationInfo,
+    operation_info: &OperationInfo,
     summary_str: &str,
     force_hash: impl Into<Option<&'a str>>,
 ) -> Result<Operation, OperationError> {
@@ -1017,20 +1021,14 @@ pub fn end_operation<'a>(
         .execute("SAVEPOINT new_operation;", [])
         .unwrap();
 
-    let change = FileAddition::create(
-        operation_conn,
-        &operation_info.file_path,
-        operation_info.file_type,
-    );
-
-    match Operation::create(
-        operation_conn,
-        &db_uuid,
-        &operation_info.description,
-        change.id,
-        &hash,
-    ) {
+    match Operation::create(operation_conn, &db_uuid, &operation_info.description, &hash) {
         Ok(operation) => {
+            for op_file in operation_info.files.iter() {
+                let fa =
+                    FileAddition::create(operation_conn, &op_file.file_path, op_file.file_type);
+                Operation::add_file(operation_conn, &operation.hash, fa.id)
+                    .map_err(|err| OperationError::SQLError(format!("{err}")))?
+            }
             OperationSummary::create(operation_conn, &operation.hash, summary_str);
             write_changeset(&operation, &output, &dependencies);
             operation_conn
@@ -1480,9 +1478,7 @@ mod tests {
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, &db_uuid);
-        let change = FileAddition::create(op_conn, "test", FileTypes::Fasta);
-        let operation =
-            Operation::create(op_conn, &db_uuid, "test", change.id, "some-hash").unwrap();
+        let operation = Operation::create(op_conn, &db_uuid, "test", "some-hash").unwrap();
         OperationState::set_operation(op_conn, &db_uuid, &operation.hash);
         assert_eq!(
             OperationState::get_operation(op_conn, &db_uuid).unwrap(),
@@ -1541,9 +1537,11 @@ mod tests {
             conn,
             op_conn,
             &mut session,
-            OperationInfo {
-                file_path: "test".to_string(),
-                file_type: FileTypes::Fasta,
+            &OperationInfo {
+                files: vec![OperationFile {
+                    file_path: "test".to_string(),
+                    file_type: FileTypes::Fasta,
+                }],
                 description: "test".to_string(),
             },
             "test",

@@ -18,8 +18,7 @@ CREATE TABLE operation (
   parent_hash TEXT,
   branch_id INTEGER NOT NULL,
   change_type TEXT NOT NULL,
-  change_id INTEGER NOT NULL,
-  FOREIGN KEY(parent_hash) REFERENCES operation(hash)
+  FOREIGN KEY(parent_hash) REFERENCES operation(hash),
   FOREIGN KEY(branch_id) REFERENCES branch(id)
 ) STRICT;
 
@@ -27,6 +26,14 @@ CREATE TABLE file_addition (
   id INTEGER PRIMARY KEY NOT NULL,
   file_path TEXT NOT NULL,
   file_type TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE operation_files (
+  id INTEGER PRIMARY KEY NOT NULL,
+  operation_hash TEXT NOT NULL,
+  file_addition_id INTEGER NOT NULL,
+  FOREIGN KEY(operation_hash) REFERENCES operation(hash),
+  FOREIGN KEY(file_addition_id) REFERENCES file_addition(id)
 ) STRICT;
 
 CREATE TABLE operation_summary (

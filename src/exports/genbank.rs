@@ -314,7 +314,7 @@ mod tests {
     use super::*;
     use crate::imports::genbank::import_genbank;
     use crate::models::file_types::FileTypes;
-    use crate::models::operations::OperationInfo;
+    use crate::models::operations::{OperationFile, OperationInfo};
     use crate::models::strand::Strand::Forward;
     use crate::models::{metadata, operations::setup_db};
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
@@ -396,8 +396,10 @@ mod tests {
             None,
             None,
             OperationInfo {
-                file_path: path.to_str().unwrap().to_string(),
-                file_type: FileTypes::GenBank,
+                files: vec![OperationFile {
+                    file_path: path.to_str().unwrap().to_string(),
+                    file_type: FileTypes::GenBank,
+                }],
                 description: "test".to_string(),
             },
         )
@@ -425,8 +427,10 @@ mod tests {
             None,
             None,
             OperationInfo {
-                file_path: path.to_str().unwrap().to_string(),
-                file_type: FileTypes::GenBank,
+                files: vec![OperationFile {
+                    file_path: path.to_str().unwrap().to_string(),
+                    file_type: FileTypes::GenBank,
+                }],
                 description: "test".to_string(),
             },
         )
@@ -454,8 +458,10 @@ mod tests {
             None,
             None,
             OperationInfo {
-                file_path: path.to_str().unwrap().to_string(),
-                file_type: FileTypes::GenBank,
+                files: vec![OperationFile {
+                    file_path: path.to_str().unwrap().to_string(),
+                    file_type: FileTypes::GenBank,
+                }],
                 description: "test".to_string(),
             },
         )

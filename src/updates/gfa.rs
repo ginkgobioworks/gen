@@ -1,7 +1,7 @@
 use crate::calculate_hash;
 use crate::gfa::bool_to_strand;
 use crate::gfa_reader::{Gfa, Segment};
-use crate::models::operations::OperationInfo;
+use crate::models::operations::{OperationFile, OperationInfo};
 use crate::models::{
     block_group::BlockGroup,
     block_group_edge::{BlockGroupEdge, BlockGroupEdgeData},
@@ -209,9 +209,11 @@ pub fn update_with_gfa(
         conn,
         operation_conn,
         &mut session,
-        OperationInfo {
-            file_path: gfa_path.to_string(),
-            file_type: FileTypes::GFA,
+        &OperationInfo {
+            files: vec![OperationFile {
+                file_path: gfa_path.to_string(),
+                file_type: FileTypes::GFA,
+            }],
             description: "gfa_update".to_string(),
         },
         &summary_str,

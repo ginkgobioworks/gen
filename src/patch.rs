@@ -1,5 +1,7 @@
 use crate::config::get_changeset_path;
-use crate::models::operations::{FileAddition, Operation, OperationInfo, OperationSummary};
+use crate::models::operations::{
+    FileAddition, Operation, OperationFile, OperationInfo, OperationSummary,
+};
 use crate::models::traits::Query;
 use crate::operation_management;
 use crate::operation_management::{
@@ -19,7 +21,7 @@ use std::io::{Read, Write};
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OperationPatch {
     pub operation: Operation,
-    files: FileAddition,
+    files: Vec<FileAddition>,
     summary: OperationSummary,
     dependencies: Vec<u8>,
     changeset: Vec<u8>,
@@ -45,12 +47,7 @@ where
         file.read_to_end(&mut contents).unwrap();
         patches.push(OperationPatch {
             operation: operation.clone(),
-            files: FileAddition::get(
-                op_conn,
-                "select * from file_addition where id = ?1",
-                params![Value::from(operation.change_id)],
-            )
-            .unwrap(),
+            files: FileAddition::get_files_for_operation(op_conn, &operation.hash),
             summary: OperationSummary::get(
                 op_conn,
                 "select * from operation_summary where operation_hash = ?1",
@@ -92,10 +89,16 @@ pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[Operati
             conn,
             op_conn,
             &mut session,
-            OperationInfo {
-                file_path: patch.files.file_path.clone(),
-                file_type: patch.files.file_type,
-                description: op_info.change_type.clone(),
+            &OperationInfo {
+                files: patch
+                    .files
+                    .iter()
+                    .map(|fa| OperationFile {
+                        file_path: fa.file_path.clone(),
+                        file_type: fa.file_type,
+                    })
+                    .collect::<Vec<_>>(),
+                description: "unknown".to_string(),
             },
             &patch.summary.summary,
             None,
@@ -107,6 +110,9 @@ pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[Operati
                 OperationError::OperationExists => println!("Operation already applied. Skipping."),
                 OperationError::NoChanges => {
                     println!("No new changes present in operation. Skipping.")
+                }
+                OperationError::SQLError(details) => {
+                    println!("An error occurred executing SQL: {details}")
                 }
             },
         }
