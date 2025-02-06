@@ -1,15 +1,13 @@
 use crate::views::block_layout::ScaledLayout;
 use core::panic;
-use std::u32;
 use log::info;
 use ratatui::{
     layout::Rect,
-    widgets::{Block, Borders},
-    widgets::canvas::{Canvas, Line},
-    style::{Style, Color, Stylize, Modifier},
+    style::{Color, Modifier, Style, Stylize},
     text::Span,
+    widgets::canvas::{Canvas, Line},
+    widgets::{Block, Borders},
 };
-
 
 /// Holds data for the self.
 pub struct Viewer {
@@ -28,9 +26,9 @@ impl Viewer {
             let viewport_top = self.scroll.offset_y + self.plot_area.height as i32; // z-axis is upside down
             let viewport_bottom = self.scroll.offset_y;
 
-            return (*y as i32) >= viewport_bottom 
-                && (*y as i32) < viewport_top 
-                && (*x as i32) >= viewport_left 
+            return (*y as i32) >= viewport_bottom
+                && (*y as i32) < viewport_top
+                && (*x as i32) >= viewport_left
                 && (*x as i32) < viewport_right;
         }
         false
@@ -62,9 +60,10 @@ impl Viewer {
         // we need to keep a 1:1 mapping between coordinates to avoid glitches.
 
         // Terminal window coordinates
-        let block = Block::default().borders(Borders::ALL)
-                                    .style(Style::new().white().on_black())
-                                    .title("graph view");
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .style(Style::new().white().on_black())
+            .title("graph view");
         self.plot_area = block.inner(area);
 
         // Data coordinates (the top-left corner of our view is (offset_x, offset_y))
@@ -83,9 +82,12 @@ impl Viewer {
                 // Draw the lines described in the processed layout
                 for ((x1, y1), (x2, y2)) in &self.layout.lines {
                     // Clip the line to the visible area, skip if it's not visible itself
-                    if let Some(((x1c, y1c), (x2c, y2c))) = clip_line((*x1, *y1), (*x2, *y2), 
-                        (viewport_left as f64, viewport_bottom as f64), 
-                        (viewport_right as f64, viewport_top as f64)) {
+                    if let Some(((x1c, y1c), (x2c, y2c))) = clip_line(
+                        (*x1, *y1),
+                        (*x2, *y2),
+                        (viewport_left as f64, viewport_bottom as f64),
+                        (viewport_right as f64, viewport_top as f64),
+                    ) {
                         ctx.draw(&Line {
                             x1: x1c,
                             y1: y1c,
@@ -102,21 +104,30 @@ impl Viewer {
                         continue;
                     }
                     // Clip labels that are potentially in the window (horizontal)
-                    let clipped_label = clip_label(label, *x as isize, 
-                        (viewport_left + 1) as isize, self.plot_area.width as usize);
+                    let clipped_label = clip_label(
+                        label,
+                        *x as isize,
+                        (viewport_left + 1) as isize,
+                        self.plot_area.width as usize,
+                    );
                     if !clipped_label.is_empty() {
                         // Style the label depending on whether it's selected
                         let style = if Some(*block_id) == self.scroll.selected_block {
-                            Style::default().fg(Color::LightGreen).add_modifier(Modifier::BOLD)
+                            Style::default()
+                                .fg(Color::LightGreen)
+                                .add_modifier(Modifier::BOLD)
                         } else {
                             Style::default().fg(Color::White)
                         };
-                        ctx.print((*x as isize).max(viewport_left as isize) as f64, *y as f64, 
-                            Span::styled(clipped_label, style));
+                        ctx.print(
+                            (*x as isize).max(viewport_left as isize) as f64,
+                            *y as f64,
+                            Span::styled(clipped_label, style),
+                        );
                     }
                 }
             });
-        frame.render_widget(canvas, area);   
+        frame.render_widget(canvas, area);
     }
 
     /// Cycle through visible blocks in the viewport
@@ -127,7 +138,10 @@ impl Viewer {
     /// - The direction can be reversed by setting `reverse` to true.
     /// - The selected block is stored in the viewer state, under scrollstate.
     pub fn cycle_blocks(&mut self, reverse: bool) {
-        let mut blocks_in_viewport: Vec<u32> = self.layout.labels.keys()
+        let mut blocks_in_viewport: Vec<u32> = self
+            .layout
+            .labels
+            .keys()
             .filter(|&&block_id| self.is_block_visible(block_id))
             .cloned()
             .collect();
@@ -148,23 +162,27 @@ impl Viewer {
                 info!("Selected block: {}", blocks_in_viewport[0]);
             } else {
                 self.scroll.selected_block = Some(blocks_in_viewport[blocks_in_viewport.len() - 1]);
-                info!("Selected block: {}", blocks_in_viewport[blocks_in_viewport.len() - 1]);
+                info!(
+                    "Selected block: {}",
+                    blocks_in_viewport[blocks_in_viewport.len() - 1]
+                );
             }
         } else {
             let selected_block = self.scroll.selected_block.unwrap();
-            let next_block = if let Some(index) = blocks_in_viewport.iter().position(|&id| id == selected_block) {
+            let next_block = if let Some(index) = blocks_in_viewport
+                .iter()
+                .position(|&id| id == selected_block)
+            {
                 let next_index = if reverse {
                     if index == 0 {
                         blocks_in_viewport.len() - 1
                     } else {
                         index - 1
                     }
+                } else if index == blocks_in_viewport.len() - 1 {
+                    0
                 } else {
-                    if index == blocks_in_viewport.len() - 1 {
-                        0
-                    } else {
-                        index + 1
-                    }
+                    index + 1
                 };
                 blocks_in_viewport[next_index]
             } else {
@@ -192,20 +210,22 @@ pub struct ScrollState {
 ///   - If `scale` = 0.5, each cell is 0.5 data units (you see *less* data, zoomed in).
 /// - `aspect_ratio` = width / height of a terminal cell in data units.
 pub struct PlotParameters {
-    pub label_width: u32, 
-    pub scale: u32, 
-    pub aspect_ratio: f32, 
+    pub label_width: u32,
+    pub scale: u32,
+    pub aspect_ratio: f32,
 }
-
-
-
 
 /// Clips a string to a specific window, indicating that it has been clipped.
 /// - If the string is empty, it returns an empty string.
 /// - If the string is shorter than the window, it returns the string.
 /// - If the string is longer than the window, it clips the string and replaces the last character with a period.
 /// - If the string is not within the window at all, it returns an empty string.
-pub fn clip_label(label: &str, label_start: isize, window_start: isize, window_width: usize) -> String {
+pub fn clip_label(
+    label: &str,
+    label_start: isize,
+    window_start: isize,
+    window_width: usize,
+) -> String {
     if label.is_empty() {
         return "".to_string();
     }
@@ -215,7 +235,7 @@ pub fn clip_label(label: &str, label_start: isize, window_start: isize, window_w
     if label_end < window_start || label_start > window_end {
         return "".to_string();
     }
- 
+
     if label_start >= window_start && label_end <= window_end {
         return label.to_string();
     }
@@ -227,13 +247,21 @@ pub fn clip_label(label: &str, label_start: isize, window_start: isize, window_w
         let delta_right = label_end - window_end;
         // Make sure we don't try to cut in the middle of a multibyte character
         let character_cutoff = (label.chars().count() as isize - delta_right - 1) as usize;
-        let byte_cutoff = label.char_indices().nth(character_cutoff).map(|(i, _)| i).unwrap_or(label.len());
+        let byte_cutoff = label
+            .char_indices()
+            .nth(character_cutoff)
+            .map(|(i, _)| i)
+            .unwrap_or(label.len());
         clipped.replace_range(byte_cutoff.., "…");
     }
     if window_start > label_start {
         let delta_left = window_start - label_start;
         let character_cutoff = delta_left as usize + 1;
-        let byte_cutoff = label.char_indices().nth(character_cutoff).map(|(i, _)| i).unwrap_or(label.len());
+        let byte_cutoff = label
+            .char_indices()
+            .nth(character_cutoff)
+            .map(|(i, _)| i)
+            .unwrap_or(label.len());
         clipped.replace_range(..byte_cutoff, "…");
     }
 
@@ -244,11 +272,11 @@ pub fn clip_label(label: &str, label_start: isize, window_start: isize, window_w
 /// - If the line is completely outside the window, it returns None.
 /// - If the line is completely inside the window, it returns the original line.
 /// - If the line is partially inside the window, it clips the line to the window.
-/// 
+///
 /// This may be made more efficient through bitwise comparisons (see Cohen-Sutherland line clipping algorithm)
 pub fn clip_line(
-    (x1, y1): (f64, f64), // Line start
-    (x2, y2): (f64, f64), // Line end
+    (x1, y1): (f64, f64),   // Line start
+    (x2, y2): (f64, f64),   // Line end
     (wx1, wy1): (f64, f64), // Window top left
     (wx2, wy2): (f64, f64), // Window bottom right
 ) -> Option<((f64, f64), (f64, f64))> {
@@ -299,7 +327,7 @@ pub fn clip_line(
 mod tests {
     use super::*;
 
-
+    #[allow(clippy::too_many_arguments)]
     fn test_clip_line_helper(
         x1: f64,
         y1: f64,
@@ -317,29 +345,37 @@ mod tests {
 
     #[test]
     fn test_clip_line_outside() {
-        test_clip_line_helper(0.0, 0.0,
-                              1.0, 1.0, 
-                              2.0, 2.0, 
-                              3.0, 3.0, 
-                              None);
+        test_clip_line_helper(0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, None);
     }
 
-    #[test  ]
+    #[test]
     fn test_clip_line_inside() {
-        test_clip_line_helper(0.0, 0.0,
-                              1.0, 1.0, 
-                              -1.0, -1.0, 
-                              1.5, 1.5, 
-                              Some(((0.0, 0.0), (1.0, 1.0))));
+        test_clip_line_helper(
+            0.0,
+            0.0,
+            1.0,
+            1.0,
+            -1.0,
+            -1.0,
+            1.5,
+            1.5,
+            Some(((0.0, 0.0), (1.0, 1.0))),
+        );
     }
 
-    #[test  ]
+    #[test]
     fn test_clip_line_partial() {
-        test_clip_line_helper(0.0, 0.0,
-                              1.0, 1.0, 
-                              0.5, 0.5, 
-                              1.5, 1.5, 
-                              Some(((0.5, 0.5), (1.0, 1.0))));
+        test_clip_line_helper(
+            0.0,
+            0.0,
+            1.0,
+            1.0,
+            0.5,
+            0.5,
+            1.5,
+            1.5,
+            Some(((0.5, 0.5), (1.0, 1.0))),
+        );
     }
 
     #[test]
@@ -351,39 +387,39 @@ mod tests {
 
     #[test]
     fn test_clip_label_negative_offset() {
-        //  -2   0 1 2 3 4 5 6 7 8 9 
-        //  [        A B C]D E  
+        //  -2   0 1 2 3 4 5 6 7 8 9
+        //  [        A B C]D E
         let clipped = clip_label("ABCDE", 2, -2, 7);
         assert_eq!(clipped, "AB…");
     }
 
     #[test]
     fn test_clip_label_internal() {
-        // 0 1 2 3 4 5 6 7 8 9 
-        //  [  A B C D E  ] 
+        // 0 1 2 3 4 5 6 7 8 9
+        //  [  A B C D E  ]
         let clipped = clip_label("ABCDE", 2, 1, 7);
         assert_eq!(clipped, "ABCDE");
     }
 
     #[test]
     fn test_clip_label_external() {
-        // 0 1 2 3 4 5 6 7 8 9 
-        //     A B  [     ] 
+        // 0 1 2 3 4 5 6 7 8 9
+        //     A B  [     ]
         let clipped = clip_label("AB", 2, 5, 3);
         assert_eq!(clipped, "");
     }
 
     #[test]
     fn test_clip_label_left() {
-        // 0 1 2 3 4 5 6 7 8 9 
-        //     A B[C D E F G H] 
+        // 0 1 2 3 4 5 6 7 8 9
+        //     A B[C D E F G H]
         let clipped = clip_label("ABCDEFGH", 2, 4, 10);
         assert_eq!(clipped, "…DEFGH");
     }
 
     #[test]
     fn test_clip_label_right() {
-        // 0 1 2 3 4 5 6 7 8 9 
+        // 0 1 2 3 4 5 6 7 8 9
         //[    A B C D E]F G H
         let clipped = clip_label("ABCDEFGH", 2, 0, 7);
         assert_eq!(clipped, "ABCD…");
@@ -391,10 +427,9 @@ mod tests {
 
     #[test]
     fn test_clip_label_both() {
-        // 0 1 2 3 4 5 6 7 8 9 
+        // 0 1 2 3 4 5 6 7 8 9
         //     A B[C D E]F G H
         let clipped = clip_label("ABCDEFGH", 2, 4, 3);
         assert_eq!(clipped, "…D…");
     }
-
 }
