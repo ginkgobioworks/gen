@@ -72,7 +72,7 @@ pub fn export_gfa(
         }
     }
 
-    let mut links = vec![];
+    let mut links = BTreeSet::new();
     for (source, target, edge_info) in graph.all_edges() {
         if !Node::is_terminal(source.node_id) && !Node::is_terminal(target.node_id) {
             let source_segment = Segment {
@@ -90,7 +90,7 @@ pub fn export_gfa(
                 strand: edge_info.target_strand,
             };
 
-            links.push(Link {
+            links.insert(Link {
                 source_segment_id: source_segment.segment_id(),
                 source_strand: edge_info.source_strand,
                 target_segment_id: target_segment.segment_id(),
@@ -99,7 +99,6 @@ pub fn export_gfa(
         }
     }
     let path_links = translate_path_links(conn, collection_name, sample_name, &graph);
-    println!("pl are {path_links:?}");
     write_segments(&mut writer, &segments.iter().collect::<Vec<&Segment>>());
     write_links(&mut writer, &links.iter().collect::<Vec<&Link>>());
     write_paths(&mut writer, path_links);
