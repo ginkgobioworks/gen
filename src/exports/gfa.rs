@@ -1,4 +1,5 @@
 use crate::gfa::{path_line, write_links, write_segments, Link, Path as GFAPath, Segment};
+use crate::models::sequence::Sequence;
 use crate::models::{
     block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
@@ -62,10 +63,10 @@ pub fn export_gfa(
     let file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(file);
 
-    let mut segments = vec![];
+    let mut segments = BTreeSet::new();
     for block in &blocks {
         if !Node::is_terminal(block.node_id) {
-            segments.push(Segment {
+            segments.insert(Segment {
                 sequence: block.sequence(),
                 node_id: block.node_id,
                 sequence_start: block.start,
@@ -76,7 +77,6 @@ pub fn export_gfa(
             });
         }
     }
-    write_segments(&mut writer, &segments);
 
     let mut links = BTreeSet::new();
     for (source, target, edge_info) in graph.all_edges() {
@@ -105,9 +105,28 @@ pub fn export_gfa(
         }
     }
     let path_links = get_path_links(conn, collection_name, sample_name, &blocks);
+    let path_nodes = Node::get_sequences_by_node_ids(
+        conn,
+        &blocks
+            .iter()
+            .map(|block| block.node_id)
+            .collect::<Vec<i64>>(),
+    );
     for (_path_name, link_list) in path_links.iter() {
         let mut iterator = link_list.iter().peekable();
         while let Some((segment_id, strand)) = iterator.next() {
+            let mut seg_info = segment_id.rsplitn(3, ".");
+            let sequence_end = seg_info.next().unwrap().parse::<i64>().unwrap();
+            let sequence_start = seg_info.next().unwrap().parse::<i64>().unwrap();
+            let node_id = seg_info.next().unwrap().parse::<i64>().unwrap();
+            let seq: &Sequence = &path_nodes[&node_id];
+            segments.insert(Segment {
+                sequence: seq.get_sequence(sequence_start, sequence_end),
+                node_id,
+                sequence_start,
+                sequence_end,
+                strand: Strand::Unknown,
+            });
             if let Some((next_segment, next_strand)) = iterator.peek() {
                 links.insert(Link {
                     source_segment_id: segment_id.clone(),
@@ -118,6 +137,7 @@ pub fn export_gfa(
             }
         }
     }
+    write_segments(&mut writer, &segments.iter().collect::<Vec<&Segment>>());
     write_links(&mut writer, &links.iter().collect::<Vec<&Link>>());
     write_paths(&mut writer, path_links);
 }

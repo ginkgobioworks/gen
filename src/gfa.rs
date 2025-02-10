@@ -3,7 +3,7 @@ use convert_case::{Case, Casing};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct Segment {
     pub sequence: String,
     pub node_id: i64,
@@ -59,7 +59,7 @@ pub fn path_line(path: &Path) -> String {
     format!("P\t{}\t{}\t*\n", path.name.to_case(Case::Train), segments)
 }
 
-pub fn write_segments(writer: &mut BufWriter<File>, segments: &Vec<Segment>) {
+pub fn write_segments(writer: &mut BufWriter<File>, segments: &[&Segment]) {
     for segment in segments {
         writer
             .write_all(&segment_line(segment).into_bytes())

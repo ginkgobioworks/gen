@@ -163,7 +163,7 @@ pub fn gfa_sample_diff(
 
     let file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(file);
-    write_segments(&mut writer, &segments.iter().cloned().collect());
+    write_segments(&mut writer, &segments.iter().collect::<Vec<&Segment>>());
     write_links(&mut writer, &links.iter().collect::<Vec<&Link>>());
 
     for path in paths {
