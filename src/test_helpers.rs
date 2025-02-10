@@ -144,40 +144,45 @@ pub fn setup_block_group(conn: &Connection) -> (i64, Path) {
             edge_id: edge0.id,
             chromosome_index: 0,
             phased: 0,
+            source_phase_layer_id: 0,
+            target_phase_layer_id: 0,
         },
         BlockGroupEdgeData {
             block_group_id: block_group.id,
             edge_id: edge1.id,
             chromosome_index: 0,
             phased: 0,
+            source_phase_layer_id: 0,
+            target_phase_layer_id: 0,
         },
         BlockGroupEdgeData {
             block_group_id: block_group.id,
             edge_id: edge2.id,
             chromosome_index: 0,
             phased: 0,
+            source_phase_layer_id: 0,
+            target_phase_layer_id: 0,
         },
         BlockGroupEdgeData {
             block_group_id: block_group.id,
             edge_id: edge3.id,
             chromosome_index: 0,
             phased: 0,
+            source_phase_layer_id: 0,
+            target_phase_layer_id: 0,
         },
         BlockGroupEdgeData {
             block_group_id: block_group.id,
             edge_id: edge4.id,
             chromosome_index: 0,
             phased: 0,
+            source_phase_layer_id: 0,
+            target_phase_layer_id: 0,
         },
     ];
-    BlockGroupEdge::bulk_create(conn, &block_group_edges);
+    let block_group_edge_ids = BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
-    let path = Path::create(
-        conn,
-        "chr1",
-        block_group.id,
-        &[edge0.id, edge1.id, edge2.id, edge3.id, edge4.id],
-    );
+    let path = Path::create(conn, "chr1", block_group.id, &block_group_edge_ids);
     (block_group.id, path)
 }
 

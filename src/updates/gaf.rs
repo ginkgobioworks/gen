@@ -338,16 +338,18 @@ pub fn update_with_gaf<'a, P>(
                 BlockGroup::query(conn, "select distinct bg.* from block_groups bg left join block_group_edges bge on (bg.id = bge.block_group_id) left join edges e on (e.id = bge.edge_id and (e.source_node_id in rarray(?2) or e.target_node_id in rarray(?2))) where collection_name = ?1 and sample_name is null", params!(collection_name.to_string(), Rc::new(bg_nodes)))
             };
             for bg in bgs.iter() {
-                let new_block_group_edges = edge_ids
+                let block_group_edges = edge_ids
                     .iter()
                     .map(|edge_id| BlockGroupEdgeData {
                         block_group_id: bg.id,
                         edge_id: *edge_id,
                         chromosome_index: 0,
                         phased: 0,
+                        source_phase_layer_id: 0,
+                        target_phase_layer_id: 0,
                     })
                     .collect::<Vec<_>>();
-                BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
+                BlockGroupEdge::bulk_create(conn, &block_group_edges);
             }
         }
     }

@@ -295,6 +295,7 @@ pub fn flatten_to_interval_tree(
                         sequence_start: source_node.sequence_start,
                         sequence_end: source_node.sequence_end,
                         strand: edge.source_strand,
+                        phase_layer_id: 0,
                     });
                     spans.insert(NodeIntervalBlock {
                         block_id: target_node.block_id,
@@ -304,6 +305,7 @@ pub fn flatten_to_interval_tree(
                         sequence_start: target_node.sequence_start,
                         sequence_end: target_node.sequence_end,
                         strand: edge.target_strand,
+                        phase_layer_id: 0,
                     });
                     if remove_ambiguous_positions {
                         for (node_id, node_range) in [

@@ -678,6 +678,7 @@ mod tests {
                 path_start: 0,
                 path_end: 30,
                 strand: Forward,
+                phase_layer_id: 0,
             },
             PathBlock {
                 id: 0,
@@ -688,6 +689,7 @@ mod tests {
                 path_start: 30,
                 path_end: 60,
                 strand: Forward,
+                phase_layer_id: 0,
             },
         ];
         assert_eq!(
@@ -802,6 +804,7 @@ mod tests {
             path_start: 0,
             path_end: 8302,
             strand: Forward,
+            phase_layer_id: 0,
         }];
         assert_eq!(
             get_path_nodes(&graph, &path_blocks),

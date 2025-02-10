@@ -106,23 +106,27 @@ pub fn import_fasta<'a>(
             Strand::Forward,
         );
 
-        let new_block_group_edges = vec![
+        let block_group_edges = vec![
             BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id: edge_into.id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             },
             BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id: edge_out_of.id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             },
         ];
 
-        BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
-        let path = Path::create(conn, &name, block_group.id, &[edge_into.id, edge_out_of.id]);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(conn, &block_group_edges);
+        let path = Path::create(conn, &name, block_group.id, &block_group_edge_ids);
         summary.entry(path.name).or_insert(sequence_length);
         bar.inc(1);
     }

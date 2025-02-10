@@ -1,19 +1,17 @@
 use noodles::fasta;
 use rusqlite;
-use rusqlite::{types::Value as SQLValue, Connection};
+use rusqlite::Connection;
 use std::{io, str};
 
 use crate::models::operations::{OperationFile, OperationInfo};
 use crate::models::{
     block_group::{BlockGroup, PathChange},
-    edge::Edge,
     file_types::FileTypes,
     node::Node,
     path::PathBlock,
     sample::Sample,
     sequence::Sequence,
     strand::Strand,
-    traits::*,
 };
 use crate::{calculate_hash, operation_management};
 
@@ -90,6 +88,7 @@ pub fn update_with_fasta(
         path_start: start_coordinate,
         path_end: end_coordinate,
         strand: Strand::Forward,
+        phase_layer_id: 0,
     };
 
     let path_change = PathChange {
@@ -104,26 +103,15 @@ pub fn update_with_fasta(
     };
 
     let interval_tree = path.intervaltree(conn);
-    BlockGroup::insert_change(conn, &path_change, &interval_tree);
+    let block_group_edge_ids = BlockGroup::insert_change(conn, &path_change, &interval_tree);
 
-    let edge_to_new_node = Edge::query(
-        conn,
-        "select * from edges where target_node_id = ?1",
-        rusqlite::params!(SQLValue::from(node_id)),
-    )[0]
-    .clone();
-    let edge_from_new_node = Edge::query(
-        conn,
-        "select * from edges where source_node_id = ?1",
-        rusqlite::params!(SQLValue::from(node_id)),
-    )[0]
-    .clone();
     let new_path = path.new_path_with(
         conn,
         start_coordinate,
         end_coordinate,
-        &edge_to_new_node,
-        &edge_from_new_node,
+        block_group_edge_ids[0],
+        block_group_edge_ids[1],
+        node_id,
     );
 
     let summary_str = format!(" {}: 1 change", new_path.name);
@@ -153,8 +141,9 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use crate::imports::fasta::import_fasta;
-    use crate::models::{metadata, operations::setup_db};
+    use crate::models::{metadata, operations::setup_db, traits::*};
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
+    use rusqlite::types::Value as SQLValue;
     use std::collections::HashSet;
     use std::path::PathBuf;
 

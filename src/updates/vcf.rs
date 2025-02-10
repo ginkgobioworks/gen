@@ -144,6 +144,7 @@ fn prepare_change(
         path_start: ref_start,
         path_end: ref_end,
         strand: Strand::Forward,
+        phase_layer_id: 0,
     };
     PathChange {
         block_group_id: sample_bg_id,

@@ -51,6 +51,29 @@ pub enum FileMode {
     Write,
 }
 
+// NOTE: The ordering of these entries is important, because it is the order in which tables are
+// processed in get_changeset_dependencies.  If model Foo depends on model Bar, then foo must come
+// first in this list.  For instance, an edge depends on a source node and a target node, so the
+// edges table must come before the nodes table here.  This is because in
+// get_changeset_dependencies, if we process edges first, we correctly find any nodes that were
+// created that the edge must be associated with.  If we instead processed nodes first, some nodes
+// associated with edges would get counted as new nodes, and if we recrate the edge it might not be
+// associated with the correct recreated nodes.
+const CHANGE_TABLES: &[&str; 12] = &[
+    "collections",
+    "samples",
+    "accessions",
+    "paths",
+    "path_edges",
+    "block_group_edges",
+    "edges",
+    "accession_paths",
+    "accession_edges",
+    "nodes",
+    "sequences",
+    "block_groups",
+];
+
 #[derive(Deserialize, Serialize, Debug)]
 pub struct DependencyModels {
     pub sequences: Vec<Sequence>,
@@ -60,6 +83,7 @@ pub struct DependencyModels {
     pub paths: Vec<Path>,
     pub accessions: Vec<Accession>,
     pub accession_edges: Vec<AccessionEdge>,
+    pub block_group_edges: Vec<BlockGroupEdge>,
 }
 
 #[derive(Debug)]
@@ -101,6 +125,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
     let mut previous_nodes = HashSet::new();
     let mut previous_sequences = HashSet::new();
     let mut previous_accession_edges = HashSet::new();
+    let mut previous_block_group_edges = HashSet::new();
     let mut created_block_groups = HashSet::new();
     let mut created_paths = HashSet::new();
     let mut created_accessions = HashSet::new();
@@ -108,6 +133,7 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
     let mut created_accession_edges = HashSet::new();
     let mut created_nodes = HashSet::new();
     let mut created_sequences: HashSet<String> = HashSet::new();
+    let mut created_block_group_edges = HashSet::new();
 
     while let Some(item) = iter.next().unwrap() {
         let op = item.op().unwrap();
@@ -164,16 +190,18 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                 }
                 "path_edges" => {
                     let path_id = item.new_value(1).unwrap().as_i64().unwrap();
-                    let edge_id = item.new_value(3).unwrap().as_i64().unwrap();
+                    let block_group_edge_id = item.new_value(3).unwrap().as_i64().unwrap();
                     if !created_paths.contains(&path_id) {
                         previous_paths.insert(path_id);
                     }
-                    if !created_edges.contains(&edge_id) {
-                        previous_edges.insert(edge_id);
+                    if !created_block_group_edges.contains(&block_group_edge_id) {
+                        previous_block_group_edges.insert(block_group_edge_id);
                     }
                 }
                 "block_group_edges" => {
                     // make sure blockgroup_map has blockgroups for bg ids made in external changes.
+                    let block_group_edge_pk = item.new_value(pk_column).unwrap().as_i64().unwrap();
+                    created_block_group_edges.insert(block_group_edge_pk);
                     let bg_id = item.new_value(1).unwrap().as_i64().unwrap();
                     let edge_id = item.new_value(2).unwrap().as_i64().unwrap();
                     if !created_edges.contains(&edge_id) {
@@ -273,6 +301,14 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
             &format!(
                 "select * from accession_edges where id in ({ids})",
                 ids = previous_accession_edges.iter().join(",")
+            ),
+            rusqlite::params!(),
+        ),
+        block_group_edges: BlockGroupEdge::query(
+            conn,
+            &format!(
+                "select * from block_group_edges where id in ({ids})",
+                ids = previous_block_group_edges.iter().join(",")
             ),
             rusqlite::params!(),
         ),
@@ -392,6 +428,8 @@ pub fn load_changeset_models(changeset: &mut ChangesetIter) -> ChangesetModels {
                     edge_id: parse_number(item, 2),
                     chromosome_index: parse_number(item, 3),
                     phased: parse_number(item, 4),
+                    source_phase_layer_id: parse_number(item, 5),
+                    target_phase_layer_id: parse_number(item, 6),
                 }),
                 _ => {}
             }
@@ -414,6 +452,7 @@ pub fn apply_changeset(
     for sequence in dependencies.sequences.iter() {
         NewSequence::from(sequence).save(conn);
     }
+
     for node in dependencies.nodes.iter() {
         if !Node::is_terminal(node.id) {
             assert!(Sequence::sequence_from_hash(conn, &node.sequence_hash).is_some());
@@ -423,6 +462,12 @@ pub fn apply_changeset(
     let mut dep_bg_map = HashMap::new();
     for bg in dependencies.block_group.iter() {
         let sample_name = bg.sample_name.as_ref().map(|v| v as &str);
+        if !Collection::exists(conn, &bg.collection_name) {
+            Collection::create(conn, &bg.collection_name);
+        }
+        if let Some(sample_name) = sample_name {
+            Sample::get_or_create(conn, sample_name);
+        }
         let new_bg = BlockGroup::create(conn, &bg.collection_name, sample_name, &bg.name);
         dep_bg_map.insert(&bg.id, new_bg.id);
     }
@@ -434,12 +479,50 @@ pub fn apply_changeset(
     }
 
     let mut dep_edge_map = HashMap::new();
-    let new_edges = Edge::bulk_create(
-        conn,
-        &dependencies.edges.iter().map(EdgeData::from).collect(),
-    );
+    let updated_edges = dependencies
+        .edges
+        .iter()
+        .map(|edge| EdgeData {
+            source_node_id: *dep_node_map
+                .get(&edge.source_node_id)
+                .unwrap_or(&edge.source_node_id),
+            source_coordinate: edge.source_coordinate,
+            source_strand: edge.source_strand,
+            target_node_id: *dep_node_map
+                .get(&edge.target_node_id)
+                .unwrap_or(&edge.target_node_id),
+            target_coordinate: edge.target_coordinate,
+            target_strand: edge.target_strand,
+        })
+        .collect::<Vec<EdgeData>>();
+    let new_edges = Edge::bulk_create(conn, &updated_edges);
     for (index, edge_id) in new_edges.iter().enumerate() {
         dep_edge_map.insert(&dependencies.edges[index].id, *edge_id);
+    }
+
+    let mut dep_block_group_edge_map = HashMap::new();
+    let updated_block_group_edges = &dependencies
+        .block_group_edges
+        .iter()
+        .map(|bge| BlockGroupEdgeData {
+            block_group_id: *dep_bg_map
+                .get(&bge.block_group_id)
+                .unwrap_or(&bge.block_group_id),
+            edge_id: *dep_edge_map.get(&bge.edge_id).unwrap_or(&bge.edge_id),
+            chromosome_index: bge.chromosome_index,
+            phased: bge.phased,
+            source_phase_layer_id: bge.source_phase_layer_id,
+            target_phase_layer_id: bge.target_phase_layer_id,
+        })
+        .collect::<Vec<BlockGroupEdgeData>>();
+
+    let new_block_group_edge_ids = BlockGroupEdge::bulk_create(conn, updated_block_group_edges);
+
+    for (index, block_group_edge_id) in new_block_group_edge_ids.iter().enumerate() {
+        dep_block_group_edge_map.insert(
+            &dependencies.block_group_edges[index].id,
+            *block_group_edge_id,
+        );
     }
 
     let mut dep_path_map = HashMap::new();
@@ -456,14 +539,24 @@ pub fn apply_changeset(
     }
 
     let mut dep_accession_edge_map = HashMap::new();
-    let new_accession_edges = AccessionEdge::bulk_create(
-        conn,
-        &dependencies
-            .accession_edges
-            .iter()
-            .map(AccessionEdgeData::from)
-            .collect(),
-    );
+    let updated_accession_edges = dependencies
+        .accession_edges
+        .iter()
+        .map(|edge| AccessionEdgeData {
+            source_node_id: *dep_node_map
+                .get(&edge.source_node_id)
+                .unwrap_or(&edge.source_node_id),
+            source_coordinate: edge.source_coordinate,
+            source_strand: edge.source_strand,
+            target_node_id: *dep_node_map
+                .get(&edge.target_node_id)
+                .unwrap_or(&edge.target_node_id),
+            target_coordinate: edge.target_coordinate,
+            target_strand: edge.target_strand,
+            chromosome_index: edge.chromosome_index,
+        })
+        .collect::<Vec<AccessionEdgeData>>();
+    let new_accession_edges = AccessionEdge::bulk_create(conn, &updated_accession_edges);
     for (index, edge_id) in new_accession_edges.iter().enumerate() {
         dep_accession_edge_map.insert(&dependencies.accession_edges[index].id, *edge_id);
     }
@@ -579,6 +672,23 @@ pub fn apply_changeset(
                         },
                     );
                 }
+                "block_group_edges" => {
+                    // make sure blockgroup_map has blockgroups for bg ids made in external changes.
+                    let bg_id = item.new_value(1).unwrap().as_i64().unwrap();
+                    let edge_id = item.new_value(2).unwrap().as_i64().unwrap();
+                    let chromosome_index = item.new_value(3).unwrap().as_i64().unwrap();
+                    let phased = item.new_value(4).unwrap().as_i64().unwrap();
+                    let source_phase_layer_id = item.new_value(5).unwrap().as_i64().unwrap();
+                    let target_phase_layer_id = item.new_value(6).unwrap().as_i64().unwrap();
+                    insert_block_group_edges.push(BlockGroupEdgeData {
+                        block_group_id: bg_id,
+                        edge_id,
+                        chromosome_index,
+                        phased,
+                        source_phase_layer_id,
+                        target_phase_layer_id,
+                    });
+                }
                 "path_edges" => {
                     let path_id = item.new_value(1).unwrap().as_i64().unwrap();
                     let path_index = item.new_value(2).unwrap().as_i64().unwrap();
@@ -588,14 +698,6 @@ pub fn apply_changeset(
                         .entry(path_id)
                         .or_default()
                         .push((path_index, edge_id));
-                }
-                "block_group_edges" => {
-                    // make sure blockgroup_map has blockgroups for bg ids made in external changes.
-                    let bg_id = item.new_value(1).unwrap().as_i64().unwrap();
-                    let edge_id = item.new_value(2).unwrap().as_i64().unwrap();
-                    let chromosome_index = item.new_value(3).unwrap().as_i64().unwrap();
-                    let phased = item.new_value(4).unwrap().as_i64().unwrap();
-                    insert_block_group_edges.push((bg_id, edge_id, chromosome_index, phased));
                 }
                 "collections" => {
                     Collection::create(
@@ -695,56 +797,52 @@ pub fn apply_changeset(
         edge_id_map.insert(sorted_edge_ids[index], *edge_id);
     }
 
-    let mut block_group_edges: HashMap<i64, Vec<(i64, i64, i64)>> = HashMap::new();
+    let mut block_group_edges = vec![];
 
-    for (bg_id, edge_id, chromosome_index, phased) in insert_block_group_edges {
+    for block_group_edge_data in insert_block_group_edges {
         let bg_id = *dep_bg_map
-            .get(&bg_id)
-            .or(blockgroup_map.get(&bg_id).or(Some(&bg_id)))
+            .get(&block_group_edge_data.block_group_id)
+            .or(blockgroup_map
+                .get(&block_group_edge_data.block_group_id)
+                .or(Some(&block_group_edge_data.block_group_id)))
             .unwrap();
         let edge_id = dep_edge_map
-            .get(&edge_id)
-            .or(edge_id_map.get(&edge_id).or(Some(&edge_id)))
+            .get(&block_group_edge_data.edge_id)
+            .or(edge_id_map
+                .get(&block_group_edge_data.edge_id)
+                .or(Some(&block_group_edge_data.edge_id)))
             .unwrap();
-        block_group_edges
-            .entry(bg_id)
-            .or_default()
-            .push((*edge_id, chromosome_index, phased));
+        block_group_edges.push(BlockGroupEdgeData {
+            block_group_id: bg_id,
+            edge_id: *edge_id,
+            chromosome_index: block_group_edge_data.chromosome_index,
+            phased: block_group_edge_data.phased,
+            source_phase_layer_id: block_group_edge_data.source_phase_layer_id,
+            target_phase_layer_id: block_group_edge_data.target_phase_layer_id,
+        });
     }
 
-    for (bg_id, edges) in block_group_edges.iter() {
-        let new_block_group_edges = edges
-            .iter()
-            .map(|(edge_id, chromosome_index, phased)| BlockGroupEdgeData {
-                block_group_id: *bg_id,
-                edge_id: *edge_id,
-                chromosome_index: *chromosome_index,
-                phased: *phased,
-            })
-            .collect::<Vec<_>>();
-        BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
-    }
+    let _block_group_edge_ids = BlockGroupEdge::bulk_create(conn, &block_group_edges);
 
     for path in insert_paths {
-        let mut sorted_edges = vec![];
-        for (_, edge_id) in path_edges
+        let mut sorted_block_group_edge_ids = vec![];
+        for (_, block_group_edge_id) in path_edges
             .get(&path.id)
             .unwrap()
             .iter()
             .sorted_by(|(c1, _), (c2, _)| Ord::cmp(&c1, &c2))
         {
-            let new_edge_id = dep_edge_map
-                .get(edge_id)
-                .unwrap_or(edge_id_map.get(edge_id).unwrap_or(edge_id));
-            sorted_edges.push(*new_edge_id);
+            let new_block_group_edge_id = dep_block_group_edge_map
+                .get(block_group_edge_id)
+                .unwrap_or(block_group_edge_id);
+            sorted_block_group_edge_ids.push(*new_block_group_edge_id);
         }
-        let new_bg_id = *dep_bg_map
-            .get(&path.block_group_id)
-            .or(blockgroup_map
+        let new_bg_id = *dep_bg_map.get(&path.block_group_id).unwrap_or(
+            blockgroup_map
                 .get(&path.block_group_id)
-                .or(Some(&path.block_group_id)))
-            .unwrap();
-        Path::create(conn, &path.name, new_bg_id, &sorted_edges);
+                .unwrap_or(&path.block_group_id),
+        );
+        Path::create(conn, &path.name, new_bg_id, &sorted_block_group_edge_ids);
     }
 
     let mut updated_accession_edge_map = HashMap::new();
@@ -1059,20 +1157,7 @@ pub fn end_operation<'a>(
 }
 
 pub fn attach_session(session: &mut session::Session) {
-    for table in [
-        "collections",
-        "samples",
-        "sequences",
-        "block_groups",
-        "paths",
-        "nodes",
-        "edges",
-        "path_edges",
-        "block_group_edges",
-        "accessions",
-        "accession_edges",
-        "accession_paths",
-    ] {
+    for table in CHANGE_TABLES {
         session.attach(Some(table)).unwrap();
     }
 }
@@ -1534,6 +1619,8 @@ mod tests {
             edge_id: new_edge.id,
             chromosome_index: 0,
             phased: 0,
+            source_phase_layer_id: 0,
+            target_phase_layer_id: 0,
         };
         BlockGroupEdge::bulk_create(conn, &[block_group_edge]);
         let operation = end_operation(
@@ -1556,7 +1643,7 @@ mod tests {
             get_changeset_path(&operation).join(format!("{op_id}.dep", op_id = operation.hash));
         let dependencies: DependencyModels =
             serde_json::from_reader(fs::File::open(dependency_path).unwrap()).unwrap();
-        assert_eq!(dependencies.sequences.len(), 1);
+        assert_eq!(dependencies.sequences.len(), 2);
         assert_eq!(
             dependencies.block_group[0].collection_name,
             dep_bg.collection_name

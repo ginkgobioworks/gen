@@ -304,6 +304,11 @@ mod tests {
             Strand::Forward,
         );
 
+        println!("here1");
+        println!("block group id: {}", block_group.id);
+        println!("edge1 id: {}", edge1.id);
+        println!("edge2 id: {}", edge2.id);
+        println!("edge3 id: {}", edge3.id);
         let edge_ids = [edge1.id, edge2.id, edge3.id];
         let block_group_edges = edge_ids
             .iter()
@@ -312,11 +317,18 @@ mod tests {
                 edge_id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
-        let _path1 = Path::create(&conn, "parent", block_group.id, &edge_ids);
+        println!("here2");
+        for bgei in block_group_edge_ids.iter() {
+            println!("block group edge id: {}", bgei);
+        }
+        println!("block group id: {}", block_group.id);
+        let _path1 = Path::create(&conn, "parent", block_group.id, &block_group_edge_ids);
 
         // Set up child
         let _child_sample = Sample::get_or_create_child(&conn, collection_name, "child", None);
@@ -354,11 +366,20 @@ mod tests {
                 edge_id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &child_block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &child_block_group_edges);
         let original_child_path = BlockGroup::get_current_path(&conn, child_block_group.id);
-        let _child_path = original_child_path.new_path_with(&conn, 2, 6, &edge4, &edge5);
+        let _child_path = original_child_path.new_path_with(
+            &conn,
+            2,
+            6,
+            block_group_edge_ids[0],
+            block_group_edge_ids[1],
+            node3_id,
+        );
 
         let temp_dir = tempdir().unwrap();
         let gfa_path = temp_dir.path().join("parent-child-diff.gfa");
@@ -419,13 +440,22 @@ mod tests {
                 edge_id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &grandchild_block_group_edges);
+        let block_group_edge_ids =
+            BlockGroupEdge::bulk_create(&conn, &grandchild_block_group_edges);
         let original_grandchild_path =
             BlockGroup::get_current_path(&conn, grandchild_block_group.id);
-        let _grandchild_path =
-            original_grandchild_path.new_path_with(&conn, 10, 14, &edge6, &edge7);
+        let _grandchild_path = original_grandchild_path.new_path_with(
+            &conn,
+            10,
+            14,
+            block_group_edge_ids[0],
+            block_group_edge_ids[1],
+            node4_id,
+        );
 
         let gfa_path = temp_dir.path().join("parent-grandchild-diff.gfa");
         gfa_sample_diff(&conn, collection_name, &gfa_path, None, Some("grandchild"));
@@ -539,11 +569,13 @@ mod tests {
                 edge_id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
-        let _path1 = Path::create(&conn, "test path", block_group.id, &edge_ids);
+        let _path1 = Path::create(&conn, "test path", block_group.id, &block_group_edge_ids);
 
         let temp_dir = tempdir().unwrap();
         let gfa_path = temp_dir.path().join("diff-against-nothing.gfa");
@@ -626,11 +658,13 @@ mod tests {
                 edge_id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
-        let _path1 = Path::create(&conn, "test path", block_group.id, &edge_ids);
+        let _path1 = Path::create(&conn, "test path", block_group.id, &block_group_edge_ids);
 
         let temp_dir = tempdir().unwrap();
         let gfa_path = temp_dir.path().join("self-diff.gfa");
@@ -715,11 +749,13 @@ mod tests {
                 edge_id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
-        let _path1 = Path::create(&conn, "parent", block_group.id, &edge_ids);
+        let _path1 = Path::create(&conn, "parent", block_group.id, &block_group_edge_ids);
 
         let _sample2 = Sample::get_or_create(&conn, "sample2");
         let block_group2 = BlockGroup::create(
@@ -775,11 +811,13 @@ mod tests {
                 edge_id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
-        let _path2 = Path::create(&conn, "parent", block_group2.id, &edge_ids);
+        let _path2 = Path::create(&conn, "parent", block_group2.id, &block_group_edge_ids);
 
         let temp_dir = tempdir().unwrap();
         let gfa_path = temp_dir.path().join("unrelated-diff.gfa");
@@ -865,11 +903,13 @@ mod tests {
                 edge_id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
-        let _path1 = Path::create(&conn, "parent", block_group.id, &edge_ids);
+        let _path1 = Path::create(&conn, "parent", block_group.id, &block_group_edge_ids);
 
         let _sample2 = Sample::get_or_create(&conn, "sample2");
         let block_group2 =
@@ -921,11 +961,13 @@ mod tests {
                 edge_id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &block_group_edges);
 
-        let _path2 = Path::create(&conn, "parent", block_group2.id, &edge_ids);
+        let _path2 = Path::create(&conn, "parent", block_group2.id, &block_group_edge_ids);
 
         let temp_dir = tempdir().unwrap();
         let gfa_path = temp_dir.path().join("unrelated-diff.gfa");
@@ -996,11 +1038,15 @@ mod tests {
                 edge_id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &block_group_edges);
+        let bge1_id = block_group_edge_ids[0];
+        let bge2_id = block_group_edge_ids[1];
 
-        let _path1 = Path::create(&conn, "parent", block_group.id, &[edge1.id, edge2.id]);
+        let _path1 = Path::create(&conn, "parent", block_group.id, &[bge1_id, bge2_id]);
 
         // Set up child
         let _child_sample = Sample::get_or_create_child(&conn, collection_name, "child", None);
@@ -1038,11 +1084,20 @@ mod tests {
                 edge_id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &child_block_group_edges);
+        let block_group_edge_ids = BlockGroupEdge::bulk_create(&conn, &child_block_group_edges);
         let original_child_path = BlockGroup::get_current_path(&conn, child_block_group.id);
-        let _child_path = original_child_path.new_path_with(&conn, 2, 6, &edge3, &edge4);
+        let _child_path = original_child_path.new_path_with(
+            &conn,
+            2,
+            6,
+            block_group_edge_ids[0],
+            block_group_edge_ids[1],
+            node2_id,
+        );
 
         let temp_dir = tempdir().unwrap();
         let gfa_path = temp_dir.path().join("parent-child-diff.gfa");
@@ -1103,12 +1158,22 @@ mod tests {
                 edge_id,
                 chromosome_index: 0,
                 phased: 0,
+                source_phase_layer_id: 0,
+                target_phase_layer_id: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
-        BlockGroupEdge::bulk_create(&conn, &grandchild_block_group_edges);
+        let block_group_edge_ids =
+            BlockGroupEdge::bulk_create(&conn, &grandchild_block_group_edges);
         let original_grandchild_path =
             BlockGroup::get_current_path(&conn, grandchild_block_group.id);
-        let _grandchild_path = original_grandchild_path.new_path_with(&conn, 4, 10, &edge5, &edge6);
+        let _grandchild_path = original_grandchild_path.new_path_with(
+            &conn,
+            4,
+            10,
+            block_group_edge_ids[0],
+            block_group_edge_ids[1],
+            node3_id,
+        );
 
         let gfa_path = temp_dir.path().join("parent-grandchild-diff.gfa");
         gfa_sample_diff(&conn, collection_name, &gfa_path, None, Some("grandchild"));

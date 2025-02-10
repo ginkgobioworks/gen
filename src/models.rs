@@ -9,6 +9,7 @@ pub mod node;
 pub mod operations;
 pub mod path;
 pub mod path_edge;
+pub mod phase_layer;
 pub mod sample;
 pub mod sequence;
 pub mod strand;
