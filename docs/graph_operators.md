@@ -216,8 +216,8 @@ possible to use a subgraph in 'make' operations.
 <figcaption width=800><b>Figure X</b>: a) DNA graph representing the insertion of the trinucleotide CCC, and a 
 substitution of AGG by TGA; the section we wish to extract as subgraph is indicated in bold. Numbers below the blocks 
 indicate the gen node id and corresponding coordinate range. b) Extracted subset, note terminal blocks with nucleotides 
-A and A. c) Scaffold graph with the terminal blocks from panel b highlighted in bold. d) Supergraph created from the 
-subgraph in panel b and the scaffold in panel c.</figcaption>
+A and A. c) Graph in the same lineage as the original graph, with the terminal blocks from panel b highlighted in bold. d) Supergraph created by splicing the 
+subgraph in panel b into the scaffold in panel c. </figcaption>
 </figure>
 
 ### Chunks
@@ -398,18 +398,6 @@ encouraged to leverage gen for the underlying primitives.
 ### Splice [WIP]
 Whereas `stitch` operations take place at the ends of a graph, `splice` works on the _inside_ of a graph. It can be used
 to model a substitution genome edit, but also to reintegrate an extracted subgraph.
-
-
-<figure style="margin-left: auto; margin-right: auto">
-<img src="./figures/operators/subgraph-supergraph.png" width=800 alt="Figure 1">
-<figcaption width=800><b>Figure X</b>: a) DNA graph representing the insertion of the trinucleotide CCC, and a 
-substitution of AGG by TGA; the section we wish to extract as subgraph is indicated in bold. Numbers below the blocks 
-indicate the gen node id and corresponding coordinate range. b) Extracted subset, note terminal blocks with nucleotides 
-A and A. c) Scaffold graph with the terminal blocks from panel b highlighted in bold. d) Supergraph created from the 
-subgraph in panel b and the scaffold in panel c.</figcaption>
-</figure>
-
-
 
 TODO
 
