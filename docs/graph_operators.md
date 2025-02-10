@@ -47,15 +47,17 @@ new sample.
 A graph's name and sample identifier can be almost any text string as long as it is unique within the context of the
 current collection in the repository. Placeholder symbols like `%n` and `%u` provide an easy way to avoid naming
 conflicts. When `%n` is used in a pattern, it is automatically replaced by the *n*ext available numerical identifier for
-that pattern, so if _plasmid_1_ and _plasmid_2_ already exist,`--new-name "plasmid_%n"` results in a new graph called
-"plasmid_3". On the first use within a collection `%n` starts at 1, afterwards it will always be larger than the
-previous occurence of the pattern (gaps in the range are not filled). This avoids name collisions within a branch, but
-may still lead to conflicts when one branch is merged into another, requiring a name change at that point. This is not a
-problem for the `%u` placeholder, which is automatically replaced by the first 7 characters of the text representation
-of a Universally *u*nique identifier (UUID), a large random number that is statistically unlikely to ever come up twice.
-Using only the first 7 characters is a compromise between legibility and uniqueness, and should be sufficient in most
-cases. For very large repositories the odds of a collision increase however, and a `%U` placeholder (capitalized) can be
-used to include a full 128-bit UUID instead.
+that pattern, so if "plasmid\_1" and "plasmid\_2" already exist,`--new-name "plasmid\_%n"` results in a new graph called
+"plasmid\_3". Any characters that come behind `%n` and a non-numerical character are not taken into account, so
+"plasmid\_2\_abc" will still be followed by "plasmid\_3". This allows users to give more information without restarting
+the count, for example "plasmid\_%n\_expression-library". On the first use within a collection `%n` starts at 1,
+afterwards it will always be larger than the previous occurence of the pattern (gaps in the range are not filled). This
+avoids name collisions within a branch, but may still lead to conflicts when one branch is merged into another,
+requiring a name change at that point. This is not a problem for the `%u` placeholder, which is automatically replaced
+by the first 7 characters of the text representation of a Universally *u*nique identifier (UUID), a large random number
+that is statistically unlikely to ever come up twice. Using only the first 7 characters is a compromise between
+legibility and uniqueness, and should be sufficient in most cases. For very large repositories the odds of a collision
+increase however, and a `%U` placeholder (capitalized) can be used to include a full 128-bit UUID instead.
 
 While there is a certain directionality to the intent of _derive_ and _make_ operations (respectively, analysis and
 design of experiments), users should feel empowered to combine operations as needed. For example, deriving a subgraph
@@ -101,7 +103,9 @@ Effect of --affix option when generating combinatorial libraries, demonstrated t
    ...AGGCGGA, ATGCTA...           ...AGGCGG,     , CTA...
    ...       , ATGGGC...           ...      ,     , GGC...
 ```
-(Implementation note: this happens at the node level, sequences don't have to be literally trimmed. The suffix/prefix may be a separate sequence & node to avoid any issues with library edits down the line, for example if the first sequence is dropped. See fixtures/affix_* for an example fasta and csv file.)
+(Implementation note: this happens at the node level, sequences don't have to be literally trimmed. The suffix/prefix
+may be a separate sequence & node to avoid any issues with library edits down the line, for example if the first
+sequence is dropped. See fixtures/affix_* for an example fasta and csv file.)
 
 
 ### 2. Make paths
@@ -170,22 +174,22 @@ gen derive subgraph —-sample S1 —-region chr1:7-12 —-new-sample my_locus
 ```
 
 The region string can be read as “the sequence from position 7 through 12 (but not including 12) on the current path of
-the graph with the name chr1”. An error will be raised if the sequence graph does not have a designated path. If we
-wanted to use a different path on chr1, we would also specify the name of that path as `—-backbone` argument along with
-the region. It must be noted that even though the region definition is linear, the derived subgraph is not. Instead, the
-ends of the region induce a subgraph consisting of all the blocks and edges that can be accessed by walks between both
-points. Any edges to or from blocks that are outside of the subgraph will be rewritten to edges to the end and start
-dummy nodes, respectively.
+the graph with the name chr1”. An error will be raised if the graph does not have a designated path. If we wanted to use
+a different path on chr1, we would also specify the name of that path as `—-backbone` argument along with the region. It
+must be noted that even though the region definition is linear, the derived subgraph is not. Instead, the ends of the
+region induce a subgraph consisting of all the blocks and edges that can be accessed by walks between both points. Any
+edges to or from blocks that are outside of the subgraph will be rewritten to edges to the end and start dummy nodes,
+respectively.
 
 Alternatively, users can specify the boundaries directly by entering a pair of block coordinates as the `—-start` and
-`—-end` options. Block coordinates follow the format `m.n`, where m and n refer to the node ID in the sequence graph,
-and the position on that node, respectively. This ensures consistency between multiple versions of the sequence graph,
-since node IDs do not change as the graph grows. This is very similar to the format used by block identifiers that can
-be found in visualizations or exported GFA files, where they take the role of segment names. In a visualization a block
-may be labeled as 2:10-20 in the visualization, indicating that it refers to positions 10 through 20 on node 2. In the
-GFA file the corresponding identifier would be 2.10, the second coordinate can be derived from the length of the
-segment. Therefore, to indicate a block coordinate at position 5 on a block labeled 2:10-20 in a visualization, a user
-would enter 2.15.
+`—-end` options. Block coordinates follow the format `m.n`, where m and n refer to the node ID in the graph, and the
+position on that node, respectively. This ensures consistency between multiple versions of the graph, since node IDs do
+not change as the graph grows. This is very similar to the format used by block identifiers that can be found in
+visualizations or exported GFA files, where they take the role of segment names. In a visualization a block may be
+labeled as 2:10-20 in the visualization, indicating that it refers to positions 10 through 20 on node 2. In the GFA file
+the corresponding identifier would be 2.10, the second coordinate can be derived from the length of the segment.
+Therefore, to indicate a block coordinate at position 5 on a block labeled 2:10-20 in a visualization, a user would
+enter 2.15.
 
 Lastly, users can define a subgraph through a named accession instead. An accession also defines a part of the graph
 through coordinates on a linear path, but they are stored by name in the gen database. and referenced through the
@@ -209,7 +213,7 @@ possible to use a subgraph in 'make' operations.
 
 <figure style="margin-left: auto; margin-right: auto">
 <img src="./figures/operators/subgraph-supergraph.png" width=800 alt="Figure 1">
-<figcaption width=800><b>Figure X</b>: a) DNA sequence graph representing the insertion of the trinucleotide CCC, and a 
+<figcaption width=800><b>Figure X</b>: a) DNA graph representing the insertion of the trinucleotide CCC, and a 
 substitution of AGG by TGA; the section we wish to extract as subgraph is indicated in bold. Numbers below the blocks 
 indicate the gen node id and corresponding coordinate range. b) Extracted subset, note terminal blocks with nucleotides 
 A and A. c) Scaffold graph with the terminal blocks from panel b highlighted in bold. d) Supergraph created from the 
@@ -218,38 +222,38 @@ subgraph in panel b and the scaffold in panel c.</figcaption>
 
 ### Chunks
 ```console
-Usage: gen derive chunks INPUT (--breakpoints POS1 [POS2 ...] | --chunksize LENGTH) [--backbone PATH] [--sample SAMPLE]
+Usage: gen derive chunks INPUT (--breakpoints POS1 [POS2 ...] | --chunksize LENGTH) [--backbone PATH] [--sample INPUT_SAMPLE]
 [--overlap FWD[:BWD] [FWD[:BWD]] ...]
 
-Split a sequence graph at the given breakpoints or into chunks of a specific size.
+Split a graph at the given breakpoints or into chunks of a specific size.
 
-INPUT: name of the sequence graph to derive chunks from
+INPUT: name of the graph to derive chunks from
 
 Options:
 --breakpoints POS1 [POS2 ...]
-Split the sequence graph at specific positions on a reference path.
+Split the graph at specific positions on a reference path.
 --chunksize LENGTH Place breakpoints at regularly spaced intervals. Mutually exclusive with --breakpoints.
 --backbone PATH Interpret or compute breakpoints in the context of a path other than the default reference path.
---sample SAMPLE Input graph is associated to a specific sample.
+--sample INPUT_SAMPLE Input graph is associated to a specific sample.
 --overlap FWD[:BWD] [FWD[:BWD]] ...
 Make chunks overlap by n bp added to the left chunk at each break point, and m bp on the right chunk.
 --new-name OUT1 [OUT2 ...]
 Output chunk name(s) with support for placeholders `%n` (next) and `%u`/`%U` (unique). If only
 OUT1 is provided, it will be reused with new placeholders for each chunk.
-Default: ".%n"
---new-sample SAMPLE Associate the output chunks to one or more new samples, or the null sample if not specified.
+Default: "<INPUT>.%n"
+--new-sample OUTPUT_SAMPLE Associate the output chunks to a new sample, or the null sample if not specified.
 --force Allow variable regions at breakpoints and in overlaps. Warning: edges that span chunk boundaries
 will be dropped.
 ```
 
-A sequence graph can be split into pieces to enable a synthesis or cloning campaign using the `derive chunks`
-subcommand, which can be used, for example, as follows:
+A graph can be split into pieces to enable a synthesis or cloning campaign using the `derive chunks` subcommand, which
+can be used, for example, as follows:
 
 `gen derive chunks chr1 --breakpoints 100 200 300 —-overlap 20`
 
-This command can be interpreted as "split the sequence graph called chr1 into chunks by introducing breakpoints at
-positions 100, 200 and 300, using the designated linear path associated with ch1 as the coordinate reference frame and
-including a 20 bp overhang".
+This command can be interpreted as "split the graph called chr1 into chunks by introducing breakpoints at positions 100,
+200 and 300, using the designated linear path associated with ch1 as the coordinate reference frame and including a 20
+bp overhang".
 
 The positions at which the graph should be split can either be given explicitly (`--breakpoints`), or they can be
 calculated automatically (`--chunksize`). In both cases, positions are interpreted as linear coordinates on the
@@ -282,8 +286,8 @@ users can also specify graph and sample names as a list and/or with wildcards (`
 <figure style="margin-left: auto; margin-right: auto">
 <img src="./figures/operators/split_left.png" width=600 alt="Figure 1">
 <figcaption width=800><b>Figure 1</b>: <kbd> gen make chunks chr1 --breakpoints 15 --overlap 4</kbd><br>
- (a) Chr1 sequence graph with desired breakpoint indicated as dotted line.
- (b) A left chunk with a forward overlap of 4 nucleotides is created by moving the End mode of the graph. Block 1:20-31 is shown to indicate the change (dashed line = reference), it cannot be accessed on any path between start and end.
+ (a) Chr1 graph with desired breakpoint indicated as dotted line.
+ (b) A left chunk with a forward overlap of 4 nucleotides is created by moving the End node of the graph. Block 1:20-31 is shown to indicate the change (dashed line = reference), it cannot be accessed on any path between start and end.
  (c) Right chunk without overlap compared to the breakpoint. For this chunk the edge from the start node is moved instead.
 
 </figcaption>
@@ -304,22 +308,22 @@ Left and right chunk with a forward and backward overlap of 2 nucleotides, or 4 
 ```console
 Usage: gen derive union S1 S2 [S3 ...] [--new-sample OUTPUT]
             
-        Combines the contents of two or more samples, merging sequence graphs based on their name and printing statistics to the screen.
+        Combines the contents of two or more samples, merging graphs based on their name and printing statistics to the screen.
 
 Options:
     --new-sample OUTPUT Store output as a new sample. Supports placeholders. 
 ```
 
-The `derive union` command combines variants across samples by deriving the union of the sequence graphs they contain.
-This is used to merge experimental results or library designs into samples that can be handled and tracked as a unit.
-Graph unions also allow researchers to model biological processes like a cross between two individuals. The combined
-sequence graph represents all possible allele combinations, and can be used to align sequencing reads for instance.
+The `derive union` command combines variants across samples by deriving the union of the graphs they contain. This is
+used to merge experimental results or library designs into samples that can be handled and tracked as a unit. Graph
+unions also allow researchers to model biological processes like a cross between two individuals. The combined graph
+represents all possible allele combinations, and can be used to align sequencing reads for instance.
 
-Sequence graphs with a common name across the input samples are merged by combining their nodes and edges. For example,
-if both samples contain just 'chr1', the output sample will comprise a single sequence graph that represents all
-variants of 'chr1'. If the input samples contain sequence graphs with different names, the output sample will contain
-multiple sequence graphs. For example, the union of sample 'S1' which contains 'chr1', with 'S2' containing 'chr2'
-results in a sample that contains both 'chr1' and 'chr2'.
+graphs with a common name across the input samples are merged by combining their nodes and edges. For example, if both
+samples contain just 'chr1', the output sample will comprise a single graph that represents all variants of 'chr1'. If
+the input samples contain graphs with different names, the output sample will contain multiple graphs. For example, the
+union of sample 'S1' which contains 'chr1', with 'S2' containing 'chr2' results in a sample that contains both 'chr1'
+and 'chr2'.
 
 ### Intersection [WIP]
 The complementary operation to a union, is to retain only the edges that are present in both, i.e. the intersection.
@@ -332,7 +336,7 @@ implied rather than made directly.
 </figure>
 
 ```console
-Usage: gen derive intersection S1 S2 [S3 ...] [-o, --output SAMPLE]
+Usage: gen derive intersection S1 S2 [S3 ...] [--new-sample OUTPUT]
             
         ...
 
@@ -349,7 +353,7 @@ Options:
 </figure>
 
 ```console
-Usage: gen derive intersection S1 S2 [S3 ...] [-o, --output SAMPLE]
+Usage: gen derive intersection S1 S2 [S3 ...] [--new-sample OUTPUT]
             
         ...
 
@@ -361,17 +365,33 @@ Options:
 ## Make
 
 ### Stitch [WIP]
+```console
+Usage: gen make stitch INPUT1 INPUT2 [INPUT3 ...] [--sample INPUT_SAMPLE] [--overlap FWD[:BWD] [FWD[:BWD]] ...] [--force] [--new-name OUTPUT] [--new-sample OUTPUT_SAMPLE]
+
+Stitch two or more graphs together. The input graphs must come from the same sample (or the null sample).
+
+INPUT1, INPUT2, ...: names of the graphs to combine, in the order they should be stitched together.
+
+Options:
+--sample INPUT_SAMPLE Take input graphs from a specific sample.
+--overlap FWD[:BWD] [FWD[:BWD]] ...
+Resolve overlaps during stitching. FWD is the number of base pairs to trim from the end of the graph to the left of the junction, and BWD is the number of base pairs to trim from the start of the graph to the right of the junction. A sequence mismatch in the overlap region will raise an error unless --force is used.
+--force Allow mismatches between overlapping sequences. If a mismatch is found, both overlap sequences will be included in the output graph.
+--new-name OUT1
+Name of the output graph, with support for placeholders `%n` (next) and `%u`/`%U` (unique).
+Default: "INPUT1,INPUT2,..."
+--new-sample SAMPLE Associate the output graph to a new sample, or the null sample if not specified.
+```
+
 The stitch operation provides a general-purpose representation of molecular cloning workflows in a graph sequence model.
 Supporting specific protocols like Gibson assembly is considered out of scope for the gen client, but users are
-encouraged to leverage gen for the underlying primitives.
-
-TODO
+encouraged to leverage gen for the underlying primitives. 
 
 
 
 <figure  width=800 >
 <img src="./figures/operators/stitches.png" width=600 alt="Figure X" >
-<figcaption><b>Figure X</b>:</figcaption>
+<figcaption><b>Figure X</b>: a) Two graphs to be stitched together, with an overlap of 4 base pairs. b) Stitch with `--overlap 4:0`, retaining the overlap on the right graph. c) Stitch with `--overlap 0:4`, retaining the overlap on the left graph. d) Stitch with `--overlap 2:2`, trimming from both sides of the junction. e) Resolution of an overlap mismatch with `--force`; both overlap sequences are included in the output graph. The overlap parameters `4:0`, `0:4`, and `2:2` are all equivalent in this case.</figcaption>
 </figure>
 
 
@@ -382,7 +402,7 @@ to model a substitution genome edit, but also to reintegrate an extracted subgra
 
 <figure style="margin-left: auto; margin-right: auto">
 <img src="./figures/operators/subgraph-supergraph.png" width=800 alt="Figure 1">
-<figcaption width=800><b>Figure X</b>: a) DNA sequence graph representing the insertion of the trinucleotide CCC, and a 
+<figcaption width=800><b>Figure X</b>: a) DNA graph representing the insertion of the trinucleotide CCC, and a 
 substitution of AGG by TGA; the section we wish to extract as subgraph is indicated in bold. Numbers below the blocks 
 indicate the gen node id and corresponding coordinate range. b) Extracted subset, note terminal blocks with nucleotides 
 A and A. c) Scaffold graph with the terminal blocks from panel b highlighted in bold. d) Supergraph created from the 

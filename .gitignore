@@ -29,3 +29,6 @@ fixtures/*.ipynb
 **/__pycache__/*
 **/*.egg-info/*
 
+# IDE
+.vscode/launch.json
+flamegraph.svg
