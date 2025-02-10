@@ -5,7 +5,7 @@ use petgraph::graphmap::UnGraphMap;
 use petgraph::visit::{Dfs, Reversed};
 use petgraph::Direction;
 use rusqlite::types::Value;
-use rusqlite::{params_from_iter, Connection, Result as SQLResult, Row};
+use rusqlite::{params, params_from_iter, Connection, Result as SQLResult, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::string::ToString;
@@ -17,7 +17,6 @@ pub struct Operation {
     pub parent_hash: Option<String>,
     pub branch_id: i64,
     pub change_type: String,
-    pub change_id: i64,
 }
 
 impl Operation {
@@ -25,7 +24,6 @@ impl Operation {
         conn: &Connection,
         db_uuid: &str,
         change_type: &str,
-        change_id: i64,
         hash: &str,
     ) -> SQLResult<Operation> {
         let current_op = OperationState::get_operation(conn, db_uuid);
@@ -49,13 +47,12 @@ impl Operation {
             }
         }
 
-        let query = "INSERT INTO operation (hash, db_uuid, change_type, change_id, parent_hash, branch_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6);";
+        let query = "INSERT INTO operation (hash, db_uuid, change_type, parent_hash, branch_id) VALUES (?1, ?2, ?3, ?4, ?5);";
         let mut stmt = conn.prepare(query).unwrap();
         stmt.execute(params_from_iter(vec![
             Value::from(hash.to_string()),
             Value::from(db_uuid.to_string()),
             Value::from(change_type.to_string()),
-            Value::from(change_id),
             Value::from(current_op.clone()),
             Value::from(current_branch_id),
         ]))?;
@@ -65,12 +62,23 @@ impl Operation {
             parent_hash: current_op.clone(),
             branch_id: current_branch_id,
             change_type: change_type.to_string(),
-            change_id,
         };
         // TODO: error condition here where we can write to disk but transaction fails
         OperationState::set_operation(conn, &operation.db_uuid, &operation.hash);
         Branch::set_start_operation(conn, current_branch_id, &operation.hash);
         Ok(operation)
+    }
+
+    pub fn add_file(
+        conn: &Connection,
+        operation_hash: &str,
+        file_addition_id: i64,
+    ) -> SQLResult<()> {
+        let query =
+            "INSERT INTO operation_files (operation_hash, file_addition_id) VALUES (?1, ?2)";
+        let mut stmt = conn.prepare(query).unwrap();
+        stmt.execute(params![operation_hash.to_string(), file_addition_id])?;
+        Ok(())
     }
 
     pub fn get_upstream(conn: &Connection, operation_hash: String) -> Vec<String> {
@@ -178,14 +186,17 @@ impl Query for Operation {
             parent_hash: row.get(2).unwrap(),
             branch_id: row.get(3).unwrap(),
             change_type: row.get(4).unwrap(),
-            change_id: row.get(5).unwrap(),
         }
     }
 }
 
-pub struct OperationInfo {
+pub struct OperationFile {
     pub file_path: String,
     pub file_type: FileTypes,
+}
+
+pub struct OperationInfo {
+    pub files: Vec<OperationFile>,
     pub description: String,
 }
 
@@ -229,6 +240,17 @@ impl FileAddition {
             )
             .unwrap();
         rows.next().unwrap().unwrap()
+    }
+
+    pub fn get_files_for_operation(conn: &Connection, operation_hash: &str) -> Vec<FileAddition> {
+        let query = "select fa.* from file_addition fa left join operation_files of on (fa.id = of.file_addition_id) where of.operation_hash = ?1";
+        let mut stmt = conn.prepare(query).unwrap();
+        let rows = stmt
+            .query_map(params![operation_hash], |row| {
+                Ok(FileAddition::process_row(row))
+            })
+            .unwrap();
+        rows.map(|row| row.unwrap()).collect()
     }
 }
 
@@ -768,7 +790,6 @@ mod tests {
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, db_uuid);
 
-        let change = FileAddition::create(op_conn, "foo", FileTypes::Fasta);
         // operations will be made in ascending order.
         // The branch topology is as follows. () indicate where a branch starts
         //
@@ -787,21 +808,21 @@ mod tests {
         expected_graph.add_edge("op-4", "op-6");
         expected_graph.add_edge("op-1", "op-7");
 
-        let _ = Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-1").unwrap();
-        let _ = Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-2").unwrap();
-        let _ = Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-3").unwrap();
+        let _ = Operation::create(op_conn, db_uuid, "vcf_addition", "op-1").unwrap();
+        let _ = Operation::create(op_conn, db_uuid, "vcf_addition", "op-2").unwrap();
+        let _ = Operation::create(op_conn, db_uuid, "vcf_addition", "op-3").unwrap();
         Branch::create(op_conn, db_uuid, "branch-1");
         OperationState::set_branch(op_conn, db_uuid, "branch-1");
-        let _ = Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-4").unwrap();
-        let _ = Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-5").unwrap();
+        let _ = Operation::create(op_conn, db_uuid, "vcf_addition", "op-4").unwrap();
+        let _ = Operation::create(op_conn, db_uuid, "vcf_addition", "op-5").unwrap();
         OperationState::set_operation(op_conn, db_uuid, "op-4");
         Branch::create(op_conn, db_uuid, "branch-2");
         OperationState::set_branch(op_conn, db_uuid, "branch-2");
-        let _ = Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-6").unwrap();
+        let _ = Operation::create(op_conn, db_uuid, "vcf_addition", "op-6").unwrap();
         OperationState::set_operation(op_conn, db_uuid, "op-1");
         Branch::create(op_conn, db_uuid, "branch-3");
         OperationState::set_branch(op_conn, db_uuid, "branch-3");
-        let _ = Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-7").unwrap();
+        let _ = Operation::create(op_conn, db_uuid, "vcf_addition", "op-7").unwrap();
         let graph = Operation::get_operation_graph(op_conn);
 
         assert!(keys_match(&graph.node_ids, &expected_graph.node_ids));
@@ -968,13 +989,11 @@ mod tests {
         let db2_main = Branch::get_by_name(op_conn, db_uuid2, "main").unwrap().id;
 
         let change = FileAddition::create(op_conn, "foo", FileTypes::Fasta);
-        let op_1 =
-            Operation::create(op_conn, db_uuid, "vcf_addition", change.id, "op-1-hash").unwrap();
+        let op_1 = Operation::create(op_conn, db_uuid, "vcf_addition", "op-1-hash").unwrap();
 
         assert_eq!(Branch::get_operations(op_conn, db2_main), vec![]);
 
-        let op_2 =
-            Operation::create(op_conn, db_uuid2, "vcf_addition", change.id, "op-2-hash").unwrap();
+        let op_2 = Operation::create(op_conn, db_uuid2, "vcf_addition", "op-2-hash").unwrap();
 
         assert_eq!(
             Branch::get_operations(op_conn, db1_main)

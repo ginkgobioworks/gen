@@ -1,3 +1,4 @@
+use crate::models::operations::OperationFile;
 use crate::models::{
     block_group::BlockGroup,
     block_group_edge::BlockGroupEdge,
@@ -114,9 +115,11 @@ pub fn derive_subgraph(
         conn,
         operation_conn,
         &mut session,
-        OperationInfo {
-            file_path: "".to_string(),
-            file_type: FileTypes::None,
+        &OperationInfo {
+            files: vec![OperationFile {
+                file_path: "".to_string(),
+                file_type: FileTypes::None,
+            }],
             description: "derive subgraph".to_string(),
         },
         &summary_str,

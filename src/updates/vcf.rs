@@ -1,4 +1,4 @@
-use crate::models::operations::OperationInfo;
+use crate::models::operations::{OperationFile, OperationInfo};
 use crate::models::{
     block_group::{BlockGroup, BlockGroupData, PathCache, PathChange},
     file_types::FileTypes,
@@ -506,9 +506,11 @@ pub fn update_with_vcf<'a>(
         conn,
         operation_conn,
         &mut session,
-        OperationInfo {
-            file_path: vcf_path.to_string(),
-            file_type: FileTypes::VCF,
+        &OperationInfo {
+            files: vec![OperationFile {
+                file_path: vcf_path.to_string(),
+                file_type: FileTypes::VCF,
+            }],
             description: "vcf_addition".to_string(),
         },
         &summary_str,

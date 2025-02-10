@@ -179,14 +179,21 @@ where
         bar.inc(1);
     }
     bar.finish();
-    let filename = operation_info.file_path.clone();
     let bar = add_saving_operation_bar(&progress_bar);
     let op = end_operation(
         conn,
         op_conn,
         &mut session,
-        operation_info,
-        &format!("Genbank Import of {filename}",),
+        &operation_info,
+        &format!(
+            "Genbank Import of {files}",
+            files = operation_info
+                .files
+                .iter()
+                .map(|f| f.file_path.clone())
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
         None,
     )
     .map_err(GenBankError::OperationError);
@@ -199,7 +206,7 @@ mod tests {
     use super::*;
     use crate::models::file_types::FileTypes;
     use crate::models::metadata;
-    use crate::models::operations::setup_db;
+    use crate::models::operations::{setup_db, OperationFile};
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use noodles::fasta;
     use std::collections::HashSet;
@@ -232,8 +239,10 @@ mod tests {
                 None,
                 None,
                 OperationInfo {
-                    file_path: "".to_string(),
-                    file_type: FileTypes::GenBank,
+                    files: vec![OperationFile {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                    }],
                     description: "test".to_string(),
                 }
             ),
@@ -261,8 +270,10 @@ mod tests {
             None,
             None,
             OperationInfo {
-                file_path: path.to_str().unwrap().to_string(),
-                file_type: FileTypes::GenBank,
+                files: vec![OperationFile {
+                    file_path: path.to_str().unwrap().to_string(),
+                    file_type: FileTypes::GenBank,
+                }],
                 description: "test".to_string(),
             },
         )
@@ -290,8 +301,10 @@ mod tests {
             None,
             "new-sample",
             OperationInfo {
-                file_path: "".to_string(),
-                file_type: FileTypes::GenBank,
+                files: vec![OperationFile {
+                    file_path: "".to_string(),
+                    file_type: FileTypes::GenBank,
+                }],
                 description: "test".to_string(),
             },
         );
@@ -324,8 +337,10 @@ mod tests {
                 None,
                 None,
                 OperationInfo {
-                    file_path: "".to_string(),
-                    file_type: FileTypes::GenBank,
+                    files: vec![OperationFile {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                    }],
                     description: "test".to_string(),
                 },
             );
@@ -359,8 +374,10 @@ mod tests {
                 None,
                 None,
                 OperationInfo {
-                    file_path: "".to_string(),
-                    file_type: FileTypes::GenBank,
+                    files: vec![OperationFile {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                    }],
                     description: "test".to_string(),
                 },
             );
@@ -411,8 +428,10 @@ mod tests {
                 None,
                 None,
                 OperationInfo {
-                    file_path: "".to_string(),
-                    file_type: FileTypes::GenBank,
+                    files: vec![OperationFile {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                    }],
                     description: "test".to_string(),
                 },
             );
@@ -466,8 +485,10 @@ mod tests {
                 None,
                 None,
                 OperationInfo {
-                    file_path: "".to_string(),
-                    file_type: FileTypes::GenBank,
+                    files: vec![OperationFile {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                    }],
                     description: "test".to_string(),
                 },
             );
@@ -519,8 +540,10 @@ mod tests {
                 None,
                 None,
                 OperationInfo {
-                    file_path: "".to_string(),
-                    file_type: FileTypes::GenBank,
+                    files: vec![OperationFile {
+                        file_path: "".to_string(),
+                        file_type: FileTypes::GenBank,
+                    }],
                     description: "test".to_string(),
                 },
             );

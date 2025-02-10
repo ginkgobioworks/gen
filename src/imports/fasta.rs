@@ -1,6 +1,6 @@
 use crate::calculate_hash;
 use crate::models::file_types::FileTypes;
-use crate::models::operations::OperationInfo;
+use crate::models::operations::{OperationFile, OperationInfo};
 use crate::models::sample::Sample;
 use crate::models::{
     block_group::BlockGroup,
@@ -137,9 +137,11 @@ pub fn import_fasta<'a>(
         conn,
         operation_conn,
         &mut session,
-        OperationInfo {
-            file_path: fasta.to_string(),
-            file_type: FileTypes::Fasta,
+        &OperationInfo {
+            files: vec![OperationFile {
+                file_path: fasta.to_string(),
+                file_type: FileTypes::Fasta,
+            }],
             description: "fasta_addition".to_string(),
         },
         &summary_str,

@@ -17,7 +17,9 @@ use gen::imports::library::import_library;
 use gen::models::block_group::BlockGroup;
 use gen::models::file_types::FileTypes;
 use gen::models::metadata;
-use gen::models::operations::{setup_db, Branch, Operation, OperationInfo, OperationState};
+use gen::models::operations::{
+    setup_db, Branch, Operation, OperationFile, OperationInfo, OperationState,
+};
 use gen::models::sample::Sample;
 use gen::operation_management;
 use gen::operation_management::{parse_patch_operations, OperationError};
@@ -506,8 +508,10 @@ fn main() {
                     name.deref(),
                     sample.as_deref(),
                     OperationInfo {
-                        file_path: gb.clone(),
-                        file_type: FileTypes::GenBank,
+                        files: vec![OperationFile {
+                            file_path: gb.clone(),
+                            file_type: FileTypes::GenBank,
+                        }],
                         description: "GenBank Import".to_string(),
                     },
                 );
@@ -620,9 +624,11 @@ fn main() {
                     &f,
                     name.deref(),
                     *create_missing,
-                    OperationInfo {
-                        file_path: gb_path.clone(),
-                        file_type: FileTypes::GenBank,
+                    &OperationInfo {
+                        files: vec![OperationFile {
+                            file_path: gb_path.clone(),
+                            file_type: FileTypes::GenBank,
+                        }],
                         description: "Update from GenBank".to_string(),
                     },
                 ) {

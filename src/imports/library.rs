@@ -1,4 +1,5 @@
 use crate::calculate_hash;
+use crate::models::operations::OperationFile;
 use crate::models::{
     block_group::BlockGroup,
     block_group_edge::{BlockGroupEdge, BlockGroupEdgeData},
@@ -192,9 +193,11 @@ pub fn import_library<'a>(
         conn,
         operation_conn,
         &mut session,
-        OperationInfo {
-            file_path: library_file_path.to_string(),
-            file_type: FileTypes::CSV,
+        &OperationInfo {
+            files: vec![OperationFile {
+                file_path: library_file_path.to_string(),
+                file_type: FileTypes::CSV,
+            }],
             description: "library_csv_import".to_string(),
         },
         &summary_str,
