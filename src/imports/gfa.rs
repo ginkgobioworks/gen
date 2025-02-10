@@ -172,17 +172,6 @@ pub fn import_gfa<'a>(
     let bar = progress_bar.add(get_time_elapsed_bar());
     bar.set_message("Creating Gen Objects");
     let edge_ids = Edge::bulk_create(conn, &edges.into_iter().collect::<Vec<EdgeData>>());
-    let new_block_group_edges = edge_ids
-        .iter()
-        .map(|edge_id| BlockGroupEdgeData {
-            block_group_id: block_group.id,
-            edge_id: *edge_id,
-            chromosome_index: 0,
-            phased: 0,
-        })
-        .collect::<Vec<_>>();
-
-    BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
 
     let saved_edges = Edge::bulk_load(conn, &edge_ids);
     let mut edge_ids_by_data = HashMap::new();
@@ -196,6 +185,8 @@ pub fn import_gfa<'a>(
         );
         edge_ids_by_data.insert(key, edge.id);
     }
+
+    let mut created_blockgroup_edges: HashSet<i64> = HashSet::new();
 
     for input_path in &gfa.paths {
         let path_name = &input_path.name;
@@ -229,10 +220,24 @@ pub fn import_gfa<'a>(
         );
         let edge_id = *edge_ids_by_data.get(&key).unwrap();
         path_edge_ids.push(edge_id);
+        created_blockgroup_edges.extend(path_edge_ids.iter());
+
+        BlockGroupEdge::bulk_create(
+            conn,
+            &path_edge_ids
+                .iter()
+                .map(|id| BlockGroupEdgeData {
+                    block_group_id: block_group.id,
+                    edge_id: *id,
+                    chromosome_index: 0,
+                    phased: 0,
+                })
+                .collect::<Vec<BlockGroupEdgeData>>(),
+        );
         Path::create(conn, path_name, block_group.id, &path_edge_ids);
     }
 
-    for input_walk in &gfa.walk {
+    for (walk_index, input_walk) in (1..).zip(&gfa.walk) {
         let path_name = &input_walk.sample_id;
         let mut source_node_id = PATH_START_NODE_ID;
         let mut source_coordinate = 0;
@@ -264,8 +269,43 @@ pub fn import_gfa<'a>(
         );
         let edge_id = *edge_ids_by_data.get(&key).unwrap();
         path_edge_ids.push(edge_id);
+        created_blockgroup_edges.extend(path_edge_ids.iter());
+
+        BlockGroupEdge::bulk_create(
+            conn,
+            &path_edge_ids
+                .iter()
+                .map(|id| BlockGroupEdgeData {
+                    block_group_id: block_group.id,
+                    edge_id: *id,
+                    chromosome_index: walk_index,
+                    phased: 0,
+                })
+                .collect::<Vec<BlockGroupEdgeData>>(),
+        );
         Path::create(conn, path_name, block_group.id, &path_edge_ids);
     }
+
+    // make any block group edges not in paths or walks
+    BlockGroupEdge::bulk_create(
+        conn,
+        &edge_ids
+            .iter()
+            .filter_map(|id| {
+                if !created_blockgroup_edges.contains(id) {
+                    Some(BlockGroupEdgeData {
+                        block_group_id: block_group.id,
+                        edge_id: *id,
+                        chromosome_index: 0,
+                        phased: 0,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<BlockGroupEdgeData>>(),
+    );
+
     bar.finish();
 }
 
