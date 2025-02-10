@@ -391,7 +391,7 @@ encouraged to leverage gen for the underlying primitives.
 
 <figure  width=800 >
 <img src="./figures/operators/stitches.png" width=600 alt="Figure X" >
-<figcaption><b>Figure X</b>: a) Two graphs to be stitched together, with an overlap of 4 base pairs. b) Stitch with `--overlap 4:0`, retaining the overlap on the right graph. c) Stitch with `--overlap 0:4`, retaining the overlap on the left graph. d) Stitch with `--overlap 2:2`, trimming from both sides of the junction. e) Resolution of an overlap mismatch with `--force`; both overlap sequences are included in the output graph. The overlap parameters `4:0`, `0:4`, and `2:2` are all equivalent in this case.</figcaption>
+<figcaption><b>Figure X</b>: a) Two graphs to be stitched together, with an overlap of 4 base pairs. b) Stitch with --overlap of 4 or 4:0, retaining the overlap on the right graph. c) Stitch with --overlap 0:4, retaining the overlap on the left graph. d) Stitch with --overlap 2:2, trimming from both sides of the junction. e) Resolution of an overlap mismatch with --force; both overlap sequences are included in the output graph. The overlap parameters 4, 4:0, 0:4, and 2:2 are all equivalent in this case.</figcaption>
 </figure>
 
 
