@@ -988,7 +988,6 @@ mod tests {
         let db1_main = Branch::get_by_name(op_conn, db_uuid, "main").unwrap().id;
         let db2_main = Branch::get_by_name(op_conn, db_uuid2, "main").unwrap().id;
 
-        let change = FileAddition::create(op_conn, "foo", FileTypes::Fasta);
         let op_1 = Operation::create(op_conn, db_uuid, "vcf_addition", "op-1-hash").unwrap();
 
         assert_eq!(Branch::get_operations(op_conn, db2_main), vec![]);
