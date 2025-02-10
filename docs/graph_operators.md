@@ -86,9 +86,7 @@ sample as a graph of possible sequences, Gen lends itself well to the design and
 example pooled Type IIs restriction/ligation workflow, commonly known as Golden Gate cloning, is described below:
 
 ### 1. Import library
-- Currently this is an "update" command that creates a combinatorial library based on a set of sequences (fasta) and a
-library layout (csv). By making this an "import" users can create a library from scratch, and not as an edit to an
-existing sequence.
+- Import from fasta with CSV layout
 - At this point the user is mainly thinking about the final design they want to test, not how they will be cloning it.
 It could be helpful to (in the future) provide an `--affix` option to merge common prefixes and suffixes to make good
 cloning sites more obvious. Many genetic parts naturally start or end the same way, which should be represented in the
