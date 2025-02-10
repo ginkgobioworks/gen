@@ -156,6 +156,8 @@ pub fn import_library<'a>(
             edge_id: *edge_id,
             chromosome_index: *edge_id, // TODO: This is a hack, clean it up with phase layers
             phased: 0,
+            source_phase_layer_id: 0,
+            target_phase_layer_id: 0,
         })
         .collect::<Vec<_>>();
     BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
@@ -167,10 +169,15 @@ pub fn import_library<'a>(
     }
     path_node_ids.push(PATH_END_NODE_ID);
 
-    let new_edges = Edge::bulk_load(conn, &new_edge_ids);
+    let new_edges = BlockGroupEdge::edges_for_block_group(conn, new_block_group.id);
     let new_edge_ids_by_source_and_target_node = new_edges
         .iter()
-        .map(|edge| ((edge.source_node_id, edge.target_node_id), edge.id))
+        .map(|edge| {
+            (
+                (edge.edge.source_node_id, edge.edge.target_node_id),
+                edge.block_group_edge_id,
+            )
+        })
         .collect::<HashMap<_, _>>();
     let path_edge_ids = path_node_ids
         .iter()

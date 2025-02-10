@@ -12,7 +12,7 @@ use crate::models::{
 use crate::operation_management;
 use core::ops::Range;
 use rusqlite::Connection;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::io;
 
 #[allow(clippy::too_many_arguments)]
@@ -80,7 +80,7 @@ pub fn derive_subgraph(
         new_block_group_id,
     );
 
-    let current_edges = PathEdge::edges_for_path(conn, current_path.id);
+    let current_edges = PathEdge::block_group_edges_for_path(conn, current_path.id);
     let child_block_group_edges = BlockGroupEdge::edges_for_block_group(conn, child_block_group_id);
     let new_start_edge = child_block_group_edges
         .iter()
@@ -90,24 +90,25 @@ pub fn derive_subgraph(
         .iter()
         .find(|x| x.edge.target_node_id == PATH_END_NODE_ID)
         .unwrap();
-    let new_edge_id_set = child_block_group_edges
+    let child_edges_by_id = child_block_group_edges
         .iter()
-        .map(|x| x.edge.id)
-        .collect::<HashSet<i64>>();
+        .map(|x| (x.edge.id, x))
+        .collect::<HashMap<_, _>>();
 
-    let mut new_path_edge_ids = vec![];
-    new_path_edge_ids.push(new_start_edge.edge.id);
+    let mut new_path_block_group_edge_ids = vec![];
+    new_path_block_group_edge_ids.push(new_start_edge.block_group_edge_id);
     for current_edge in current_edges {
-        if new_edge_id_set.contains(&current_edge.id) {
-            new_path_edge_ids.push(current_edge.id);
+        let child_edge = child_edges_by_id.get(&current_edge.edge_id);
+        if let Some(child_edge) = child_edge {
+            new_path_block_group_edge_ids.push(child_edge.block_group_edge_id);
         }
     }
-    new_path_edge_ids.push(new_end_edge.edge.id);
+    new_path_block_group_edge_ids.push(new_end_edge.block_group_edge_id);
     Path::create(
         conn,
         &current_path.name,
         child_block_group_id,
-        &new_path_edge_ids,
+        &new_path_block_group_edge_ids,
     );
 
     let summary_str = format!(" {}: 1 new derived block group", new_sample_name);
@@ -142,6 +143,7 @@ mod tests {
     use crate::test_helpers::{
         get_connection, get_operation_connection, setup_block_group, setup_gen_dir,
     };
+    use std::collections::HashSet;
 
     #[test]
     fn test_derive_subgraph_one_insertion() {
