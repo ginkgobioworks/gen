@@ -12,7 +12,7 @@ pub struct Segment {
     pub strand: Strand,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct Link {
     pub source_segment_id: String,
     pub source_strand: Strand,
@@ -38,7 +38,7 @@ impl Segment {
 
 fn segment_line(segment: &Segment) -> String {
     // NOTE: We encode the node ID and start coordinate in the segment ID
-    format!("S\t{}\t{}\t*\n", segment.segment_id(), segment.sequence)
+    format!("S\t{}\t{}\n", segment.segment_id(), segment.sequence)
 }
 
 fn link_line(link: &Link) -> String {
@@ -72,7 +72,7 @@ pub fn write_segments(writer: &mut BufWriter<File>, segments: &Vec<Segment>) {
     }
 }
 
-pub fn write_links(writer: &mut BufWriter<File>, links: &Vec<Link>) {
+pub fn write_links(writer: &mut BufWriter<File>, links: &[&Link]) {
     for link in links {
         writer
             .write_all(&link_line(link).into_bytes())

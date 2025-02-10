@@ -12,7 +12,7 @@ use crate::models::{
 };
 use itertools::Itertools;
 use rusqlite::Connection;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
@@ -78,7 +78,7 @@ pub fn export_gfa(
     }
     write_segments(&mut writer, &segments);
 
-    let mut links = vec![];
+    let mut links = BTreeSet::new();
     for (source, target, edge_info) in graph.all_edges() {
         if !Node::is_terminal(source.node_id) && !Node::is_terminal(target.node_id) {
             let source_segment = Segment {
@@ -96,7 +96,7 @@ pub fn export_gfa(
                 strand: edge_info.target_strand,
             };
 
-            links.push(Link {
+            links.insert(Link {
                 source_segment_id: source_segment.segment_id(),
                 source_strand: edge_info.source_strand,
                 target_segment_id: target_segment.segment_id(),
@@ -104,8 +104,22 @@ pub fn export_gfa(
             });
         }
     }
-    write_links(&mut writer, &links);
-    write_paths(&mut writer, conn, collection_name, sample_name, &blocks);
+    let path_links = get_path_links(conn, collection_name, sample_name, &blocks);
+    for (_path_name, link_list) in path_links.iter() {
+        let mut iterator = link_list.iter().peekable();
+        while let Some((segment_id, strand)) = iterator.next() {
+            if let Some((next_segment, next_strand)) = iterator.peek() {
+                links.insert(Link {
+                    source_segment_id: segment_id.clone(),
+                    source_strand: *strand,
+                    target_segment_id: next_segment.clone(),
+                    target_strand: *next_strand,
+                });
+            }
+        }
+    }
+    write_links(&mut writer, &links.iter().collect::<Vec<&Link>>());
+    write_paths(&mut writer, path_links);
 }
 
 // NOTE: A path is an immutable list of edges, but the sequence between the target of one edge and
@@ -144,13 +158,12 @@ fn segments_for_edges(
     node_ids
 }
 
-fn write_paths(
-    writer: &mut BufWriter<File>,
+fn get_path_links(
     conn: &Connection,
     collection_name: &str,
     sample_name: Option<String>,
     blocks: &[GroupBlock],
-) {
+) -> HashMap<String, Vec<(String, Strand)>> {
     let paths = Path::query_for_collection_and_sample(conn, collection_name, sample_name);
     let edges_by_path_id =
         PathEdge::edges_for_paths(conn, paths.iter().map(|path| path.id).collect());
@@ -163,6 +176,8 @@ fn write_paths(
         .iter()
         .map(|block| ((block.node_id, block.end), block.clone()))
         .collect::<HashMap<(i64, i64), GroupBlock>>();
+
+    let mut path_links: HashMap<String, Vec<(String, Strand)>> = HashMap::new();
 
     for path in paths {
         let block_group = BlockGroup::get_by_id(conn, path.block_group_id);
@@ -189,14 +204,35 @@ fn write_paths(
         } else {
             path.name
         };
+
+        path_links.insert(
+            full_path_name,
+            graph_segment_ids
+                .iter()
+                .zip(node_strands.iter())
+                .map(|(segment_id, strand)| (segment_id.clone(), *strand))
+                .collect(),
+        );
+    }
+    path_links
+}
+
+fn write_paths(writer: &mut BufWriter<File>, path_links: HashMap<String, Vec<(String, Strand)>>) {
+    for (name, links) in path_links.iter() {
+        let mut segment_ids = vec![];
+        let mut node_strands = vec![];
+        for (segment_id, strand) in links.iter() {
+            segment_ids.push(segment_id.clone());
+            node_strands.push(*strand);
+        }
         let path = GFAPath {
-            name: full_path_name.clone(),
-            segment_ids: graph_segment_ids,
+            name: name.clone(),
+            segment_ids,
             node_strands,
         };
         writer
             .write_all(&path_line(&path).into_bytes())
-            .unwrap_or_else(|_| panic!("Error writing path {} to GFA stream", full_path_name));
+            .unwrap_or_else(|_| panic!("Error writing path {} to GFA stream", name));
     }
 }
 

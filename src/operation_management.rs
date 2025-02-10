@@ -1202,7 +1202,7 @@ mod tests {
     use super::*;
     use crate::imports::fasta::import_fasta;
     use crate::models::file_types::FileTypes;
-    use crate::models::operations::{setup_db, Branch, FileAddition, Operation, OperationState};
+    use crate::models::operations::{setup_db, Branch, Operation, OperationState};
     use crate::models::{edge::Edge, metadata, node::Node, sample::Sample};
     use crate::test_helpers::{
         create_operation, get_connection, get_operation_connection, setup_block_group,

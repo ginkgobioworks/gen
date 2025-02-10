@@ -77,7 +77,6 @@ where
 
 pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[OperationPatch]) {
     for patch in patches.iter() {
-        let op_info = &patch.operation;
         let changeset = &patch.changeset;
         let input: &mut dyn Read = &mut changeset.as_slice();
         let mut iter = ChangesetIter::start_strm(&input).unwrap();
