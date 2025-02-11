@@ -112,12 +112,18 @@ fn translate_path_links(
     sample_name: Option<String>,
     graph: &DiGraphMap<GraphNode, GraphEdge>,
 ) -> HashMap<String, Vec<(String, Strand)>> {
+    // When a path is created, it will refer to node positions in the graph as it exists then.
+    // If the graph is then updated, the path nodes may be split and the graph no longer contains
+    // the corresponding nodes in the initial path. This takes the initial path and identifies the
+    // set of nodes in the current graph corresponding to the path using a depth first search
+    // approach.
     let paths = Path::query_for_collection_and_sample(conn, collection_name, sample_name);
 
     let mut path_links: HashMap<String, Vec<(String, Strand)>> = HashMap::new();
 
     struct PathNode {
         node: (GraphNode, Strand),
+        path_index: usize,
         prev: Option<Rc<PathNode>>,
     }
 
@@ -134,19 +140,20 @@ fn translate_path_links(
         for start_node in start_nodes.iter() {
             let mut stack: VecDeque<Rc<PathNode>> = VecDeque::new();
             let mut visited: HashSet<(GraphNode, Strand)> = HashSet::new();
-            let mut block_iter = path_blocks.iter().peekable();
-            let mut current_block = block_iter.next().unwrap();
+            let mut path_index = 0;
             let mut current_pos;
             let mut final_path = vec![];
 
             // Start with the initial path containing only the start node
             stack.push_back(Rc::new(PathNode {
                 node: (*start_node, Strand::Forward),
+                path_index,
                 prev: None,
             }));
 
             while let Some(current_node) = stack.pop_back() {
                 let current = current_node.node;
+                let mut current_block = &path_blocks[current_node.path_index];
 
                 if !visited.insert(current) {
                     continue;
@@ -154,9 +161,10 @@ fn translate_path_links(
 
                 // if current completes the current block, move to the next path block
                 if current.0.sequence_end == current_block.sequence_end {
-                    if let Some(x) = block_iter.next() {
-                        current_block = x;
-                        current_pos = x.sequence_start;
+                    path_index += 1;
+                    if path_index < path_blocks.len() {
+                        current_block = &path_blocks[path_index];
+                        current_pos = current_block.sequence_start;
                     } else {
                         // we're done, path_block is fully consumed
                         let mut path = vec![];
@@ -179,6 +187,7 @@ fn translate_path_links(
                     {
                         stack.push_back(Rc::new(PathNode {
                             node: (neighbor, edge.target_strand),
+                            path_index,
                             prev: Some(Rc::clone(&current_node)),
                         }));
                     }
