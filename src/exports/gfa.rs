@@ -1,18 +1,15 @@
 use crate::gfa::{path_line, write_links, write_segments, Link, Path as GFAPath, Segment};
-use crate::graph::{GraphEdge, GraphNode};
-use crate::models::node::PATH_START_NODE_ID;
+use crate::graph::{project_path, GraphEdge, GraphNode};
 use crate::models::{
     block_group::BlockGroup, block_group_edge::BlockGroupEdge, collection::Collection, edge::Edge,
     node::Node, path::Path, sample::Sample, strand::Strand,
 };
 use petgraph::graphmap::DiGraphMap;
-use petgraph::Direction;
 use rusqlite::Connection;
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
-use std::rc::Rc;
 
 pub fn export_gfa(
     conn: &Connection,
@@ -100,137 +97,62 @@ pub fn export_gfa(
             });
         }
     }
-    let path_links = translate_path_links(conn, collection_name, sample_name, &graph);
+    let paths = get_paths(conn, collection_name, sample_name, &graph);
     write_segments(&mut writer, &segments.iter().collect::<Vec<&Segment>>());
     write_links(&mut writer, &links.iter().collect::<Vec<&Link>>());
-    write_paths(&mut writer, path_links);
+    write_paths(&mut writer, paths);
 }
 
-fn translate_path_links(
+fn get_paths(
     conn: &Connection,
     collection_name: &str,
     sample_name: Option<String>,
     graph: &DiGraphMap<GraphNode, GraphEdge>,
 ) -> HashMap<String, Vec<(String, Strand)>> {
-    // When a path is created, it will refer to node positions in the graph as it exists then.
-    // If the graph is then updated, the path nodes may be split and the graph no longer contains
-    // the corresponding nodes in the initial path. This takes the initial path and identifies the
-    // set of nodes in the current graph corresponding to the path using a depth first search
-    // approach.
     let paths = Path::query_for_collection_and_sample(conn, collection_name, sample_name);
 
     let mut path_links: HashMap<String, Vec<(String, Strand)>> = HashMap::new();
-
-    struct PathNode {
-        node: (GraphNode, Strand),
-        // path_index serves as a pointer at which path block the added node was at. This is because
-        // in a DFS, we may reset to a previous position for a search and need to reset the position
-        // in the path as well.
-        path_index: usize,
-        prev: Option<Rc<PathNode>>,
-    }
-
-    let start_nodes = graph
-        .nodes()
-        .filter(|node| node.node_id == PATH_START_NODE_ID)
-        .collect::<Vec<GraphNode>>();
 
     for path in paths {
         let block_group = BlockGroup::get_by_id(conn, path.block_group_id);
         let sample_name = block_group.sample_name;
 
         let path_blocks = path.blocks(conn);
-        for start_node in start_nodes.iter() {
-            let mut stack: VecDeque<Rc<PathNode>> = VecDeque::new();
-            let mut visited: HashSet<(GraphNode, Strand)> = HashSet::new();
-            let mut path_index = 0;
-            let mut current_pos;
-            let mut final_path = vec![];
+        let projected_path = project_path(graph, &path_blocks);
 
-            // Start with the initial path containing only the start node
-            stack.push_back(Rc::new(PathNode {
-                node: (*start_node, Strand::Forward),
-                path_index,
-                prev: None,
-            }));
-
-            while let Some(current_node) = stack.pop_back() {
-                let current = current_node.node;
-                let mut current_block = &path_blocks[current_node.path_index];
-
-                if !visited.insert(current) {
-                    continue;
-                }
-
-                // if current completes the current block, move to the next path block
-                if current.0.sequence_end == current_block.sequence_end {
-                    path_index += 1;
-                    if path_index < path_blocks.len() {
-                        current_block = &path_blocks[path_index];
-                        current_pos = current_block.sequence_start;
-                    } else {
-                        // we're done, path_block is fully consumed
-                        let mut path = vec![];
-                        let mut path_ref = Some(Rc::clone(&current_node));
-                        while let Some(pn) = path_ref {
-                            path.push(pn.node);
-                            path_ref = pn.prev.clone();
-                        }
-                        final_path = path.into_iter().rev().collect();
-                        break;
-                    }
-                } else {
-                    current_pos = current.0.sequence_end;
-                }
-
-                for (_src, neighbor, edge) in graph.edges(current.0) {
-                    if neighbor.node_id == current_block.node_id
-                        && neighbor.sequence_start == current_pos
-                        && current_block.strand == edge.target_strand
-                    {
-                        stack.push_back(Rc::new(PathNode {
-                            node: (neighbor, edge.target_strand),
-                            path_index,
-                            prev: Some(Rc::clone(&current_node)),
-                        }));
-                    }
-                }
-            }
-            if !final_path.is_empty() {
-                let full_path_name = if sample_name.is_some() && sample_name.clone().unwrap() != ""
-                {
-                    format!("{}.{}", path.name, sample_name.unwrap()).to_string()
-                } else {
-                    path.name
-                };
-                path_links.insert(
-                    full_path_name,
-                    final_path
-                        .iter()
-                        .filter_map(|(node, strand)| {
-                            if !Node::is_terminal(node.node_id) {
-                                Some((
-                                    format!(
-                                        "{id}.{ss}.{se}",
-                                        id = node.node_id,
-                                        ss = node.sequence_start,
-                                        se = node.sequence_end
-                                    ),
-                                    *strand,
-                                ))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<_>>(),
-                );
-                break;
+        if !projected_path.is_empty() {
+            let full_path_name = if sample_name.is_some() && sample_name.clone().unwrap() != "" {
+                format!("{}.{}", path.name, sample_name.unwrap()).to_string()
             } else {
-                println!(
-                    "Path {name} is not translatable to current graph.",
-                    name = &path.name
-                );
-            }
+                path.name
+            };
+            path_links.insert(
+                full_path_name,
+                projected_path
+                    .iter()
+                    .filter_map(|(node, strand)| {
+                        if !Node::is_terminal(node.node_id) {
+                            Some((
+                                format!(
+                                    "{id}.{ss}.{se}",
+                                    id = node.node_id,
+                                    ss = node.sequence_start,
+                                    se = node.sequence_end
+                                ),
+                                *strand,
+                            ))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>(),
+            );
+            break;
+        } else {
+            println!(
+                "Path {name} is not translatable to current graph.",
+                name = &path.name
+            );
         }
     }
     path_links

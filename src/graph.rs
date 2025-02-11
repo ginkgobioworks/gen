@@ -1,4 +1,6 @@
 use crate::models::block_group::NodeIntervalBlock;
+use crate::models::node::PATH_START_NODE_ID;
+use crate::models::path::PathBlock;
 use crate::models::strand::Strand;
 use interavl::IntervalTree as IT2;
 use intervaltree::IntervalTree;
@@ -13,6 +15,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::{self, Debug};
 use std::hash::Hash;
 use std::iter::from_fn;
+use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct GraphNode {
@@ -363,6 +366,90 @@ pub fn flatten_to_interval_tree(
         .map(|block| (block.start..block.end, *block))
         .collect();
     tree
+}
+
+pub fn project_path(
+    graph: &DiGraphMap<GraphNode, GraphEdge>,
+    path_blocks: &[PathBlock],
+) -> Vec<(GraphNode, Strand)> {
+    // When a path is created, it will refer to node positions in the graph as it exists then.
+    // If the graph is then updated, the path nodes may be split and the graph no longer contains
+    // the corresponding nodes in the initial path. This takes the initial path and identifies the
+    // set of nodes in the current graph corresponding to the path using a depth first search
+    // approach.
+
+    #[derive(Debug)]
+    struct PathNode {
+        node: (GraphNode, Strand),
+        // path_index serves as a pointer at which path block the added node was at. This is because
+        // in a DFS, we may reset to a previous position for a search and need to reset the position
+        // in the path as well.
+        path_index: usize,
+        prev: Option<Rc<PathNode>>,
+    }
+
+    let start_nodes = graph
+        .nodes()
+        .filter(|node| node.node_id == PATH_START_NODE_ID)
+        .collect::<Vec<GraphNode>>();
+    let start_node = start_nodes.first().unwrap();
+
+    let mut final_path = vec![];
+    let mut stack: VecDeque<Rc<PathNode>> = VecDeque::new();
+    let mut visited: HashSet<(GraphNode, Strand)> = HashSet::new();
+    let mut path_index = 0;
+    let mut current_pos;
+
+    // Start with the initial path containing only the start node
+    stack.push_back(Rc::new(PathNode {
+        node: (*start_node, Strand::Forward),
+        path_index,
+        prev: None,
+    }));
+
+    while let Some(current_node) = stack.pop_back() {
+        let current = current_node.node;
+        let mut current_block = &path_blocks[current_node.path_index];
+
+        if !visited.insert(current) {
+            continue;
+        }
+
+        // if current completes the current block, move to the next path block
+        if current.0.sequence_end == current_block.sequence_end {
+            path_index += 1;
+            if path_index < path_blocks.len() {
+                current_block = &path_blocks[path_index];
+                current_pos = current_block.sequence_start;
+            } else {
+                // we're done, path_block is fully consumed
+                let mut path = vec![];
+                let mut path_ref = Some(Rc::clone(&current_node));
+                while let Some(pn) = path_ref {
+                    path.push(pn.node);
+                    path_ref = pn.prev.clone();
+                }
+                final_path = path.into_iter().rev().collect();
+                break;
+            }
+        } else {
+            current_pos = current.0.sequence_end;
+        }
+
+        for (_src, neighbor, edge) in graph.edges(current.0) {
+            if neighbor.node_id == current_block.node_id
+                && neighbor.sequence_start == current_pos
+                && current_block.strand == edge.target_strand
+            {
+                stack.push_back(Rc::new(PathNode {
+                    node: (neighbor, edge.target_strand),
+                    path_index,
+                    prev: Some(Rc::clone(&current_node)),
+                }));
+            }
+        }
+    }
+    final_path
 }
 
 #[cfg(test)]
@@ -731,6 +818,623 @@ mod tests {
                 .map(|(source, target, _weight)| (*source, *target))
                 .collect::<Vec<(i64, i64)>>();
             assert_eq!(intermediate_edges, vec![(2, 3), (3, 4), (2, 6), (6, 4)]);
+        }
+    }
+
+    #[cfg(test)]
+    mod project_path {
+        use super::*;
+        use crate::models::node::PATH_END_NODE_ID;
+        use petgraph::data::Build;
+        use petgraph::graphmap::DiGraphMap;
+
+        #[test]
+        fn test_simple_path_projection() {
+            // graph looks like
+            //
+            //           /-> 4.3.5 -> 5.0.3 ---\
+            //  s -> 3.0.5 -------------------> 3.5.15 -> e
+            //  initial path is defined as 3.0.0 to 3.0.15
+            let mut graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: PATH_START_NODE_ID,
+                    sequence_start: 0,
+                    sequence_end: 0,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 3,
+                    sequence_start: 0,
+                    sequence_end: 5,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 3,
+                    sequence_start: 0,
+                    sequence_end: 5,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 4,
+                    sequence_start: 3,
+                    sequence_end: 5,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 4,
+                    sequence_start: 3,
+                    sequence_end: 5,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 5,
+                    sequence_start: 0,
+                    sequence_end: 3,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 5,
+                    sequence_start: 0,
+                    sequence_end: 3,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 3,
+                    sequence_start: 5,
+                    sequence_end: 15,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 3,
+                    sequence_start: 0,
+                    sequence_end: 5,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 3,
+                    sequence_start: 5,
+                    sequence_end: 15,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 3,
+                    sequence_start: 5,
+                    sequence_end: 15,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: PATH_END_NODE_ID,
+                    sequence_start: 0,
+                    sequence_end: 0,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+            let path_blocks = vec![
+                PathBlock {
+                    id: 0,
+                    node_id: PATH_START_NODE_ID,
+                    block_sequence: "".to_string(),
+                    sequence_start: 0,
+                    sequence_end: 0,
+                    path_start: 0,
+                    path_end: 0,
+                    strand: Strand::Forward,
+                },
+                PathBlock {
+                    id: 0,
+                    node_id: 3,
+                    block_sequence: "".to_string(),
+                    sequence_start: 0,
+                    sequence_end: 15,
+                    path_start: 0,
+                    path_end: 0,
+                    strand: Strand::Forward,
+                },
+                PathBlock {
+                    id: 0,
+                    node_id: PATH_END_NODE_ID,
+                    block_sequence: "".to_string(),
+                    sequence_start: 0,
+                    sequence_end: 0,
+                    path_start: 0,
+                    path_end: 0,
+                    strand: Strand::Forward,
+                },
+            ];
+            let projection = project_path(&graph, &path_blocks);
+            assert_eq!(
+                projection,
+                [
+                    (
+                        GraphNode {
+                            block_id: -1,
+                            node_id: PATH_START_NODE_ID,
+                            sequence_start: 0,
+                            sequence_end: 0
+                        },
+                        Strand::Forward
+                    ),
+                    (
+                        GraphNode {
+                            block_id: -1,
+                            node_id: 3,
+                            sequence_start: 0,
+                            sequence_end: 5
+                        },
+                        Strand::Forward
+                    ),
+                    (
+                        GraphNode {
+                            block_id: -1,
+                            node_id: 3,
+                            sequence_start: 5,
+                            sequence_end: 15
+                        },
+                        Strand::Forward
+                    ),
+                    (
+                        GraphNode {
+                            block_id: -1,
+                            node_id: PATH_END_NODE_ID,
+                            sequence_start: 0,
+                            sequence_end: 0
+                        },
+                        Strand::Forward
+                    )
+                ]
+            )
+        }
+
+        #[test]
+        fn test_nested_path_projection() {
+            // graph looks like
+            //                                                /-> 7.0.2 -\
+            //           /-> 4.3.5 -> 5.0.3 ---\     /-> 6.0.3----------->6.3.7 -\
+            //  s -> 3.0.5 -------------------> 3.5.10 ------------------------> 3.10.15 -> e
+            //  initial path is defined as 3.0.0 -> 3.5.10 -> 6.0.7 -> 3.10.15
+            let mut graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: PATH_START_NODE_ID,
+                    sequence_start: 0,
+                    sequence_end: 0,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 3,
+                    sequence_start: 0,
+                    sequence_end: 5,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 3,
+                    sequence_start: 0,
+                    sequence_end: 5,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 4,
+                    sequence_start: 3,
+                    sequence_end: 5,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 4,
+                    sequence_start: 3,
+                    sequence_end: 5,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 5,
+                    sequence_start: 0,
+                    sequence_end: 3,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 5,
+                    sequence_start: 0,
+                    sequence_end: 3,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 3,
+                    sequence_start: 5,
+                    sequence_end: 10,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 3,
+                    sequence_start: 0,
+                    sequence_end: 5,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 3,
+                    sequence_start: 5,
+                    sequence_end: 10,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 3,
+                    sequence_start: 5,
+                    sequence_end: 10,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 3,
+                    sequence_start: 10,
+                    sequence_end: 15,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 3,
+                    sequence_start: 5,
+                    sequence_end: 10,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 6,
+                    sequence_start: 0,
+                    sequence_end: 3,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 6,
+                    sequence_start: 0,
+                    sequence_end: 3,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 6,
+                    sequence_start: 3,
+                    sequence_end: 7,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 6,
+                    sequence_start: 0,
+                    sequence_end: 3,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 7,
+                    sequence_start: 0,
+                    sequence_end: 2,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 7,
+                    sequence_start: 0,
+                    sequence_end: 2,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 6,
+                    sequence_start: 3,
+                    sequence_end: 7,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 6,
+                    sequence_start: 3,
+                    sequence_end: 7,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 3,
+                    sequence_start: 10,
+                    sequence_end: 15,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 3,
+                    sequence_start: 10,
+                    sequence_end: 15,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: PATH_END_NODE_ID,
+                    sequence_start: 0,
+                    sequence_end: 0,
+                },
+                GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                },
+            );
+            let path_blocks = vec![
+                PathBlock {
+                    id: 0,
+                    node_id: PATH_START_NODE_ID,
+                    block_sequence: "".to_string(),
+                    sequence_start: 0,
+                    sequence_end: 0,
+                    path_start: 0,
+                    path_end: 0,
+                    strand: Strand::Forward,
+                },
+                PathBlock {
+                    id: 0,
+                    node_id: 3,
+                    block_sequence: "".to_string(),
+                    sequence_start: 0,
+                    sequence_end: 5,
+                    path_start: 0,
+                    path_end: 5,
+                    strand: Strand::Forward,
+                },
+                PathBlock {
+                    id: 0,
+                    node_id: 3,
+                    block_sequence: "".to_string(),
+                    sequence_start: 5,
+                    sequence_end: 10,
+                    path_start: 5,
+                    path_end: 10,
+                    strand: Strand::Forward,
+                },
+                PathBlock {
+                    id: 0,
+                    node_id: 6,
+                    block_sequence: "".to_string(),
+                    sequence_start: 0,
+                    sequence_end: 7,
+                    path_start: 10,
+                    path_end: 17,
+                    strand: Strand::Forward,
+                },
+                PathBlock {
+                    id: 0,
+                    node_id: 3,
+                    block_sequence: "".to_string(),
+                    sequence_start: 10,
+                    sequence_end: 15,
+                    path_start: 17,
+                    path_end: 23,
+                    strand: Strand::Forward,
+                },
+                PathBlock {
+                    id: 0,
+                    node_id: PATH_END_NODE_ID,
+                    block_sequence: "".to_string(),
+                    sequence_start: 0,
+                    sequence_end: 0,
+                    path_start: 0,
+                    path_end: 0,
+                    strand: Strand::Forward,
+                },
+            ];
+            let projection = project_path(&graph, &path_blocks);
+            assert_eq!(
+                projection,
+                [
+                    (
+                        GraphNode {
+                            block_id: -1,
+                            node_id: PATH_START_NODE_ID,
+                            sequence_start: 0,
+                            sequence_end: 0
+                        },
+                        Strand::Forward
+                    ),
+                    (
+                        GraphNode {
+                            block_id: -1,
+                            node_id: 3,
+                            sequence_start: 0,
+                            sequence_end: 5
+                        },
+                        Strand::Forward
+                    ),
+                    (
+                        GraphNode {
+                            block_id: -1,
+                            node_id: 3,
+                            sequence_start: 5,
+                            sequence_end: 10
+                        },
+                        Strand::Forward
+                    ),
+                    (
+                        GraphNode {
+                            block_id: -1,
+                            node_id: 6,
+                            sequence_start: 0,
+                            sequence_end: 3
+                        },
+                        Strand::Forward
+                    ),
+                    (
+                        GraphNode {
+                            block_id: -1,
+                            node_id: 6,
+                            sequence_start: 3,
+                            sequence_end: 7
+                        },
+                        Strand::Forward
+                    ),
+                    (
+                        GraphNode {
+                            block_id: -1,
+                            node_id: 3,
+                            sequence_start: 10,
+                            sequence_end: 15
+                        },
+                        Strand::Forward
+                    ),
+                    (
+                        GraphNode {
+                            block_id: -1,
+                            node_id: PATH_END_NODE_ID,
+                            sequence_start: 0,
+                            sequence_end: 0
+                        },
+                        Strand::Forward
+                    )
+                ]
+            )
         }
     }
 }
