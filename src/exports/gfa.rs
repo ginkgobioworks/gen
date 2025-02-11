@@ -123,6 +123,9 @@ fn translate_path_links(
 
     struct PathNode {
         node: (GraphNode, Strand),
+        // path_index serves as a pointer at which path block the added node was at. This is because
+        // in a DFS, we may reset to a previous position for a search and need to reset the position
+        // in the path as well.
         path_index: usize,
         prev: Option<Rc<PathNode>>,
     }
