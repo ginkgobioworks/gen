@@ -11,6 +11,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
+use std::rc::Rc;
 
 pub fn export_gfa(
     conn: &Connection,
@@ -114,6 +115,11 @@ fn translate_path_links(
 
     let mut path_links: HashMap<String, Vec<(String, Strand)>> = HashMap::new();
 
+    struct PathNode {
+        node: (GraphNode, Strand),
+        prev: Option<Rc<PathNode>>,
+    }
+
     for path in paths {
         let block_group = BlockGroup::get_by_id(conn, path.block_group_id);
         let sample_name = block_group.sample_name;
@@ -132,7 +138,7 @@ fn translate_path_links(
             })
             .collect::<Vec<GraphNode>>();
         for start_node in start_nodes.iter() {
-            let mut stack: VecDeque<Vec<(GraphNode, Strand)>> = VecDeque::new();
+            let mut stack: VecDeque<Rc<PathNode>> = VecDeque::new();
             let mut visited: HashSet<(GraphNode, Strand)> = HashSet::new();
             let mut block_iter = path_blocks.iter().peekable();
             let mut current_block = block_iter.next().unwrap();
@@ -140,10 +146,13 @@ fn translate_path_links(
             let mut final_path = vec![];
 
             // Start with the initial path containing only the start node
-            stack.push_back(vec![(*start_node, Strand::Forward)]);
+            stack.push_back(Rc::new(PathNode {
+                node: (*start_node, Strand::Forward),
+                prev: None,
+            }));
 
-            while let Some(node_path) = stack.pop_back() {
-                let &current = node_path.last().unwrap();
+            while let Some(current_node) = stack.pop_back() {
+                let current = current_node.node;
 
                 if !visited.insert(current) {
                     continue;
@@ -156,7 +165,13 @@ fn translate_path_links(
                         current_pos = x.sequence_start;
                     } else {
                         // we're done, path_block is fully consumed
-                        final_path = node_path;
+                        let mut path = vec![];
+                        let mut path_ref = Some(Rc::clone(&current_node));
+                        while let Some(pn) = path_ref {
+                            path.push(pn.node);
+                            path_ref = pn.prev.clone();
+                        }
+                        final_path = path.into_iter().rev().collect();
                         break;
                     }
                 } else {
@@ -168,9 +183,10 @@ fn translate_path_links(
                         && neighbor.sequence_start == current_pos
                         && current_block.strand == edge.target_strand
                     {
-                        let mut new_path = node_path.clone();
-                        new_path.push((neighbor, edge.target_strand));
-                        stack.push_back(new_path);
+                        stack.push_back(Rc::new(PathNode {
+                            node: (neighbor, edge.target_strand),
+                            prev: Some(Rc::clone(&current_node)),
+                        }));
                     }
                 }
             }
