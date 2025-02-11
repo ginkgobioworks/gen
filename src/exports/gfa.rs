@@ -220,7 +220,10 @@ fn translate_path_links(
                 );
                 break;
             } else {
-                println!("cant find path for {path:?} {path_blocks:?} {start_nodes:?}");
+                println!(
+                    "Path {name} is not translatable to current graph.",
+                    name = &path.name
+                );
             }
         }
     }
