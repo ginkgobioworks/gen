@@ -825,7 +825,6 @@ mod tests {
     mod project_path {
         use super::*;
         use crate::models::node::PATH_END_NODE_ID;
-        use petgraph::data::Build;
         use petgraph::graphmap::DiGraphMap;
 
         #[test]
