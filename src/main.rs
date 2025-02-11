@@ -33,6 +33,7 @@ use gen::updates::vcf::{update_with_vcf, VcfError};
 use gen::views::block_group::view_block_group;
 use gen::views::patch::view_patches;
 
+use gen::views::operations::view_operations;
 use itertools::Itertools;
 use noodles::core::Region;
 use noodles::gff::directive::name;
@@ -262,6 +263,9 @@ enum Commands {
     /// View operations carried out against a database
     #[command()]
     Operations {
+        /// Edit operation messages
+        #[arg(short, long)]
+        message: Option<String>,
         /// The branch to list operations for
         #[arg(short, long)]
         branch: Option<String>,
@@ -678,7 +682,7 @@ fn main() {
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
         }
-        Some(Commands::Operations { branch }) => {
+        Some(Commands::Operations { message, branch }) => {
             let current_op = OperationState::get_operation(&operation_conn, &db_uuid);
             if let Some(current_op) = current_op {
                 let branch_name = branch.clone().unwrap_or_else(|| {
@@ -695,23 +699,27 @@ fn main() {
                         .unwrap_or_else(|| panic!("No branch named {branch_name}."))
                         .id,
                 );
-                let mut indicator = "";
-                println!(
-                    "{indicator:<3}{col1:>64}   {col2:<70}",
-                    col1 = "Id",
-                    col2 = "Summary"
-                );
-                for op in operations.iter() {
-                    if op.hash == current_op {
-                        indicator = ">";
-                    } else {
-                        indicator = "";
-                    }
+                if let Some(message) = message {
+                    view_operations(&operation_conn, &operations);
+                } else {
+                    let mut indicator = "";
                     println!(
                         "{indicator:<3}{col1:>64}   {col2:<70}",
-                        col1 = op.hash,
-                        col2 = op.change_type
+                        col1 = "Id",
+                        col2 = "Summary"
                     );
+                    for op in operations.iter() {
+                        if op.hash == current_op {
+                            indicator = ">";
+                        } else {
+                            indicator = "";
+                        }
+                        println!(
+                            "{indicator:<3}{col1:>64}   {col2:<70}",
+                            col1 = op.hash,
+                            col2 = op.change_type
+                        );
+                    }
                 }
             } else {
                 println!("No operations found.");

@@ -23,6 +23,7 @@ pub fn get_operation_connection(db_path: impl Into<Option<PathBuf>>) -> Connecti
     };
     let mut conn =
         Connection::open(&path).unwrap_or_else(|_| panic!("Error connecting to {:?}", &path));
+    rusqlite::vtab::array::load_module(&conn).unwrap();
     run_operation_migrations(&mut conn);
     conn
 }
