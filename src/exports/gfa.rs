@@ -1,16 +1,10 @@
 use crate::gfa::{path_line, write_links, write_segments, Link, Path as GFAPath, Segment};
+use crate::graph::{project_path, GraphEdge, GraphNode};
 use crate::models::{
-    block_group::BlockGroup,
-    block_group_edge::BlockGroupEdge,
-    collection::Collection,
-    edge::{Edge, GroupBlock},
-    node::Node,
-    path::Path,
-    path_edge::PathEdge,
-    sample::Sample,
-    strand::Strand,
+    block_group::BlockGroup, block_group_edge::BlockGroupEdge, collection::Collection, edge::Edge,
+    node::Node, path::Path, sample::Sample, strand::Strand,
 };
-use itertools::Itertools;
+use petgraph::graphmap::DiGraphMap;
 use rusqlite::Connection;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::File;
@@ -62,10 +56,10 @@ pub fn export_gfa(
     let file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(file);
 
-    let mut segments = vec![];
+    let mut segments = BTreeSet::new();
     for block in &blocks {
         if !Node::is_terminal(block.node_id) {
-            segments.push(Segment {
+            segments.insert(Segment {
                 sequence: block.sequence(),
                 node_id: block.node_id,
                 sequence_start: block.start,
@@ -76,7 +70,6 @@ pub fn export_gfa(
             });
         }
     }
-    write_segments(&mut writer, &segments);
 
     let mut links = BTreeSet::new();
     for (source, target, edge_info) in graph.all_edges() {
@@ -104,78 +97,19 @@ pub fn export_gfa(
             });
         }
     }
-    let path_links = get_path_links(conn, collection_name, sample_name, &blocks);
-    for (_path_name, link_list) in path_links.iter() {
-        let mut iterator = link_list.iter().peekable();
-        while let Some((segment_id, strand)) = iterator.next() {
-            if let Some((next_segment, next_strand)) = iterator.peek() {
-                links.insert(Link {
-                    source_segment_id: segment_id.clone(),
-                    source_strand: *strand,
-                    target_segment_id: next_segment.clone(),
-                    target_strand: *next_strand,
-                });
-            }
-        }
-    }
+    let paths = get_paths(conn, collection_name, sample_name, &graph);
+    write_segments(&mut writer, &segments.iter().collect::<Vec<&Segment>>());
     write_links(&mut writer, &links.iter().collect::<Vec<&Link>>());
-    write_paths(&mut writer, path_links);
+    write_paths(&mut writer, paths);
 }
 
-// NOTE: A path is an immutable list of edges, but the sequence between the target of one edge and
-// the source of the next may be "split" by later operations that add edges with sources or targets
-// on a sequence that are in between those of a consecutive pair of edges in a path.  This function
-// handles that case by collecting all the nodes between the target of one edge and the source of
-// the next.
-fn segments_for_edges(
-    edge1: &Edge,
-    edge2: &Edge,
-    blocks_by_node_and_start: &HashMap<(i64, i64), GroupBlock>,
-    blocks_by_node_and_end: &HashMap<(i64, i64), GroupBlock>,
-) -> Vec<String> {
-    let mut current_block = blocks_by_node_and_start
-        .get(&(edge1.target_node_id, edge1.target_coordinate))
-        .unwrap();
-    let end_block = blocks_by_node_and_end
-        .get(&(edge2.source_node_id, edge2.source_coordinate))
-        .unwrap();
-    let mut node_ids = vec![];
-    #[allow(clippy::while_immutable_condition)]
-    while current_block.id != end_block.id {
-        node_ids.push(format!(
-            "{}.{}.{}",
-            current_block.node_id, current_block.start, current_block.end
-        ));
-        current_block = blocks_by_node_and_start
-            .get(&(current_block.node_id, current_block.end))
-            .unwrap();
-    }
-    node_ids.push(format!(
-        "{}.{}.{}",
-        end_block.node_id, end_block.start, end_block.end
-    ));
-
-    node_ids
-}
-
-fn get_path_links(
+fn get_paths(
     conn: &Connection,
     collection_name: &str,
     sample_name: Option<String>,
-    blocks: &[GroupBlock],
+    graph: &DiGraphMap<GraphNode, GraphEdge>,
 ) -> HashMap<String, Vec<(String, Strand)>> {
     let paths = Path::query_for_collection_and_sample(conn, collection_name, sample_name);
-    let edges_by_path_id =
-        PathEdge::edges_for_paths(conn, paths.iter().map(|path| path.id).collect());
-
-    let blocks_by_node_and_start = blocks
-        .iter()
-        .map(|block| ((block.node_id, block.start), block.clone()))
-        .collect::<HashMap<(i64, i64), GroupBlock>>();
-    let blocks_by_node_and_end = blocks
-        .iter()
-        .map(|block| ((block.node_id, block.end), block.clone()))
-        .collect::<HashMap<(i64, i64), GroupBlock>>();
 
     let mut path_links: HashMap<String, Vec<(String, Strand)>> = HashMap::new();
 
@@ -183,36 +117,42 @@ fn get_path_links(
         let block_group = BlockGroup::get_by_id(conn, path.block_group_id);
         let sample_name = block_group.sample_name;
 
-        let edges_for_path = edges_by_path_id.get(&path.id).unwrap();
-        let mut graph_segment_ids = vec![];
-        let mut node_strands = vec![];
-        for (edge1, edge2) in edges_for_path.iter().tuple_windows() {
-            let segment_ids = segments_for_edges(
-                edge1,
-                edge2,
-                &blocks_by_node_and_start,
-                &blocks_by_node_and_end,
+        let path_blocks = path.blocks(conn);
+        let projected_path = project_path(graph, &path_blocks);
+
+        if !projected_path.is_empty() {
+            let full_path_name = if sample_name.is_some() && sample_name.clone().unwrap() != "" {
+                format!("{}.{}", path.name, sample_name.unwrap()).to_string()
+            } else {
+                path.name
+            };
+            path_links.insert(
+                full_path_name,
+                projected_path
+                    .iter()
+                    .filter_map(|(node, strand)| {
+                        if !Node::is_terminal(node.node_id) {
+                            Some((
+                                format!(
+                                    "{id}.{ss}.{se}",
+                                    id = node.node_id,
+                                    ss = node.sequence_start,
+                                    se = node.sequence_end
+                                ),
+                                *strand,
+                            ))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>(),
             );
-            for segment_id in &segment_ids {
-                graph_segment_ids.push(segment_id.clone());
-                node_strands.push(edge1.target_strand);
-            }
-        }
-
-        let full_path_name = if sample_name.is_some() && sample_name.clone().unwrap() != "" {
-            format!("{}.{}", path.name, sample_name.unwrap()).to_string()
         } else {
-            path.name
-        };
-
-        path_links.insert(
-            full_path_name,
-            graph_segment_ids
-                .iter()
-                .zip(node_strands.iter())
-                .map(|(segment_id, strand)| (segment_id.clone(), *strand))
-                .collect(),
-        );
+            println!(
+                "Path {name} is not translatable to current graph.",
+                name = &path.name
+            );
+        }
     }
     path_links
 }
