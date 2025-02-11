@@ -425,8 +425,6 @@ mod tests {
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id, false);
-        let mut g = BlockGroup::get_graph(conn, block_group_id);
-        BlockGroup::prune_graph(&mut g);
 
         let temp_dir = tempdir().expect("Couldn't get handle to temp directory");
         let mut gfa_path = PathBuf::from(temp_dir.path());
