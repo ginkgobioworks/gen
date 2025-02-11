@@ -1,5 +1,6 @@
 use crate::gfa::{path_line, write_links, write_segments, Link, Path as GFAPath, Segment};
 use crate::graph::{GraphEdge, GraphNode};
+use crate::models::node::PATH_START_NODE_ID;
 use crate::models::{
     block_group::BlockGroup, block_group_edge::BlockGroupEdge, collection::Collection, edge::Edge,
     node::Node, path::Path, sample::Sample, strand::Strand,
@@ -120,23 +121,16 @@ fn translate_path_links(
         prev: Option<Rc<PathNode>>,
     }
 
+    let start_nodes = graph
+        .nodes()
+        .filter(|node| node.node_id == PATH_START_NODE_ID)
+        .collect::<Vec<GraphNode>>();
+
     for path in paths {
         let block_group = BlockGroup::get_by_id(conn, path.block_group_id);
         let sample_name = block_group.sample_name;
 
         let path_blocks = path.blocks(conn);
-        let path_block = path_blocks.first().expect("Path is empty.");
-        let start_nodes = graph
-            .nodes()
-            .filter(|node| {
-                node.node_id == path_block.node_id
-                    && node.sequence_start == path_block.sequence_start
-                    && graph
-                        .edges_directed(*node, Direction::Incoming)
-                        .collect::<Vec<_>>()
-                        .is_empty()
-            })
-            .collect::<Vec<GraphNode>>();
         for start_node in start_nodes.iter() {
             let mut stack: VecDeque<Rc<PathNode>> = VecDeque::new();
             let mut visited: HashSet<(GraphNode, Strand)> = HashSet::new();
