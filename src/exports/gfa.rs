@@ -147,7 +147,6 @@ fn get_paths(
                     })
                     .collect::<Vec<_>>(),
             );
-            break;
         } else {
             println!(
                 "Path {name} is not translatable to current graph.",
