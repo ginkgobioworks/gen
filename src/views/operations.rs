@@ -17,6 +17,7 @@ use ratatui::{
     Terminal,
 };
 use rusqlite::{params, types::Value, Connection};
+use std::collections::HashMap;
 use std::io;
 use std::rc::Rc;
 use tui_textarea::TextArea;
@@ -30,8 +31,19 @@ fn clip_text(t: &str, limit: usize) -> String {
     }
 }
 
+struct OperationRow<'a> {
+    operation: &'a Operation,
+    summary: OperationSummary,
+}
+
 pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<(), io::Error> {
-    let mut operation_summaries = OperationSummary::query(
+    let operation_by_hash: HashMap<String, &Operation> = HashMap::from_iter(
+        operations
+            .iter()
+            .map(|op| (op.hash.clone(), op))
+            .collect::<Vec<(String, &Operation)>>(),
+    );
+    let summaries = OperationSummary::query(
         conn,
         "select * from operation_summary where operation_hash in rarray(?1)",
         params![Rc::new(
@@ -41,6 +53,13 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
                 .collect::<Vec<Value>>()
         )],
     );
+    let mut operation_summaries = summaries
+        .iter()
+        .map(|summary| OperationRow {
+            operation: operation_by_hash[&summary.operation_hash],
+            summary: summary.clone(),
+        })
+        .collect::<Vec<_>>();
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -72,28 +91,36 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
                     };
 
                     Row::new(vec![
-                        clip_text(&op.operation_hash, 40),
-                        clip_text(&op.summary, 50),
+                        clip_text(&op.operation.hash, 40),
+                        clip_text(&op.operation.change_type, 20),
+                        clip_text(&op.summary.summary, 50),
                     ])
                     .style(style)
                 })
                 .collect();
 
-            let table = Table::new(rows, [Constraint::Length(40), Constraint::Length(50)])
-                .header(
-                    Row::new(vec!["Operation Hash", "Summary"])
-                        .style(Style::default().add_modifier(Modifier::UNDERLINED)),
-                )
-                .block(
-                    Block::default()
-                        .title("Operations")
-                        .borders(Borders::ALL)
-                        .border_style(if panel_focus == "operations" {
-                            focused_style
-                        } else {
-                            unfocused_style
-                        }),
-                );
+            let table = Table::new(
+                rows,
+                [
+                    Constraint::Length(40),
+                    Constraint::Length(20),
+                    Constraint::Length(50),
+                ],
+            )
+            .header(
+                Row::new(vec!["Operation Hash", "Change Type", "Summary"])
+                    .style(Style::default().add_modifier(Modifier::UNDERLINED)),
+            )
+            .block(
+                Block::default()
+                    .title("Operations")
+                    .borders(Borders::ALL)
+                    .border_style(if panel_focus == "operations" {
+                        focused_style
+                    } else {
+                        unfocused_style
+                    }),
+            );
 
             let status_bar_height: u16 = 1;
 
@@ -197,10 +224,10 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
                         let new_summary = textarea.lines().iter().join("\n");
                         let _ = OperationSummary::set_message(
                             conn,
-                            operation_summaries[selected].id,
+                            operation_summaries[selected].summary.id,
                             &new_summary,
                         );
-                        operation_summaries[selected].summary = new_summary;
+                        operation_summaries[selected].summary.summary = new_summary;
                     } else {
                         textarea.input(key);
                     }
@@ -220,7 +247,7 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
                         }
                         KeyCode::Enter | KeyCode::Char('e') => {
                             textarea = TextArea::from_iter(
-                                operation_summaries[selected].summary.split("\n"),
+                                operation_summaries[selected].summary.summary.split("\n"),
                             );
                             view_message_panel = true;
                             focus_index = if let Some((i, _)) = focus_rotation
