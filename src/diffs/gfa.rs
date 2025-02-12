@@ -256,12 +256,13 @@ mod tests {
     };
 
     use crate::models::operations::setup_db;
-    use crate::test_helpers::{get_connection, get_operation_connection};
+    use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use tempfile::tempdir;
 
     #[test]
     fn test_gfa_diff() {
         // Sets up a basic graph and then exports it to a GFA file
+        setup_gen_dir();
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
@@ -485,6 +486,7 @@ mod tests {
     #[test]
     fn test_gfa_diff_against_nothing() {
         // Confirm diff of a sample against nothing is just the sample
+        setup_gen_dir();
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
@@ -575,6 +577,7 @@ mod tests {
     #[test]
     fn test_self_diff() {
         // Confirm diff of a sample to itself just results in a graph that's a single path
+        setup_gen_dir();
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
@@ -671,6 +674,7 @@ mod tests {
     #[test]
     fn test_gfa_diff_unrelated_paths() {
         // Confirm diff of a sample to totally unrelated sample produces two separate paths
+        setup_gen_dir();
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
@@ -820,6 +824,7 @@ mod tests {
     fn test_gfa_diff_unrelated_paths_matching_block_group_names() {
         // Confirm diff of two paths that are in the same block group but don't share any nodes
         // results in two disjoint sequences
+        setup_gen_dir();
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
@@ -970,6 +975,7 @@ mod tests {
         // Set up a child with a replacement, then a grandchild with a replacement on the child that
         // partially overlaps the child's replacement, and confirm diffs between all pairs from
         // (original, child, grandchild)
+        setup_gen_dir();
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);

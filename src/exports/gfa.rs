@@ -202,6 +202,7 @@ mod tests {
     #[test]
     fn test_simple_export() {
         // Sets up a basic graph and then exports it to a GFA file
+        setup_gen_dir();
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
@@ -435,6 +436,7 @@ mod tests {
         // Confirm that if edges are added to or from a sequence, that results in the sequence being
         // split into multiple segments in the exported GFA, and that the multiple segments are
         // re-imported as multiple sequences
+        setup_gen_dir();
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);

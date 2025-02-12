@@ -299,6 +299,7 @@ pub fn import_gfa<'a>(
         Path::create(conn, path_name, block_group.id, &path_edge_ids);
     }
 
+    let mut chromosome_index = gfa.paths.len() + gfa.walk.len();
     // make any block group edges not in paths or walks
     BlockGroupEdge::bulk_create(
         conn,
@@ -306,10 +307,11 @@ pub fn import_gfa<'a>(
             .iter()
             .filter_map(|id| {
                 if !created_blockgroup_edges.contains(id) {
+                    chromosome_index += 1;
                     Some(BlockGroupEdgeData {
                         block_group_id: block_group.id,
                         edge_id: *id,
-                        chromosome_index: 0,
+                        chromosome_index: chromosome_index as i64,
                         phased: 0,
                     })
                 } else {
@@ -414,6 +416,7 @@ mod tests {
 
     #[test]
     fn test_import_no_path_gfa() {
+        setup_gen_dir();
         let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         gfa_path.push("fixtures/no_path.gfa");
         let collection_name = "no path".to_string();
@@ -436,6 +439,7 @@ mod tests {
 
     #[test]
     fn test_import_gfa_with_walk() {
+        setup_gen_dir();
         let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         gfa_path.push("fixtures/walk.gfa");
         let collection_name = "walk".to_string();
@@ -465,6 +469,7 @@ mod tests {
 
     #[test]
     fn test_import_gfa_with_reverse_strand_edges() {
+        setup_gen_dir();
         let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         gfa_path.push("fixtures/reverse_strand.gfa");
         let collection_name = "test".to_string();
@@ -494,6 +499,7 @@ mod tests {
 
     #[test]
     fn test_import_anderson_promoters() {
+        setup_gen_dir();
         let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         gfa_path.push("fixtures/anderson_promoters.gfa");
         let collection_name = "anderson promoters".to_string();
