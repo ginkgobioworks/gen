@@ -31,9 +31,9 @@ use gen::updates::gfa::update_with_gfa;
 use gen::updates::library::update_with_library;
 use gen::updates::vcf::{update_with_vcf, VcfError};
 use gen::views::block_group::view_block_group;
+use gen::views::operations::view_operations;
 use gen::views::patch::view_patches;
 
-use gen::views::operations::view_operations;
 use itertools::Itertools;
 use noodles::core::Region;
 use noodles::gff::directive::name;

@@ -66,8 +66,8 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
-    let mut textarea = TextArea::default();
 
+    let mut textarea = TextArea::default();
     let mut view_message_panel = false;
     let mut panel_focus = "operations";
     let mut focus_rotation = vec!["operations"];
@@ -76,6 +76,7 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
         .fg(Color::Blue)
         .add_modifier(Modifier::BOLD);
     let unfocused_style = Style::default().fg(Color::Gray);
+    let status_bar_height: u16 = 1;
 
     let mut selected = 0;
     loop {
@@ -121,12 +122,6 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
                         unfocused_style
                     }),
             );
-
-            let status_bar_height: u16 = 1;
-
-            // Define the layouts
-            // The outer layout is a vertical split between the canvas and the status bar
-            // The inner layout is a vertical split between the canvas and the panel
 
             let outer_layout = Layout::default()
                 .direction(Direction::Vertical)
