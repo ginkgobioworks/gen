@@ -13,7 +13,7 @@ use ratatui::widgets::Paragraph;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
-    widgets::{Block, Borders, List, ListItem},
+    widgets::{Block, Borders, Row, Table},
     Terminal,
 };
 use rusqlite::{params, types::Value, Connection};
@@ -22,11 +22,11 @@ use std::rc::Rc;
 use tui_textarea::TextArea;
 
 fn clip_text(t: &str, limit: usize) -> String {
-    let new_t = t.replace("\n", " ");
-    if new_t.len() > limit {
-        format!("{trunc}...", trunc = &new_t[0..limit])
+    let t = t.replace("\n", " ");
+    if t.len() > limit - 3 {
+        format!("{trunc}...", trunc = &t[0..limit - 3])
     } else {
-        new_t
+        t.to_string()
     }
 }
 
@@ -61,30 +61,39 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
     let mut selected = 0;
     loop {
         terminal.draw(|f| {
-            let items: Vec<ListItem> = operation_summaries
+            let rows: Vec<Row> = operation_summaries
                 .iter()
                 .enumerate()
                 .map(|(i, op)| {
-                    let prefix = if i == selected { "> " } else { "  " };
-                    ListItem::new(format!(
-                        "{}{} - {}",
-                        prefix,
-                        op.operation_hash,
-                        clip_text(&op.summary, 50)
-                    ))
+                    let style = if i == selected {
+                        Style::default().add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default()
+                    };
+
+                    Row::new(vec![
+                        clip_text(&op.operation_hash, 40),
+                        clip_text(&op.summary, 50),
+                    ])
+                    .style(style)
                 })
                 .collect();
 
-            let list = List::new(items).block(
-                Block::default()
-                    .title("Operations")
-                    .borders(Borders::ALL)
-                    .border_style(if panel_focus == "operations" {
-                        focused_style
-                    } else {
-                        unfocused_style
-                    }),
-            );
+            let table = Table::new(rows, [Constraint::Length(40), Constraint::Length(50)])
+                .header(
+                    Row::new(vec!["Operation Hash", "Summary"])
+                        .style(Style::default().add_modifier(Modifier::UNDERLINED)),
+                )
+                .block(
+                    Block::default()
+                        .title("Operations")
+                        .borders(Borders::ALL)
+                        .border_style(if panel_focus == "operations" {
+                            focused_style
+                        } else {
+                            unfocused_style
+                        }),
+                );
 
             let status_bar_height: u16 = 1;
 
@@ -130,14 +139,14 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
                     .direction(Direction::Vertical)
                     .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
                     .split(main_area);
-                f.render_widget(list, chunks[0]);
+                f.render_widget(table, chunks[0]);
                 f.render_widget(&textarea, chunks[1]);
             } else {
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([Constraint::Percentage(100)].as_ref())
                     .split(main_area);
-                f.render_widget(list, chunks[0]);
+                f.render_widget(table, chunks[0]);
             };
             let status_bar_contents = format!(
                 "{panel_messages:width$}",
