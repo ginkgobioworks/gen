@@ -297,10 +297,11 @@ impl OperationSummary {
         rows.next().unwrap().unwrap()
     }
 
-    pub fn set_message(conn: &Connection, id: i64, message: &str) {
+    pub fn set_message(conn: &Connection, id: i64, message: &str) -> SQLResult<()> {
         let query = "UPDATE operation_summary SET summary = ?2 where id = ?1";
         let mut stmt = conn.prepare(query).unwrap();
-        stmt.execute(params![id, message]);
+        stmt.execute(params![id, message])?;
+        Ok(())
     }
 }
 

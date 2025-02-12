@@ -265,7 +265,7 @@ enum Commands {
     Operations {
         /// Edit operation messages
         #[arg(short, long)]
-        message: Option<String>,
+        interactive: bool,
         /// The branch to list operations for
         #[arg(short, long)]
         branch: Option<String>,
@@ -682,7 +682,10 @@ fn main() {
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
         }
-        Some(Commands::Operations { message, branch }) => {
+        Some(Commands::Operations {
+            interactive,
+            branch,
+        }) => {
             let current_op = OperationState::get_operation(&operation_conn, &db_uuid);
             if let Some(current_op) = current_op {
                 let branch_name = branch.clone().unwrap_or_else(|| {
@@ -699,7 +702,7 @@ fn main() {
                         .unwrap_or_else(|| panic!("No branch named {branch_name}."))
                         .id,
                 );
-                if let Some(message) = message {
+                if *interactive {
                     view_operations(&operation_conn, &operations);
                 } else {
                     let mut indicator = "";

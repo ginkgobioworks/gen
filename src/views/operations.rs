@@ -1,11 +1,15 @@
 use crate::models::operations::{Operation, OperationSummary};
 use crate::models::traits::Query;
+use crossterm::event::KeyModifiers;
 use crossterm::{
-    event::{self, KeyCode, KeyEvent},
+    event::{self, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use itertools::Itertools;
+use ratatui::prelude::{Color, Style, Text};
+use ratatui::style::Modifier;
+use ratatui::widgets::Paragraph;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
@@ -16,6 +20,15 @@ use rusqlite::{params, types::Value, Connection};
 use std::io;
 use std::rc::Rc;
 use tui_textarea::TextArea;
+
+fn clip_text(t: &str, limit: usize) -> String {
+    let new_t = t.replace("\n", " ");
+    if new_t.len() > limit {
+        format!("{trunc}...", trunc = &new_t[0..limit])
+    } else {
+        new_t
+    }
+}
 
 pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<(), io::Error> {
     let mut operation_summaries = OperationSummary::query(
@@ -36,7 +49,14 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
     let mut terminal = Terminal::new(backend)?;
     let mut textarea = TextArea::default();
 
-    let mut editing_message = false;
+    let mut view_message_panel = false;
+    let mut panel_focus = "operations";
+    let mut focus_rotation = vec!["operations"];
+    let mut focus_index: usize = 0;
+    let focused_style = Style::default()
+        .fg(Color::Blue)
+        .add_modifier(Modifier::BOLD);
+    let unfocused_style = Style::default().fg(Color::Gray);
 
     let mut selected = 0;
     loop {
@@ -46,36 +66,127 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
                 .enumerate()
                 .map(|(i, op)| {
                     let prefix = if i == selected { "> " } else { "  " };
-                    ListItem::new(format!("{}{} - {}", prefix, op.operation_hash, op.summary))
+                    ListItem::new(format!(
+                        "{}{} - {}",
+                        prefix,
+                        op.operation_hash,
+                        clip_text(&op.summary, 50)
+                    ))
                 })
                 .collect();
 
-            let list =
-                List::new(items).block(Block::default().title("Operations").borders(Borders::ALL));
+            let list = List::new(items).block(
+                Block::default()
+                    .title("Operations")
+                    .borders(Borders::ALL)
+                    .border_style(if panel_focus == "operations" {
+                        focused_style
+                    } else {
+                        unfocused_style
+                    }),
+            );
 
-            if editing_message {
+            let status_bar_height: u16 = 1;
+
+            // Define the layouts
+            // The outer layout is a vertical split between the canvas and the status bar
+            // The inner layout is a vertical split between the canvas and the panel
+
+            let outer_layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(vec![
+                    Constraint::Min(1),
+                    Constraint::Length(status_bar_height),
+                ])
+                .split(f.area());
+
+            let main_area = outer_layout[0];
+            let status_bar_area = outer_layout[1];
+
+            let mut panel_messages = " Controls: ctrl+up/down=cycle focus".to_string();
+
+            // for ease, we just set all panels to unfocused here
+            textarea.set_block(
+                Block::default()
+                    .title("Operation Summary")
+                    .borders(Borders::ALL)
+                    .border_style(unfocused_style),
+            );
+
+            if panel_focus == "message_editor" {
+                panel_messages.push_str(", ctrl+s=save message, esc=close message editor");
+                textarea.set_block(
+                    Block::default()
+                        .title("Operation Summary")
+                        .borders(Borders::ALL)
+                        .border_style(focused_style),
+                );
+            } else if panel_focus == "operations" {
+                panel_messages.push_str(", e or enter=edit message, esc or q=exit");
+            }
+
+            if view_message_panel {
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
-                    .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
-                    .split(f.area());
+                    .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                    .split(main_area);
                 f.render_widget(list, chunks[0]);
                 f.render_widget(&textarea, chunks[1]);
             } else {
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([Constraint::Percentage(100)].as_ref())
-                    .split(f.area());
+                    .split(main_area);
                 f.render_widget(list, chunks[0]);
             };
+            let status_bar_contents = format!(
+                "{panel_messages:width$}",
+                width = status_bar_area.width as usize
+            );
+            let status_bar = Paragraph::new(Text::styled(
+                status_bar_contents,
+                Style::default().bg(Color::DarkGray).fg(Color::White),
+            ));
+            f.render_widget(status_bar, status_bar_area);
         })?;
 
         if event::poll(std::time::Duration::from_millis(100))? {
-            if editing_message {
-                if let event::Event::Key(key) = event::read()? {
+            if let event::Event::Key(key) = event::read()? {
+                if key.modifiers == KeyModifiers::CONTROL
+                    && (key.code == KeyCode::Up || key.code == KeyCode::Down)
+                {
+                    if key.code == KeyCode::Down {
+                        focus_index += 1;
+                        if focus_index >= focus_rotation.len() {
+                            focus_index = 0;
+                        }
+                        panel_focus = focus_rotation[focus_index];
+                    } else {
+                        if focus_index > 0 {
+                            focus_index -= 1;
+                        } else {
+                            focus_index = focus_rotation.len() - 1;
+                        }
+                        panel_focus = focus_rotation[focus_index];
+                    }
+                } else if panel_focus == "message_editor" {
                     if key.code == KeyCode::Esc {
-                        editing_message = false;
+                        view_message_panel = false;
+                        if let Some((p, _)) = focus_rotation
+                            .iter()
+                            .find_position(|s| **s == "message_editor")
+                        {
+                            focus_rotation.remove(p);
+                        }
+                        if focus_index >= focus_rotation.len() {
+                            focus_index = 0;
+                        }
+                        panel_focus = focus_rotation[focus_index];
+                    } else if key.code == KeyCode::Char('s')
+                        && key.modifiers == KeyModifiers::CONTROL
+                    {
                         let new_summary = textarea.lines().iter().join("\n");
-                        OperationSummary::set_message(
+                        let _ = OperationSummary::set_message(
                             conn,
                             operation_summaries[selected].id,
                             &new_summary,
@@ -84,26 +195,38 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
                     } else {
                         textarea.input(key);
                     }
-                }
-            } else if let event::Event::Key(KeyEvent { code, .. }) = event::read()? {
-                match code {
-                    KeyCode::Esc | KeyCode::Char('q') => break,
-                    KeyCode::Up => {
-                        if selected > 0 {
-                            selected = selected.saturating_sub(1);
+                } else {
+                    let code = key.code;
+                    match code {
+                        KeyCode::Esc | KeyCode::Char('q') => break,
+                        KeyCode::Up => {
+                            if selected > 0 {
+                                selected = selected.saturating_sub(1);
+                            }
                         }
-                    }
-                    KeyCode::Down => {
-                        if selected < operations.len() - 1 {
-                            selected += 1;
+                        KeyCode::Down => {
+                            if selected < operations.len() - 1 {
+                                selected += 1;
+                            }
                         }
+                        KeyCode::Enter | KeyCode::Char('e') => {
+                            textarea = TextArea::from_iter(
+                                operation_summaries[selected].summary.split("\n"),
+                            );
+                            view_message_panel = true;
+                            focus_index = if let Some((i, _)) = focus_rotation
+                                .iter()
+                                .find_position(|s| **s == "message_editor")
+                            {
+                                i
+                            } else {
+                                focus_rotation.push("message_editor");
+                                focus_rotation.len() - 1
+                            };
+                            panel_focus = focus_rotation[focus_index];
+                        }
+                        _ => {}
                     }
-                    KeyCode::Enter | KeyCode::Char('e') => {
-                        textarea =
-                            TextArea::from_iter(operation_summaries[selected].summary.split("\n"));
-                        editing_message = true;
-                    }
-                    _ => {}
                 }
             }
         }
