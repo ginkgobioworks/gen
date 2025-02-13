@@ -1,13 +1,7 @@
 use crate::models::operations::OperationFile;
 use crate::models::{
-    block_group::BlockGroup,
-    block_group_edge::BlockGroupEdge,
-    file_types::FileTypes,
-    node::{PATH_END_NODE_ID, PATH_START_NODE_ID},
-    operations::OperationInfo,
-    path::Path,
-    path_edge::PathEdge,
-    sample::Sample,
+    block_group::BlockGroup, block_group_edge::BlockGroupEdge, file_types::FileTypes,
+    operations::OperationInfo, path::Path, path_edge::PathEdge, sample::Sample,
 };
 use crate::operation_management;
 use core::ops::Range;
@@ -15,26 +9,234 @@ use rusqlite::Connection;
 use std::collections::HashSet;
 use std::io;
 
+fn get_path(conn: &Connection, block_group_id: i64, backbone: Option<&str>) -> Path {
+    if let Some(backbone) = backbone {
+        let path = BlockGroup::get_path_by_name(conn, block_group_id, backbone);
+        if path.is_none() {
+            panic!("No path found with name {}", backbone);
+        }
+        path.unwrap()
+    } else {
+        BlockGroup::get_current_path(conn, block_group_id)
+    }
+}
+
+pub fn get_sized_ranges(
+    conn: &Connection,
+    collection_name: &str,
+    parent_sample_name: Option<&str>,
+    new_sample_name: &str,
+    region_name: &str,
+    backbone: Option<&str>,
+    chunk_size: i64,
+) -> Vec<Range<i64>> {
+    let _new_sample = Sample::get_or_create(conn, new_sample_name);
+    let (parent_block_group_id, _new_block_group_id) = get_parent_and_new_block_groups(
+        conn,
+        collection_name,
+        parent_sample_name,
+        new_sample_name,
+        region_name,
+    );
+
+    let current_path = get_path(conn, parent_block_group_id, backbone);
+
+    let path_length = current_path.sequence(conn).len() as i64;
+
+    let mut range_start = 0;
+    let chunk_count = path_length / chunk_size;
+    let chunk_remainder = path_length % chunk_size;
+
+    let mut chunk_ranges = vec![];
+    for _ in 0..chunk_count {
+        chunk_ranges.push(Range {
+            start: range_start,
+            end: range_start + chunk_size,
+        });
+        range_start += chunk_size;
+    }
+    if chunk_remainder > 0 {
+        chunk_ranges.push(Range {
+            start: range_start,
+            end: path_length,
+        });
+    }
+
+    chunk_ranges
+}
+
+pub fn get_breakpoint_ranges(
+    conn: &Connection,
+    collection_name: &str,
+    parent_sample_name: Option<&str>,
+    new_sample_name: &str,
+    region_name: &str,
+    backbone: Option<&str>,
+    breakpoints: &str,
+) -> Vec<Range<i64>> {
+    let _new_sample = Sample::get_or_create(conn, new_sample_name);
+    let (parent_block_group_id, _new_block_group_id) = get_parent_and_new_block_groups(
+        conn,
+        collection_name,
+        parent_sample_name,
+        new_sample_name,
+        region_name,
+    );
+
+    let current_path = get_path(conn, parent_block_group_id, backbone);
+
+    let path_length = current_path.sequence(conn).len() as i64;
+
+    let parsed_breakpoints = breakpoints
+        .split(",")
+        .map(|x| x.parse::<i64>().unwrap())
+        .collect::<Vec<i64>>();
+
+    let mut range_start = 0;
+    let mut chunk_ranges = vec![];
+    for breakpoint in parsed_breakpoints {
+        chunk_ranges.push(Range {
+            start: range_start,
+            end: breakpoint,
+        });
+        range_start = breakpoint;
+    }
+    chunk_ranges.push(Range {
+        start: range_start,
+        end: path_length,
+    });
+
+    chunk_ranges
+}
+
 #[allow(clippy::too_many_arguments)]
-pub fn derive_subgraph(
+pub fn derive_chunks(
     conn: &Connection,
     operation_conn: &Connection,
     collection_name: &str,
     parent_sample_name: Option<&str>,
     new_sample_name: &str,
     region_name: &str,
-    start_coordinate: i64,
-    end_coordinate: i64,
+    backbone: Option<&str>,
+    chunk_ranges: Vec<Range<i64>>,
 ) -> io::Result<()> {
     let mut session = operation_management::start_operation(conn);
     let _new_sample = Sample::get_or_create(conn, new_sample_name);
+    let (parent_block_group_id, new_block_group_id) = get_parent_and_new_block_groups(
+        conn,
+        collection_name,
+        parent_sample_name,
+        new_sample_name,
+        region_name,
+    );
+
+    let current_path = get_path(conn, parent_block_group_id, backbone);
+
+    let current_path_length = current_path.sequence(conn).len() as i64;
+    let current_intervaltree = current_path.intervaltree(conn);
+    let current_edges = PathEdge::edges_for_path(conn, current_path.id);
+
+    for chunk_range in &chunk_ranges {
+        let start_coordinate = chunk_range.start;
+        let end_coordinate = chunk_range.end;
+        if (start_coordinate < 0 || start_coordinate > current_path_length)
+            || (end_coordinate < 0 || end_coordinate > current_path_length)
+        {
+            panic!(
+                "Start and/or end coordinates ({}, {}) are out of range for the current path.",
+                start_coordinate, end_coordinate
+            );
+        }
+
+        let mut blocks = current_intervaltree
+            .query(Range {
+                start: start_coordinate,
+                end: end_coordinate,
+            })
+            .map(|x| x.value)
+            .collect::<Vec<_>>();
+        blocks.sort_by(|a, b| a.start.cmp(&b.start));
+        let start_block = blocks[0];
+        let start_node_coordinate =
+            start_coordinate - start_block.start + start_block.sequence_start;
+        let end_block = blocks[blocks.len() - 1];
+        let end_node_coordinate = end_coordinate - end_block.start + end_block.sequence_start;
+
+        let child_block_group_id = BlockGroup::derive_subgraph(
+            conn,
+            parent_block_group_id,
+            &start_block,
+            &end_block,
+            start_node_coordinate,
+            end_node_coordinate,
+            new_block_group_id,
+        );
+
+        let child_block_group_edges =
+            BlockGroupEdge::edges_for_block_group(conn, child_block_group_id);
+        let new_edge_id_set = child_block_group_edges
+            .iter()
+            .map(|x| x.edge.id)
+            .collect::<HashSet<i64>>();
+
+        let mut new_path_edge_ids = vec![];
+        for current_edge in &current_edges {
+            if new_edge_id_set.contains(&current_edge.id) {
+                new_path_edge_ids.push(current_edge.id);
+            }
+        }
+        Path::create(
+            conn,
+            &current_path.name,
+            child_block_group_id,
+            &new_path_edge_ids,
+        );
+    }
+
+    let summary_str = format!(
+        " {}: {} new derived block group(s)",
+        new_sample_name,
+        chunk_ranges.len()
+    );
+    operation_management::end_operation(
+        conn,
+        operation_conn,
+        &mut session,
+        &OperationInfo {
+            files: vec![OperationFile {
+                file_path: "".to_string(),
+                file_type: FileTypes::None,
+            }],
+            description: "derive chunks".to_string(),
+        },
+        &summary_str,
+        None,
+    )
+    .unwrap();
+
+    println!("Derived chunks successfully.");
+
+    Ok(())
+}
+
+fn get_parent_and_new_block_groups(
+    conn: &Connection,
+    collection_name: &str,
+    parent_sample_name: Option<&str>,
+    new_sample_name: &str,
+    region_name: &str,
+) -> (i64, i64) {
     let block_groups = Sample::get_block_groups(conn, collection_name, parent_sample_name);
 
     let mut parent_block_group_id = 0;
     let mut new_block_group_id = 0;
-    for block_group in block_groups {
+    for block_group in &block_groups {
         if block_group.name == region_name {
             parent_block_group_id = block_group.id;
+            println!("here10");
+            println!("collection_name: {}", collection_name);
+            println!("new_sample_name: {}", new_sample_name);
+            println!("block_group.name: {}", block_group.name);
             let new_block_group = BlockGroup::create(
                 conn,
                 collection_name,
@@ -49,87 +251,7 @@ pub fn derive_subgraph(
         panic!("No region found with name: {}", region_name);
     }
 
-    let current_path = BlockGroup::get_current_path(conn, parent_block_group_id);
-    let current_path_length = current_path.sequence(conn).len() as i64;
-    if (start_coordinate < 0 || start_coordinate > current_path_length)
-        || (end_coordinate < 0 || end_coordinate > current_path_length)
-    {
-        panic!("Start and/or end coordinates are out of range for the current path.");
-    }
-    let current_intervaltree = current_path.intervaltree(conn);
-    let mut blocks = current_intervaltree
-        .query(Range {
-            start: start_coordinate,
-            end: end_coordinate,
-        })
-        .map(|x| x.value)
-        .collect::<Vec<_>>();
-    blocks.sort_by(|a, b| a.start.cmp(&b.start));
-    let start_block = blocks[0];
-    let start_node_coordinate = start_coordinate - start_block.start + start_block.sequence_start;
-    let end_block = blocks[blocks.len() - 1];
-    let end_node_coordinate = end_coordinate - end_block.start + end_block.sequence_start;
-
-    let child_block_group_id = BlockGroup::derive_subgraph(
-        conn,
-        parent_block_group_id,
-        &start_block,
-        &end_block,
-        start_node_coordinate,
-        end_node_coordinate,
-        new_block_group_id,
-    );
-
-    let current_edges = PathEdge::edges_for_path(conn, current_path.id);
-    let child_block_group_edges = BlockGroupEdge::edges_for_block_group(conn, child_block_group_id);
-    let new_start_edge = child_block_group_edges
-        .iter()
-        .find(|x| x.edge.source_node_id == PATH_START_NODE_ID)
-        .unwrap();
-    let new_end_edge = child_block_group_edges
-        .iter()
-        .find(|x| x.edge.target_node_id == PATH_END_NODE_ID)
-        .unwrap();
-    let new_edge_id_set = child_block_group_edges
-        .iter()
-        .map(|x| x.edge.id)
-        .collect::<HashSet<i64>>();
-
-    let mut new_path_edge_ids = vec![];
-    new_path_edge_ids.push(new_start_edge.edge.id);
-    for current_edge in current_edges {
-        if new_edge_id_set.contains(&current_edge.id) {
-            new_path_edge_ids.push(current_edge.id);
-        }
-    }
-    new_path_edge_ids.push(new_end_edge.edge.id);
-    Path::create(
-        conn,
-        &current_path.name,
-        child_block_group_id,
-        &new_path_edge_ids,
-    );
-
-    let summary_str = format!(" {}: 1 new derived block group", new_sample_name);
-    operation_management::end_operation(
-        conn,
-        operation_conn,
-        &mut session,
-        &OperationInfo {
-            files: vec![OperationFile {
-                file_path: "".to_string(),
-                file_type: FileTypes::None,
-            }],
-            description: "derive subgraph".to_string(),
-        },
-        &summary_str,
-        None,
-    )
-    .unwrap();
-
-    println!("Derived subgraph successfully.");
-
-    Ok(())
+    (parent_block_group_id, new_block_group_id)
 }
 
 #[cfg(test)]
@@ -144,7 +266,7 @@ mod tests {
     };
 
     #[test]
-    fn test_derive_subgraph_one_insertion() {
+    fn test_derive_chunks_one_insertion() {
         /*
         AAAAAAAAAA -> TTTTTTTTTT -> CCCCCCCCCC -> GGGGGGGGGG
                           \-> AAAAAAAA ->/
@@ -215,7 +337,17 @@ mod tests {
             ])
         );
 
-        derive_subgraph(conn, op_conn, "test", None, "test", "chr1", 15, 25).unwrap();
+        derive_chunks(
+            conn,
+            op_conn,
+            "test",
+            None,
+            "test",
+            "chr1",
+            None,
+            vec![Range { start: 15, end: 25 }],
+        )
+        .unwrap();
 
         let block_groups = Sample::get_block_groups(conn, "test", Some("test"));
         let block_group2 = block_groups.iter().find(|x| x.name == "chr1").unwrap();
