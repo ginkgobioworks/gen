@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use crate::graph::{GraphEdge, GraphNode};
 use crate::models::block_group_edge::AugmentedEdge;
-use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
+use crate::models::node::{Node, GRAPH_CYCLE_NODE_ID, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::sequence::{cached_sequence, Sequence};
 use crate::models::strand::Strand;
 use crate::models::traits::*;
@@ -299,7 +299,7 @@ impl Edge {
         let mut edges_by_source_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
         let mut edges_by_target_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
         for edge in edges.iter().map(|edge| &edge.edge) {
-            if edge.source_node_id != PATH_START_NODE_ID {
+            if !Node::is_start_node(edge.source_node_id) {
                 node_ids.insert(edge.source_node_id);
             }
             edges_by_source_node_id
@@ -307,7 +307,7 @@ impl Edge {
                 .and_modify(|edges| edges.push(edge))
                 .or_insert(vec![edge]);
 
-            if edge.target_node_id != PATH_END_NODE_ID {
+            if !Node::is_end_node(edge.target_node_id) {
                 node_ids.insert(edge.target_node_id);
             }
             edges_by_target_node_id
@@ -317,7 +317,7 @@ impl Edge {
         }
 
         let sequences_by_node_id =
-            Node::get_sequences_by_node_ids(conn, &node_ids.into_iter().collect::<Vec<i64>>());
+            Node::get_sequences_by_node_ids(conn, &node_ids.iter().copied().collect::<Vec<i64>>());
 
         let mut blocks = vec![];
         let mut block_index = 0;
@@ -350,26 +350,38 @@ impl Edge {
             }
         }
 
-        // NOTE: We need a dedicated start node and a dedicated end node for the graph formed by the
-        // block group, since different paths in the block group may start or end at different
-        // places on sequences.  These two "start sequence" and "end sequence" blocks will serve
-        // that role.
-        let start_block = GroupBlock::new(
-            block_index + 1,
-            PATH_START_NODE_ID,
-            &Sequence::new().sequence_type("DNA").sequence("").build(),
-            0,
-            0,
-        );
-        blocks.push(start_block);
-        let end_block = GroupBlock::new(
-            block_index + 2,
-            PATH_END_NODE_ID,
-            &Sequence::new().sequence_type("DNA").sequence("").build(),
-            0,
-            0,
-        );
-        blocks.push(end_block);
+        let has_cycle = node_ids.iter().any(|i| Node::is_cycle_node(*i));
+        if has_cycle {
+            let cycle_block = GroupBlock::new(
+                block_index + 1,
+                GRAPH_CYCLE_NODE_ID,
+                &Sequence::new().sequence_type("DNA").sequence("").build(),
+                0,
+                0,
+            );
+            blocks.push(cycle_block);
+        } else {
+            // NOTE: We need a dedicated start node and a dedicated end node for the graph formed by the
+            // block group, since different paths in the block group may start or end at different
+            // places on sequences.  These two "start sequence" and "end sequence" blocks will serve
+            // that role.
+            let start_block = GroupBlock::new(
+                block_index + 1,
+                PATH_START_NODE_ID,
+                &Sequence::new().sequence_type("DNA").sequence("").build(),
+                0,
+                0,
+            );
+            blocks.push(start_block);
+            let end_block = GroupBlock::new(
+                block_index + 2,
+                PATH_END_NODE_ID,
+                &Sequence::new().sequence_type("DNA").sequence("").build(),
+                0,
+                0,
+            );
+            blocks.push(end_block);
+        }
         blocks
     }
 

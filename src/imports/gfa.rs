@@ -1,5 +1,6 @@
 use crate::gfa::bool_to_strand;
 use crate::gfa_reader::Gfa;
+use crate::graph::{GraphEdge, GraphNode};
 use crate::models::file_types::FileTypes;
 use crate::models::node::GRAPH_CYCLE_NODE_ID;
 use crate::models::operations::{OperationFile, OperationInfo};
@@ -19,6 +20,7 @@ use crate::operation_management::{end_operation, start_operation, OperationError
 use crate::progress_bar::{get_handler, get_progress_bar, get_time_elapsed_bar};
 use itertools::Itertools;
 use petgraph::algo::kosaraju_scc;
+use petgraph::prelude::UnGraphMap;
 use petgraph::visit::DfsPostOrder;
 use rusqlite;
 use rusqlite::Connection;
@@ -329,7 +331,14 @@ pub fn import_gfa<'a>(
     let bar = progress_bar.add(get_progress_bar(None));
     bar.set_message("Breaking cycles");
     let graph = BlockGroup::get_graph(conn, block_group.id);
-    let connected_components = kosaraju_scc(&graph);
+    let mut undirected_graph: UnGraphMap<GraphNode, GraphEdge> = UnGraphMap::new();
+    for node in graph.nodes() {
+        undirected_graph.add_node(node);
+    }
+    for (src, dst, weight) in graph.all_edges() {
+        undirected_graph.add_edge(src, dst, *weight);
+    }
+    let connected_components = kosaraju_scc(&undirected_graph);
     let mut new_edges = vec![];
     for subgraph in connected_components.iter() {
         if subgraph.len() >= 3 {
@@ -368,9 +377,10 @@ pub fn import_gfa<'a>(
                     order[0].node_id,
                     Strand::Forward,
                 ));
+                let last_node = order.last().unwrap();
                 new_edges.push(edge_data_from_fields(
-                    order[0].node_id,
-                    order[0].sequence_end,
+                    last_node.node_id,
+                    last_node.sequence_end,
                     Strand::Forward,
                     GRAPH_CYCLE_NODE_ID,
                     Strand::Forward,
