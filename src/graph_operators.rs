@@ -1,7 +1,13 @@
 use crate::models::operations::OperationFile;
 use crate::models::{
-    block_group::BlockGroup, block_group_edge::BlockGroupEdge, file_types::FileTypes,
-    operations::OperationInfo, path::Path, path_edge::PathEdge, sample::Sample,
+    block_group::BlockGroup,
+    block_group_edge::BlockGroupEdge,
+    file_types::FileTypes,
+    node::{PATH_END_NODE_ID, PATH_START_NODE_ID},
+    operations::OperationInfo,
+    path::Path,
+    path_edge::PathEdge,
+    sample::Sample,
 };
 use crate::operation_management;
 use core::ops::Range;
@@ -180,10 +186,34 @@ pub fn derive_chunks(
             .collect::<HashSet<i64>>();
 
         let mut new_path_edge_ids = vec![];
+        let start_edge = &current_edges[0];
+        if !new_edge_id_set.contains(&start_edge.id) {
+            let new_start_edge = child_block_group_edges
+                .iter()
+                .find(|e| {
+                    e.edge.source_node_id == PATH_START_NODE_ID
+                        && e.edge.target_node_id == start_block.node_id
+                        && e.edge.target_coordinate == start_node_coordinate
+                })
+                .unwrap();
+            new_path_edge_ids.push(new_start_edge.edge.id);
+        }
         for current_edge in &current_edges {
             if new_edge_id_set.contains(&current_edge.id) {
                 new_path_edge_ids.push(current_edge.id);
             }
+        }
+        let end_edge = &current_edges[0];
+        if !new_edge_id_set.contains(&end_edge.id) {
+            let new_end_edge = child_block_group_edges
+                .iter()
+                .find(|e| {
+                    e.edge.target_node_id == PATH_END_NODE_ID
+                        && e.edge.source_node_id == end_block.node_id
+                        && e.edge.source_coordinate == end_node_coordinate
+                })
+                .unwrap();
+            new_path_edge_ids.push(new_end_edge.edge.id);
         }
         Path::create(
             conn,
