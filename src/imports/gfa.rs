@@ -1,10 +1,7 @@
-use rusqlite;
-use rusqlite::Connection;
-use std::collections::{HashMap, HashSet};
-use std::path::Path as FilePath;
-
 use crate::gfa::bool_to_strand;
 use crate::gfa_reader::Gfa;
+use crate::models::file_types::FileTypes;
+use crate::models::operations::{OperationFile, OperationInfo};
 use crate::models::sample::Sample;
 use crate::models::{
     block_group::BlockGroup,
@@ -12,19 +9,35 @@ use crate::models::{
     collection::Collection,
     edge::{Edge, EdgeData},
     node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
+    operations::Operation,
     path::Path,
     sequence::Sequence,
     strand::Strand,
 };
+use crate::operation_management::{end_operation, start_operation, OperationError};
 use crate::progress_bar::{get_handler, get_progress_bar, get_time_elapsed_bar};
+use rusqlite;
+use rusqlite::Connection;
+use std::collections::{HashMap, HashSet};
+use std::path::Path as FilePath;
+use thiserror::Error;
+
+#[derive(Debug, Error, PartialEq)]
+pub enum GFAImportError {
+    #[error("Operation Error: {0}")]
+    OperationError(#[from] OperationError),
+}
 
 pub fn import_gfa<'a>(
     gfa_path: &FilePath,
     collection_name: &str,
     sample_name: impl Into<Option<&'a str>>,
     conn: &Connection,
-) {
+    operation_conn: &Connection,
+) -> Result<Operation, GFAImportError> {
     let progress_bar = get_handler();
+    let mut session = start_operation(conn);
+
     Collection::create(conn, collection_name);
     let sample_name = sample_name.into();
     if let Some(sample_name) = sample_name {
@@ -286,6 +299,7 @@ pub fn import_gfa<'a>(
         Path::create(conn, path_name, block_group.id, &path_edge_ids);
     }
 
+    let mut chromosome_index = gfa.paths.len() + gfa.walk.len();
     // make any block group edges not in paths or walks
     BlockGroupEdge::bulk_create(
         conn,
@@ -293,10 +307,11 @@ pub fn import_gfa<'a>(
             .iter()
             .filter_map(|id| {
                 if !created_blockgroup_edges.contains(id) {
+                    chromosome_index += 1;
                     Some(BlockGroupEdgeData {
                         block_group_id: block_group.id,
                         edge_id: *id,
-                        chromosome_index: 0,
+                        chromosome_index: chromosome_index as i64,
                         phased: 0,
                     })
                 } else {
@@ -306,7 +321,23 @@ pub fn import_gfa<'a>(
             .collect::<Vec<BlockGroupEdgeData>>(),
     );
 
+    let op = end_operation(
+        conn,
+        operation_conn,
+        &mut session,
+        &OperationInfo {
+            files: vec![OperationFile {
+                file_path: gfa_path.to_str().unwrap().to_string(),
+                file_type: FileTypes::GFA,
+            }],
+            description: "gfa_import".to_string(),
+        },
+        &format!("Imported GFA {path}", path = gfa_path.to_str().unwrap()),
+        None,
+    )
+    .map_err(GFAImportError::OperationError);
     bar.finish();
+    op
 }
 
 fn edge_data_from_fields(
@@ -329,8 +360,10 @@ fn edge_data_from_fields(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::metadata;
+    use crate::models::operations::setup_db;
     use crate::models::traits::*;
-    use crate::test_helpers::{get_connection, setup_gen_dir};
+    use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use rusqlite::types::Value as SQLValue;
     use std::path::PathBuf;
 
@@ -341,7 +374,10 @@ mod tests {
         gfa_path.push("fixtures/simple.gfa");
         let collection_name = "test".to_string();
         let conn = &get_connection(None);
-        import_gfa(&gfa_path, &collection_name, None, conn);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let _ = import_gfa(&gfa_path, &collection_name, None, conn, op_conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::query(
@@ -368,7 +404,10 @@ mod tests {
         gfa_path.push("fixtures/simple.gfa");
         let collection_name = "test".to_string();
         let conn = &get_connection(None);
-        import_gfa(&gfa_path, &collection_name, "new-sample", conn);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let _ = import_gfa(&gfa_path, &collection_name, "new-sample", conn, op_conn);
         assert_eq!(
             Sample::get_by_name(conn, "new-sample").unwrap().name,
             "new-sample"
@@ -377,11 +416,15 @@ mod tests {
 
     #[test]
     fn test_import_no_path_gfa() {
+        setup_gen_dir();
         let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         gfa_path.push("fixtures/no_path.gfa");
         let collection_name = "no path".to_string();
         let conn = &get_connection(None);
-        import_gfa(&gfa_path, &collection_name, None, conn);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let _ = import_gfa(&gfa_path, &collection_name, None, conn, op_conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id, false);
@@ -396,11 +439,15 @@ mod tests {
 
     #[test]
     fn test_import_gfa_with_walk() {
+        setup_gen_dir();
         let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         gfa_path.push("fixtures/walk.gfa");
         let collection_name = "walk".to_string();
         let conn = &mut get_connection(None);
-        import_gfa(&gfa_path, &collection_name, None, conn);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let _ = import_gfa(&gfa_path, &collection_name, None, conn, op_conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::query(
@@ -422,11 +469,15 @@ mod tests {
 
     #[test]
     fn test_import_gfa_with_reverse_strand_edges() {
+        setup_gen_dir();
         let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         gfa_path.push("fixtures/reverse_strand.gfa");
         let collection_name = "test".to_string();
         let conn = &get_connection(None);
-        import_gfa(&gfa_path, &collection_name, None, conn);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let _ = import_gfa(&gfa_path, &collection_name, None, conn, op_conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::query(
@@ -448,11 +499,15 @@ mod tests {
 
     #[test]
     fn test_import_anderson_promoters() {
+        setup_gen_dir();
         let mut gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         gfa_path.push("fixtures/anderson_promoters.gfa");
         let collection_name = "anderson promoters".to_string();
         let conn = &get_connection(None);
-        import_gfa(&gfa_path, &collection_name, None, conn);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let _ = import_gfa(&gfa_path, &collection_name, None, conn, op_conn);
 
         let paths = Path::query_for_collection(conn, &collection_name);
         assert_eq!(paths.len(), 20);
@@ -558,7 +613,10 @@ mod tests {
         gfa_path.push("fixtures/aa.gfa");
         let collection_name = "test".to_string();
         let conn = &get_connection(None);
-        import_gfa(&gfa_path, &collection_name, None, conn);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let _ = import_gfa(&gfa_path, &collection_name, None, conn, op_conn);
 
         let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
         let path = Path::query(

@@ -12,7 +12,7 @@ use gen::get_connection;
 use gen::graph_operators::derive_subgraph;
 use gen::imports::fasta::{import_fasta, FastaError};
 use gen::imports::genbank::import_genbank;
-use gen::imports::gfa::import_gfa;
+use gen::imports::gfa::{import_gfa, GFAImportError};
 use gen::imports::library::import_library;
 use gen::models::block_group::BlockGroup;
 use gen::models::file_types::FileTypes;
@@ -493,12 +493,23 @@ fn main() {
                     }
                 }
             } else if gfa.is_some() {
-                import_gfa(
+                match import_gfa(
                     &PathBuf::from(gfa.clone().unwrap()),
                     name,
                     sample.as_deref(),
                     &conn,
-                );
+                    &operation_conn,
+                ) {
+                    Ok(_) => println!("GFA Imported."),
+                    Err(GFAImportError::OperationError(OperationError::NoChanges)) => {
+                        println!("GFA already exists.")
+                    }
+                    Err(_) => {
+                        conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
+                        operation_conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
+                        panic!("Import failed.");
+                    }
+                }
             } else if let Some(gb) = gb {
                 let f = File::open(gb).unwrap();
                 let _ = import_genbank(

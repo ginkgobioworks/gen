@@ -456,7 +456,7 @@ mod tests {
         let gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/chr22_het.gfa");
         let csv_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/chr22_insert.csv");
 
-        import_gfa(&gfa_path, &collection, None, conn);
+        let _ = import_gfa(&gfa_path, &collection, None, conn, op_conn);
         let gaf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/chr22_het.gaf");
         update_with_gaf(conn, op_conn, gaf_path, csv_path, "test", "child", None);
         let graph = Sample::get_graph(conn, "test", "child");
@@ -518,7 +518,7 @@ mod tests {
         let gfa_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/chr22_het.gfa");
         let csv_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/chr22_insert.csv");
 
-        import_gfa(&gfa_path, &collection, None, conn);
+        let _ = import_gfa(&gfa_path, &collection, None, conn, op_conn);
         let gaf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/chr22_het.gaf");
         update_with_gaf(conn, op_conn, gaf_path, csv_path, "test", "child", None);
         let graph = Sample::get_graph(conn, "test", "child");
