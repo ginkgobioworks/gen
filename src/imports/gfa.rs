@@ -1,6 +1,7 @@
 use crate::gfa::bool_to_strand;
 use crate::gfa_reader::Gfa;
 use crate::models::file_types::FileTypes;
+use crate::models::node::GRAPH_CYCLE_NODE_ID;
 use crate::models::operations::{OperationFile, OperationInfo};
 use crate::models::sample::Sample;
 use crate::models::{
@@ -16,6 +17,9 @@ use crate::models::{
 };
 use crate::operation_management::{end_operation, start_operation, OperationError};
 use crate::progress_bar::{get_handler, get_progress_bar, get_time_elapsed_bar};
+use itertools::Itertools;
+use petgraph::algo::kosaraju_scc;
+use petgraph::visit::DfsPostOrder;
 use rusqlite;
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
@@ -182,8 +186,8 @@ pub fn import_gfa<'a>(
     }
     bar.finish();
 
-    let bar = progress_bar.add(get_time_elapsed_bar());
-    bar.set_message("Creating Gen Objects");
+    let gen_bar = progress_bar.add(get_time_elapsed_bar());
+    gen_bar.set_message("Creating Gen Objects");
     let edge_ids = Edge::bulk_create(conn, &edges.into_iter().collect::<Vec<EdgeData>>());
 
     let saved_edges = Edge::bulk_load(conn, &edge_ids);
@@ -321,6 +325,74 @@ pub fn import_gfa<'a>(
             .collect::<Vec<BlockGroupEdgeData>>(),
     );
 
+    // check the graph for cycles and make start/end nodes if so
+    let bar = progress_bar.add(get_progress_bar(None));
+    bar.set_message("Breaking cycles");
+    let graph = BlockGroup::get_graph(conn, block_group.id);
+    let connected_components = kosaraju_scc(&graph);
+    let mut new_edges = vec![];
+    for subgraph in connected_components.iter() {
+        if subgraph.len() >= 3 {
+            let mut has_start = false;
+            let mut has_end = false;
+            for node in subgraph.iter() {
+                if Node::is_cycle_node(node.node_id) {
+                    has_start = true;
+                    has_end = true;
+                } else if !has_start && Node::is_start_node(node.node_id) {
+                    has_start = true;
+                } else if !has_end && Node::is_end_node(node.node_id) {
+                    has_end = true;
+                };
+                if has_start && has_end {
+                    break;
+                }
+            }
+            // honestly not sure what to do about graphs where we have just one terminal
+            if !has_start && !has_end {
+                // from the subgraph, we want to find a deterministic sort of ordered elements.
+                // Kosaraju returns nodes in arbitrary order. We use DFS and then rotate the vector
+                // so the first node_id starts the list for consistency.
+                let mut order = vec![];
+                let mut dfs = DfsPostOrder::new(&graph, subgraph[0]);
+                while let Some(nx) = dfs.next(&graph) {
+                    order.push(nx);
+                }
+                let (min_index, _) = order.iter().enumerate().min_set_by_key(|(_, k)| k.node_id)[0];
+                order.rotate_left(min_index);
+                bar.inc(1);
+                new_edges.push(edge_data_from_fields(
+                    GRAPH_CYCLE_NODE_ID,
+                    0,
+                    Strand::Forward,
+                    order[0].node_id,
+                    Strand::Forward,
+                ));
+                new_edges.push(edge_data_from_fields(
+                    order[0].node_id,
+                    order[0].sequence_end,
+                    Strand::Forward,
+                    GRAPH_CYCLE_NODE_ID,
+                    Strand::Forward,
+                ));
+            }
+        }
+    }
+    let new_edge_ids = Edge::bulk_create(conn, &new_edges.into_iter().collect::<Vec<EdgeData>>());
+    BlockGroupEdge::bulk_create(
+        conn,
+        &new_edge_ids
+            .iter()
+            .map(|id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>(),
+    );
+    bar.finish();
+
     let op = end_operation(
         conn,
         operation_conn,
@@ -336,7 +408,7 @@ pub fn import_gfa<'a>(
         None,
     )
     .map_err(GFAImportError::OperationError);
-    bar.finish();
+    gen_bar.finish();
     op
 }
 

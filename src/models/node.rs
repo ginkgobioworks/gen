@@ -8,6 +8,7 @@ use crate::models::traits::*;
 
 pub const PATH_START_NODE_ID: i64 = 1;
 pub const PATH_END_NODE_ID: i64 = 2;
+pub const GRAPH_CYCLE_NODE_ID: i64 = 3;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Node {
@@ -130,7 +131,7 @@ impl Node {
     }
 
     pub fn is_terminal(node_id: i64) -> bool {
-        Node::is_start_node(node_id) || Node::is_end_node(node_id)
+        Node::is_start_node(node_id) || Node::is_end_node(node_id) || Node::is_cycle_node(node_id)
     }
 
     pub fn is_start_node(node_id: i64) -> bool {
@@ -139,6 +140,10 @@ impl Node {
 
     pub fn is_end_node(node_id: i64) -> bool {
         node_id == PATH_END_NODE_ID
+    }
+
+    pub fn is_cycle_node(node_id: i64) -> bool {
+        node_id == GRAPH_CYCLE_NODE_ID
     }
 
     pub fn get_start_node() -> Node {
