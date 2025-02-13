@@ -37,13 +37,8 @@ pub fn get_sized_ranges(
     chunk_size: i64,
 ) -> Vec<Range<i64>> {
     let _new_sample = Sample::get_or_create(conn, new_sample_name);
-    let (parent_block_group_id, _new_block_group_id) = get_parent_and_new_block_groups(
-        conn,
-        collection_name,
-        parent_sample_name,
-        new_sample_name,
-        region_name,
-    );
+    let parent_block_group_id =
+        get_parent_block_group_id(conn, collection_name, parent_sample_name, region_name);
 
     let current_path = get_path(conn, parent_block_group_id, backbone);
 
@@ -81,13 +76,8 @@ pub fn get_breakpoint_ranges(
     breakpoints: &str,
 ) -> Vec<Range<i64>> {
     let _new_sample = Sample::get_or_create(conn, new_sample_name);
-    let (parent_block_group_id, _new_block_group_id) = get_parent_and_new_block_groups(
-        conn,
-        collection_name,
-        parent_sample_name,
-        new_sample_name,
-        region_name,
-    );
+    let parent_block_group_id =
+        get_parent_block_group_id(conn, collection_name, parent_sample_name, region_name);
 
     let current_path = get_path(conn, parent_block_group_id, backbone);
 
@@ -128,13 +118,8 @@ pub fn derive_chunks(
 ) -> io::Result<()> {
     let mut session = operation_management::start_operation(conn);
     let _new_sample = Sample::get_or_create(conn, new_sample_name);
-    let (parent_block_group_id, new_block_group_id) = get_parent_and_new_block_groups(
-        conn,
-        collection_name,
-        parent_sample_name,
-        new_sample_name,
-        region_name,
-    );
+    let parent_block_group_id =
+        get_parent_block_group_id(conn, collection_name, parent_sample_name, region_name);
 
     let current_path = get_path(conn, parent_block_group_id, backbone);
 
@@ -142,7 +127,16 @@ pub fn derive_chunks(
     let current_intervaltree = current_path.intervaltree(conn);
     let current_edges = PathEdge::edges_for_path(conn, current_path.id);
 
-    for chunk_range in &chunk_ranges {
+    for (i, chunk_range) in chunk_ranges.clone().into_iter().enumerate() {
+        let new_block_group_name = format!("{}.{}", region_name, i + 1);
+        let new_block_group = BlockGroup::create(
+            conn,
+            collection_name,
+            Some(new_sample_name),
+            new_block_group_name.as_str(),
+        );
+        let new_block_group_id = new_block_group.id;
+
         let start_coordinate = chunk_range.start;
         let end_coordinate = chunk_range.end;
         if (start_coordinate < 0 || start_coordinate > current_path_length)
@@ -203,7 +197,7 @@ pub fn derive_chunks(
                 new_path_edge_ids.push(current_edge.id);
             }
         }
-        let end_edge = &current_edges[0];
+        let end_edge = &current_edges[current_edges.len() - 1];
         if !new_edge_id_set.contains(&end_edge.id) {
             let new_end_edge = child_block_group_edges
                 .iter()
@@ -249,39 +243,21 @@ pub fn derive_chunks(
     Ok(())
 }
 
-fn get_parent_and_new_block_groups(
+fn get_parent_block_group_id(
     conn: &Connection,
     collection_name: &str,
     parent_sample_name: Option<&str>,
-    new_sample_name: &str,
     region_name: &str,
-) -> (i64, i64) {
+) -> i64 {
     let block_groups = Sample::get_block_groups(conn, collection_name, parent_sample_name);
 
-    let mut parent_block_group_id = 0;
-    let mut new_block_group_id = 0;
     for block_group in &block_groups {
         if block_group.name == region_name {
-            parent_block_group_id = block_group.id;
-            println!("here10");
-            println!("collection_name: {}", collection_name);
-            println!("new_sample_name: {}", new_sample_name);
-            println!("block_group.name: {}", block_group.name);
-            let new_block_group = BlockGroup::create(
-                conn,
-                collection_name,
-                Some(new_sample_name),
-                &block_group.name,
-            );
-            new_block_group_id = new_block_group.id;
+            return block_group.id;
         }
     }
 
-    if new_block_group_id == 0 {
-        panic!("No region found with name: {}", region_name);
-    }
-
-    (parent_block_group_id, new_block_group_id)
+    panic!("No region found with name: {}", region_name);
 }
 
 #[cfg(test)]
@@ -380,7 +356,7 @@ mod tests {
         .unwrap();
 
         let block_groups = Sample::get_block_groups(conn, "test", Some("test"));
-        let block_group2 = block_groups.iter().find(|x| x.name == "chr1").unwrap();
+        let block_group2 = block_groups.iter().find(|x| x.name == "chr1.1").unwrap();
 
         let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id, false);
         assert_eq!(
