@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use crate::graph::{GraphEdge, GraphNode};
 use crate::models::block_group_edge::AugmentedEdge;
-use crate::models::node::{Node, GRAPH_CYCLE_NODE_ID, PATH_END_NODE_ID, PATH_START_NODE_ID};
+use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::sequence::{cached_sequence, Sequence};
 use crate::models::strand::Strand;
 use crate::models::traits::*;
@@ -350,38 +350,26 @@ impl Edge {
             }
         }
 
-        let has_cycle = node_ids.iter().any(|i| Node::is_cycle_node(*i));
-        if has_cycle {
-            let cycle_block = GroupBlock::new(
-                block_index + 1,
-                GRAPH_CYCLE_NODE_ID,
-                &Sequence::new().sequence_type("DNA").sequence("").build(),
-                0,
-                0,
-            );
-            blocks.push(cycle_block);
-        } else {
-            // NOTE: We need a dedicated start node and a dedicated end node for the graph formed by the
-            // block group, since different paths in the block group may start or end at different
-            // places on sequences.  These two "start sequence" and "end sequence" blocks will serve
-            // that role.
-            let start_block = GroupBlock::new(
-                block_index + 1,
-                PATH_START_NODE_ID,
-                &Sequence::new().sequence_type("DNA").sequence("").build(),
-                0,
-                0,
-            );
-            blocks.push(start_block);
-            let end_block = GroupBlock::new(
-                block_index + 2,
-                PATH_END_NODE_ID,
-                &Sequence::new().sequence_type("DNA").sequence("").build(),
-                0,
-                0,
-            );
-            blocks.push(end_block);
-        }
+        // NOTE: We need a dedicated start node and a dedicated end node for the graph formed by the
+        // block group, since different paths in the block group may start or end at different
+        // places on sequences.  These two "start sequence" and "end sequence" blocks will serve
+        // that role.
+        let start_block = GroupBlock::new(
+            block_index + 1,
+            PATH_START_NODE_ID,
+            &Sequence::new().sequence_type("DNA").sequence("").build(),
+            0,
+            0,
+        );
+        blocks.push(start_block);
+        let end_block = GroupBlock::new(
+            block_index + 2,
+            PATH_END_NODE_ID,
+            &Sequence::new().sequence_type("DNA").sequence("").build(),
+            0,
+            0,
+        );
+        blocks.push(end_block);
         blocks
     }
 

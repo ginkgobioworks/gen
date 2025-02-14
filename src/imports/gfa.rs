@@ -2,7 +2,6 @@ use crate::gfa::bool_to_strand;
 use crate::gfa_reader::Gfa;
 use crate::graph::{GraphEdge, GraphNode};
 use crate::models::file_types::FileTypes;
-use crate::models::node::GRAPH_CYCLE_NODE_ID;
 use crate::models::operations::{OperationFile, OperationInfo};
 use crate::models::sample::Sample;
 use crate::models::{
@@ -345,10 +344,7 @@ pub fn import_gfa<'a>(
             let mut has_start = false;
             let mut has_end = false;
             for node in subgraph.iter() {
-                if Node::is_cycle_node(node.node_id) {
-                    has_start = true;
-                    has_end = true;
-                } else if !has_start && Node::is_start_node(node.node_id) {
+                if !has_start && Node::is_start_node(node.node_id) {
                     has_start = true;
                 } else if !has_end && Node::is_end_node(node.node_id) {
                     has_end = true;
@@ -371,7 +367,7 @@ pub fn import_gfa<'a>(
                 order.rotate_left(min_index);
                 bar.inc(1);
                 new_edges.push(edge_data_from_fields(
-                    GRAPH_CYCLE_NODE_ID,
+                    PATH_START_NODE_ID,
                     0,
                     Strand::Forward,
                     order[0].node_id,
@@ -382,7 +378,14 @@ pub fn import_gfa<'a>(
                     last_node.node_id,
                     last_node.sequence_end,
                     Strand::Forward,
-                    GRAPH_CYCLE_NODE_ID,
+                    PATH_END_NODE_ID,
+                    Strand::Forward,
+                ));
+                new_edges.push(edge_data_from_fields(
+                    PATH_END_NODE_ID,
+                    0,
+                    Strand::Forward,
+                    PATH_START_NODE_ID,
                     Strand::Forward,
                 ));
             }

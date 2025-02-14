@@ -139,15 +139,17 @@ pub fn view_patches(patches: &[OperationPatch]) -> HashMap<String, HashMap<i64, 
             }
 
             for (src, dest, (fp, tp)) in graph.all_edges() {
-                let source_block = block_graph
-                    .nodes()
-                    .find(|(node, _start, end)| *node == src && end == fp)
-                    .unwrap();
-                let dest_block = block_graph
-                    .nodes()
-                    .find(|(node, start, _end)| *node == dest && start == tp)
-                    .unwrap();
-                block_graph.add_edge(source_block, dest_block, ());
+                if !(Node::is_end_node(src) && Node::is_start_node(dest)) {
+                    let source_block = block_graph
+                        .nodes()
+                        .find(|(node, _start, end)| *node == src && end == fp)
+                        .unwrap();
+                    let dest_block = block_graph
+                        .nodes()
+                        .find(|(node, start, _end)| *node == dest && start == tp)
+                        .unwrap();
+                    block_graph.add_edge(source_block, dest_block, ());
+                }
             }
 
             let mut dot = "digraph {\n    rankdir=LR\n    node [shape=none]\n".to_string();
