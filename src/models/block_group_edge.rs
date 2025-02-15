@@ -6,7 +6,7 @@ use rusqlite::{Connection, Row};
 use std::collections::HashMap;
 use std::rc::Rc;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct BlockGroupEdge {
     pub id: i64,
     pub block_group_id: i64,
@@ -15,7 +15,7 @@ pub struct BlockGroupEdge {
     pub phased: i64,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct BlockGroupEdgeData {
     pub block_group_id: i64,
     pub edge_id: i64,
@@ -23,14 +23,14 @@ pub struct BlockGroupEdgeData {
     pub phased: i64,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct AugmentedEdge {
     pub edge: Edge,
     pub chromosome_index: i64,
     pub phased: i64,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct AugmentedEdgeData {
     pub edge_data: EdgeData,
     pub chromosome_index: i64,
