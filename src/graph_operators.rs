@@ -1,18 +1,21 @@
 use crate::models::operations::OperationFile;
 use crate::models::{
     block_group::BlockGroup,
-    block_group_edge::BlockGroupEdge,
+    block_group_edge::{BlockGroupEdge, BlockGroupEdgeData},
+    edge::{Edge, EdgeData},
     file_types::FileTypes,
     node::{PATH_END_NODE_ID, PATH_START_NODE_ID},
     operations::{Operation, OperationInfo},
     path::Path,
     path_edge::PathEdge,
     sample::Sample,
+    strand::Strand,
 };
 use crate::operation_management::{end_operation, start_operation, OperationError};
 use core::ops::Range;
+use itertools::Itertools;
 use rusqlite::Connection;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
@@ -212,6 +215,206 @@ fn get_block_group_id(
         "No region found with name: {}",
         region_name
     )))
+}
+
+pub fn make_stitch(
+    conn: &Connection,
+    operation_conn: &Connection,
+    collection_name: &str,
+    parent_sample_name: Option<&str>,
+    new_sample_name: &str,
+    region_names: Vec<&str>,
+    new_name: &str,
+) -> Result<Operation, DeriveGraphError> {
+    let mut session = start_operation(conn);
+
+    let _new_sample = Sample::get_or_create(conn, new_sample_name);
+    let block_groups = Sample::get_block_groups(conn, collection_name, parent_sample_name);
+
+    let mut block_groups_by_name = HashMap::new();
+    for block_group in &block_groups {
+        let block_group_name = block_group.name.as_str();
+        if region_names.contains(&block_group_name) {
+            block_groups_by_name.insert(block_group_name, block_group);
+        }
+    }
+
+    let mut source_node_coordinates = vec![(PATH_START_NODE_ID, 0, Strand::Forward)];
+    let mut edges_to_reuse = vec![];
+    let mut edges_to_create = vec![];
+    let mut concatenated_path_edges = vec![];
+
+    for region_name in &region_names {
+        if let Some(block_group) = block_groups_by_name.get(region_name) {
+            let edges = BlockGroupEdge::edges_for_block_group(conn, block_group.id);
+
+            let nonterminal_edges = edges
+                .iter()
+                .filter(|edge| !edge.edge.is_start_edge() && !edge.edge.is_end_edge())
+                .cloned();
+            edges_to_reuse.extend(nonterminal_edges);
+
+            let start_edges = edges
+                .iter()
+                .filter(|edge| edge.edge.is_start_edge())
+                .collect::<Vec<_>>();
+            for source_node_coordinate in &source_node_coordinates {
+                for start_edge in &start_edges {
+                    edges_to_create.push(EdgeData {
+                        source_node_id: source_node_coordinate.0,
+                        source_coordinate: source_node_coordinate.1,
+                        source_strand: source_node_coordinate.2,
+                        target_node_id: start_edge.edge.target_node_id,
+                        target_coordinate: start_edge.edge.target_coordinate,
+                        target_strand: start_edge.edge.target_strand,
+                    });
+                }
+            }
+
+            let end_edges = edges.iter().filter(|edge| edge.edge.is_end_edge());
+            source_node_coordinates = end_edges
+                .map(|edge| {
+                    (
+                        edge.edge.source_node_id,
+                        edge.edge.source_coordinate,
+                        edge.edge.source_strand,
+                    )
+                })
+                .collect();
+
+            let current_path = BlockGroup::get_current_path(conn, block_group.id);
+            concatenated_path_edges.extend(PathEdge::edges_for_path(conn, current_path.id));
+        } else {
+	    return Err(DeriveGraphError::RegionNotFound(format!(
+		"No region found with name: {}",
+		region_name
+	    )));
+        }
+    }
+
+    let created_edge_ids = Edge::bulk_create(conn, &edges_to_create);
+    let created_edges = Edge::bulk_load(conn, &created_edge_ids);
+
+    let created_edges_by_node_info = created_edges
+        .iter()
+        .map(|edge| {
+            (
+                (
+                    edge.source_node_id,
+                    edge.source_coordinate,
+                    edge.source_strand,
+                    edge.target_node_id,
+                    edge.target_coordinate,
+                    edge.target_strand,
+                ),
+                edge.clone(),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+
+    let mut stitch_path_edge_ids = vec![];
+    for (path_edge1, path_edge2) in concatenated_path_edges.iter().tuple_windows() {
+        if path_edge1.target_node_id == PATH_END_NODE_ID
+            && path_edge2.source_node_id == PATH_START_NODE_ID
+        {
+            stitch_path_edge_ids.push(
+                created_edges_by_node_info[&(
+                    path_edge1.source_node_id,
+                    path_edge1.source_coordinate,
+                    path_edge1.source_strand,
+                    path_edge2.target_node_id,
+                    path_edge2.target_coordinate,
+                    path_edge2.target_strand,
+                )]
+                    .id,
+            );
+        }
+    }
+
+    let new_block_group =
+        BlockGroup::create(conn, collection_name, Some(new_sample_name), new_name);
+    let new_block_group_id = new_block_group.id;
+
+    let mut new_path_edge_ids = vec![concatenated_path_edges[0].id];
+    let mut stitch_count = 0;
+    for path_edge in &concatenated_path_edges {
+        if path_edge.is_end_edge() {
+            new_path_edge_ids.push(stitch_path_edge_ids[stitch_count]);
+            stitch_count += 1;
+        } else if !path_edge.is_start_edge() {
+            new_path_edge_ids.push(path_edge.id);
+        }
+    }
+
+    new_path_edge_ids.push(concatenated_path_edges[concatenated_path_edges.len() - 1].id);
+
+    Path::create(conn, new_name, new_block_group_id, &new_path_edge_ids);
+
+    let bg_edges_for_existing_edges = edges_to_reuse
+        .iter()
+        .map(|edge| BlockGroupEdgeData {
+            block_group_id: new_block_group_id,
+            edge_id: edge.edge.id,
+            chromosome_index: edge.chromosome_index,
+            phased: edge.phased,
+        })
+        .collect::<Vec<_>>();
+
+    let mut chromosome_index_counter = edges_to_reuse
+        .iter()
+        .min_by(|x, y| x.chromosome_index.cmp(&y.chromosome_index))
+        .unwrap()
+        .chromosome_index
+        + 1;
+
+    let path_edge_id_set = new_path_edge_ids.iter().collect::<HashSet<_>>();
+    let mut bg_edges = vec![];
+    for created_edge in created_edges {
+        if path_edge_id_set.contains(&created_edge.id) {
+            bg_edges.push(BlockGroupEdgeData {
+                block_group_id: new_block_group_id,
+                edge_id: created_edge.id,
+                chromosome_index: 0,
+                phased: 0,
+            });
+        } else {
+            bg_edges.push(BlockGroupEdgeData {
+                block_group_id: new_block_group_id,
+                edge_id: created_edge.id,
+                chromosome_index: chromosome_index_counter,
+                phased: 0,
+            });
+            chromosome_index_counter += 1;
+        }
+    }
+
+    bg_edges.extend(bg_edges_for_existing_edges);
+    BlockGroupEdge::bulk_create(conn, &bg_edges);
+
+    let summary_str = format!(
+        " {}: stitched {} chunks into new graph",
+        new_sample_name,
+        region_names.len()
+    );
+    let op = end_operation(
+        conn,
+        operation_conn,
+        &mut session,
+        &OperationInfo {
+            files: vec![OperationFile {
+                file_path: "".to_string(),
+                file_type: FileTypes::None,
+            }],
+            description: "make stitch".to_string(),
+        },
+        &summary_str,
+        None,
+    )
+    .unwrap();
+
+    println!("Stitched chunks successfully.");
+
+    Ok(op)
 }
 
 #[cfg(test)]
