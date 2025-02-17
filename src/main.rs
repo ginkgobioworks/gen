@@ -164,9 +164,12 @@ enum Commands {
         /// View the graph for a specific sample
         #[arg(short, long)]
         sample: Option<String>,
-        /// Restrict the view to a specific collection
+        /// Look for the sample in a specific collection
         #[arg(short, long)]
         collection: Option<String>,
+        /// Position as "node id:coordinate" to center the graph on
+        #[arg(short, long)]
+        position: Option<String>,
     },
     /// Update a sequence collecting using GAF results.
     #[command(name = "update-gaf", arg_required_else_help(true))]
@@ -552,13 +555,20 @@ fn main() {
             graph,
             sample,
             collection,
+            position,
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             let collection_name = &collection
                 .clone()
                 .unwrap_or_else(|| get_default_collection(&operation_conn));
 
-            view_block_group(&conn, graph, sample.clone(), collection_name);
+            view_block_group(
+                &conn,
+                graph,
+                sample.clone(),
+                collection_name,
+                position.clone(),
+            );
             conn.execute("END TRANSACTION", []).unwrap();
         }
         Some(Commands::Update {

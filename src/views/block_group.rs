@@ -1,17 +1,10 @@
-use crate::models::{
-    block_group::BlockGroup, block_group_edge::BlockGroupEdge, edge::Edge, node::Node,
-    traits::Query,
-};
+use crate::models::{block_group::BlockGroup, node::Node, traits::Query};
 
-use crate::graph::{GraphEdge, GraphNode};
-use crate::views::block_group_viewer::{PlotParameters, ScrollState, Viewer};
-use crate::views::block_layout::{BaseLayout, ScaledLayout};
+use crate::views::block_group_viewer::{PlotParameters, Viewer};
 
 use rusqlite::{params, Connection};
 
 use core::panic;
-use log::{info, warn};
-use std::collections::HashMap;
 use std::error::Error;
 use std::time::{Duration, Instant};
 
@@ -20,26 +13,19 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use petgraph::graph::NodeIndex;
-use petgraph::graphmap::DiGraphMap;
-use petgraph::stable_graph::StableDiGraph;
-use petgraph::visit::Bfs;
-use petgraph::Direction;
 use ratatui::{
     layout::{Constraint, Rect},
     style::{Color, Style},
     text::Text,
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
-use rust_sugiyama::{configure::Config, from_graph};
-
-
 
 pub fn view_block_group(
     conn: &Connection,
     name: &str,
     sample_name: Option<String>,
     collection_name: &str,
+    position: Option<String>, // Node ID and offset
 ) -> Result<(), Box<dyn Error>> {
     // Get the block group for two cases: with and without a sample
     let block_group = if let Some(ref sample_name) = sample_name {
@@ -59,60 +45,38 @@ pub fn view_block_group(
         );
     }
 
+    // Get the node object corresponding to a node id
+    let origin = if let Some(position_str) = position {
+        let parts = position_str.split(":").collect::<Vec<&str>>();
+        if parts.len() != 2 {
+            panic!("Invalid position: {}", position_str);
+        }
+        let node_id = parts[0].parse::<i64>().unwrap();
+        let offset = parts[1].parse::<i64>().unwrap();
+        Some((
+            Node::get(conn, "select * from nodes where id = ?1", params![node_id]).unwrap(),
+            offset,
+        ))
+    } else {
+        None
+    };
+
     let block_group_id = block_group.unwrap().id;
+    let block_graph = BlockGroup::get_graph(conn, block_group_id);
 
-    let mut edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
-
-    let mut blocks = Edge::blocks_from_edges(conn, &edges);
-    info!("{} blocks found", blocks.len());
-
-    // Panic if there are no blocks
-    if blocks.is_empty() {
-        panic!("No blocks found for block group {}", name);
-    }
-
-    blocks.sort_by(|a, b| a.node_id.cmp(&b.node_id));
-    let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
-    edges.extend(boundary_edges.clone());
-
-    // TODO: somehow there are edges missing (particularly from the start node))
-
-    // Build a block graph
-    let (block_graph, _block_pairs) = Edge::build_graph(&edges, &blocks);
-
+    // Create the viewer
+    println!("Pre-calculating chunked layout...");
+    let mut viewer = if let Some(origin) = origin {
+        Viewer::with_origin(&block_graph, conn, PlotParameters::default(), origin)
+    } else {
+        Viewer::new(&block_graph, conn, PlotParameters::default())
+    };
 
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let mut terminal = ratatui::init();
-
-    /* 
-
-    // The sugiyama layout was raw and unprocessed, so we need to stretch it to account for the sequence labels
-    // Pass the plotting parameters to the ScaledLayout constructor
-    let scaled_layout = ScaledLayout::new(&base_layout, &initial_parameters);
-
-    // Calculate the center point of the coordinates from the labels in the ScaledLayout
-    //let center_x = scaled_layout.labels.values().map(|(_, x, _)| x).sum::<u32>() as f64 / scaled_layout.labels.len() as f64;
-    let center_y = scaled_layout
-        .labels
-        .values()
-        .map(|((_, y), _)| y)
-        .sum::<f64>()
-        / scaled_layout.labels.len() as f64;
-
-    // Set the initial offset so that graph is vertically centered, and left-aligned with some margin
-    // We haven't set up a canvas yet, so we don't know more about the plot area
-    let initial_scroll_state = ScrollState {
-        offset_x: -5,
-        offset_y: center_y.round() as i32
-            - (terminal.get_frame().area().height as f64 / 2.0).round() as i32,
-        selected_block: None,
-    };
-*/
-
-    let mut viewer = Viewer::new(&block_graph, conn, PlotParameters::default());
 
     // Basic event loop
     let tick_rate = Duration::from_millis(100);
@@ -127,10 +91,7 @@ pub fn view_block_group(
             // - The panel is a scrollable paragraph that can be toggled on and off
             let status_bar_height: u16 = 1;
 
-            // Define the layouts
             // The outer layout is a vertical split between the canvas and the status bar
-            // The inner layout is a vertical split between the canvas and the panel
-
             let outer_layout = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Vertical)
                 .constraints(vec!
@@ -141,6 +102,7 @@ pub fn view_block_group(
                 )
                 .split(frame.area());
 
+            // The inner layout is a vertical split between the canvas and the panel
             let inner_layout = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Vertical)
                 .constraints(vec!
@@ -253,16 +215,18 @@ pub fn view_block_group(
                                 viewer.parameters.scale += 1;
                             } else {
                                 // Otherwise, increase the label width
-                                viewer.parameters.label_width =
-                                    match viewer.parameters.label_width {
-                                        1 => 11,
-                                        11 => 100,
-                                        100 => u32::MAX,
-                                        _ => u32::MAX,
-                                    }
+                                viewer.parameters.label_width = match viewer.parameters.label_width
+                                {
+                                    1 => 11,
+                                    11 => 100,
+                                    100 => u32::MAX,
+                                    _ => u32::MAX,
+                                }
                             };
                             // Recalculate the layout
-                            viewer.scaled_layout.refresh(&viewer.base_layout, &viewer.parameters);
+                            viewer
+                                .scaled_layout
+                                .refresh(&viewer.base_layout, &viewer.parameters);
 
                             // Center the viewport on the selected block if there is one
                             if let Some(selected_block) = viewer.scroll.selected_block {
@@ -279,15 +243,17 @@ pub fn view_block_group(
                                 viewer.parameters.scale -= 1;
                             } else {
                                 // If we're at the minimum scale, start decreasing the label width
-                                viewer.parameters.label_width =
-                                    match viewer.parameters.label_width {
-                                        u32::MAX => 100,
-                                        100 => 11,
-                                        11 => 1,
-                                        _ => 1,
-                                    };
+                                viewer.parameters.label_width = match viewer.parameters.label_width
+                                {
+                                    u32::MAX => 100,
+                                    100 => 11,
+                                    11 => 1,
+                                    _ => 1,
+                                };
                             }
-                            viewer.scaled_layout.refresh(&viewer.base_layout, &viewer.parameters);
+                            viewer
+                                .scaled_layout
+                                .refresh(&viewer.base_layout, &viewer.parameters);
                             if let Some(selected_block) = viewer.scroll.selected_block {
                                 viewer.center_on_block(selected_block);
                             }
@@ -331,9 +297,5 @@ pub fn view_block_group(
     Ok(())
 }
 
-
 #[cfg(test)]
-mod tests {
-    use super::*;
- 
-}
+mod tests {}

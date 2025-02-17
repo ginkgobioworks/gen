@@ -1,25 +1,22 @@
 use crate::graph::{GraphEdge, GraphNode};
-use crate::views::block_layout::{Partition, SugiyamaGraph, RawLayout, BaseLayout, ScaledLayout, };
 use crate::models::node;
 use crate::models::node::Node;
 use crate::models::sequence::Sequence;
+use crate::views::block_layout::{BaseLayout, ScaledLayout};
 
 use core::panic;
 use log::info;
-use petgraph::graph::{DefaultIx, EdgeIndex, NodeIndex};
-use petgraph::Direction;
 use petgraph::graphmap::DiGraphMap;
+use petgraph::Direction;
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style, Stylize},
+    style::{Color, Style},
     text::Span,
     widgets::canvas::{Canvas, Line},
-    widgets::{Block, Borders},
+    widgets::Block,
 };
-use rust_sugiyama::{configure::Config, from_graph};
-use std::collections::HashMap;
 use rusqlite::Connection;
-
+use std::collections::HashMap;
 
 /// Labels used in the graph visualization
 pub mod label {
@@ -50,25 +47,19 @@ impl Default for PlotParameters {
     }
 }
 
-
-/// Holds current scrolling offset and a zoom factors for data units per terminal cell.
-/// - `block_len` = how much of the sequence to show in each block label.
+/// Holds parameters that do change as the user scrolls through the graph.
+/// - `offset_x` and `offset_y` = coordinates of the top-left corner of the viewport (y-axis is upside down)
+/// - `selected_block` = the block that is currently selected by the user.
+#[derive(Default)]
 pub struct ScrollState {
     pub offset_x: i32,
     pub offset_y: i32,
     pub selected_block: Option<GraphNode>,
 }
 
-impl Default for ScrollState {
-    fn default() -> Self {
-        Self {
-            offset_x: 0,
-            offset_y: 0,
-            selected_block: None,
-        }
-    }
-}
-
+/// Holds the state of the viewer.
+/// - `initial_scroll_set` = we don't know what the initial scroll state is until we do our first render,
+///   so we can't center the origin block until the second pass. This keeps track of whether we've done that.
 pub struct Viewer<'a> {
     pub block_graph: &'a DiGraphMap<GraphNode, GraphEdge>,
     pub conn: &'a Connection,
@@ -86,10 +77,14 @@ impl<'a> Viewer<'a> {
     pub fn new(
         block_graph: &'a DiGraphMap<GraphNode, GraphEdge>,
         conn: &'a Connection,
-        plot_parameters: PlotParameters
+        plot_parameters: PlotParameters,
     ) -> Viewer<'a> {
-        Self::with_origin(block_graph, conn, plot_parameters,
-             (Node::get_start_node(), 0))
+        Self::with_origin(
+            block_graph,
+            conn,
+            plot_parameters,
+            (Node::get_start_node(), 0),
+        )
     }
 
     pub fn with_origin(
@@ -98,31 +93,38 @@ impl<'a> Viewer<'a> {
         plot_parameters: PlotParameters,
         origin: (Node, i64),
     ) -> Viewer<'a> {
-         
-        let mut base_layout = BaseLayout::with_origin(block_graph, origin.clone());
-        
+        let base_layout = BaseLayout::with_origin(block_graph, origin.clone());
+
         // Get the sequences for the nodes in the base_layout subgraph
-        let node_sequences = Node::get_sequences_by_node_ids(conn, 
-            &base_layout.subgraph.nodes()
+        let node_sequences = Node::get_sequences_by_node_ids(
+            conn,
+            &base_layout
+                .layout_graph
+                .nodes()
                 .map(|node| node.node_id)
                 .collect::<std::collections::BTreeSet<i64>>()
                 .into_iter()
-                .collect::<Vec<i64>>())
-            .into_iter()
-            .collect::<HashMap<i64, Sequence>>();
+                .collect::<Vec<i64>>(),
+        )
+        .into_iter()
+        .collect::<HashMap<i64, Sequence>>();
 
         // Stretch and scale the base layout to account for the sequence labels and plot parameters
         let scaled_layout = ScaledLayout::from_base_layout(&base_layout, &plot_parameters);
 
         // Capture the origin block from the base_layout's nodes (matching on node_id)
-        let origin_block = base_layout.subgraph.nodes().find(|node| node.node_id == origin.0.id);
+        let origin_block = base_layout
+            .layout_graph
+            .nodes()
+            .find(|node| node.node_id == origin.0.id);
 
         // Create initial scroll state with origin block selected (or first non-start/end node if origin is start)
         let mut scroll_state = ScrollState::default();
         if let Some(origin) = origin_block {
             if origin.node_id == node::PATH_START_NODE_ID {
                 // Find the first non-start/end node by looking at outgoing neighbors of the start node
-                scroll_state.selected_block = base_layout.subgraph
+                scroll_state.selected_block = base_layout
+                    .layout_graph
                     .neighbors_directed(origin, Direction::Outgoing)
                     .find(|node| node.node_id != node::PATH_END_NODE_ID);
             } else {
@@ -132,7 +134,7 @@ impl<'a> Viewer<'a> {
 
         Viewer {
             block_graph,
-            conn,   
+            conn,
             base_layout,
             scaled_layout,
             node_sequences,
@@ -146,7 +148,8 @@ impl<'a> Viewer<'a> {
 
     /// Refresh based on changed parameters or layout.
     pub fn refresh(&mut self) {
-        self.scaled_layout.refresh(&self.base_layout, &self.parameters);
+        self.scaled_layout
+            .refresh(&self.base_layout, &self.parameters);
     }
 
     /// Check if a block is visible in the viewport.
@@ -200,7 +203,8 @@ impl<'a> Viewer<'a> {
             if let Some(origin) = self.origin_block {
                 if let Some(((x, y), _)) = self.scaled_layout.labels.get(&origin) {
                     self.scroll.offset_x = (x.floor() as i32) - 3; // left aligned with 3 units of padding
-                    self.scroll.offset_y = (y.floor() as i32) - ((self.plot_area.height as f64) / 2.0).round() as i32; // vertically centered
+                    self.scroll.offset_y =
+                        (y.floor() as i32) - ((self.plot_area.height as f64) / 2.0).round() as i32; // vertically centered
                     self.initial_scroll_set = true;
                 }
             }
@@ -246,12 +250,19 @@ impl<'a> Viewer<'a> {
                     }
 
                     // Handle dummy nodes (start and end) differently than other nodes
-                    if block.node_id == node::PATH_START_NODE_ID || block.node_id == node::PATH_END_NODE_ID {
+                    if block.node_id == node::PATH_START_NODE_ID
+                        || block.node_id == node::PATH_END_NODE_ID
+                    {
                         continue;
-                    } 
+                    }
 
                     let label = if let Some(sequence) = self.node_sequences.get(&block.node_id) {
-                        inner_truncation(sequence.get_sequence(block.sequence_start, block.sequence_end).as_str(), (x2 - x) as u32)
+                        inner_truncation(
+                            sequence
+                                .get_sequence(block.sequence_start, block.sequence_end)
+                                .as_str(),
+                            (x2 - x) as u32,
+                        )
                     } else {
                         "●".to_string()
                     };
@@ -259,15 +270,12 @@ impl<'a> Viewer<'a> {
                     let style = if Some(block) == self.scroll.selected_block.as_ref() {
                         // Selected blocks
                         match label.as_str() {
-                            "●" => Style::default()
-                                .fg(Color::LightGreen),
-                            _ => Style::default()
-                                .fg(Color::Black)
-                                .bg(Color::White)
+                            "●" => Style::default().fg(Color::LightGreen),
+                            _ => Style::default().fg(Color::Black).bg(Color::White),
                         }
-                        } else {
-                            Style::default().fg(Color::White)
-                        };
+                    } else {
+                        Style::default().fg(Color::White)
+                    };
 
                     // Clip labels that are potentially in the window (horizontal)
                     let clipped_label = clip_label(
@@ -278,18 +286,21 @@ impl<'a> Viewer<'a> {
                     );
                     if !clipped_label.is_empty() {
                         ctx.print(
-                            f64::max(*x, viewport_left as f64), 
+                            f64::max(*x, viewport_left as f64),
                             *y,
                             Span::styled(clipped_label, style),
                         );
                     }
 
                     // Indicate if the block is connected to the start node (not shown)
-                    if self.base_layout.subgraph
+                    if self
+                        .base_layout
+                        .layout_graph
                         .neighbors_directed(*block, Direction::Incoming)
-                        .any(|neighbor| neighbor.node_id == node::PATH_START_NODE_ID) {
+                        .any(|neighbor| neighbor.node_id == node::PATH_START_NODE_ID)
+                    {
                         let x_pos = *x as isize - (label::START_LABEL.len() as isize);
-                        let arrow  = clip_label(
+                        let arrow = clip_label(
                             label::START_LABEL,
                             x_pos,
                             (viewport_left + 1) as isize,
@@ -298,34 +309,40 @@ impl<'a> Viewer<'a> {
                         if !arrow.is_empty() {
                             ctx.print(
                                 x_pos as f64,
-                                *y as f64,
+                                *y,
                                 Span::styled(arrow, Style::default().fg(Color::DarkGray)),
                             );
                         }
                     }
 
                     // Indicate if the block is connected to the end node (not shown)
-                    if self.base_layout.subgraph
+                    if self
+                        .base_layout
+                        .layout_graph
                         .neighbors_directed(*block, Direction::Outgoing)
-                        .any(|neighbor| neighbor.node_id == node::PATH_END_NODE_ID) {
-                        let x_pos = *x2 as isize + 1;  
-                        let arrow  = clip_label(
+                        .any(|neighbor| neighbor.node_id == node::PATH_END_NODE_ID)
+                    {
+                        let x_pos = *x2 as isize + 1;
+                        let arrow = clip_label(
                             label::END_LABEL,
                             x_pos,
                             (viewport_left + 1) as isize,
                             self.plot_area.width as usize,
-                        );  
+                        );
                         if !arrow.is_empty() {
                             ctx.print(
                                 x_pos as f64,
-                                *y as f64,
+                                *y,
                                 Span::styled(arrow, Style::default().fg(Color::DarkGray)),
-                            );  
+                            );
                         }
                     }
                 }
             });
         frame.render_widget(canvas, area);
+
+        // Compute more of the base layout if we're getting close to the ends.
+        self.auto_expand();
     }
 
     /// Cycle through visible blocks in the viewport
@@ -340,11 +357,11 @@ impl<'a> Viewer<'a> {
             .scaled_layout
             .labels
             .keys()
-            .filter(|&&block_id| 
-                self.is_block_visible(block_id) && 
-                block_id.node_id != node::PATH_START_NODE_ID && 
-                block_id.node_id != node::PATH_END_NODE_ID
-            )
+            .filter(|&&block_id| {
+                self.is_block_visible(block_id)
+                    && block_id.node_id != node::PATH_START_NODE_ID
+                    && block_id.node_id != node::PATH_END_NODE_ID
+            })
             .cloned()
             .collect();
 
@@ -397,43 +414,36 @@ impl<'a> Viewer<'a> {
             info!("Selected block: {:?}", next_block);
         }
     }
-    /* 
-    /// Check the viewport bounds against the layout and trigger expansion
-    pub fn auto_expand(&mut self) {
-        // Calculate the overall x-coordinates of the layout by looking at all labels.
-        let xs: Vec<f64> = self.layout.labels.values()
-            .flat_map(|((x_start, _), (x_end, _))| vec![*x_start, *x_end])
-            .collect();
 
+    /// Check the viewport bounds against the layout and trigger expansion if needed.
+    pub fn auto_expand(&mut self) {
+        // Find the minimum and maximum x-coordinates of (left side of) labels in the layout so far
+        let xs: Vec<f64> = self
+            .scaled_layout
+            .labels
+            .values()
+            .map(|((x, _), _)| *x)
+            .collect();
         if xs.is_empty() {
             return;
         }
-
-        let min_x = xs.iter().cloned().fold(f64::INFINITY, f64::min);
-        let max_x = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-
-        // Define a margin (in data units) which, when reached, triggers expansion.
-        let margin = 5.0; 
+        // For floats, min and max are not defined, so use fold instead.
+        let x_min = xs.iter().cloned().fold(f64::INFINITY, f64::min);
+        let x_max = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 
         // Current viewport boundaries (data coordinates)
-        let viewport_left = self.scroll.offset_x as f64;
-        let viewport_right = self.scroll.offset_x as f64 + self.plot_area.width as f64;
+        let viewport_left = self.scroll.offset_x;
+        let viewport_right = self.scroll.offset_x + self.plot_area.width as i32;
 
-        // Check if we're near the left boundary and can expand leftwards.
-        if viewport_left < min_x + margin {
-            // Safety: ensure the base layout can expand further left.
-            // (You might need additional checks based on your partition logic.)
-            self.layout._base_layout.expand_left();
-            self.layout.refresh(&self.plot_parameters);
+        // Check if we're a screen width away from the left/right boundary and expand if needed
+        // - if we can't expand any further, this will do nothing
+        if (x_min as i32) > (viewport_left - self.plot_area.width as i32) {
+            self.base_layout.expand_left();
         }
-        
-        // Check if we're near the right boundary and can expand rightwards.
-        if viewport_right > max_x - margin {
-            self.layout._base_layout.expand_right();
-            self.layout.refresh(&self.plot_parameters);
+        if (x_max as i32) < (viewport_right + self.plot_area.width as i32) {
+            self.base_layout.expand_right();
         }
     }
-    */
 }
 
 /// Module containing scroll state functionality
@@ -490,7 +500,7 @@ fn inner_truncation(s: &str, target_length: u32) -> String {
     if input_length <= target_length {
         return s.to_string();
     } else if target_length < 5 {
-        return "●".to_string();
+        return "●".to_string(); // ○ is U+25CB; ● is U+25CF
     }
     // length - 3 because we need space for the ellipsis
     let left_len = (target_length - 3) / 2 + ((target_length - 3) % 2);
@@ -616,9 +626,9 @@ mod tests {
     use super::*;
     use crate::graph::{GraphEdge, GraphNode};
     use crate::models::strand::Strand;
-    use itertools::Itertools;
     use petgraph::graphmap::DiGraphMap;
 
+    #[allow(dead_code)]
     fn make_test_graph(
         edges: Vec<(usize, usize)>,
         nodes: Option<Vec<GraphNode>>,
@@ -642,7 +652,7 @@ mod tests {
         });
 
         for node in &nodes {
-            graph.add_node(node.clone());
+            graph.add_node(*node);
         }
 
         for (source, target) in edges {
@@ -793,27 +803,5 @@ mod tests {
         //     A B[C D E]F G H
         let clipped = clip_label("ABCDEFGH", 2, 4, 3);
         assert_eq!(clipped, "…D…");
-    }
-
-
-    #[test]
-    fn test_block_group_viewer_new() {
-        let edges = vec![(0, 1), (1, 2), (2, 4), (1, 3), (3, 4), (4, 5)];
-        let graph = make_test_graph(edges, None);
-        
-        // Create an in-memory SQLite database for testing
-        let conn = Connection::open_in_memory().unwrap();
-        
-        // Set up any necessary test database schema/data
-        conn.execute(
-            "CREATE TABLE sequences (
-                node_id INTEGER PRIMARY KEY,
-                sequence TEXT NOT NULL
-            )",
-            [],
-        ).unwrap();
-
-        let viewer = Viewer::new(&graph, &conn, PlotParameters::default());
-        //assert_eq!(viewer.block_graph, graph);
     }
 }
