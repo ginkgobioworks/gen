@@ -263,6 +263,7 @@ fn get_parent_block_group_id(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::imports::fasta::import_fasta;
     use crate::models::{
         block_group_edge::BlockGroupEdgeData, collection::Collection, edge::Edge, metadata,
         node::Node, operations::setup_db, sequence::Sequence, strand::Strand,
@@ -270,6 +271,8 @@ mod tests {
     use crate::test_helpers::{
         get_connection, get_operation_connection, setup_block_group, setup_gen_dir,
     };
+    use crate::updates::fasta::update_with_fasta;
+    use std::path::PathBuf;
 
     #[test]
     fn test_derive_chunks_one_insertion() {
@@ -366,5 +369,119 @@ mod tests {
 
         let new_path = BlockGroup::get_current_path(conn, block_group2.id);
         assert_eq!(new_path.sequence(conn), "TAAAAAAAAC");
+    }
+
+    #[test]
+    fn derive_chunks_two_inserts() {
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let mut fasta_update_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_update_path.push("fixtures/aa.fa");
+
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test";
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            collection,
+            None,
+            false,
+            conn,
+            op_conn,
+        )
+        .unwrap();
+
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            collection,
+            None,
+            "test1",
+            "m123",
+            3,
+            5,
+            fasta_update_path.to_str().unwrap(),
+        );
+
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            collection,
+            Some("test1"),
+            "test2",
+            "m123",
+            15,
+            20,
+            fasta_update_path.to_str().unwrap(),
+        );
+
+        let original_block_groups = Sample::get_block_groups(conn, collection, None);
+        let original_block_group_id = original_block_groups[0].id;
+        let all_original_sequences =
+            BlockGroup::get_all_sequences(conn, original_block_group_id, false);
+        assert_eq!(
+            all_original_sequences,
+            HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),])
+        );
+
+        let grandchild_block_groups = Sample::get_block_groups(conn, collection, Some("test2"));
+        let grandchild_block_group_id = grandchild_block_groups[0].id;
+        let all_grandchild_sequences =
+            BlockGroup::get_all_sequences(conn, grandchild_block_group_id, false);
+        assert_eq!(
+            all_grandchild_sequences,
+            HashSet::from_iter(vec![
+                "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+                "ATCAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+                "ATCGATCGATCGATCAAGGAACACACAGAGA".to_string(),
+                "ATCAATCGATCGATCAAGGAACACACAGAGA".to_string(),
+            ])
+        );
+
+        derive_chunks(
+            conn,
+            op_conn,
+            collection,
+            Some("test2"),
+            "test3",
+            "m123",
+            None,
+            vec![
+                Range { start: 0, end: 1 },
+                Range { start: 1, end: 8 },
+                Range { start: 8, end: 25 },
+                Range { start: 25, end: 31 },
+            ],
+        )
+        .unwrap();
+
+        let block_groups = Sample::get_block_groups(conn, collection, Some("test3"));
+        let block_group2 = block_groups.iter().find(|x| x.name == "m123.2").unwrap();
+
+        let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id, false);
+        assert_eq!(
+            all_sequences2,
+            HashSet::from_iter(vec!["TCAATCG".to_string(), "TCGATCG".to_string(),])
+        );
+
+        let path2 = BlockGroup::get_current_path(conn, block_group2.id);
+        assert_eq!(path2.sequence(conn), "TCAATCG");
+
+        let block_group3 = block_groups.iter().find(|x| x.name == "m123.3").unwrap();
+        let all_sequences3 = BlockGroup::get_all_sequences(conn, block_group3.id, false);
+        assert_eq!(
+            all_sequences3,
+            HashSet::from_iter(vec![
+                "ATCGATCAAGGAACACA".to_string(),
+                "ATCGATCGATCGGGAACACA".to_string(),
+            ])
+        );
+
+        let path3 = BlockGroup::get_current_path(conn, block_group3.id);
+        assert_eq!(path3.sequence(conn), "ATCGATCAAGGAACACA");
     }
 }
