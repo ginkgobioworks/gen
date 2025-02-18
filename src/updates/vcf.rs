@@ -217,6 +217,8 @@ pub fn update_with_vcf<'a>(
     let mut parent_block_groups: HashMap<(&str, i64), i64> = HashMap::new();
     let mut created_samples = HashSet::new();
 
+    let mut path_lengths: HashMap<i64, i64> = HashMap::new();
+
     let _ = progress_bar.println("Parsing VCF for changes.");
 
     let bar = progress_bar.add(get_progress_bar(None));
@@ -289,6 +291,17 @@ pub fn update_with_vcf<'a>(
                         };
                         let sample_path =
                             PathCache::lookup(&mut path_cache, sample_bg_id, seq_name.clone());
+                        let path_length = if let Some(l) = path_lengths.get(&sample_path.id) {
+                            l
+                        } else {
+                            let l = sample_path.sequence(conn).len();
+                            path_lengths.insert(sample_path.id, l as i64);
+                            &path_lengths[&sample_path.id]
+                        };
+
+                        if ref_start > *path_length {
+                            panic!("Invalid position found. Path {0} has length of {path_length}, change is in position {ref_start}.", sample_path.name);
+                        }
                         vcf_entries.push(VcfEntry {
                             ids: allele_accession,
                             ref_start,
@@ -376,6 +389,18 @@ pub fn update_with_vcf<'a>(
                                             sample_bg_id,
                                             seq_name.clone(),
                                         );
+                                        let path_length =
+                                            if let Some(l) = path_lengths.get(&sample_path.id) {
+                                                l
+                                            } else {
+                                                let l = sample_path.sequence(conn).len();
+                                                path_lengths.insert(sample_path.id, l as i64);
+                                                &path_lengths[&sample_path.id]
+                                            };
+
+                                        if ref_start > *path_length {
+                                            panic!("Invalid position found. Path {0} has length of {path_length}, change is in position {ref_start}.", sample_path.name);
+                                        }
 
                                         vcf_entries.push(VcfEntry {
                                             ids: allele_accession,
