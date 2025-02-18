@@ -14,7 +14,7 @@ use crate::graph::{
 use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group_edge::{AugmentedEdgeData, BlockGroupEdge, BlockGroupEdgeData};
 use crate::models::edge::{Edge, EdgeData, GroupBlock};
-use crate::models::node::{PATH_END_NODE_ID, PATH_START_NODE_ID};
+use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::path::{Path, PathBlock, PathData};
 use crate::models::path_edge::PathEdge;
 use crate::models::strand::Strand;
@@ -658,10 +658,18 @@ impl BlockGroup {
             start_blocks[0]
         };
 
+        if Node::is_terminal(start_block.node_id) {
+            panic!("Invalid change specified. Coordinate is outside bounds of path range.");
+        }
+
         let end_blocks: Vec<&NodeIntervalBlock> =
             tree.query_point(change.end).map(|x| &x.value).collect();
         assert_eq!(end_blocks.len(), 1);
         let end_block = end_blocks[0];
+
+        if Node::is_terminal(end_block.node_id) {
+            panic!("Invalid change specified. Coordinate is outside bounds of path range.");
+        }
 
         let mut new_edges = vec![];
 
