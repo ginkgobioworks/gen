@@ -1,7 +1,5 @@
 use crate::models::{block_group::BlockGroup, node::Node, traits::Query};
-
-use crate::views::block_group_viewer::{PlotParameters, Viewer};
-
+use crate::views::block_group_viewer::{NavDirection, PlotParameters, Viewer};
 use rusqlite::{params, Connection};
 
 use core::panic;
@@ -17,7 +15,7 @@ use ratatui::{
     layout::{Constraint, Rect},
     style::{Color, Style},
     text::Text,
-    widgets::{Block, Borders, Clear, Paragraph, Wrap},
+    widgets::{Block, Clear, Padding, Paragraph, Wrap},
 };
 
 pub fn view_block_group(
@@ -124,7 +122,7 @@ pub fn view_block_group(
             // Status bar
             let status_bar_contents = format!(
                 "{:width$}",
-                " Controls: arrows(+shift)=scroll, +/-=zoom, tab=select blocks, return=show information on block, q=quit",
+                "◀ ▼ ▲ ▶ select blocks (+shift/alt), +/- zoom, return: show information on block, q=quit",
                 width = status_bar_area.width as usize);
 
             let status_bar = Paragraph::new(Text::styled(status_bar_contents,
@@ -134,8 +132,7 @@ pub fn view_block_group(
 
             // Panel
             if show_panel {
-                let panel_block = Block::default().borders(Borders::ALL);
-                let content_area = panel_block.inner(panel_area);
+                let panel_block = Block::bordered().padding(Padding::new(2, 2, 1, 1)).title("Details");
                 let mut panel_text = Text::from("No content found");
 
                 // Get information about the currently selected block
@@ -148,10 +145,12 @@ pub fn view_block_group(
                 let panel_content = Paragraph::new(panel_text)
                     .wrap(Wrap { trim: true })
                     .scroll((0, 0))
-                    .style(Style::default().bg(Color::Reset));
+                    .style(Style::default().bg(Color::Reset))
+                    .block(panel_block);
+
                 // First clear the area, then render
-                frame.render_widget(Clear, content_area);
-                frame.render_widget(panel_content, content_area);
+                frame.render_widget(Clear, panel_area);
+                frame.render_widget(panel_content, panel_area);
             }
         })?;
 
@@ -169,52 +168,51 @@ pub fn view_block_group(
                     match key.code {
                         // Scrolling through the graph
                         KeyCode::Left => {
-                            // Scroll left
-                            if key.modifiers == KeyModifiers::SHIFT {
+                            if key.modifiers.contains(KeyModifiers::SHIFT) {
                                 viewer.scroll.offset_x -= viewer.plot_area.width as i32 / 3;
-                            } else {
+                                viewer.unselect_if_not_visible();
+                            } else if key.modifiers.contains(KeyModifiers::ALT) {
                                 viewer.scroll.offset_x -= 1;
+                            } else {
+                                viewer.move_selection(NavDirection::Left);
                             }
-                            // Forget the selected block if it's not visible
-                            viewer.unselect_if_not_visible();
                         }
                         KeyCode::Right => {
-                            // Scroll right
-                            if key.modifiers == KeyModifiers::SHIFT {
+                            if key.modifiers.contains(KeyModifiers::SHIFT) {
                                 viewer.scroll.offset_x += viewer.plot_area.width as i32 / 3;
-                            } else {
+                                viewer.unselect_if_not_visible();
+                            } else if key.modifiers.contains(KeyModifiers::ALT) {
                                 viewer.scroll.offset_x += 1;
+                            } else {
+                                viewer.move_selection(NavDirection::Right);
                             }
-                            viewer.unselect_if_not_visible();
                         }
                         KeyCode::Up => {
-                            // Scroll up
-                            if key.modifiers == KeyModifiers::SHIFT {
+                            if key.modifiers.contains(KeyModifiers::SHIFT) {
                                 viewer.scroll.offset_y += viewer.plot_area.height as i32 / 3;
-                            } else {
+                                viewer.unselect_if_not_visible();
+                            } else if key.modifiers.contains(KeyModifiers::ALT) {
                                 viewer.scroll.offset_y += 1;
+                            } else {
+                                viewer.move_selection(NavDirection::Down);
                             }
-                            viewer.unselect_if_not_visible();
                         }
                         KeyCode::Down => {
-                            // Scroll down
-                            if key.modifiers == KeyModifiers::SHIFT {
+                            if key.modifiers.contains(KeyModifiers::SHIFT) {
                                 viewer.scroll.offset_y -= viewer.plot_area.height as i32 / 3;
-                            } else {
+                                viewer.unselect_if_not_visible();
+                            } else if key.modifiers.contains(KeyModifiers::ALT) {
                                 viewer.scroll.offset_y -= 1;
+                            } else {
+                                viewer.move_selection(NavDirection::Up);
                             }
-                            viewer.unselect_if_not_visible();
                         }
                         // Zooming in and out
                         KeyCode::Char('+') | KeyCode::Char('=') => {
-                            // Increase how much of the sequence is shown in each block label: 0 vs 11 vs 100 characters.
-                            // 11 was picked as the default because it results in symmetrical labels.
-                            // After 100 it just becomes the full length.
+                            // Increase how much of the sequence is shown in each block label.
                             if viewer.parameters.label_width == u32::MAX {
-                                // If we're already maximizing the length, start increasing the scale
                                 viewer.parameters.scale += 1;
                             } else {
-                                // Otherwise, increase the label width
                                 viewer.parameters.label_width = match viewer.parameters.label_width
                                 {
                                     1 => 11,
@@ -222,27 +220,24 @@ pub fn view_block_group(
                                     100 => u32::MAX,
                                     _ => u32::MAX,
                                 }
-                            };
-                            // Recalculate the layout
+                            }
+
+                            // If no block is selected, select the center block
+                            if viewer.scroll.selected_block.is_none() {
+                                viewer.select_center_block();
+                            }
+
+                            // Recalculate the layout.
                             viewer
                                 .scaled_layout
                                 .refresh(&viewer.base_layout, &viewer.parameters);
-
-                            // Center the viewport on the selected block if there is one
-                            if let Some(selected_block) = viewer.scroll.selected_block {
-                                viewer.center_on_block(selected_block);
-                            }
+                            viewer.center_on_block(viewer.scroll.selected_block.unwrap());
                         }
                         KeyCode::Char('-') | KeyCode::Char('_') => {
-                            // Decrease how much of the sequence is shown in each block label: 11 vs 100 vs 1000 characters.
-                            // 11 was picked as the default because it results in symmetrical labels.
-                            // After 1000 it just becomes the full length.
-
+                            // Decrease how much of the sequence is shown in each block label.
                             if viewer.parameters.scale > 2 {
-                                // Decrease the scale if we're not at the minimum scale (2 because we use a 0.5 aspect ratio)
                                 viewer.parameters.scale -= 1;
                             } else {
-                                // If we're at the minimum scale, start decreasing the label width
                                 viewer.parameters.label_width = match viewer.parameters.label_width
                                 {
                                     u32::MAX => 100,
@@ -251,29 +246,27 @@ pub fn view_block_group(
                                     _ => 1,
                                 };
                             }
+
+                            // If no block is selected, select the center block
+                            if viewer.scroll.selected_block.is_none() {
+                                viewer.select_center_block();
+                            }
+
+                            // Recalculate the layout.
                             viewer
                                 .scaled_layout
                                 .refresh(&viewer.base_layout, &viewer.parameters);
-                            if let Some(selected_block) = viewer.scroll.selected_block {
-                                viewer.center_on_block(selected_block);
-                            }
+                            viewer.center_on_block(viewer.scroll.selected_block.unwrap());
                         }
                         // Performing actions on blocks
                         KeyCode::Tab => {
-                            // Cycle through visible blocks in the viewport
-                            viewer.cycle_blocks(false);
+                            // Future implementation: switch between panels
                         }
                         KeyCode::BackTab => {
-                            // Reverse cycle through visible blocks in the viewport
-                            viewer.cycle_blocks(true);
+                            // Future implementation: switch between panels
                         }
                         KeyCode::Esc => {
-                            // If we have a popup open, close it, otherwise unselect the selected block
-                            if show_panel {
-                                show_panel = false;
-                            } else {
-                                viewer.scroll.selected_block = None;
-                            }
+                            show_panel = false;
                         }
                         KeyCode::Enter => {
                             // Show information on the selected block, if there is one

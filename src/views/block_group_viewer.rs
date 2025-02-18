@@ -5,7 +5,6 @@ use crate::models::sequence::Sequence;
 use crate::views::block_layout::{BaseLayout, ScaledLayout};
 
 use core::panic;
-use log::info;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
 use ratatui::{
@@ -55,6 +54,14 @@ pub struct ScrollState {
     pub offset_x: i32,
     pub offset_y: i32,
     pub selected_block: Option<GraphNode>,
+}
+
+/// Add the new enum for arrow navigation at the top of the file (after the use statements)
+pub enum NavDirection {
+    Left,
+    Right,
+    Up,
+    Down,
 }
 
 /// Holds the state of the viewer.
@@ -118,27 +125,13 @@ impl<'a> Viewer<'a> {
             .nodes()
             .find(|node| node.node_id == origin.0.id);
 
-        // Create initial scroll state with origin block selected (or first non-start/end node if origin is start)
-        let mut scroll_state = ScrollState::default();
-        if let Some(origin) = origin_block {
-            if origin.node_id == node::PATH_START_NODE_ID {
-                // Find the first non-start/end node by looking at outgoing neighbors of the start node
-                scroll_state.selected_block = base_layout
-                    .layout_graph
-                    .neighbors_directed(origin, Direction::Outgoing)
-                    .find(|node| node.node_id != node::PATH_END_NODE_ID);
-            } else {
-                scroll_state.selected_block = Some(origin);
-            }
-        }
-
         Viewer {
             block_graph,
             conn,
             base_layout,
             scaled_layout,
             node_sequences,
-            scroll: scroll_state,
+            scroll: ScrollState::default(),
             plot_area: Rect::default(),
             parameters: plot_parameters,
             origin_block,
@@ -177,12 +170,33 @@ impl<'a> Viewer<'a> {
         }
     }
 
-    /// Center the viewport on a specific block
-    /// - If the block is not present in the layout, panic.
+    /// Center the viewport on a specific block with minimal whitespace around the layout bounds.
+    /// Only show at most 5 units of margin on the left side.
     pub fn center_on_block(&mut self, block: GraphNode) {
-        if let Some(((x, y), _)) = self.scaled_layout.labels.get(&block) {
-            self.scroll.offset_x = *x as i32 - (self.plot_area.width as f64 / 2.0).round() as i32;
-            self.scroll.offset_y = *y as i32 - (self.plot_area.height as f64 / 2.0).round() as i32;
+        if let Some(((start, y), (end, _))) = self.scaled_layout.labels.get(&block) {
+            // Calculate the center of the block label
+            let block_center_x = (start + end) / 2.0;
+            let block_center_y = *y; // y coordinate is the same in both
+
+            let viewport_width = self.plot_area.width as f64;
+            let viewport_height = self.plot_area.height as f64;
+            let mut new_offset_x = block_center_x - viewport_width / 2.0;
+            let new_offset_y = block_center_y - viewport_height / 2.0;
+
+            // Define the maximum allowed margin
+            let margin = 5.0;
+
+            // Clamp new_offset_x to (x_min - margin)
+            let x_min = self
+                .scaled_layout
+                .labels
+                .values()
+                .map(|((x, _), _)| *x)
+                .fold(f64::INFINITY, f64::min);
+            new_offset_x = new_offset_x.clamp(x_min - margin, f64::MAX);
+
+            self.scroll.offset_x = new_offset_x.round() as i32;
+            self.scroll.offset_y = new_offset_y.round() as i32;
         } else {
             panic!("Block ID {:?} not found in layout", block);
         }
@@ -201,12 +215,18 @@ impl<'a> Viewer<'a> {
         // Set initial scroll offset if not already set, aligning the origin block:
         if !self.initial_scroll_set && self.plot_area.width > 0 && self.plot_area.height > 0 {
             if let Some(origin) = self.origin_block {
-                if let Some(((x, y), _)) = self.scaled_layout.labels.get(&origin) {
-                    self.scroll.offset_x = (x.floor() as i32) - 3; // left aligned with 3 units of padding
-                    self.scroll.offset_y =
-                        (y.floor() as i32) - ((self.plot_area.height as f64) / 2.0).round() as i32; // vertically centered
-                    self.initial_scroll_set = true;
+                if origin.node_id == node::PATH_START_NODE_ID {
+                    // Find the first non-start/end node by looking at outgoing neighbors of the start node
+                    self.scroll.selected_block = self
+                        .base_layout
+                        .layout_graph
+                        .neighbors_directed(origin, Direction::Outgoing)
+                        .find(|node| node.node_id != node::PATH_END_NODE_ID);
+                } else {
+                    self.scroll.selected_block = Some(origin);
                 }
+                self.center_on_block(self.scroll.selected_block.unwrap());
+                self.initial_scroll_set = true;
             }
         }
 
@@ -345,76 +365,6 @@ impl<'a> Viewer<'a> {
         self.auto_expand();
     }
 
-    /// Cycle through visible blocks in the viewport
-    /// - If no block is selected, it selects the first block in the viewport.
-    /// - If a block is selected, it selects the next block in the viewport.
-    /// - If the last block is selected, it selects the first block in the viewport.
-    /// - If no blocks are in the viewport, it does nothing.
-    /// - The direction can be reversed by setting `reverse` to true.
-    /// - The selected block is stored in the viewer state, under scrollstate.
-    pub fn cycle_blocks(&mut self, reverse: bool) {
-        let mut blocks_in_viewport: Vec<GraphNode> = self
-            .scaled_layout
-            .labels
-            .keys()
-            .filter(|&&block_id| {
-                self.is_block_visible(block_id)
-                    && block_id.node_id != node::PATH_START_NODE_ID
-                    && block_id.node_id != node::PATH_END_NODE_ID
-            })
-            .cloned()
-            .collect();
-
-        blocks_in_viewport.sort_by(|a, b| {
-            let ((ax, ay), _) = self.scaled_layout.labels.get(a).unwrap();
-            let ((bx, by), _) = self.scaled_layout.labels.get(b).unwrap();
-            by.partial_cmp(ay)
-                .unwrap()
-                .then_with(|| ax.partial_cmp(bx).unwrap())
-        });
-
-        if blocks_in_viewport.is_empty() {
-            info!("No blocks in the viewport");
-            return;
-        }
-        if self.scroll.selected_block.is_none() {
-            if !reverse {
-                self.scroll.selected_block = Some(blocks_in_viewport[0]);
-                info!("Selected block: {:?}", blocks_in_viewport[0]);
-            } else {
-                self.scroll.selected_block = Some(blocks_in_viewport[blocks_in_viewport.len() - 1]);
-                info!(
-                    "Selected block: {:?}",
-                    blocks_in_viewport[blocks_in_viewport.len() - 1]
-                );
-            }
-        } else {
-            let selected_block = self.scroll.selected_block.unwrap();
-            let next_block = if let Some(index) = blocks_in_viewport
-                .iter()
-                .position(|&id| id == selected_block)
-            {
-                let next_index = if reverse {
-                    if index == 0 {
-                        blocks_in_viewport.len() - 1
-                    } else {
-                        index - 1
-                    }
-                } else if index == blocks_in_viewport.len() - 1 {
-                    0
-                } else {
-                    index + 1
-                };
-
-                blocks_in_viewport[next_index]
-            } else {
-                blocks_in_viewport[0]
-            };
-            self.scroll.selected_block = Some(next_block);
-            info!("Selected block: {:?}", next_block);
-        }
-    }
-
     /// Check the viewport bounds against the layout and trigger expansion if needed.
     pub fn auto_expand(&mut self) {
         // Find the minimum and maximum x-coordinates of (left side of) labels in the layout so far
@@ -442,6 +392,109 @@ impl<'a> Viewer<'a> {
         }
         if (x_max as i32) < (viewport_right + self.plot_area.width as i32) {
             self.base_layout.expand_right();
+        }
+    }
+
+    /// Cycle through nodes in a specified direction based on the label coordinates.
+    /// For moves to the left, it uses the end coordinate of the label; for right, the start coordinate;
+    /// and for up/down, the average of the start and end coordinates.
+    pub fn move_selection(&mut self, direction: NavDirection) {
+        // Determine the reference point from BaseLayout's node_positions.
+        let current_point = if let Some(selected) = self.scroll.selected_block {
+            self.base_layout
+                .node_positions
+                .get(&selected)
+                .cloned()
+                .unwrap_or_else(|| {
+                    (
+                        self.scroll.offset_x as f64 + self.plot_area.width as f64 / 2.0,
+                        self.scroll.offset_y as f64 + self.plot_area.height as f64 / 2.0,
+                    )
+                })
+        } else {
+            (
+                self.scroll.offset_x as f64 + self.plot_area.width as f64 / 2.0,
+                self.scroll.offset_y as f64 + self.plot_area.height as f64 / 2.0,
+            )
+        };
+
+        let mut best_candidate: Option<(GraphNode, f64)> = None;
+        for (node, &position) in self.base_layout.node_positions.iter() {
+            // Skip the current selection and the start/end nodes.
+            if let Some(selected) = self.scroll.selected_block {
+                if *node == selected
+                    || node.node_id == node::PATH_START_NODE_ID
+                    || node.node_id == node::PATH_END_NODE_ID
+                {
+                    continue;
+                }
+            }
+
+            let candidate_point = position;
+
+            // For vertical movement, only consider candidates that are nearly horizontally aligned.
+            if matches!(direction, NavDirection::Up | NavDirection::Down) {
+                let horizontal_threshold = 1.0;
+                if (candidate_point.0 - current_point.0).abs() > horizontal_threshold {
+                    continue;
+                }
+            }
+
+            let is_candidate = match direction {
+                NavDirection::Left => candidate_point.0 < current_point.0,
+                NavDirection::Right => candidate_point.0 > current_point.0,
+                NavDirection::Up => candidate_point.1 < current_point.1,
+                NavDirection::Down => candidate_point.1 > current_point.1,
+            };
+            if !is_candidate {
+                continue;
+            }
+
+            let dx = candidate_point.0 - current_point.0;
+            let dy = candidate_point.1 - current_point.1;
+            let distance = (dx * dx + dy * dy).sqrt();
+            if distance == 0.0 {
+                continue;
+            }
+
+            if let Some((_, best_distance)) = best_candidate {
+                if distance < best_distance {
+                    best_candidate = Some((*node, distance));
+                }
+            } else {
+                best_candidate = Some((*node, distance));
+            }
+        }
+
+        if let Some((new_selection, _)) = best_candidate {
+            self.scroll.selected_block = Some(new_selection);
+            self.center_on_block(new_selection);
+        }
+    }
+
+    /// Select the block closest to the center of the viewport using coordinates from scaled_layout.
+    pub fn select_center_block(&mut self) -> Option<GraphNode> {
+        let center = (
+            self.scroll.offset_x as f64 + self.plot_area.width as f64 / 2.0,
+            self.scroll.offset_y as f64 + self.plot_area.height as f64 / 2.0,
+        );
+        let mut best_candidate: Option<(GraphNode, f64)> = None;
+        for (node, &((start, y), (end, _))) in self.scaled_layout.labels.iter() {
+            let candidate_center = ((start + end) / 2.0, y);
+            let dx = candidate_center.0 - center.0;
+            let dy = candidate_center.1 - center.1;
+            let dist = (dx * dx + dy * dy).sqrt();
+            best_candidate = match best_candidate {
+                Some((_, best)) if dist < best => Some((*node, dist)),
+                None => Some((*node, dist)),
+                other => other,
+            };
+        }
+        if let Some((node, _)) = best_candidate {
+            self.scroll.selected_block = Some(node);
+            Some(node)
+        } else {
+            None
         }
     }
 }
