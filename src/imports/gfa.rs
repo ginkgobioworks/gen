@@ -394,7 +394,6 @@ pub fn import_gfa<'a>(
                 // there's a cycle, connect end/start node just for our record keeping to identify this cycle
                 // faster. Can likely just premake this edge and call it a cycle edge since it'll
                 // always be the same
-                // always be the same
                 new_edges.push(edge_data_from_fields(
                     PATH_END_NODE_ID,
                     0,

@@ -281,9 +281,10 @@ mod tests {
             op_conn,
         )
         .unwrap();
-        let n = Node::query(conn, "select * from nodes;", rusqlite::params!());
-        println!("{n:?}");
-        assert_eq!(n.len(), 3);
+        assert_eq!(
+            Node::query(conn, "select * from nodes;", rusqlite::params!()).len(),
+            3
+        );
         assert_eq!(
             import_fasta(
                 &fasta_path.to_str().unwrap().to_string(),

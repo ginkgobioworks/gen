@@ -3,7 +3,7 @@ use std::time::Duration;
 
 pub fn get_handler() -> MultiProgress {
     let p = MultiProgress::new();
-    // #[cfg(test)]
+    #[cfg(test)]
     {
         use indicatif::ProgressDrawTarget;
         p.set_draw_target(ProgressDrawTarget::hidden())
