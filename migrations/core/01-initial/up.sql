@@ -123,7 +123,6 @@ INSERT INTO gen_metadata (db_uuid) values (lower(
     substr(hex(randomblob(2)), 2) || '-' ||
     hex(randomblob(6))
   ));
-INSERT INTO sequences (hash, sequence_type, sequence, name, file_path, "length") values ("start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "OTHER", "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "", "", 64), ("end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "OTHER", "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "", "", 64), ("cycle-node-ooooooooooooooooooooooooooooooooooooooooooooooooooooo", "OTHER", "cycle-node-ooooooooooooooooooooooooooooooooooooooooooooooooooooo", "", "", 64);
+INSERT INTO sequences (hash, sequence_type, sequence, name, file_path, "length") values ("start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "OTHER", "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "", "", 64), ("end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "OTHER", "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "", "", 64);
 INSERT INTO nodes (id, sequence_hash) values (1, "start-node-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy");
 INSERT INTO nodes (id, sequence_hash) values (2, "end-node-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz");
-INSERT INTO nodes (id, sequence_hash) values (3, "cycle-node-ooooooooooooooooooooooooooooooooooooooooooooooooooooo");

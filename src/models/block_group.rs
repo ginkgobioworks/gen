@@ -14,7 +14,7 @@ use crate::graph::{
 use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group_edge::{AugmentedEdgeData, BlockGroupEdge, BlockGroupEdgeData};
 use crate::models::edge::{Edge, EdgeData, GroupBlock};
-use crate::models::node::{PATH_END_NODE_ID, PATH_START_NODE_ID};
+use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::path::{Path, PathBlock, PathData};
 use crate::models::path_edge::PathEdge;
 use crate::models::strand::Strand;
@@ -410,12 +410,19 @@ impl BlockGroup {
         let mut start_nodes = vec![];
         let mut end_nodes = vec![];
         for node in graph.nodes() {
-            let has_incoming = graph.neighbors_directed(node, Direction::Incoming).next();
-            let has_outgoing = graph.neighbors_directed(node, Direction::Outgoing).next();
-            if has_incoming.is_none() {
+            if Node::is_start_node(node.node_id)
+                || graph
+                    .neighbors_directed(node, Direction::Incoming)
+                    .next()
+                    .is_none()
+            {
                 start_nodes.push(node);
-            }
-            if has_outgoing.is_none() {
+            } else if Node::is_end_node(node.node_id)
+                || graph
+                    .neighbors_directed(node, Direction::Outgoing)
+                    .next()
+                    .is_none()
+            {
                 end_nodes.push(node);
             }
         }
