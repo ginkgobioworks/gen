@@ -16,7 +16,7 @@ use crate::models::{
     strand::Strand,
 };
 use crate::operation_management::{end_operation, start_operation, OperationError};
-use crate::progress_bar::{get_handler, get_progress_bar, get_time_elapsed_bar};
+use crate::progress_bar::{get_handler, get_message_bar, get_progress_bar, get_time_elapsed_bar};
 use itertools::Itertools;
 use petgraph::algo::kosaraju_scc;
 use petgraph::prelude::UnGraphMap;
@@ -205,6 +205,10 @@ pub fn import_gfa<'a>(
     }
 
     let mut created_blockgroup_edges: HashSet<i64> = HashSet::new();
+    // We use these nodes later for cycle breaking. If a cycle exists, and part of that cycle
+    // is the beginning of a path, we use that figuring it may be the user indicating where a
+    // plasmid/etc. should start.
+    let mut path_start_nodes: HashSet<i64> = HashSet::new();
 
     for input_path in &gfa.paths {
         let path_name = &input_path.name;
@@ -215,6 +219,7 @@ pub fn import_gfa<'a>(
         for (index, segment_id) in input_path.segments.iter().enumerate() {
             let target = sequences_by_segment_id.get(segment_id).unwrap();
             let target_node_id = *node_ids_by_segment_id.get(segment_id).unwrap();
+            path_start_nodes.insert(target_node_id);
             let target_strand = bool_to_strand(input_path.strands[index]);
             let key = edge_data_from_fields(
                 source_node_id,
@@ -264,6 +269,7 @@ pub fn import_gfa<'a>(
         for (index, segment_id) in input_walk.segments.iter().enumerate() {
             let target = sequences_by_segment_id.get(segment_id).unwrap();
             let target_node_id = *node_ids_by_segment_id.get(segment_id).unwrap();
+            path_start_nodes.insert(target_node_id);
             let target_strand = bool_to_strand(input_walk.strands[index]);
             let key = edge_data_from_fields(
                 source_node_id,
@@ -329,6 +335,7 @@ pub fn import_gfa<'a>(
     // check the graph for cycles and make start/end nodes if so
     let bar = progress_bar.add(get_progress_bar(None));
     bar.set_message("Breaking cycles");
+    let message_bar = progress_bar.add(get_message_bar());
     let graph = BlockGroup::get_graph(conn, block_group.id);
     let mut undirected_graph: UnGraphMap<GraphNode, GraphEdge> = UnGraphMap::new();
     for node in graph.nodes() {
@@ -353,17 +360,26 @@ pub fn import_gfa<'a>(
                     break;
                 }
             }
-            // honestly not sure what to do about graphs where we have just one terminal
+            // For graphs with just one enter/exit point, we log a message
             if !has_start && !has_end {
                 // from the subgraph, we want to find a deterministic sort of ordered elements.
                 // Kosaraju returns nodes in arbitrary order. We use DFS and then rotate the vector
-                // so the first node_id starts the list for consistency.
+                // so the first node_id starts the list for consistency. If a node in the DFS is in
+                // a known start node for a path, we use that one.
                 let mut order = vec![];
                 let mut dfs = DfsPostOrder::new(&graph, subgraph[0]);
+                let mut path_min_index: Option<usize> = None;
                 while let Some(nx) = dfs.next(&graph) {
+                    if path_min_index.is_none() && path_start_nodes.contains(&nx.node_id) {
+                        path_min_index = Some(order.len());
+                    }
                     order.push(nx);
                 }
-                let (min_index, _) = order.iter().enumerate().min_set_by_key(|(_, k)| k.node_id)[0];
+                let min_index = if let Some(x) = path_min_index {
+                    x
+                } else {
+                    order.iter().enumerate().min_set_by_key(|(_, k)| k.node_id)[0].0
+                };
                 order.rotate_left(min_index);
                 bar.inc(1);
                 new_edges.push(edge_data_from_fields(
@@ -388,9 +404,12 @@ pub fn import_gfa<'a>(
                     PATH_START_NODE_ID,
                     Strand::Forward,
                 ));
+            } else {
+                message_bar.set_message("Path encountered with cycle after start/end node, no cycle breaking will apply.");
             }
         }
     }
+    message_bar.finish();
     let new_edge_ids = Edge::bulk_create(conn, &new_edges.into_iter().collect::<Vec<EdgeData>>());
     BlockGroupEdge::bulk_create(
         conn,
