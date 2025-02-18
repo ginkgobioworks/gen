@@ -294,8 +294,8 @@ pub fn update_with_vcf<'a>(
                         let path_length = if let Some(l) = path_lengths.get(&sample_path.id) {
                             l
                         } else {
-                            let l = sample_path.sequence(conn).len();
-                            path_lengths.insert(sample_path.id, l as i64);
+                            let l = sample_path.length(conn);
+                            path_lengths.insert(sample_path.id, l);
                             &path_lengths[&sample_path.id]
                         };
 

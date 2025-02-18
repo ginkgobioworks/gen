@@ -262,6 +262,13 @@ impl Path {
             .join("")
     }
 
+    pub fn length(&self, conn: &Connection) -> i64 {
+        let blocks = self.blocks(conn);
+        let end_block = blocks.last().unwrap();
+        // the last block is the terminal node, which starts at the end of the path
+        end_block.path_start
+    }
+
     pub fn edge_pairs_to_block(
         &self,
         block_id: i64,
