@@ -293,13 +293,9 @@ pub fn update_with_vcf<'a>(
                         };
                         let sample_path =
                             PathCache::lookup(&mut path_cache, sample_bg_id, seq_name.clone());
-                        let path_length = if let Some(l) = path_lengths.get(&sample_path.id) {
-                            l
-                        } else {
-                            let l = sample_path.length(conn);
-                            path_lengths.insert(sample_path.id, l);
-                            &path_lengths[&sample_path.id]
-                        };
+                        let path_length = path_lengths
+                            .entry(sample_path.id)
+                            .or_insert(sample_path.length(conn));
 
                         if ref_start > *path_length {
                             return Err(VcfError::InvalidRecord(format!("Invalid position found. Path {0} has length of {path_length}, change is in position {ref_start}.", sample_path.name)));
