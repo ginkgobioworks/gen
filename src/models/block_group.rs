@@ -13,7 +13,6 @@ use crate::models::path::{Path, PathBlock, PathData};
 use crate::models::path_edge::PathEdge;
 use crate::models::strand::Strand;
 use crate::models::traits::*;
-use crate::operation_management::OperationError;
 use intervaltree::IntervalTree;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
@@ -1019,7 +1018,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1058,7 +1057,7 @@ mod tests {
         };
         // take out an entire block.
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
             all_sequences,
@@ -1101,7 +1100,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1143,7 +1142,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1185,7 +1184,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1227,7 +1226,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1269,7 +1268,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1311,7 +1310,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1353,7 +1352,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1395,7 +1394,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1440,7 +1439,7 @@ mod tests {
 
         // take out an entire block.
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
             all_sequences,
@@ -1481,7 +1480,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1493,7 +1492,7 @@ mod tests {
         );
 
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1535,7 +1534,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1578,7 +1577,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1620,7 +1619,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1662,7 +1661,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1704,7 +1703,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1746,7 +1745,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1834,7 +1833,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1876,7 +1875,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(&conn);
-        BlockGroup::insert_change(&conn, &change, &tree);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
 
         let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
         assert_eq!(
@@ -1927,7 +1926,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(conn);
-        BlockGroup::insert_change(conn, &change, &tree);
+        BlockGroup::insert_change(conn, &change, &tree).unwrap();
 
         let tree = BlockGroup::intervaltree_for(conn, block_group_id, false);
         let tree2 = BlockGroup::intervaltree_for(conn, block_group_id, true);
@@ -2106,7 +2105,7 @@ mod tests {
         };
         // note we are making our change against the new blockgroup, and not the parent blockgroup
         let tree = BlockGroup::intervaltree_for(conn, new_bg_id, true);
-        BlockGroup::insert_change(conn, &change, &tree);
+        BlockGroup::insert_change(conn, &change, &tree).unwrap();
         let all_sequences = BlockGroup::get_all_sequences(conn, new_bg_id, true);
         assert_eq!(
             all_sequences,
@@ -2151,7 +2150,7 @@ mod tests {
         };
         // take out an entire block.
         let tree = BlockGroup::intervaltree_for(conn, gc_bg_id, true);
-        BlockGroup::insert_change(conn, &change, &tree);
+        BlockGroup::insert_change(conn, &change, &tree).unwrap();
         let all_sequences = BlockGroup::get_all_sequences(conn, gc_bg_id, true);
         assert_eq!(
             all_sequences,
@@ -2201,7 +2200,7 @@ mod tests {
         };
         // note we are making our change against the new blockgroup, and not the parent blockgroup
         let tree = BlockGroup::intervaltree_for(conn, new_bg_id, true);
-        BlockGroup::insert_change(conn, &change, &tree);
+        BlockGroup::insert_change(conn, &change, &tree).unwrap();
         let all_sequences = BlockGroup::get_all_sequences(conn, new_bg_id, true);
         assert_eq!(
             all_sequences,
@@ -2256,7 +2255,7 @@ mod tests {
         };
         // take out an entire block.
         let tree = BlockGroup::intervaltree_for(conn, gc_bg_id, true);
-        BlockGroup::insert_change(conn, &change, &tree);
+        BlockGroup::insert_change(conn, &change, &tree).unwrap();
         let all_sequences = BlockGroup::get_all_sequences(conn, gc_bg_id, true);
         assert_eq!(
             all_sequences,
@@ -2313,7 +2312,7 @@ mod tests {
         };
         // note we are making our change against the new blockgroup, and not the parent blockgroup
         let tree = BlockGroup::intervaltree_for(conn, new_bg_id, true);
-        BlockGroup::insert_change(conn, &change, &tree);
+        BlockGroup::insert_change(conn, &change, &tree).unwrap();
         let all_sequences = BlockGroup::get_all_sequences(conn, new_bg_id, true);
         assert_eq!(
             all_sequences,
@@ -2368,7 +2367,7 @@ mod tests {
         };
         // take out an entire block.
         let tree = BlockGroup::intervaltree_for(conn, gc_bg_id, true);
-        BlockGroup::insert_change(conn, &change, &tree);
+        BlockGroup::insert_change(conn, &change, &tree).unwrap();
     }
 
     mod test_derive_subgraph {

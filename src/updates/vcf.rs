@@ -498,7 +498,8 @@ pub fn update_with_vcf<'a>(
             &path_changes,
             &mut path_cache,
             coordinate_frame.is_some(),
-        );
+        )
+        .unwrap();
         bar.inc(path_changes.len() as u64);
         summary
             .entry(sample_name)

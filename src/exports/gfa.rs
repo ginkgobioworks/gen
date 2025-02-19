@@ -468,7 +468,7 @@ mod tests {
             phased: 0,
         };
         let tree = path.intervaltree(conn);
-        BlockGroup::insert_change(conn, &change, &tree);
+        BlockGroup::insert_change(conn, &change, &tree).unwrap();
 
         let augmented_edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
         let mut node_ids = HashSet::new();
