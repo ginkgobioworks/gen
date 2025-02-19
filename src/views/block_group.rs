@@ -79,7 +79,8 @@ pub fn view_block_group(
     // Basic event loop
     let tick_rate = Duration::from_millis(100);
     let mut last_tick = Instant::now();
-    let mut show_panel = false; // Informational popup
+    let mut show_panel = false;
+    let mut tui_layout_change = false;
     loop {
         // Draw the UI
         terminal.draw(|frame| {
@@ -111,7 +112,6 @@ pub fn view_block_group(
                 )
                 .split(outer_layout[0]);
 
-
             let canvas_area = if show_panel { inner_layout[0] } else { outer_layout[0] };
             let panel_area = if show_panel { inner_layout[1] } else { Rect::default() };
             let status_bar_area = outer_layout[1];
@@ -122,7 +122,7 @@ pub fn view_block_group(
             // Status bar
             let status_bar_contents = format!(
                 "{:width$}",
-                "◀ ▼ ▲ ▶ select blocks (+shift/alt), +/- zoom, return: show information on block, q=quit",
+                "◀ ▼ ▲ ▶ select blocks (+shift/alt to scroll) | +/- zoom | return: show information on block | q=quit",
                 width = status_bar_area.width as usize);
 
             let status_bar = Paragraph::new(Text::styled(status_bar_contents,
@@ -136,8 +136,8 @@ pub fn view_block_group(
                 let mut panel_text = Text::from("No content found");
 
                 // Get information about the currently selected block
-                if viewer.scroll.selected_block.is_some() {
-                    let selected_block = viewer.scroll.selected_block.unwrap();
+                if viewer.state.selected_block.is_some() {
+                    let selected_block = viewer.state.selected_block.unwrap();
                     panel_text = Text::from(format!("Block ID: {}\nNode ID: {}\nStart: {}\nEnd: {}\n", 
                         selected_block.block_id, selected_block.node_id, selected_block.sequence_start, selected_block.sequence_end));
                 }
@@ -148,9 +148,14 @@ pub fn view_block_group(
                     .style(Style::default().bg(Color::Reset))
                     .block(panel_block);
 
-                // First clear the area, then render
-                frame.render_widget(Clear, panel_area);
+                // Clear the panel area if we just changed the layout
+                if tui_layout_change {
+                    frame.render_widget(Clear, panel_area);
+                }
                 frame.render_widget(panel_content, panel_area);
+
+                // Reset the layout change flag
+                tui_layout_change = false;
             }
         })?;
 
@@ -169,13 +174,13 @@ pub fn view_block_group(
                         // Scrolling through the graph
                         KeyCode::Left => {
                             if key.modifiers.contains(KeyModifiers::SHIFT) {
-                                viewer.scroll.offset_x -= viewer.plot_area.width as i32 / 3;
+                                viewer.state.offset_x -= viewer.state.viewport.width as i32 / 3;
                                 viewer.unselect_if_not_visible();
                             } else if key.modifiers.contains(KeyModifiers::ALT) {
-                                viewer.scroll.offset_x -= 1;
+                                viewer.state.offset_x -= 1;
                             } else {
                                 // If no block is selected, select the center block
-                                if viewer.scroll.selected_block.is_none() {
+                                if viewer.state.selected_block.is_none() {
                                     viewer.select_center_block();
                                 }
                                 viewer.move_selection(NavDirection::Left);
@@ -183,12 +188,12 @@ pub fn view_block_group(
                         }
                         KeyCode::Right => {
                             if key.modifiers.contains(KeyModifiers::SHIFT) {
-                                viewer.scroll.offset_x += viewer.plot_area.width as i32 / 3;
+                                viewer.state.offset_x += viewer.state.viewport.width as i32 / 3;
                                 viewer.unselect_if_not_visible();
                             } else if key.modifiers.contains(KeyModifiers::ALT) {
-                                viewer.scroll.offset_x += 1;
+                                viewer.state.offset_x += 1;
                             } else {
-                                if viewer.scroll.selected_block.is_none() {
+                                if viewer.state.selected_block.is_none() {
                                     viewer.select_center_block();
                                 }
                                 viewer.move_selection(NavDirection::Right);
@@ -196,12 +201,12 @@ pub fn view_block_group(
                         }
                         KeyCode::Up => {
                             if key.modifiers.contains(KeyModifiers::SHIFT) {
-                                viewer.scroll.offset_y += viewer.plot_area.height as i32 / 3;
+                                viewer.state.offset_y += viewer.state.viewport.height as i32 / 3;
                                 viewer.unselect_if_not_visible();
                             } else if key.modifiers.contains(KeyModifiers::ALT) {
-                                viewer.scroll.offset_y += 1;
+                                viewer.state.offset_y += 1;
                             } else {
-                                if viewer.scroll.selected_block.is_none() {
+                                if viewer.state.selected_block.is_none() {
                                     viewer.select_center_block();
                                 }
                                 viewer.move_selection(NavDirection::Down);
@@ -209,12 +214,12 @@ pub fn view_block_group(
                         }
                         KeyCode::Down => {
                             if key.modifiers.contains(KeyModifiers::SHIFT) {
-                                viewer.scroll.offset_y -= viewer.plot_area.height as i32 / 3;
+                                viewer.state.offset_y -= viewer.state.viewport.height as i32 / 3;
                                 viewer.unselect_if_not_visible();
                             } else if key.modifiers.contains(KeyModifiers::ALT) {
-                                viewer.scroll.offset_y -= 1;
+                                viewer.state.offset_y -= 1;
                             } else {
-                                if viewer.scroll.selected_block.is_none() {
+                                if viewer.state.selected_block.is_none() {
                                     viewer.select_center_block();
                                 }
                                 viewer.move_selection(NavDirection::Up);
@@ -236,7 +241,7 @@ pub fn view_block_group(
                             }
 
                             // If no block is selected, select the center block
-                            if viewer.scroll.selected_block.is_none() {
+                            if viewer.state.selected_block.is_none() {
                                 viewer.select_center_block();
                             }
 
@@ -244,7 +249,7 @@ pub fn view_block_group(
                             viewer
                                 .scaled_layout
                                 .refresh(&viewer.base_layout, &viewer.parameters);
-                            viewer.center_on_block(viewer.scroll.selected_block.unwrap());
+                            viewer.center_on_block(viewer.state.selected_block.unwrap());
                         }
                         KeyCode::Char('-') | KeyCode::Char('_') => {
                             // Decrease how much of the sequence is shown in each block label.
@@ -261,7 +266,7 @@ pub fn view_block_group(
                             }
 
                             // If no block is selected, select the center block
-                            if viewer.scroll.selected_block.is_none() {
+                            if viewer.state.selected_block.is_none() {
                                 viewer.select_center_block();
                             }
 
@@ -269,7 +274,7 @@ pub fn view_block_group(
                             viewer
                                 .scaled_layout
                                 .refresh(&viewer.base_layout, &viewer.parameters);
-                            viewer.center_on_block(viewer.scroll.selected_block.unwrap());
+                            viewer.center_on_block(viewer.state.selected_block.unwrap());
                         }
                         // Performing actions on blocks
                         KeyCode::Tab => {
@@ -283,7 +288,7 @@ pub fn view_block_group(
                         }
                         KeyCode::Enter => {
                             // Show information on the selected block, if there is one
-                            show_panel = viewer.scroll.selected_block.is_some()
+                            show_panel = viewer.state.selected_block.is_some();
                         }
                         _ => {}
                     }
@@ -302,6 +307,3 @@ pub fn view_block_group(
     execute!(stdout, LeaveAlternateScreen)?;
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {}

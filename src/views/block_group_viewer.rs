@@ -39,7 +39,7 @@ pub struct PlotParameters {
     pub label_width: u32,
     pub scale: u32,
     pub aspect_ratio: f32,
-    pub vertical_offset: f64,
+    pub line_offset_y: f64,
 }
 
 impl Default for PlotParameters {
@@ -48,7 +48,7 @@ impl Default for PlotParameters {
             label_width: 11,
             scale: 4,
             aspect_ratio: 0.5,
-            vertical_offset: 0.125,
+            line_offset_y: 0.125,
         }
     }
 }
@@ -56,14 +56,26 @@ impl Default for PlotParameters {
 /// Holds parameters that do change as the user scrolls through the graph.
 /// - `offset_x` and `offset_y` = coordinates of the top-left corner of the viewport (y-axis is upside down)
 /// - `selected_block` = the block that is currently selected by the user.
-#[derive(Default)]
-pub struct ScrollState {
+// Remove Default derive since we have a manual impl
+pub struct State {
     pub offset_x: i32,
     pub offset_y: i32,
+    pub viewport: Rect,
     pub selected_block: Option<GraphNode>,
+    pub first_render: bool,
+}
+impl Default for State {
+    fn default() -> Self {
+        State {
+            offset_x: 0,
+            offset_y: 0,
+            viewport: Rect::new(0, 0, 0, 0),
+            selected_block: None,
+            first_render: true,
+        }
+    }
 }
 
-/// Add the new enum for arrow navigation at the top of the file (after the use statements)
 pub enum NavDirection {
     Left,
     Right,
@@ -71,20 +83,15 @@ pub enum NavDirection {
     Down,
 }
 
-/// Holds the state of the viewer.
-/// - `initial_scroll_set` = we don't know what the initial scroll state is until we do our first render,
-///   so we can't center the origin block until the second pass. This keeps track of whether we've done that.
 pub struct Viewer<'a> {
     pub block_graph: &'a DiGraphMap<GraphNode, GraphEdge>,
     pub conn: &'a Connection,
     pub base_layout: BaseLayout,
     pub scaled_layout: ScaledLayout,
     pub node_sequences: HashMap<i64, Sequence>,
-    pub scroll: ScrollState,
-    pub plot_area: Rect,
+    pub state: State,
     pub parameters: PlotParameters,
     pub origin_block: Option<GraphNode>,
-    pub initial_scroll_set: bool,
 }
 
 impl<'a> Viewer<'a> {
@@ -138,11 +145,9 @@ impl<'a> Viewer<'a> {
             base_layout,
             scaled_layout,
             node_sequences,
-            scroll: ScrollState::default(),
-            plot_area: Rect::default(),
+            state: State::default(),
             parameters: plot_parameters,
             origin_block,
-            initial_scroll_set: false,
         }
     }
 
@@ -155,24 +160,19 @@ impl<'a> Viewer<'a> {
     /// Check if a block is visible in the viewport.
     pub fn is_block_visible(&self, block: GraphNode) -> bool {
         if let Some(((x, y), _)) = self.scaled_layout.labels.get(&block) {
-            let viewport_left = self.scroll.offset_x;
-            let viewport_right = self.scroll.offset_x + self.plot_area.width as i32;
-            let viewport_top = self.scroll.offset_y + self.plot_area.height as i32; // z-axis is upside down
-            let viewport_bottom = self.scroll.offset_y;
-
-            return (*y as i32) >= viewport_bottom
-                && (*y as i32) < viewport_top
-                && (*x as i32) >= viewport_left
-                && (*x as i32) < viewport_right;
+            return (*y as i32) >= self.state.offset_y
+                && (*y as i32) < self.state.offset_y + self.state.viewport.height as i32
+                && (*x as i32) >= self.state.offset_x
+                && (*x as i32) < self.state.offset_x + self.state.viewport.width as i32;
         }
         false
     }
 
     /// Unselect the currently selected block if it's not visible in the viewport.
     pub fn unselect_if_not_visible(&mut self) {
-        if let Some(selected_block) = self.scroll.selected_block {
+        if let Some(selected_block) = self.state.selected_block {
             if !self.is_block_visible(selected_block) {
-                self.scroll.selected_block = None;
+                self.state.selected_block = None;
             }
         }
     }
@@ -195,50 +195,78 @@ impl<'a> Viewer<'a> {
         // Set up the coordinate systems for the window and the canvas,
         // we need to keep a 1:1 mapping between coordinates to avoid glitches.
 
-        // Terminal window coordinates
-        let block = Block::default();
-        self.plot_area = block.inner(area);
+        // From the terminal's perspective, the viewport is the inner area of the scrolling canvas area.
+        // Terminal coordinates are referenced from the top-left corner of the terminal, with the y-axis
+        // pointing downwards.
+        //
+        // From the data's perspective, the viewport is a moving window defined by a width, height, and
+        // offset from the data origin. When offset_x = 0 and offset_y = 0, the bottom-left corner of the
+        // viewport has data coordinates (0,0). We must keep a 1:1 mapping between the size of the viewport
+        // in data units and in terminal cells to avoid glitches.
+
+        let canvas_block = Block::default();
+        let viewport = canvas_block.inner(area);
+
+        // Check if the viewport has changed size, and if so, update the offset to keep our reference
+        // frame intact.
+        if self.state.viewport != viewport {
+            let x_diff = viewport.x as i32 - self.state.viewport.x as i32;
+            let y_diff = viewport.y as i32 - self.state.viewport.y as i32;
+            let height_diff = viewport.height as i32 - self.state.viewport.height as i32;
+
+            // Adjust offsets based on viewport changes
+            self.state.offset_x -= x_diff;
+            // Accommodate inverted y-axis between terminal and data coordinates
+            self.state.offset_y += y_diff - height_diff;
+            self.state.viewport = viewport;
+        }
 
         // Set initial scroll offset if not already set, aligning the origin block:
-        if !self.initial_scroll_set && self.plot_area.width > 0 && self.plot_area.height > 0 {
+        if self.state.first_render
+            && self.state.viewport.width > 0
+            && self.state.viewport.height > 0
+        {
             if let Some(origin) = self.origin_block {
                 if origin.node_id == node::PATH_START_NODE_ID {
                     // Find the first non-start/end node by looking at outgoing neighbors of the start node
-                    self.scroll.selected_block = self
+                    self.state.selected_block = self
                         .base_layout
                         .layout_graph
                         .neighbors_directed(origin, Direction::Outgoing)
                         .find(|node| node.node_id != node::PATH_END_NODE_ID);
                 } else {
-                    self.scroll.selected_block = Some(origin);
+                    self.state.selected_block = Some(origin);
                 }
-                self.center_on_block(self.scroll.selected_block.unwrap());
-                self.initial_scroll_set = true;
+                self.center_on_block(self.state.selected_block.unwrap());
+                self.state.first_render = false;
             }
         }
-
-        // Data coordinates (the top-left corner of our view is (offset_x, offset_y))
-        let viewport_left = self.scroll.offset_x;
-        let viewport_right = self.scroll.offset_x + self.plot_area.width as i32;
-        let viewport_top = self.scroll.offset_y + self.plot_area.height as i32; // z-axis is upside down
-        let viewport_bottom = self.scroll.offset_y;
 
         // Create the canvas
         let canvas = Canvas::default()
             .background_color(Color::Black)
-            .block(block)
+            .block(canvas_block)
             // Adjust the x_bounds and y_bounds by the scroll offsets.
-            .x_bounds([viewport_left as f64, viewport_right as f64])
-            .y_bounds([viewport_bottom as f64, viewport_top as f64])
+            .x_bounds([
+                self.state.offset_x as f64,
+                (self.state.offset_x + self.state.viewport.width as i32) as f64,
+            ])
+            .y_bounds([
+                self.state.offset_y as f64,
+                (self.state.offset_y + self.state.viewport.height as i32) as f64,
+            ])
             .paint(|ctx| {
                 // Draw the lines described in the processed layout
                 for ((x1, y1), (x2, y2)) in self.scaled_layout.lines.values() {
                     // Clip the line to the visible area, skip if it's not visible itself
                     if let Some(((x1c, y1c), (x2c, y2c))) = clip_line(
-                        (*x1, *y1 + self.parameters.vertical_offset),
-                        (*x2, *y2 + self.parameters.vertical_offset),
-                        (viewport_left as f64, viewport_bottom as f64),
-                        (viewport_right as f64, viewport_top as f64),
+                        (*x1, *y1 + self.parameters.line_offset_y),
+                        (*x2, *y2 + self.parameters.line_offset_y),
+                        (self.state.offset_x as f64, self.state.offset_y as f64),
+                        (
+                            (self.state.offset_x + self.state.viewport.width as i32) as f64,
+                            (self.state.offset_y + self.state.viewport.height as i32) as f64,
+                        ),
                     ) {
                         ctx.draw(&Line {
                             x1: x1c,
@@ -252,7 +280,9 @@ impl<'a> Viewer<'a> {
                 // Print the labels
                 for (block, ((x, y), (x2, _y2))) in self.scaled_layout.labels.iter() {
                     // Skip labels that are not in the visible area (vertical)
-                    if (*y as i32) < viewport_bottom || (*y as i32) >= viewport_top {
+                    if (*y as i32) < self.state.offset_y
+                        || (*y as i32) >= (self.state.offset_y + self.state.viewport.height as i32)
+                    {
                         continue;
                     }
 
@@ -274,7 +304,7 @@ impl<'a> Viewer<'a> {
                         label::NODE.to_string()
                     };
                     // Style the label depending on whether it's selected
-                    let style = if Some(block) == self.scroll.selected_block.as_ref() {
+                    let style = if Some(block) == self.state.selected_block.as_ref() {
                         // Selected blocks
                         match label.as_str() {
                             label::NODE => Style::default().fg(Color::LightGreen),
@@ -288,12 +318,12 @@ impl<'a> Viewer<'a> {
                     let clipped_label = clip_label(
                         &label,
                         *x as isize,
-                        (viewport_left + 1) as isize,
-                        self.plot_area.width as usize,
+                        (self.state.offset_x + 1) as isize,
+                        self.state.viewport.width as usize,
                     );
                     if !clipped_label.is_empty() {
                         ctx.print(
-                            f64::max(*x, viewport_left as f64),
+                            f64::max(*x, self.state.offset_x as f64),
                             *y,
                             Span::styled(clipped_label, style),
                         );
@@ -310,8 +340,8 @@ impl<'a> Viewer<'a> {
                         let arrow = clip_label(
                             label::START,
                             x_pos,
-                            (viewport_left + 1) as isize,
-                            self.plot_area.width as usize,
+                            (self.state.offset_x + 1) as isize,
+                            self.state.viewport.width as usize,
                         );
                         if !arrow.is_empty() {
                             ctx.print(
@@ -333,8 +363,8 @@ impl<'a> Viewer<'a> {
                         let arrow = clip_label(
                             label::END,
                             x_pos,
-                            (viewport_left + 1) as isize,
-                            self.plot_area.width as usize,
+                            (self.state.offset_x + 1) as isize,
+                            self.state.viewport.width as usize,
                         );
                         if !arrow.is_empty() {
                             ctx.print(
@@ -368,16 +398,12 @@ impl<'a> Viewer<'a> {
         let x_min = xs.iter().cloned().fold(f64::INFINITY, f64::min);
         let x_max = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 
-        // Current viewport boundaries (data coordinates)
-        let viewport_left = self.scroll.offset_x;
-        let viewport_right = self.scroll.offset_x + self.plot_area.width as i32;
-
         // Check if we're a screen width away from the left/right boundary and expand if needed
         // - if we can't expand any further, this will do nothing
-        if (x_min as i32) > (viewport_left - self.plot_area.width as i32) {
+        if (x_min as i32) > (self.state.offset_x - self.state.viewport.width as i32) {
             self.base_layout.expand_left();
         }
-        if (x_max as i32) < (viewport_right + self.plot_area.width as i32) {
+        if (x_max as i32) < (self.state.offset_x + 2 * self.state.viewport.width as i32) {
             self.base_layout.expand_right();
         }
     }
@@ -387,28 +413,28 @@ impl<'a> Viewer<'a> {
     /// and for up/down, the average of the start and end coordinates.
     pub fn move_selection(&mut self, direction: NavDirection) {
         // Determine the reference point from BaseLayout's node_positions.
-        let current_point = if let Some(selected) = self.scroll.selected_block {
+        let current_point = if let Some(selected) = self.state.selected_block {
             self.base_layout
                 .node_positions
                 .get(&selected)
                 .cloned()
                 .unwrap_or_else(|| {
                     (
-                        self.scroll.offset_x as f64 + self.plot_area.width as f64 / 2.0,
-                        self.scroll.offset_y as f64 + self.plot_area.height as f64 / 2.0,
+                        self.state.offset_x as f64 + self.state.viewport.width as f64 / 2.0,
+                        self.state.offset_y as f64 + self.state.viewport.height as f64 / 2.0,
                     )
                 })
         } else {
             (
-                self.scroll.offset_x as f64 + self.plot_area.width as f64 / 2.0,
-                self.scroll.offset_y as f64 + self.plot_area.height as f64 / 2.0,
+                self.state.offset_x as f64 + self.state.viewport.width as f64 / 2.0,
+                self.state.offset_y as f64 + self.state.viewport.height as f64 / 2.0,
             )
         };
 
         let mut best_candidate: Option<(GraphNode, f64)> = None;
         for (node, &position) in self.base_layout.node_positions.iter() {
             // Skip the current selection and the start/end nodes.
-            if let Some(selected) = self.scroll.selected_block {
+            if let Some(selected) = self.state.selected_block {
                 if *node == selected
                     || node.node_id == node::PATH_START_NODE_ID
                     || node.node_id == node::PATH_END_NODE_ID
@@ -454,7 +480,7 @@ impl<'a> Viewer<'a> {
         }
 
         if let Some((new_selection, _)) = best_candidate {
-            self.scroll.selected_block = Some(new_selection);
+            self.state.selected_block = Some(new_selection);
             self.center_on_block(new_selection);
         }
     }
@@ -462,8 +488,8 @@ impl<'a> Viewer<'a> {
     /// Select the block closest to the center of the viewport using coordinates from scaled_layout.
     pub fn select_center_block(&mut self) -> Option<GraphNode> {
         let center = (
-            self.scroll.offset_x as f64 + self.plot_area.width as f64 / 2.0,
-            self.scroll.offset_y as f64 + self.plot_area.height as f64 / 2.0,
+            self.state.offset_x as f64 + self.state.viewport.width as f64 / 2.0,
+            self.state.offset_y as f64 + self.state.viewport.height as f64 / 2.0,
         );
         let mut best_candidate: Option<(GraphNode, f64)> = None;
         for (node, &((start, y), (end, _))) in self.scaled_layout.labels.iter() {
@@ -478,7 +504,7 @@ impl<'a> Viewer<'a> {
             };
         }
         if let Some((node, _)) = best_candidate {
-            self.scroll.selected_block = Some(node);
+            self.state.selected_block = Some(node);
             Some(node)
         } else {
             None
@@ -489,8 +515,8 @@ impl<'a> Viewer<'a> {
     /// This method computes the world bounds from all objects (labels) and clamps the viewport's offset
     /// so that the cursor is centered when possible, but moves towards the viewport edges when near world bounds.
     pub fn update_scroll_for_cursor(&mut self, cursor_x: f64, cursor_y: f64) {
-        let vp_width = self.plot_area.width as f64;
-        let vp_height = self.plot_area.height as f64;
+        let vp_width = self.state.viewport.width as f64;
+        let vp_height = self.state.viewport.height as f64;
         let margin = 5.0;
 
         let mut xs = Vec::new();
@@ -529,14 +555,14 @@ impl<'a> Viewer<'a> {
             world_min_y - (vp_height - world_height) / 2.0
         };
 
-        self.scroll.offset_x = new_offset_x.round() as i32;
-        self.scroll.offset_y = new_offset_y.round() as i32;
+        self.state.offset_x = new_offset_x.round() as i32;
+        self.state.offset_y = new_offset_y.round() as i32;
     }
 
     /// Pan the viewport by a given delta, emulating alt+arrow key scrolling via mouse events.
     pub fn scroll_by(&mut self, delta_x: i32, delta_y: i32) {
-        let new_offset_x = self.scroll.offset_x + delta_x;
-        let new_offset_y = self.scroll.offset_y + delta_y;
+        let new_offset_x = self.state.offset_x + delta_x;
+        let new_offset_y = self.state.offset_y + delta_y;
 
         let margin = 5.0;
         let mut xs = Vec::new();
@@ -551,8 +577,8 @@ impl<'a> Viewer<'a> {
         }
 
         if xs.is_empty() || ys.is_empty() {
-            self.scroll.offset_x = new_offset_x;
-            self.scroll.offset_y = new_offset_y;
+            self.state.offset_x = new_offset_x;
+            self.state.offset_y = new_offset_y;
             return;
         }
 
@@ -561,8 +587,8 @@ impl<'a> Viewer<'a> {
         let world_min_y = ys.iter().cloned().fold(f64::INFINITY, f64::min) - margin;
         let world_max_y = ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max) + margin;
 
-        let vp_width = self.plot_area.width as f64;
-        let vp_height = self.plot_area.height as f64;
+        let vp_width = self.state.viewport.width as f64;
+        let vp_height = self.state.viewport.height as f64;
         let desired_offset_x = new_offset_x as f64;
         let desired_offset_y = new_offset_y as f64;
 
@@ -577,8 +603,8 @@ impl<'a> Viewer<'a> {
             world_min_y - (vp_height - (world_max_y - world_min_y)) / 2.0
         };
 
-        self.scroll.offset_x = clamped_x.round() as i32;
-        self.scroll.offset_y = clamped_y.round() as i32;
+        self.state.offset_x = clamped_x.round() as i32;
+        self.state.offset_y = clamped_y.round() as i32;
     }
 
     /// Handle mouse scroll events (or mouse drag events) to pan the viewport.
@@ -594,40 +620,36 @@ pub mod scroll {
     use super::*;
 
     /// Calculates the new scroll offset needed to center on a point
-    pub fn center_on_point(point: (f64, f64), plot_area: &Rect) -> (i32, i32) {
+    pub fn center_on_point(point: (f64, f64), viewport: &Rect) -> (i32, i32) {
         let target_x = point.0.round() as i32;
         let target_y = point.1.round() as i32;
 
-        let center_x = target_x - (plot_area.width as i32 / 2);
-        let center_y = target_y - (plot_area.height as i32 / 2);
+        let center_x = target_x - (viewport.width as i32 / 2);
+        let center_y = target_y - (viewport.height as i32 / 2);
 
         (center_x, center_y)
     }
 
     /// Calculates if a point is within the current viewport
-    pub fn point_in_viewport(point: (f64, f64), scroll: &ScrollState, plot_area: &Rect) -> bool {
+    pub fn point_in_viewport(point: (f64, f64), scroll: &State, viewport: &Rect) -> bool {
         let x = point.0.round() as i32;
         let y = point.1.round() as i32;
 
         let min_x = scroll.offset_x;
-        let max_x = scroll.offset_x + plot_area.width as i32;
+        let max_x = scroll.offset_x + viewport.width as i32;
         let min_y = scroll.offset_y;
-        let max_y = scroll.offset_y + plot_area.height as i32;
+        let max_y = scroll.offset_y + viewport.height as i32;
 
         x >= min_x && x <= max_x && y >= min_y && y <= max_y
     }
 
     /// Calculates if a rectangle overlaps with the current viewport
-    pub fn rect_in_viewport(
-        rect: (f64, f64, f64, f64),
-        scroll: &ScrollState,
-        plot_area: &Rect,
-    ) -> bool {
+    pub fn rect_in_viewport(rect: (f64, f64, f64, f64), scroll: &State, viewport: &Rect) -> bool {
         let (x1, y1, x2, y2) = rect;
         let min_x = scroll.offset_x;
-        let max_x = scroll.offset_x + plot_area.width as i32;
+        let max_x = scroll.offset_x + viewport.width as i32;
         let min_y = scroll.offset_y;
-        let max_y = scroll.offset_y + plot_area.height as i32;
+        let max_y = scroll.offset_y + viewport.height as i32;
 
         // Check if rectangle overlaps with viewport
         !((x2.round() as i32) < min_x
