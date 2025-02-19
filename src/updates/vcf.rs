@@ -173,6 +173,8 @@ struct VcfEntry {
 pub enum VcfError {
     #[error("Operation Error: {0}")]
     OperationError(#[from] OperationError),
+    #[error("Invalid Record: {0}")]
+    InvalidRecord(String),
 }
 
 pub fn update_with_vcf<'a>(
@@ -216,6 +218,8 @@ pub fn update_with_vcf<'a>(
 
     let mut parent_block_groups: HashMap<(&str, i64), i64> = HashMap::new();
     let mut created_samples = HashSet::new();
+
+    let mut path_lengths: HashMap<i64, i64> = HashMap::new();
 
     let _ = progress_bar.println("Parsing VCF for changes.");
 
@@ -289,6 +293,13 @@ pub fn update_with_vcf<'a>(
                         };
                         let sample_path =
                             PathCache::lookup(&mut path_cache, sample_bg_id, seq_name.clone());
+                        let path_length = path_lengths
+                            .entry(sample_path.id)
+                            .or_insert(sample_path.length(conn));
+
+                        if ref_start > *path_length {
+                            return Err(VcfError::InvalidRecord(format!("Invalid position found. Path {0} has length of {path_length}, change is in position {ref_start}.", sample_path.name)));
+                        }
                         vcf_entries.push(VcfEntry {
                             ids: allele_accession,
                             ref_start,
@@ -376,6 +387,18 @@ pub fn update_with_vcf<'a>(
                                             sample_bg_id,
                                             seq_name.clone(),
                                         );
+                                        let path_length =
+                                            if let Some(l) = path_lengths.get(&sample_path.id) {
+                                                l
+                                            } else {
+                                                let l = sample_path.sequence(conn).len();
+                                                path_lengths.insert(sample_path.id, l as i64);
+                                                &path_lengths[&sample_path.id]
+                                            };
+
+                                        if ref_start > *path_length {
+                                            return Err(VcfError::InvalidRecord(format!("Invalid position found. Path {0} has length of {path_length}, change is in position {ref_start}.", sample_path.name)));
+                                        }
 
                                         vcf_entries.push(VcfEntry {
                                             ids: allele_accession,
@@ -473,7 +496,8 @@ pub fn update_with_vcf<'a>(
             &path_changes,
             &mut path_cache,
             coordinate_frame.is_some(),
-        );
+        )
+        .unwrap();
         bar.inc(path_changes.len() as u64);
         summary
             .entry(sample_name)
@@ -652,6 +676,40 @@ mod tests {
                 .map(|v| v.to_string())
             )
         );
+    }
+
+    #[test]
+    fn test_error_when_vcf_has_changes_out_of_bounds() {
+        setup_gen_dir();
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
+        let vcf_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/vcfs/out_of_bounds.vcf");
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            None,
+            false,
+            conn,
+            op_conn,
+        )
+        .unwrap();
+        let res = update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "0/1".to_string(),
+            "sample 1".to_string(),
+            conn,
+            op_conn,
+            None,
+        );
+        assert!(matches!(res, Err(VcfError::InvalidRecord(_))));
     }
 
     #[test]

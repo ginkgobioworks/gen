@@ -1,0 +1,10 @@
+##fileformat=VCFv4.1
+##filedate=Tue Sep  4 13:12:57 2018
+##reference=simple.fa
+##contig=<ID=m123,length=34>
+##filter="QUAL > 1"
+##FILTER=<ID=PASS,Description="All filters passed">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	invalid
+m123	3	.	CGA	CA	1611.92	.	.	GT	1/1
+m123	100	.	TC	TAGA	2216.6	.	.	GT	1/1

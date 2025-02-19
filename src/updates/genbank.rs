@@ -180,7 +180,7 @@ where
                         },
                     };
                     let tree = path.intervaltree(conn);
-                    BlockGroup::insert_change(conn, &change, &tree);
+                    BlockGroup::insert_change(conn, &change, &tree).unwrap();
                 }
             }
             Err(e) => return Err(GenBankError::ParseError(format!("Failed to parse {}", e))),
