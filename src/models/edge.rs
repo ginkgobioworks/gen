@@ -299,7 +299,7 @@ impl Edge {
         let mut edges_by_source_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
         let mut edges_by_target_node_id: HashMap<i64, Vec<&Edge>> = HashMap::new();
         for edge in edges.iter().map(|edge| &edge.edge) {
-            if edge.source_node_id != PATH_START_NODE_ID {
+            if !Node::is_start_node(edge.source_node_id) {
                 node_ids.insert(edge.source_node_id);
             }
             edges_by_source_node_id
@@ -307,7 +307,7 @@ impl Edge {
                 .and_modify(|edges| edges.push(edge))
                 .or_insert(vec![edge]);
 
-            if edge.target_node_id != PATH_END_NODE_ID {
+            if !Node::is_end_node(edge.target_node_id) {
                 node_ids.insert(edge.target_node_id);
             }
             edges_by_target_node_id
@@ -317,7 +317,7 @@ impl Edge {
         }
 
         let sequences_by_node_id =
-            Node::get_sequences_by_node_ids(conn, &node_ids.into_iter().collect::<Vec<i64>>());
+            Node::get_sequences_by_node_ids(conn, &node_ids.iter().copied().collect::<Vec<i64>>());
 
         let mut blocks = vec![];
         let mut block_index = 0;

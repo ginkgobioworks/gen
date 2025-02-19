@@ -1,5 +1,6 @@
 use crate::gfa::bool_to_strand;
 use crate::gfa_reader::Gfa;
+use crate::graph::{GraphEdge, GraphNode};
 use crate::models::file_types::FileTypes;
 use crate::models::operations::{OperationFile, OperationInfo};
 use crate::models::sample::Sample;
@@ -15,7 +16,11 @@ use crate::models::{
     strand::Strand,
 };
 use crate::operation_management::{end_operation, start_operation, OperationError};
-use crate::progress_bar::{get_handler, get_progress_bar, get_time_elapsed_bar};
+use crate::progress_bar::{get_handler, get_message_bar, get_progress_bar, get_time_elapsed_bar};
+use itertools::Itertools;
+use petgraph::algo::kosaraju_scc;
+use petgraph::prelude::UnGraphMap;
+use petgraph::visit::Dfs;
 use rusqlite;
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
@@ -182,8 +187,8 @@ pub fn import_gfa<'a>(
     }
     bar.finish();
 
-    let bar = progress_bar.add(get_time_elapsed_bar());
-    bar.set_message("Creating Gen Objects");
+    let gen_bar = progress_bar.add(get_time_elapsed_bar());
+    gen_bar.set_message("Creating Gen Objects");
     let edge_ids = Edge::bulk_create(conn, &edges.into_iter().collect::<Vec<EdgeData>>());
 
     let saved_edges = Edge::bulk_load(conn, &edge_ids);
@@ -321,6 +326,94 @@ pub fn import_gfa<'a>(
             .collect::<Vec<BlockGroupEdgeData>>(),
     );
 
+    // check the graph for cycles and make start/end nodes if so
+    let bar = progress_bar.add(get_progress_bar(None));
+    bar.set_message("Breaking cycles");
+    let message_bar = progress_bar.add(get_message_bar());
+    let graph = BlockGroup::get_graph(conn, block_group.id);
+    let mut undirected_graph: UnGraphMap<GraphNode, GraphEdge> = UnGraphMap::new();
+    for node in graph.nodes() {
+        undirected_graph.add_node(node);
+    }
+    for (src, dst, weight) in graph.all_edges() {
+        undirected_graph.add_edge(src, dst, *weight);
+    }
+    let connected_components = kosaraju_scc(&undirected_graph);
+    let mut new_edges = vec![];
+    for subgraph in connected_components.iter() {
+        if subgraph.len() >= 3 {
+            let mut has_start = false;
+            let mut has_end = false;
+            for node in subgraph.iter() {
+                if !has_start && Node::is_start_node(node.node_id) {
+                    has_start = true;
+                } else if !has_end && Node::is_end_node(node.node_id) {
+                    has_end = true;
+                };
+                if has_start && has_end {
+                    break;
+                }
+            }
+            // For graphs with just one enter/exit point, we log a message
+            if !has_start && !has_end {
+                // from the subgraph, we want to find a deterministic sort of ordered elements.
+                // Kosaraju returns nodes in arbitrary order. We use DFS and then rotate the vector
+                // so the first node_id starts the list for consistency. If a node in the DFS is in
+                // a known start node for a path, we use that one.
+                let mut order = vec![];
+                let mut dfs = Dfs::new(&graph, subgraph[0]);
+                while let Some(nx) = dfs.next(&graph) {
+                    order.push(nx);
+                }
+                let min_index = order.iter().enumerate().min_set_by_key(|(_, k)| k.node_id)[0].0;
+                order.rotate_left(min_index);
+                bar.inc(1);
+                new_edges.push(edge_data_from_fields(
+                    PATH_START_NODE_ID,
+                    0,
+                    Strand::Forward,
+                    order[0].node_id,
+                    Strand::Forward,
+                ));
+                let last_node = order.last().unwrap();
+                new_edges.push(edge_data_from_fields(
+                    last_node.node_id,
+                    last_node.sequence_end,
+                    Strand::Forward,
+                    PATH_END_NODE_ID,
+                    Strand::Forward,
+                ));
+                new_edges.push(edge_data_from_fields(
+                    PATH_END_NODE_ID,
+                    0,
+                    Strand::Forward,
+                    PATH_START_NODE_ID,
+                    Strand::Forward,
+                ));
+            } else if has_start && has_end {
+                // there's a cycle, but has a start/end already. At some point we should track this
+                // so we know ahead of time where the cycles are
+            } else {
+                message_bar.set_message("Path encountered with cycle after start/end node, no cycle breaking will apply.");
+            }
+        }
+    }
+    message_bar.finish();
+    let new_edge_ids = Edge::bulk_create(conn, &new_edges.into_iter().collect::<Vec<EdgeData>>());
+    BlockGroupEdge::bulk_create(
+        conn,
+        &new_edge_ids
+            .iter()
+            .map(|id| BlockGroupEdgeData {
+                block_group_id: block_group.id,
+                edge_id: *id,
+                chromosome_index: 0,
+                phased: 0,
+            })
+            .collect::<Vec<BlockGroupEdgeData>>(),
+    );
+    bar.finish();
+
     let op = end_operation(
         conn,
         operation_conn,
@@ -336,7 +429,7 @@ pub fn import_gfa<'a>(
         None,
     )
     .map_err(GFAImportError::OperationError);
-    bar.finish();
+    gen_bar.finish();
     op
 }
 
@@ -637,5 +730,49 @@ mod tests {
 
         let node_count = Node::query(conn, "select * from nodes", rusqlite::params!()).len() as i64;
         assert_eq!(node_count, 4);
+    }
+
+    #[test]
+    fn test_imports_gfa_with_cycle() {
+        setup_gen_dir();
+        let gfa_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/gfa/cycle_no_path.gfa");
+        let collection_name = "test".to_string();
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let _ = import_gfa(&gfa_path, &collection_name, None, conn, op_conn);
+
+        let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
+
+        let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id, false);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec!["AAACCCTTTGGGACTCTA".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_breaks_cycle_using_path_node() {
+        // here the fixture has a path indicting the cycle starts in the middle of where it would
+        // normally be created
+        setup_gen_dir();
+        let gfa_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/gfa/cycle_with_path.gfa");
+        let collection_name = "test".to_string();
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+        let _ = import_gfa(&gfa_path, &collection_name, None, conn, op_conn);
+
+        let block_group_id = BlockGroup::get_id(conn, &collection_name, None, "");
+
+        let all_sequences = BlockGroup::get_all_sequences(conn, block_group_id, false);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec!["TTTGGGACTCTAAAACCC".to_string()])
+        );
     }
 }

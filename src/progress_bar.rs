@@ -66,6 +66,14 @@ pub fn get_time_elapsed_bar() -> ProgressBar {
     bar
 }
 
+pub fn get_message_bar() -> ProgressBar {
+    // This is a bar solely meant for giving messages to the user since the use of print causes
+    // issues with indicatif
+    let bar = ProgressBar::no_length().with_style(ProgressStyle::with_template("{msg}").unwrap());
+    bar.enable_steady_tick(Duration::from_millis(250));
+    bar
+}
+
 pub fn add_saving_operation_bar(progress_bar: &MultiProgress) -> ProgressBar {
     // we have this pattern here because calling set_message before a bar is added to the multibar
     // causes duplicate lines to appear
