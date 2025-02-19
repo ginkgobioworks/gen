@@ -1,12 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use intervaltree::IntervalTree;
-use petgraph::graphmap::DiGraphMap;
-use petgraph::Direction;
-use rusqlite::{params, params_from_iter, types::Value as SQLValue, Connection, Row};
-use serde::{Deserialize, Serialize};
-
 use crate::graph::{
     all_intermediate_edges, all_reachable_nodes, all_simple_paths, flatten_to_interval_tree,
     GraphEdge, GraphNode,
@@ -19,6 +13,13 @@ use crate::models::path::{Path, PathBlock, PathData};
 use crate::models::path_edge::PathEdge;
 use crate::models::strand::Strand;
 use crate::models::traits::*;
+use crate::operation_management::OperationError;
+use intervaltree::IntervalTree;
+use petgraph::graphmap::DiGraphMap;
+use petgraph::Direction;
+use rusqlite::{params, params_from_iter, types::Value as SQLValue, Connection, Row};
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BlockGroup {
@@ -103,6 +104,13 @@ pub struct NodeIntervalBlock {
     pub sequence_end: i64,
     pub strand: Strand,
 }
+
+#[derive(Debug, Error, PartialEq)]
+pub enum ChangeError {
+    #[error("Operation Error: {0}")]
+    OutOfBounds(String),
+}
+
 impl BlockGroup {
     pub fn create(
         conn: &Connection,
@@ -534,7 +542,7 @@ impl BlockGroup {
         changes: &Vec<PathChange>,
         cache: &mut PathCache,
         modify_blockgroup: bool,
-    ) {
+    ) -> Result<(), ChangeError> {
         let mut new_augmented_edges_by_block_group = HashMap::<i64, Vec<AugmentedEdgeData>>::new();
         let mut new_accession_edges = HashMap::new();
         let mut tree_map = HashMap::new();
@@ -546,7 +554,7 @@ impl BlockGroup {
             } else {
                 PathCache::get_intervaltree(cache, &change.path).unwrap()
             };
-            let new_augmented_edges = BlockGroup::set_up_new_edges(change, tree);
+            let new_augmented_edges = BlockGroup::set_up_new_edges(change, tree)?;
             new_augmented_edges_by_block_group
                 .entry(change.block_group_id)
                 .and_modify(|new_edge_data| new_edge_data.extend(new_augmented_edges.clone()))
@@ -608,6 +616,7 @@ impl BlockGroup {
                 }
             }
         }
+        Ok(())
     }
 
     #[allow(clippy::ptr_arg)]
@@ -616,8 +625,8 @@ impl BlockGroup {
         conn: &Connection,
         change: &PathChange,
         tree: &IntervalTree<i64, NodeIntervalBlock>,
-    ) {
-        let new_augmented_edges = BlockGroup::set_up_new_edges(change, tree);
+    ) -> Result<(), ChangeError> {
+        let new_augmented_edges = BlockGroup::set_up_new_edges(change, tree)?;
         let new_edges = new_augmented_edges
             .iter()
             .map(|augmented_edge| augmented_edge.edge_data.clone())
@@ -634,12 +643,13 @@ impl BlockGroup {
             })
             .collect::<Vec<_>>();
         BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
+        Ok(())
     }
 
     fn set_up_new_edges(
         change: &PathChange,
         tree: &IntervalTree<i64, NodeIntervalBlock>,
-    ) -> Vec<AugmentedEdgeData> {
+    ) -> Result<Vec<AugmentedEdgeData>, ChangeError> {
         let start_blocks: Vec<&NodeIntervalBlock> =
             tree.query_point(change.start).map(|x| &x.value).collect();
         assert_eq!(start_blocks.len(), 1);
@@ -665,7 +675,7 @@ impl BlockGroup {
         // changes at the extremes, it's not ok for the change to start beyond the current
         // boundaries.
         if Node::is_start_node(start_block.node_id) && change.start < start_block.end {
-            panic!("Invalid change specified. Coordinate is outside bounds of path range.");
+            return Err(ChangeError::OutOfBounds(format!("Invalid change specified. Coordinate {pos} is before start of path range ({path_pos}).", pos=change.start, path_pos=start_block.end)));
         }
 
         let end_blocks: Vec<&NodeIntervalBlock> =
@@ -674,7 +684,7 @@ impl BlockGroup {
         let end_block = end_blocks[0];
 
         if Node::is_end_node(end_block.node_id) && change.end > end_block.start {
-            panic!("Invalid change specified. Coordinate is outside bounds of path range.");
+            return Err(ChangeError::OutOfBounds(format!("Invalid change specified. Coordinate {pos} is before start of path range ({path_pos}).", pos=change.end, path_pos=end_block.start)));
         }
 
         let mut new_edges = vec![];
@@ -750,7 +760,7 @@ impl BlockGroup {
             new_edges.push(new_augmented_end_edge);
         }
 
-        new_edges
+        Ok(new_edges)
     }
 
     pub fn intervaltree_for(
@@ -1746,6 +1756,52 @@ mod tests {
                 "AAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
             ])
         );
+    }
+
+    #[test]
+    fn error_on_out_of_bounds_change() {
+        let conn = get_connection(None);
+        let (block_group_id, path) = setup_block_group(&conn);
+        let deletion_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("")
+            .save(&conn);
+        let deletion_node_id = Node::create(&conn, deletion_sequence.hash.as_str(), None);
+        let deletion = PathBlock {
+            id: 0,
+            node_id: deletion_node_id,
+            block_sequence: deletion_sequence.get_sequence(None, None),
+            sequence_start: 0,
+            sequence_end: 0,
+            path_start: 350,
+            path_end: 400,
+            strand: Strand::Forward,
+        };
+        let after_end_change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            path_accession: None,
+            start: 350,
+            end: 400,
+            block: deletion.clone(),
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let before_start_change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            path_accession: None,
+            start: -300,
+            end: 400,
+            block: deletion,
+            chromosome_index: 1,
+            phased: 0,
+        };
+        let tree = path.intervaltree(&conn);
+        let res = BlockGroup::insert_change(&conn, &after_end_change, &tree);
+        assert!(matches!(res, Err(ChangeError::OutOfBounds(_))));
+        let res = BlockGroup::insert_change(&conn, &before_start_change, &tree);
+        assert!(matches!(res, Err(ChangeError::OutOfBounds(_))));
     }
 
     #[test]
