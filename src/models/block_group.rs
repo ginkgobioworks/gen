@@ -658,7 +658,13 @@ impl BlockGroup {
             start_blocks[0]
         };
 
-        if Node::is_terminal(start_block.node_id) {
+        // Ensure the change is within the path bounds. The logic here is a bit backwards, where
+        // we check if the start is before the start block's end and the end is before the end
+        // block's start. This is because the terminal blocks start and end at the bounds of the
+        // interval tree. So while it's ok to have a start/end block be the start/end block (for
+        // changes at the extremes, it's not ok for the change to start beyond the current
+        // boundaries.
+        if Node::is_start_node(start_block.node_id) && change.start < start_block.end {
             panic!("Invalid change specified. Coordinate is outside bounds of path range.");
         }
 
@@ -667,7 +673,7 @@ impl BlockGroup {
         assert_eq!(end_blocks.len(), 1);
         let end_block = end_blocks[0];
 
-        if Node::is_terminal(end_block.node_id) {
+        if Node::is_end_node(end_block.node_id) && change.end > end_block.start {
             panic!("Invalid change specified. Coordinate is outside bounds of path range.");
         }
 
