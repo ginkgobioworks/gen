@@ -173,6 +173,8 @@ struct VcfEntry {
 pub enum VcfError {
     #[error("Operation Error: {0}")]
     OperationError(#[from] OperationError),
+    #[error("Invalid Record: {0}")]
+    InvalidRecord(String),
 }
 
 pub fn update_with_vcf<'a>(
@@ -300,7 +302,7 @@ pub fn update_with_vcf<'a>(
                         };
 
                         if ref_start > *path_length {
-                            panic!("Invalid position found. Path {0} has length of {path_length}, change is in position {ref_start}.", sample_path.name);
+                            return Err(VcfError::InvalidRecord(format!("Invalid position found. Path {0} has length of {path_length}, change is in position {ref_start}.", sample_path.name)));
                         }
                         vcf_entries.push(VcfEntry {
                             ids: allele_accession,
@@ -399,7 +401,7 @@ pub fn update_with_vcf<'a>(
                                             };
 
                                         if ref_start > *path_length {
-                                            panic!("Invalid position found. Path {0} has length of {path_length}, change is in position {ref_start}.", sample_path.name);
+                                            return Err(VcfError::InvalidRecord(format!("Invalid position found. Path {0} has length of {path_length}, change is in position {ref_start}.", sample_path.name)));
                                         }
 
                                         vcf_entries.push(VcfEntry {
@@ -678,6 +680,40 @@ mod tests {
                 .map(|v| v.to_string())
             )
         );
+    }
+
+    #[test]
+    fn test_error_when_vcf_has_changes_out_of_bounds() {
+        setup_gen_dir();
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
+        let vcf_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/vcfs/out_of_bounds.vcf");
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            None,
+            false,
+            conn,
+            op_conn,
+        )
+        .unwrap();
+        let res = update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "0/1".to_string(),
+            "sample 1".to_string(),
+            conn,
+            op_conn,
+            None,
+        );
+        assert!(matches!(res, Err(VcfError::InvalidRecord(_))));
     }
 
     #[test]
