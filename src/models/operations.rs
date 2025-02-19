@@ -297,22 +297,11 @@ impl OperationSummary {
         rows.next().unwrap().unwrap()
     }
 
-    pub fn query(
-        conn: &Connection,
-        query: &str,
-        placeholders: Vec<Value>,
-    ) -> Vec<OperationSummary> {
+    pub fn set_message(conn: &Connection, id: i64, message: &str) -> SQLResult<()> {
+        let query = "UPDATE operation_summary SET summary = ?2 where id = ?1";
         let mut stmt = conn.prepare(query).unwrap();
-        let rows = stmt
-            .query_map(params_from_iter(placeholders), |row| {
-                Ok(OperationSummary {
-                    id: row.get(0)?,
-                    operation_hash: row.get(1)?,
-                    summary: row.get(2)?,
-                })
-            })
-            .unwrap();
-        rows.map(|row| row.unwrap()).collect()
+        stmt.execute(params![id, message])?;
+        Ok(())
     }
 }
 
