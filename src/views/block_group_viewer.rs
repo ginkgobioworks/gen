@@ -17,10 +17,14 @@ use ratatui::{
 use rusqlite::Connection;
 use std::collections::HashMap;
 
-/// Labels used in the graph visualization
+/// Labels used in the graph visualization (selected, not-selected)
+/// the trick is to get them to align with the braille characters
+/// we use to draw lines:
+/// ⣿●⣿*⣿∘⣿⦿⣿○⣿◉⣿⏣⣿⏸⣿⏹⣿⏺⣿⏼⣿⎔⣿
 pub mod label {
-    pub const START_LABEL: &str = "Start> ";
-    pub const END_LABEL: &str = " >End";
+    pub const START: &str = "Start > ";
+    pub const END: &str = " > End";
+    pub const NODE: &str = "⏺";
 }
 
 /// Holds parameters that don't change when you scroll.
@@ -30,10 +34,12 @@ pub mod label {
 ///   - If `scale` = 2.0, each cell is 2 data units (you see *more* data).  
 ///   - If `scale` = 0.5, each cell is 0.5 data units (you see *less* data, zoomed in).
 /// - `aspect_ratio` = width / height of a terminal cell in data units.
+/// - `vertical_offset` = how much to offset the lines vertically to align the braille characters with the labels
 pub struct PlotParameters {
     pub label_width: u32,
     pub scale: u32,
     pub aspect_ratio: f32,
+    pub vertical_offset: f64,
 }
 
 impl Default for PlotParameters {
@@ -42,6 +48,7 @@ impl Default for PlotParameters {
             label_width: 11,
             scale: 4,
             aspect_ratio: 0.5,
+            vertical_offset: 0.125,
         }
     }
 }
@@ -174,29 +181,9 @@ impl<'a> Viewer<'a> {
     /// Only show at most 5 units of margin on the left side.
     pub fn center_on_block(&mut self, block: GraphNode) {
         if let Some(((start, y), (end, _))) = self.scaled_layout.labels.get(&block) {
-            // Calculate the center of the block label
             let block_center_x = (start + end) / 2.0;
-            let block_center_y = *y; // y coordinate is the same in both
-
-            let viewport_width = self.plot_area.width as f64;
-            let viewport_height = self.plot_area.height as f64;
-            let mut new_offset_x = block_center_x - viewport_width / 2.0;
-            let new_offset_y = block_center_y - viewport_height / 2.0;
-
-            // Define the maximum allowed margin
-            let margin = 5.0;
-
-            // Clamp new_offset_x to (x_min - margin)
-            let x_min = self
-                .scaled_layout
-                .labels
-                .values()
-                .map(|((x, _), _)| *x)
-                .fold(f64::INFINITY, f64::min);
-            new_offset_x = new_offset_x.clamp(x_min - margin, f64::MAX);
-
-            self.scroll.offset_x = new_offset_x.round() as i32;
-            self.scroll.offset_y = new_offset_y.round() as i32;
+            let block_center_y = *y;
+            self.update_scroll_for_cursor(block_center_x, block_center_y);
         } else {
             panic!("Block ID {:?} not found in layout", block);
         }
@@ -248,8 +235,8 @@ impl<'a> Viewer<'a> {
                 for ((x1, y1), (x2, y2)) in self.scaled_layout.lines.values() {
                     // Clip the line to the visible area, skip if it's not visible itself
                     if let Some(((x1c, y1c), (x2c, y2c))) = clip_line(
-                        (*x1, *y1),
-                        (*x2, *y2),
+                        (*x1, *y1 + self.parameters.vertical_offset),
+                        (*x2, *y2 + self.parameters.vertical_offset),
                         (viewport_left as f64, viewport_bottom as f64),
                         (viewport_right as f64, viewport_top as f64),
                     ) {
@@ -284,13 +271,13 @@ impl<'a> Viewer<'a> {
                             (x2 - x) as u32,
                         )
                     } else {
-                        "●".to_string()
+                        label::NODE.to_string()
                     };
                     // Style the label depending on whether it's selected
                     let style = if Some(block) == self.scroll.selected_block.as_ref() {
                         // Selected blocks
                         match label.as_str() {
-                            "●" => Style::default().fg(Color::LightGreen),
+                            label::NODE => Style::default().fg(Color::LightGreen),
                             _ => Style::default().fg(Color::Black).bg(Color::White),
                         }
                     } else {
@@ -319,9 +306,9 @@ impl<'a> Viewer<'a> {
                         .neighbors_directed(*block, Direction::Incoming)
                         .any(|neighbor| neighbor.node_id == node::PATH_START_NODE_ID)
                     {
-                        let x_pos = *x as isize - (label::START_LABEL.len() as isize);
+                        let x_pos = *x as isize - (label::START.len() as isize);
                         let arrow = clip_label(
-                            label::START_LABEL,
+                            label::START,
                             x_pos,
                             (viewport_left + 1) as isize,
                             self.plot_area.width as usize,
@@ -344,7 +331,7 @@ impl<'a> Viewer<'a> {
                     {
                         let x_pos = *x2 as isize + 1;
                         let arrow = clip_label(
-                            label::END_LABEL,
+                            label::END,
                             x_pos,
                             (viewport_left + 1) as isize,
                             self.plot_area.width as usize,
@@ -496,6 +483,109 @@ impl<'a> Viewer<'a> {
         } else {
             None
         }
+    }
+
+    /// Update scroll offset based on the cursor position (world coordinates of the selected object).
+    /// This method computes the world bounds from all objects (labels) and clamps the viewport's offset
+    /// so that the cursor is centered when possible, but moves towards the viewport edges when near world bounds.
+    pub fn update_scroll_for_cursor(&mut self, cursor_x: f64, cursor_y: f64) {
+        let vp_width = self.plot_area.width as f64;
+        let vp_height = self.plot_area.height as f64;
+        let margin = 5.0;
+
+        let mut xs = Vec::new();
+        let mut ys = Vec::new();
+        for ((x, _), (x2, _)) in self.scaled_layout.labels.values() {
+            xs.push(*x);
+            xs.push(*x2);
+        }
+        for ((_, y), (_, _)) in self.scaled_layout.labels.values() {
+            ys.push(*y);
+        }
+        if xs.is_empty() || ys.is_empty() {
+            return;
+        }
+
+        let world_min_x = xs.iter().cloned().fold(f64::INFINITY, f64::min) - margin;
+        let world_max_x = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max) + margin;
+        let world_min_y = ys.iter().cloned().fold(f64::INFINITY, f64::min) - margin;
+        let world_max_y = ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max) + margin;
+
+        let world_width = world_max_x - world_min_x;
+        let world_height = world_max_y - world_min_y;
+
+        let desired_x = cursor_x - vp_width / 2.0;
+        let desired_y = cursor_y - vp_height / 2.0;
+
+        let new_offset_x = if world_width >= vp_width {
+            desired_x.clamp(world_min_x, world_max_x - vp_width)
+        } else {
+            world_min_x - (vp_width - world_width) / 2.0
+        };
+
+        let new_offset_y = if world_height >= vp_height {
+            desired_y.clamp(world_min_y, world_max_y - vp_height)
+        } else {
+            world_min_y - (vp_height - world_height) / 2.0
+        };
+
+        self.scroll.offset_x = new_offset_x.round() as i32;
+        self.scroll.offset_y = new_offset_y.round() as i32;
+    }
+
+    /// Pan the viewport by a given delta, emulating alt+arrow key scrolling via mouse events.
+    pub fn scroll_by(&mut self, delta_x: i32, delta_y: i32) {
+        let new_offset_x = self.scroll.offset_x + delta_x;
+        let new_offset_y = self.scroll.offset_y + delta_y;
+
+        let margin = 5.0;
+        let mut xs = Vec::new();
+        let mut ys = Vec::new();
+
+        for ((x, _), (x2, _)) in self.scaled_layout.labels.values() {
+            xs.push(*x);
+            xs.push(*x2);
+        }
+        for ((_, y), (_, _)) in self.scaled_layout.labels.values() {
+            ys.push(*y);
+        }
+
+        if xs.is_empty() || ys.is_empty() {
+            self.scroll.offset_x = new_offset_x;
+            self.scroll.offset_y = new_offset_y;
+            return;
+        }
+
+        let world_min_x = xs.iter().cloned().fold(f64::INFINITY, f64::min) - margin;
+        let world_max_x = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max) + margin;
+        let world_min_y = ys.iter().cloned().fold(f64::INFINITY, f64::min) - margin;
+        let world_max_y = ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max) + margin;
+
+        let vp_width = self.plot_area.width as f64;
+        let vp_height = self.plot_area.height as f64;
+        let desired_offset_x = new_offset_x as f64;
+        let desired_offset_y = new_offset_y as f64;
+
+        let clamped_x = if world_max_x - world_min_x >= vp_width {
+            desired_offset_x.clamp(world_min_x, world_max_x - vp_width)
+        } else {
+            world_min_x - (vp_width - (world_max_x - world_min_x)) / 2.0
+        };
+        let clamped_y = if world_max_y - world_min_y >= vp_height {
+            desired_offset_y.clamp(world_min_y, world_max_y - vp_height)
+        } else {
+            world_min_y - (vp_height - (world_max_y - world_min_y)) / 2.0
+        };
+
+        self.scroll.offset_x = clamped_x.round() as i32;
+        self.scroll.offset_y = clamped_y.round() as i32;
+    }
+
+    /// Handle mouse scroll events (or mouse drag events) to pan the viewport.
+    /// The parameters delta_x and delta_y indicate the scrolling amounts (in terminal cells).
+    /// This emulates alt+arrow key behavior for scrolling.
+    pub fn handle_mouse_scroll(&mut self, delta_x: i32, delta_y: i32) {
+        self.scroll_by(delta_x, delta_y);
     }
 }
 

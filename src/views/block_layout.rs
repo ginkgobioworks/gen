@@ -662,11 +662,11 @@ impl ScaledLayout {
                 .map(|(source, target, edge)| {
                     let source_coord = working_layout_hashmap
                         .get(&source)
-                        .map(|&(x, y)| (x + 0.5, y + 0.25))
+                        .map(|&(x, y)| (x + 1.0, y + parameters.vertical_offset))
                         .unwrap();
                     let target_coord = working_layout_hashmap
                         .get(&target)
-                        .map(|&(x, y)| (x - 1.0, y + 0.25))
+                        .map(|&(x, y)| (x - 1.5, y + parameters.vertical_offset))
                         .unwrap();
                     (*edge, (source_coord, target_coord))
                 })
@@ -747,12 +747,12 @@ impl ScaledLayout {
                 let source_coord = self
                     .labels
                     .get(&source)
-                    .map(|(_, (x2, y2))| (*x2, *y2 + 0.5))
+                    .map(|(_, (x2, y2))| (*x2, *y2 + parameters.vertical_offset))
                     .unwrap();
                 let target_coord = self
                     .labels
                     .get(&target)
-                    .map(|((x1, y1), _)| (*x1 - 1.5, *y1 + 0.5))
+                    .map(|((x1, y1), _)| (*x1 - 1.5, *y1 + parameters.vertical_offset))
                     .unwrap();
                 (*edge, (source_coord, target_coord))
             })
@@ -989,6 +989,7 @@ mod tests {
             label_width: 5,
             scale: 1,
             aspect_ratio: 1.0,
+            vertical_offset: 0.5,
         };
         let scaled_layout = ScaledLayout::from_base_layout(&base_layout, &parameters);
 
@@ -1032,6 +1033,7 @@ mod tests {
             label_width: 1,
             scale: 10,
             aspect_ratio: 1.0,
+            vertical_offset: 0.5,
         };
         let scaled_layout = ScaledLayout::from_base_layout(&base_layout, &parameters);
 
@@ -1076,6 +1078,7 @@ mod tests {
             label_width: 15,
             scale: 1,
             aspect_ratio: 1.0,
+            vertical_offset: 0.5,
         };
         let scaled_layout = ScaledLayout::from_base_layout(&base_layout, &parameters);
 

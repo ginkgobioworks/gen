@@ -174,6 +174,10 @@ pub fn view_block_group(
                             } else if key.modifiers.contains(KeyModifiers::ALT) {
                                 viewer.scroll.offset_x -= 1;
                             } else {
+                                // If no block is selected, select the center block
+                                if viewer.scroll.selected_block.is_none() {
+                                    viewer.select_center_block();
+                                }
                                 viewer.move_selection(NavDirection::Left);
                             }
                         }
@@ -184,6 +188,9 @@ pub fn view_block_group(
                             } else if key.modifiers.contains(KeyModifiers::ALT) {
                                 viewer.scroll.offset_x += 1;
                             } else {
+                                if viewer.scroll.selected_block.is_none() {
+                                    viewer.select_center_block();
+                                }
                                 viewer.move_selection(NavDirection::Right);
                             }
                         }
@@ -194,6 +201,9 @@ pub fn view_block_group(
                             } else if key.modifiers.contains(KeyModifiers::ALT) {
                                 viewer.scroll.offset_y += 1;
                             } else {
+                                if viewer.scroll.selected_block.is_none() {
+                                    viewer.select_center_block();
+                                }
                                 viewer.move_selection(NavDirection::Down);
                             }
                         }
@@ -204,6 +214,9 @@ pub fn view_block_group(
                             } else if key.modifiers.contains(KeyModifiers::ALT) {
                                 viewer.scroll.offset_y -= 1;
                             } else {
+                                if viewer.scroll.selected_block.is_none() {
+                                    viewer.select_center_block();
+                                }
                                 viewer.move_selection(NavDirection::Up);
                             }
                         }
