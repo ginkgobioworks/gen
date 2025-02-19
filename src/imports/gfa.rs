@@ -391,16 +391,8 @@ pub fn import_gfa<'a>(
                     Strand::Forward,
                 ));
             } else if has_start && has_end {
-                // there's a cycle, connect end/start node just for our record keeping to identify this cycle
-                // faster. Can likely just premake this edge and call it a cycle edge since it'll
-                // always be the same
-                new_edges.push(edge_data_from_fields(
-                    PATH_END_NODE_ID,
-                    0,
-                    Strand::Forward,
-                    PATH_START_NODE_ID,
-                    Strand::Forward,
-                ));
+                // there's a cycle, but has a start/end already. At some point we should track this
+                // so we know ahead of time where the cycles are
             } else {
                 message_bar.set_message("Path encountered with cycle after start/end node, no cycle breaking will apply.");
             }
