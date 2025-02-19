@@ -58,6 +58,9 @@ pub fn import_library<'a>(
             .sequence(&sequence)
             .save(conn);
 
+        if sequence_hashes_by_name.contains_key(&name) {
+            panic!("Duplicate sequence name: {}", name);
+        }
         sequence_hashes_by_name.insert(name, seq.hash.clone());
         sequence_lengths_by_hash.insert(seq.hash, seq.length);
     }
@@ -230,18 +233,15 @@ mod tests {
     #[test]
     fn imports_a_library() {
         setup_gen_dir();
-        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        fasta_path.push("fixtures/simple.fa");
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, &db_uuid);
         let collection = "test";
 
-        let mut parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        parts_path.push("fixtures/affix_parts.fa");
-        let mut library_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        library_path.push("fixtures/affix_layout.csv");
+        let parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/affix_parts.fa");
+        let library_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/affix_layout.csv");
 
         let _ = import_library(
             conn,
@@ -291,10 +291,9 @@ mod tests {
         setup_db(op_conn, &db_uuid);
         let collection = "test";
 
-        let mut parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        parts_path.push("fixtures/parts.fa");
-        let mut library_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        library_path.push("fixtures/single_column_design.csv");
+        let parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/parts.fa");
+        let library_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/single_column_design.csv");
 
         let _ = import_library(
             conn,
@@ -323,18 +322,15 @@ mod tests {
     #[test]
     fn two_columns_of_same_parts() {
         setup_gen_dir();
-        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        fasta_path.push("fixtures/simple.fa");
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, &db_uuid);
         let collection = "test";
 
-        let mut parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        parts_path.push("fixtures/parts.fa");
-        let mut library_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        library_path.push("fixtures/design_reusing_parts.csv");
+        let parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/parts.fa");
+        let library_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/design_reusing_parts.csv");
 
         let _ = import_library(
             conn,

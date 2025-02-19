@@ -139,7 +139,7 @@ pub fn update_with_library(
     };
     let node_start_coordinate = start_coordinate - start_block.start + start_block.sequence_start;
 
-    let path_length = path.sequence(conn).len().try_into().unwrap();
+    let path_length = path.sequence(conn).len() as i64;
     let end_block = if end_coordinate < path_length {
         let end_blocks: Vec<_> = path_intervaltree
             .query_point(end_coordinate)
@@ -254,8 +254,7 @@ mod tests {
     #[test]
     fn makes_a_pool() {
         setup_gen_dir();
-        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        fasta_path.push("fixtures/simple.fa");
+        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
@@ -272,10 +271,9 @@ mod tests {
         )
         .unwrap();
 
-        let mut parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        parts_path.push("fixtures/parts.fa");
-        let mut library_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        library_path.push("fixtures/combinatorial_design.csv");
+        let parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/parts.fa");
+        let library_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/combinatorial_design.csv");
 
         let _ = update_with_library(
             conn,
@@ -314,8 +312,7 @@ mod tests {
     #[test]
     fn one_column_of_parts() {
         setup_gen_dir();
-        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        fasta_path.push("fixtures/simple.fa");
+        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
@@ -332,10 +329,9 @@ mod tests {
         )
         .unwrap();
 
-        let mut parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        parts_path.push("fixtures/parts.fa");
-        let mut library_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        library_path.push("fixtures/single_column_design.csv");
+        let parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/parts.fa");
+        let library_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/single_column_design.csv");
 
         let _ = update_with_library(
             conn,
@@ -368,8 +364,7 @@ mod tests {
     #[test]
     fn two_columns_of_same_parts() {
         setup_gen_dir();
-        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        fasta_path.push("fixtures/simple.fa");
+        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
@@ -386,10 +381,9 @@ mod tests {
         )
         .unwrap();
 
-        let mut parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        parts_path.push("fixtures/parts.fa");
-        let mut library_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        library_path.push("fixtures/design_reusing_parts.csv");
+        let parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/parts.fa");
+        let library_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/design_reusing_parts.csv");
 
         let _ = update_with_library(
             conn,
@@ -427,8 +421,7 @@ mod tests {
     #[test]
     fn one_column_of_parts_full_replacement() {
         setup_gen_dir();
-        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        fasta_path.push("fixtures/simple.fa");
+        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
@@ -445,10 +438,9 @@ mod tests {
         )
         .unwrap();
 
-        let mut parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        parts_path.push("fixtures/parts.fa");
-        let mut library_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        library_path.push("fixtures/single_column_design.csv");
+        let parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/parts.fa");
+        let library_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/single_column_design.csv");
 
         let _ = update_with_library(
             conn,
@@ -481,8 +473,7 @@ mod tests {
     #[test]
     fn two_columns_of_same_parts_full_replacement() {
         setup_gen_dir();
-        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        fasta_path.push("fixtures/simple.fa");
+        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
         let conn = &get_connection(None);
         let db_uuid = metadata::get_db_uuid(conn);
         let op_conn = &get_operation_connection(None);
@@ -499,10 +490,9 @@ mod tests {
         )
         .unwrap();
 
-        let mut parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        parts_path.push("fixtures/parts.fa");
-        let mut library_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        library_path.push("fixtures/design_reusing_parts.csv");
+        let parts_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/parts.fa");
+        let library_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/design_reusing_parts.csv");
 
         let _ = update_with_library(
             conn,
