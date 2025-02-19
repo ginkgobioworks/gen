@@ -27,6 +27,8 @@ fn get_path(conn: &Connection, block_group_id: i64, backbone: Option<&str>) -> P
     }
 }
 
+// Given a specific chunk size, returns a list of ranges of that chunk size that cover the entire
+// path
 pub fn get_sized_ranges(
     conn: &Connection,
     collection_name: &str,
@@ -66,6 +68,8 @@ pub fn get_sized_ranges(
     chunk_ranges
 }
 
+// Given specific points on a path, returns a list of ranges that cover the entire path, broken up
+// by the input points
 pub fn get_breakpoint_ranges(
     conn: &Connection,
     collection_name: &str,
