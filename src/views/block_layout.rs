@@ -604,7 +604,7 @@ impl BaseLayout {
 ///
 /// The raw layout from the Sugiyama algorithm is processed as follow:
 /// - The coordinates are rounded to the nearest integer and transposed to go from top-to-bottom to left-to-right.
-/// - Each block is assigned a layer (or rank) based on its y-coordinate.
+/// - Each block is assigned a layer (or rank) based on its x-coordinate (transposed y-coordinate).
 /// - The width of each layer is determined by the widest label in that layer.
 /// - The distance between layers is scaled horizontally and vertically
 #[allow(clippy::type_complexity)]
@@ -804,7 +804,6 @@ mod tests {
     fn test_make_test_graph() {
         let edges = vec![(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)];
         let graph = make_test_graph(edges, None);
-        println!("Graph: {:#?}", graph);
         assert_eq!(graph.node_count(), 6);
         assert_eq!(graph.edge_count(), 5);
     }

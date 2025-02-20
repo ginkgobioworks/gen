@@ -15,7 +15,7 @@ use ratatui::{
     widgets::Block,
 };
 use rusqlite::Connection;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Labels used in the graph visualization (selected, not-selected)
 /// the trick is to get them to align with the braille characters
@@ -123,7 +123,7 @@ impl<'a> Viewer<'a> {
                 .layout_graph
                 .nodes()
                 .map(|node| node.node_id)
-                .collect::<std::collections::BTreeSet<i64>>()
+                .collect::<HashSet<i64>>()
                 .into_iter()
                 .collect::<Vec<i64>>(),
         )
@@ -227,13 +227,15 @@ impl<'a> Viewer<'a> {
             && self.state.viewport.height > 0
         {
             if let Some(origin) = self.origin_block {
-                if origin.node_id == node::PATH_START_NODE_ID {
+                if Node::is_start_node(origin.node_id) {
                     // Find the first non-start/end node by looking at outgoing neighbors of the start node
                     self.state.selected_block = self
                         .base_layout
                         .layout_graph
                         .neighbors_directed(origin, Direction::Outgoing)
-                        .find(|node| node.node_id != node::PATH_END_NODE_ID);
+                        .find(|node| {
+                            !Node::is_start_node(node.node_id) && !Node::is_end_node(node.node_id)
+                        });
                 } else {
                     self.state.selected_block = Some(origin);
                 }
@@ -287,9 +289,7 @@ impl<'a> Viewer<'a> {
                     }
 
                     // Handle dummy nodes (start and end) differently than other nodes
-                    if block.node_id == node::PATH_START_NODE_ID
-                        || block.node_id == node::PATH_END_NODE_ID
-                    {
+                    if Node::is_start_node(block.node_id) || Node::is_end_node(block.node_id) {
                         continue;
                     }
 
@@ -334,7 +334,7 @@ impl<'a> Viewer<'a> {
                         .base_layout
                         .layout_graph
                         .neighbors_directed(*block, Direction::Incoming)
-                        .any(|neighbor| neighbor.node_id == node::PATH_START_NODE_ID)
+                        .any(|neighbor| Node::is_start_node(neighbor.node_id))
                     {
                         let x_pos = *x as isize - (label::START.len() as isize);
                         let arrow = clip_label(
@@ -436,8 +436,8 @@ impl<'a> Viewer<'a> {
             // Skip the current selection and the start/end nodes.
             if let Some(selected) = self.state.selected_block {
                 if *node == selected
-                    || node.node_id == node::PATH_START_NODE_ID
-                    || node.node_id == node::PATH_END_NODE_ID
+                    || Node::is_start_node(node.node_id)
+                    || Node::is_end_node(node.node_id)
                 {
                     continue;
                 }
@@ -515,9 +515,13 @@ impl<'a> Viewer<'a> {
     /// This method computes the world bounds from all labels and clamps the viewport's offset
     /// so that the cursor is centered when possible, but moves towards the viewport edges when near world bounds.
     pub fn update_scroll_for_cursor(&mut self, cursor_x: f64, cursor_y: f64) {
+        // The tolerance_y parameter allows for flexibility on what's considered "centered" to avoid jitter,
+        // it's a ratio of the viewport height.
+        let margin = 5.0;
+        let tolerance_y = 0.3;
+
         let vp_width = self.state.viewport.width as f64;
         let vp_height = self.state.viewport.height as f64;
-        let margin = 5.0;
 
         let mut xs = Vec::new();
         let mut ys = Vec::new();
@@ -556,7 +560,10 @@ impl<'a> Viewer<'a> {
         };
 
         self.state.offset_x = new_offset_x.round() as i32;
-        self.state.offset_y = new_offset_y.round() as i32;
+
+        if (new_offset_y - self.state.offset_y as f64).abs() > tolerance_y * vp_height {
+            self.state.offset_y = new_offset_y.round() as i32;
+        }
     }
 }
 
