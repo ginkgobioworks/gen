@@ -610,7 +610,7 @@ impl BaseLayout {
 #[allow(clippy::type_complexity)]
 #[derive(Debug)]
 pub struct ScaledLayout {
-    pub lines: HashMap<GraphEdge, ((f64, f64), (f64, f64))>, // Edge -> (start_coord, end_coord)
+    pub lines: Vec<((f64, f64), (f64, f64))>, // List of (start_coord, end_coord) pairs for edges
     pub labels: HashMap<GraphNode, ((f64, f64), (f64, f64))>, // Node -> (start_coord, end_coord)
     pub highlight_a: Option<(GraphNode, Option<(GraphNode, u32)>)>, // Block or (Block, position) to highlight in color A
     pub highlight_b: Option<(GraphNode, Option<(GraphNode, u32)>)>, // Block or (Block, position) to highlight in color B
@@ -619,7 +619,7 @@ pub struct ScaledLayout {
 impl ScaledLayout {
     pub fn from_base_layout(base_layout: &BaseLayout, parameters: &PlotParameters) -> Self {
         let mut layout = ScaledLayout {
-            lines: HashMap::new(),
+            lines: Vec::new(),
             labels: HashMap::new(),
             highlight_a: None,
             highlight_b: None,
@@ -656,10 +656,7 @@ impl ScaledLayout {
             self.lines = base_layout
                 .layout_graph
                 .all_edges()
-                .filter(|(source, target, _)| {
-                    source.node_id != PATH_START_NODE_ID && target.node_id != PATH_END_NODE_ID
-                })
-                .map(|(source, target, edge)| {
+                .map(|(source, target, _)| {
                     let source_coord = working_layout_hashmap
                         .get(&source)
                         .map(|&(x, y)| (x + 1.0, y + parameters.line_offset_y))
@@ -668,7 +665,7 @@ impl ScaledLayout {
                         .get(&target)
                         .map(|&(x, y)| (x - 1.5, y + parameters.line_offset_y))
                         .unwrap();
-                    (*edge, (source_coord, target_coord))
+                    (source_coord, target_coord)
                 })
                 .collect();
 
@@ -743,7 +740,7 @@ impl ScaledLayout {
             .filter(|(source, target, _)| {
                 source.node_id != PATH_START_NODE_ID && target.node_id != PATH_END_NODE_ID
             })
-            .map(|(source, target, edge)| {
+            .map(|(source, target, _)| {
                 let source_coord = self
                     .labels
                     .get(&source)
@@ -754,7 +751,7 @@ impl ScaledLayout {
                     .get(&target)
                     .map(|((x1, y1), _)| (*x1 - 1.5, *y1 + parameters.line_offset_y))
                     .unwrap();
-                (*edge, (source_coord, target_coord))
+                (source_coord, target_coord)
             })
             .collect();
     }

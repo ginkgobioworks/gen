@@ -257,11 +257,11 @@ impl<'a> Viewer<'a> {
             ])
             .paint(|ctx| {
                 // Draw the lines described in the processed layout
-                for ((x1, y1), (x2, y2)) in self.scaled_layout.lines.values() {
+                for &((x1, y1), (x2, y2)) in self.scaled_layout.lines.iter() {
                     // Clip the line to the visible area, skip if it's not visible itself
                     if let Some(((x1c, y1c), (x2c, y2c))) = clip_line(
-                        (*x1, *y1 + self.parameters.line_offset_y),
-                        (*x2, *y2 + self.parameters.line_offset_y),
+                        (x1, y1 + self.parameters.line_offset_y),
+                        (x2, y2 + self.parameters.line_offset_y),
                         (self.state.offset_x as f64, self.state.offset_y as f64),
                         (
                             (self.state.offset_x + self.state.viewport.width as i32) as f64,
@@ -511,8 +511,8 @@ impl<'a> Viewer<'a> {
         }
     }
 
-    /// Update scroll offset based on the cursor position (world coordinates of the selected object).
-    /// This method computes the world bounds from all objects (labels) and clamps the viewport's offset
+    /// Update scroll offset based on the cursor position (world coordinates of the selected label).
+    /// This method computes the world bounds from all labels and clamps the viewport's offset
     /// so that the cursor is centered when possible, but moves towards the viewport edges when near world bounds.
     pub fn update_scroll_for_cursor(&mut self, cursor_x: f64, cursor_y: f64) {
         let vp_width = self.state.viewport.width as f64;
