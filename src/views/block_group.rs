@@ -1,18 +1,10 @@
-use crate::models::{
-    block_group::BlockGroup, block_group_edge::BlockGroupEdge, edge::Edge, traits::Query,
-};
-
-use crate::views::block_group_viewer::{PlotParameters, ScrollState, Viewer};
-use crate::views::block_layout::ScaledLayout;
-
+use crate::models::{block_group::BlockGroup, node::Node, traits::Query};
+use crate::views::block_group_viewer::{NavDirection, PlotParameters, Viewer};
 use rusqlite::{params, Connection};
 
 use core::panic;
-use std::collections::HashMap;
 use std::error::Error;
 use std::time::{Duration, Instant};
-
-use log::info;
 
 use crossterm::{
     event::{self, KeyCode, KeyEventKind, KeyModifiers},
@@ -23,21 +15,22 @@ use ratatui::{
     layout::{Constraint, Rect},
     style::{Color, Style},
     text::Text,
-    widgets::{Block, Borders, Clear, Paragraph, Wrap},
+    widgets::{Block, Clear, Padding, Paragraph, Wrap},
 };
-use rust_sugiyama::{configure::Config, from_edges};
 
 pub fn view_block_group(
     conn: &Connection,
     name: &str,
     sample_name: Option<String>,
     collection_name: &str,
+    position: Option<String>, // Node ID and offset
 ) -> Result<(), Box<dyn Error>> {
     // Get the block group for two cases: with and without a sample
     let block_group = if let Some(ref sample_name) = sample_name {
         BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name = ?2 AND name = ?3", 
                         params![collection_name, sample_name, name])
     } else {
+        // modified version:
         BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null AND name = ?2", params![collection_name, name])
     };
 
@@ -50,69 +43,32 @@ pub fn view_block_group(
         );
     }
 
+    // Get the node object corresponding to a node id
+    let origin = if let Some(position_str) = position {
+        let parts = position_str.split(":").collect::<Vec<&str>>();
+        if parts.len() != 2 {
+            panic!("Invalid position: {}", position_str);
+        }
+        let node_id = parts[0].parse::<i64>().unwrap();
+        let offset = parts[1].parse::<i64>().unwrap();
+        Some((
+            Node::get(conn, "select * from nodes where id = ?1", params![node_id]).unwrap(),
+            offset,
+        ))
+    } else {
+        None
+    };
+
     let block_group_id = block_group.unwrap().id;
+    let block_graph = BlockGroup::get_graph(conn, block_group_id);
 
-    let mut edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
-
-    let mut blocks = Edge::blocks_from_edges(conn, &edges);
-
-    // Panic if there are no blocks
-    if blocks.is_empty() {
-        panic!("No blocks found for block group {}", name);
-    }
-
-    blocks.sort_by(|a, b| a.node_id.cmp(&b.node_id));
-    let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
-    edges.extend(boundary_edges.clone());
-
-    // TODO: somehow there are edges missing (particularly from the start node))
-
-    // Build a block graph
-    let (_block_graph, block_pairs) = Edge::build_graph(&edges, &blocks);
-
-    //println!("block_graph: {:#?}", &block_graph);
-
-    // Convert the keys of block_pairs from (i64, i64) to (u32, u32)
-    let block_pairs_u32 = block_pairs
-        .keys()
-        .map(|(b1, b2)| (*b1 as u32, *b2 as u32))
-        .collect::<Vec<_>>();
-
-    // Run the Sugiyama layout algorithm
-    // (TODO: fix/remedy core dump when there are too many blocks)
-    if blocks.len() > 10000 {
-        panic!("Too many blocks to run the Sugiyama layout algorithm in one go");
-    }
-    info!("Running Sugiyama layout algorithm");
-    let layouts = from_edges(
-        &block_pairs_u32,
-        &Config {
-            vertex_spacing: 8.0,
-            dummy_vertices: true,
-            ..Default::default()
-        },
-    );
-
-    // Confirm that there is only one layout, which means that the graph is connected
-    assert_eq!(layouts.len(), 1);
-
-    // Store that one layout and convert the block ids from usize to u32
-    let layout: Vec<(u32, (f64, f64))> = layouts[0]
-        .0
-        .iter()
-        .map(|(id, (x, y))| (*id as u32, (*x, *y)))
-        .collect();
-
-    // Confirm that every block has a corresponding layout
-    for block in &blocks {
-        assert!(
-            layout.iter().any(|(id, _)| *id == block.id as u32),
-            "Block ID {} not found in layout",
-            block.id
-        );
-    }
-
-    // TODO: the below code should go into its own module
+    // Create the viewer
+    println!("Pre-calculating chunked layout...");
+    let mut viewer = if let Some(origin) = origin {
+        Viewer::with_origin(&block_graph, conn, PlotParameters::default(), origin)
+    } else {
+        Viewer::new(&block_graph, conn, PlotParameters::default())
+    };
 
     // Setup terminal
     enable_raw_mode()?;
@@ -120,61 +76,11 @@ pub fn view_block_group(
     execute!(stdout, EnterAlternateScreen)?;
     let mut terminal = ratatui::init();
 
-    // Initialize viewer state
-    let initial_parameters = PlotParameters {
-        label_width: 11,
-        scale: 2,
-        aspect_ratio: 0.5,
-    };
-
-    // The sugiyama layout was raw and unprocessed, so we need to stretch it to account for the labels
-    // TODO: refactor this so that we work with sequence lengths rather than the actual sequence,
-    // so that we don't need the actual sequences in memory to make layout calculations.
-    let sequences = blocks
-        .iter()
-        .map(|block| (block.id as u32, block.sequence()))
-        .collect::<HashMap<u32, String>>();
-
-    let scaled_layout = ScaledLayout::new(
-        layout,
-        block_pairs_u32,
-        &initial_parameters,
-        Some(sequences),
-    );
-
-    // Calculate the center point of the coordinates from the labels in the ScaledLayout
-    //let center_x = scaled_layout.labels.values().map(|(_, x, _)| x).sum::<u32>() as f64 / scaled_layout.labels.len() as f64;
-    let center_y = scaled_layout
-        .labels
-        .values()
-        .map(|(_, _, y)| y)
-        .sum::<u32>() as f64
-        / scaled_layout.labels.len() as f64;
-
-    // Set the initial offset so that graph is vertically centered, and left-aligned with some margin
-    // We haven't set up a canvas yet, so we don't know more about the plot area
-    let initial_scroll_state = ScrollState {
-        offset_x: -5,
-        offset_y: center_y.round() as i32
-            - (terminal.get_frame().area().height as f64 / 2.0).round() as i32,
-        selected_block: None,
-    };
-
-    let mut viewer = Viewer {
-        layout: scaled_layout,
-        scroll: initial_scroll_state,
-        plot_area: Rect::default(),
-        plot_parameters: PlotParameters {
-            label_width: 11,
-            scale: 2,
-            aspect_ratio: 0.5,
-        },
-    };
-
     // Basic event loop
     let tick_rate = Duration::from_millis(100);
     let mut last_tick = Instant::now();
-    let mut show_panel = false; // Informational popup
+    let mut show_panel = false;
+    let mut tui_layout_change = false;
     loop {
         // Draw the UI
         terminal.draw(|frame| {
@@ -182,13 +88,9 @@ pub fn view_block_group(
             // - The canvas is where the graph is drawn
             // - The status bar is where the controls are displayed
             // - The panel is a scrollable paragraph that can be toggled on and off
-
             let status_bar_height: u16 = 1;
 
-            // Define the layouts
             // The outer layout is a vertical split between the canvas and the status bar
-            // The inner layout is a vertical split between the canvas and the panel
-
             let outer_layout = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Vertical)
                 .constraints(vec!
@@ -199,6 +101,7 @@ pub fn view_block_group(
                 )
                 .split(frame.area());
 
+            // The inner layout is a vertical split between the canvas and the panel
             let inner_layout = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Vertical)
                 .constraints(vec!
@@ -219,7 +122,7 @@ pub fn view_block_group(
             // Status bar
             let status_bar_contents = format!(
                 "{:width$}",
-                " Controls: arrows(+shift)=scroll, +/-=zoom, tab=select blocks, return=show information on block, q=quit",
+                "◀ ▼ ▲ ▶ select blocks (+shift/alt to scroll) | +/- zoom | return: show information on block | q=quit",
                 width = status_bar_area.width as usize);
 
             let status_bar = Paragraph::new(Text::styled(status_bar_contents,
@@ -229,27 +132,30 @@ pub fn view_block_group(
 
             // Panel
             if show_panel {
-                let panel_block = Block::default().borders(Borders::ALL);
-
-                let content_area = panel_block.inner(panel_area);
+                let panel_block = Block::bordered().padding(Padding::new(2, 2, 1, 1)).title("Details");
                 let mut panel_text = Text::from("No content found");
 
                 // Get information about the currently selected block
-                if viewer.scroll.selected_block.is_some() {
-                    let selected_block = viewer.scroll.selected_block.unwrap();
-                    let block = blocks.iter().find(|block| block.id == selected_block as i64).unwrap();
+                if viewer.state.selected_block.is_some() {
+                    let selected_block = viewer.state.selected_block.unwrap();
                     panel_text = Text::from(format!("Block ID: {}\nNode ID: {}\nStart: {}\nEnd: {}\n", 
-                        block.node_id, block.id, block.start, block.end));
+                        selected_block.block_id, selected_block.node_id, selected_block.sequence_start, selected_block.sequence_end));
                 }
 
                 let panel_content = Paragraph::new(panel_text)
                     .wrap(Wrap { trim: true })
                     .scroll((0, 0))
-                    .style(Style::default().bg(Color::Reset));
+                    .style(Style::default().bg(Color::Reset))
+                    .block(panel_block);
 
-                // First clear the area, then render
-                frame.render_widget(Clear, content_area);
-                frame.render_widget(panel_content, content_area);
+                // Clear the panel area if we just changed the layout
+                if tui_layout_change {
+                    frame.render_widget(Clear, panel_area);
+                }
+                frame.render_widget(panel_content, panel_area);
+
+                // Reset the layout change flag
+                tui_layout_change = false;
             }
         })?;
 
@@ -267,111 +173,122 @@ pub fn view_block_group(
                     match key.code {
                         // Scrolling through the graph
                         KeyCode::Left => {
-                            // Scroll left
-                            if key.modifiers == KeyModifiers::SHIFT {
-                                viewer.scroll.offset_x -= 10;
+                            if key.modifiers.contains(KeyModifiers::SHIFT) {
+                                viewer.state.offset_x -= viewer.state.viewport.width as i32 / 3;
+                                viewer.unselect_if_not_visible();
+                            } else if key.modifiers.contains(KeyModifiers::ALT) {
+                                viewer.state.offset_x -= 1;
                             } else {
-                                viewer.scroll.offset_x -= 1;
+                                // If no block is selected, select the center block
+                                if viewer.state.selected_block.is_none() {
+                                    viewer.select_center_block();
+                                }
+                                viewer.move_selection(NavDirection::Left);
                             }
-                            // Forget the selected block if it's not visible
-                            viewer.unselect_if_not_visible();
                         }
                         KeyCode::Right => {
-                            // Scroll right
-                            if key.modifiers == KeyModifiers::SHIFT {
-                                viewer.scroll.offset_x += 10;
+                            if key.modifiers.contains(KeyModifiers::SHIFT) {
+                                viewer.state.offset_x += viewer.state.viewport.width as i32 / 3;
+                                viewer.unselect_if_not_visible();
+                            } else if key.modifiers.contains(KeyModifiers::ALT) {
+                                viewer.state.offset_x += 1;
                             } else {
-                                viewer.scroll.offset_x += 1;
+                                if viewer.state.selected_block.is_none() {
+                                    viewer.select_center_block();
+                                }
+                                viewer.move_selection(NavDirection::Right);
                             }
-                            viewer.unselect_if_not_visible();
                         }
                         KeyCode::Up => {
-                            // Scroll up
-                            if key.modifiers == KeyModifiers::SHIFT {
-                                viewer.scroll.offset_y += 10;
+                            if key.modifiers.contains(KeyModifiers::SHIFT) {
+                                viewer.state.offset_y += viewer.state.viewport.height as i32 / 3;
+                                viewer.unselect_if_not_visible();
+                            } else if key.modifiers.contains(KeyModifiers::ALT) {
+                                viewer.state.offset_y += 1;
                             } else {
-                                viewer.scroll.offset_y += 1;
+                                if viewer.state.selected_block.is_none() {
+                                    viewer.select_center_block();
+                                }
+                                viewer.move_selection(NavDirection::Down);
                             }
-                            viewer.unselect_if_not_visible();
                         }
                         KeyCode::Down => {
-                            // Scroll down
-                            if key.modifiers == KeyModifiers::SHIFT {
-                                viewer.scroll.offset_y -= 10;
+                            if key.modifiers.contains(KeyModifiers::SHIFT) {
+                                viewer.state.offset_y -= viewer.state.viewport.height as i32 / 3;
+                                viewer.unselect_if_not_visible();
+                            } else if key.modifiers.contains(KeyModifiers::ALT) {
+                                viewer.state.offset_y -= 1;
                             } else {
-                                viewer.scroll.offset_y -= 1;
+                                if viewer.state.selected_block.is_none() {
+                                    viewer.select_center_block();
+                                }
+                                viewer.move_selection(NavDirection::Up);
                             }
-                            viewer.unselect_if_not_visible();
                         }
                         // Zooming in and out
                         KeyCode::Char('+') | KeyCode::Char('=') => {
-                            // Increase how much of the sequence is shown in each block label: 0 vs 11 vs 100 characters.
-                            // 11 was picked as the default because it results in symmetrical labels.
-                            // After 100 it just becomes the full length.
-                            if viewer.plot_parameters.label_width == u32::MAX {
-                                // If we're already maximizing the length, start increasing the scale
-                                viewer.plot_parameters.scale += 1;
+                            // Increase how much of the sequence is shown in each block label.
+                            if viewer.parameters.label_width == u32::MAX {
+                                viewer.parameters.scale += 1;
                             } else {
-                                // Otherwise, increase the label width
-                                viewer.plot_parameters.label_width =
-                                    match viewer.plot_parameters.label_width {
-                                        0 => 11,
-                                        11 => 100,
-                                        100 => u32::MAX,
-                                        _ => u32::MAX,
-                                    }
-                            };
-                            // Recalculate the layout
-                            viewer.layout.rescale(&viewer.plot_parameters);
-
-                            // Center the viewport on the selected block if there is one
-                            if let Some(selected_block) = viewer.scroll.selected_block {
-                                viewer.center_on_block(selected_block);
+                                viewer.parameters.label_width = match viewer.parameters.label_width
+                                {
+                                    1 => 11,
+                                    11 => 100,
+                                    100 => u32::MAX,
+                                    _ => u32::MAX,
+                                }
                             }
+
+                            // If no block is selected, select the center block
+                            if viewer.state.selected_block.is_none() {
+                                viewer.select_center_block();
+                            }
+
+                            // Recalculate the layout.
+                            viewer
+                                .scaled_layout
+                                .refresh(&viewer.base_layout, &viewer.parameters);
+                            viewer.center_on_block(viewer.state.selected_block.unwrap());
                         }
                         KeyCode::Char('-') | KeyCode::Char('_') => {
-                            // Decrease how much of the sequence is shown in each block label: 11 vs 100 vs 1000 characters.
-                            // 11 was picked as the default because it results in symmetrical labels.
-                            // After 1000 it just becomes the full length.
-
-                            if viewer.plot_parameters.scale > 1 {
-                                // Decrease the scale if we're not at the minimum scale (1)
-                                viewer.plot_parameters.scale -= 1;
+                            // Decrease how much of the sequence is shown in each block label.
+                            if viewer.parameters.scale > 2 {
+                                viewer.parameters.scale -= 1;
                             } else {
-                                // If we're at the minimum scale, start decreasing the label width
-                                viewer.plot_parameters.label_width =
-                                    match viewer.plot_parameters.label_width {
-                                        u32::MAX => 100,
-                                        100 => 11,
-                                        11 => 1,
-                                        _ => 1,
-                                    };
+                                viewer.parameters.label_width = match viewer.parameters.label_width
+                                {
+                                    u32::MAX => 100,
+                                    100 => 11,
+                                    11 => 1,
+                                    _ => 1,
+                                };
                             }
-                            viewer.layout.rescale(&viewer.plot_parameters);
-                            if let Some(selected_block) = viewer.scroll.selected_block {
-                                viewer.center_on_block(selected_block);
+
+                            // If no block is selected, select the center block
+                            if viewer.state.selected_block.is_none() {
+                                viewer.select_center_block();
                             }
+
+                            // Recalculate the layout.
+                            viewer
+                                .scaled_layout
+                                .refresh(&viewer.base_layout, &viewer.parameters);
+                            viewer.center_on_block(viewer.state.selected_block.unwrap());
                         }
                         // Performing actions on blocks
                         KeyCode::Tab => {
-                            // Cycle through visible blocks in the viewport
-                            viewer.cycle_blocks(false);
+                            // Future implementation: switch between panels
                         }
                         KeyCode::BackTab => {
-                            // Reverse cycle through visible blocks in the viewport
-                            viewer.cycle_blocks(true);
+                            // Future implementation: switch between panels
                         }
                         KeyCode::Esc => {
-                            // If we have a popup open, close it, otherwise unselect the selected block
-                            if show_panel {
-                                show_panel = false;
-                            } else {
-                                viewer.scroll.selected_block = None;
-                            }
+                            show_panel = false;
                         }
                         KeyCode::Enter => {
                             // Show information on the selected block, if there is one
-                            show_panel = viewer.scroll.selected_block.is_some();
+                            show_panel = viewer.state.selected_block.is_some();
                         }
                         _ => {}
                     }
@@ -389,9 +306,4 @@ pub fn view_block_group(
     let stdout = terminal.backend_mut();
     execute!(stdout, LeaveAlternateScreen)?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    //use super::*;
 }
