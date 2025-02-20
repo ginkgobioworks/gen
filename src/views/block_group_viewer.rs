@@ -697,52 +697,6 @@ pub fn clip_line(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::{GraphEdge, GraphNode};
-    use crate::models::strand::Strand;
-    use petgraph::graphmap::DiGraphMap;
-
-    #[allow(dead_code)]
-    fn make_test_graph(
-        edges: Vec<(usize, usize)>,
-        nodes: Option<Vec<GraphNode>>,
-    ) -> DiGraphMap<GraphNode, GraphEdge> {
-        let mut graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
-
-        // Create default nodes if none provided
-        let nodes = nodes.unwrap_or_else(|| {
-            edges
-                .iter()
-                .flat_map(|(s, t)| vec![*s, *t])
-                .collect::<std::collections::HashSet<_>>()
-                .into_iter()
-                .map(|id| GraphNode {
-                    block_id: id as i64,
-                    node_id: 0,
-                    sequence_start: 0,
-                    sequence_end: 0,
-                })
-                .collect()
-        });
-
-        for node in &nodes {
-            graph.add_node(*node);
-        }
-
-        for (source, target) in edges {
-            graph.add_edge(
-                nodes[source],
-                nodes[target],
-                GraphEdge {
-                    edge_id: 0,
-                    source_strand: Strand::Forward,
-                    target_strand: Strand::Forward,
-                    chromosome_index: 0,
-                    phased: 0,
-                },
-            );
-        }
-        graph
-    }
 
     #[test]
     fn test_inner_truncation_no_truncation_needed() {
