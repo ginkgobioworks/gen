@@ -724,7 +724,7 @@ fn main() {
                         .id,
                 );
                 if *interactive {
-                    view_operations(&operation_conn, &operations);
+                    view_operations(&conn, &operation_conn, &operations);
                 } else {
                     let mut indicator = "";
                     println!(

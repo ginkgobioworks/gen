@@ -1,14 +1,22 @@
-use crate::graph::{all_simple_paths, OperationGraph};
+use crate::graph::{all_simple_paths, GraphEdge, GraphNode, OperationGraph};
 use crate::models::file_types::FileTypes;
 use crate::models::traits::*;
-use petgraph::graphmap::UnGraphMap;
+use crate::operation_management::{
+    load_changeset, load_changeset_dependencies, load_changeset_models,
+};
+use crate::views::patch::get_change_graph;
+use petgraph::graphmap::{DiGraphMap, UnGraphMap};
 use petgraph::visit::{Dfs, Reversed};
 use petgraph::Direction;
+use rusqlite::session::ChangesetIter;
 use rusqlite::types::Value;
+use rusqlite::Error as SQLError;
 use rusqlite::{params, params_from_iter, Connection, Result as SQLResult, Row};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::io::Read;
 use std::string::ToString;
+use thiserror::Error;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Operation {
@@ -17,6 +25,12 @@ pub struct Operation {
     pub parent_hash: Option<String>,
     pub branch_id: i64,
     pub change_type: String,
+}
+
+#[derive(Debug, Error, PartialEq)]
+pub enum OperationError {
+    #[error("SQLite Error: {0}")]
+    SqliteError(#[from] SQLError),
 }
 
 impl Operation {
@@ -106,6 +120,23 @@ impl Operation {
         graph
     }
 
+    pub fn get_change_graph(
+        conn: &Connection,
+        hash: &str,
+    ) -> Result<HashMap<i64, DiGraphMap<GraphNode, GraphEdge>>, OperationError> {
+        let operation = Operation::get_by_hash(conn, hash)?;
+
+        let changeset = load_changeset(&operation);
+        let dependencies = load_changeset_dependencies(&operation);
+
+        let input: &mut dyn Read = &mut changeset.as_slice();
+        let mut iter = ChangesetIter::start_strm(&input).unwrap();
+
+        let new_models = load_changeset_models(&mut iter);
+
+        Ok(get_change_graph(&new_models, &dependencies))
+    }
+
     pub fn get_path_between(
         conn: &Connection,
         source_id: &str,
@@ -160,19 +191,11 @@ impl Operation {
         patch_path
     }
 
-    pub fn get(conn: &Connection, query: &str, placeholders: Vec<Value>) -> SQLResult<Operation> {
-        let mut stmt = conn.prepare(query).unwrap();
-        let mut rows = stmt.query_map(params_from_iter(placeholders), |row| {
-            Ok(Self::process_row(row))
-        })?;
-        rows.next().unwrap()
-    }
-
     pub fn get_by_hash(conn: &Connection, op_hash: &str) -> SQLResult<Operation> {
         Operation::get(
             conn,
             "select * from operation where hash LIKE ?1",
-            vec![Value::from(format!("{op_hash}%"))],
+            params![Value::from(format!("{op_hash}%"))],
         )
     }
 }

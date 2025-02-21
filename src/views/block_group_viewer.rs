@@ -5,6 +5,7 @@ use crate::models::sequence::Sequence;
 use crate::views::block_layout::{BaseLayout, ScaledLayout};
 
 use core::panic;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
 use ratatui::{
@@ -92,6 +93,7 @@ pub struct Viewer<'a> {
     pub state: State,
     pub parameters: PlotParameters,
     pub origin_block: Option<GraphNode>,
+    view_block: Block<'a>,
 }
 
 impl<'a> Viewer<'a> {
@@ -148,6 +150,7 @@ impl<'a> Viewer<'a> {
             state: State::default(),
             parameters: plot_parameters,
             origin_block,
+            view_block: Block::default(),
         }
     }
 
@@ -155,6 +158,10 @@ impl<'a> Viewer<'a> {
     pub fn refresh(&mut self) {
         self.scaled_layout
             .refresh(&self.base_layout, &self.parameters);
+    }
+
+    pub fn set_block(&mut self, block: Block<'a>) {
+        self.view_block = block;
     }
 
     /// Check if a block is visible in the viewport.
@@ -191,7 +198,7 @@ impl<'a> Viewer<'a> {
 
     /// Draw and render blocks and lines to a canvas through a scrollable window.
     /// TODO: turn this into the render function of a custom stateful widget
-    pub fn paint_canvas(&mut self, frame: &mut ratatui::Frame, area: Rect) {
+    pub fn draw(&mut self, frame: &mut ratatui::Frame, area: Rect) {
         // Set up the coordinate systems for the window and the canvas,
         // we need to keep a 1:1 mapping between coordinates to avoid glitches.
 
@@ -204,7 +211,7 @@ impl<'a> Viewer<'a> {
         // viewport has data coordinates (0,0). We must keep a 1:1 mapping between the size of the viewport
         // in data units and in terminal cells to avoid glitches.
 
-        let canvas_block = Block::default();
+        let canvas_block = self.view_block.clone();
         let viewport = canvas_block.inner(area);
 
         // Check if the viewport has changed size, and if so, update the offset to keep our reference
@@ -564,6 +571,117 @@ impl<'a> Viewer<'a> {
         if (new_offset_y - self.state.offset_y as f64).abs() > tolerance_y * vp_height {
             self.state.offset_y = new_offset_y.round() as i32;
         }
+    }
+
+    pub fn handle_input(&mut self, key: KeyEvent) {
+        // Scrolling through the graph
+        match key.code {
+            KeyCode::Left => {
+                if key.modifiers.contains(KeyModifiers::SHIFT) {
+                    self.state.offset_x -= self.state.viewport.width as i32 / 3;
+                    self.unselect_if_not_visible();
+                } else if key.modifiers.contains(KeyModifiers::ALT) {
+                    self.state.offset_x -= 1;
+                } else {
+                    // If no block is selected, select the center block
+                    if self.state.selected_block.is_none() {
+                        self.select_center_block();
+                    }
+                    self.move_selection(NavDirection::Left);
+                }
+            }
+            KeyCode::Right => {
+                if key.modifiers.contains(KeyModifiers::SHIFT) {
+                    self.state.offset_x += self.state.viewport.width as i32 / 3;
+                    self.unselect_if_not_visible();
+                } else if key.modifiers.contains(KeyModifiers::ALT) {
+                    self.state.offset_x += 1;
+                } else {
+                    if self.state.selected_block.is_none() {
+                        self.select_center_block();
+                    }
+                    self.move_selection(NavDirection::Right);
+                }
+            }
+            KeyCode::Up => {
+                if key.modifiers.contains(KeyModifiers::SHIFT) {
+                    self.state.offset_y += self.state.viewport.height as i32 / 3;
+                    self.unselect_if_not_visible();
+                } else if key.modifiers.contains(KeyModifiers::ALT) {
+                    self.state.offset_y += 1;
+                } else {
+                    if self.state.selected_block.is_none() {
+                        self.select_center_block();
+                    }
+                    self.move_selection(NavDirection::Down);
+                }
+            }
+            KeyCode::Down => {
+                if key.modifiers.contains(KeyModifiers::SHIFT) {
+                    self.state.offset_y -= self.state.viewport.height as i32 / 3;
+                    self.unselect_if_not_visible();
+                } else if key.modifiers.contains(KeyModifiers::ALT) {
+                    self.state.offset_y -= 1;
+                } else {
+                    if self.state.selected_block.is_none() {
+                        self.select_center_block();
+                    }
+                    self.move_selection(NavDirection::Up);
+                }
+            }
+            // Zooming in and out
+            KeyCode::Char('+') | KeyCode::Char('=') => {
+                // Increase how much of the sequence is shown in each block label.
+                if self.parameters.label_width == u32::MAX {
+                    self.parameters.scale += 1;
+                } else {
+                    self.parameters.label_width = match self.parameters.label_width {
+                        1 => 11,
+                        11 => 100,
+                        100 => u32::MAX,
+                        _ => u32::MAX,
+                    }
+                }
+
+                // If no block is selected, select the center block
+                if self.state.selected_block.is_none() {
+                    self.select_center_block();
+                }
+
+                // Recalculate the layout.
+                self.scaled_layout
+                    .refresh(&self.base_layout, &self.parameters);
+                self.center_on_block(self.state.selected_block.unwrap());
+            }
+            KeyCode::Char('-') | KeyCode::Char('_') => {
+                // Decrease how much of the sequence is shown in each block label.
+                if self.parameters.scale > 2 {
+                    self.parameters.scale -= 1;
+                } else {
+                    self.parameters.label_width = match self.parameters.label_width {
+                        u32::MAX => 100,
+                        100 => 11,
+                        11 => 1,
+                        _ => 1,
+                    };
+                }
+
+                // If no block is selected, select the center block
+                if self.state.selected_block.is_none() {
+                    self.select_center_block();
+                }
+
+                // Recalculate the layout.
+                self.scaled_layout
+                    .refresh(&self.base_layout, &self.parameters);
+                self.center_on_block(self.state.selected_block.unwrap());
+            }
+            _ => {}
+        }
+    }
+
+    pub fn get_status_line() -> String {
+        "◀ ▼ ▲ ▶ select blocks (+shift/alt to scroll) | +/- zoom".to_string()
     }
 }
 
