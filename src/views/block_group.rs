@@ -3,9 +3,6 @@ use crate::views::block_group_viewer::{NavDirection, PlotParameters, Viewer};
 use rusqlite::{params, Connection};
 
 use core::panic;
-use std::error::Error;
-use std::time::{Duration, Instant};
-
 use crossterm::{
     event::{self, KeyCode, KeyEventKind, KeyModifiers},
     execute,
@@ -17,6 +14,8 @@ use ratatui::{
     text::Text,
     widgets::{Block, Clear, Padding, Paragraph, Wrap},
 };
+use std::error::Error;
+use std::time::{Duration, Instant};
 
 pub fn view_block_group(
     conn: &Connection,
@@ -246,9 +245,7 @@ pub fn view_block_group(
                             }
 
                             // Recalculate the layout.
-                            viewer
-                                .scaled_layout
-                                .refresh(&viewer.base_layout, &viewer.parameters);
+                            viewer.refresh();
                             viewer.center_on_block(viewer.state.selected_block.unwrap());
                         }
                         KeyCode::Char('-') | KeyCode::Char('_') => {
@@ -270,10 +267,8 @@ pub fn view_block_group(
                                 viewer.select_center_block();
                             }
 
-                            // Recalculate the layout.
-                            viewer
-                                .scaled_layout
-                                .refresh(&viewer.base_layout, &viewer.parameters);
+                            // Recalculate the layout
+                            viewer.refresh();
                             viewer.center_on_block(viewer.state.selected_block.unwrap());
                         }
                         // Performing actions on blocks

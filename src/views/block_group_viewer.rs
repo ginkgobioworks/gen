@@ -78,7 +78,7 @@ impl Default for State {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum NavDirection {
     Left,
     Right,
@@ -181,8 +181,7 @@ impl<'a> Viewer<'a> {
         }
     }
 
-    /// Center the viewport on a specific block with minimal whitespace around the layout bounds.
-    /// Only show at most 5 units of margin on the left side.
+    /// Center the viewport on a specific block.
     pub fn center_on_block(&mut self, block: GraphNode) {
         if let Some(((start, y), (end, _))) = self.scaled_layout.labels.get(&block) {
             let block_center_x = (start + end) / 2.0;
@@ -473,13 +472,18 @@ impl<'a> Viewer<'a> {
 
             // Calculate Euclidean distance
             let distance = (dx * dx + dy * dy).sqrt();
-            if distance == 0.0 {
-                continue;
-            }
 
             // Keep track if it's closer than any previous candidate
             if let Some((_, best_dist)) = closest_candidate {
-                if distance < best_dist {
+                // When scrolling horizontally, break ties by preferring the down direction
+                // (otherwise it looks random to the user)
+                if (direction == NavDirection::Left || direction == NavDirection::Right)
+                    && (distance - best_dist).abs() < f64::EPSILON
+                    && dy < 0.0
+                {
+                    closest_candidate = Some((node, distance));
+                } else if distance < best_dist {
+                    // No tie-breaking needed
                     closest_candidate = Some((node, distance));
                 }
             } else {
@@ -539,7 +543,7 @@ impl<'a> Viewer<'a> {
     /// Update scroll offset based on the cursor position (world coordinates of the selected label).
     /// This method computes the world bounds from all labels and clamps the viewport's offset.
     /// On the initial call (first_render), it remains centered. Afterwards, we allow the cursor
-    /// to remain within a tolerance range vertically before scrolling.
+    /// to drift within a tolerance range vertically before scrolling.
     pub fn update_scroll_for_cursor(&mut self, cursor_x: f64, cursor_y: f64) {
         let margin = 10.0;
         let vp_width = self.state.viewport.width as f64;
@@ -555,7 +559,7 @@ impl<'a> Viewer<'a> {
         let total_width = max_x - min_x;
         let total_height = max_y - min_y;
 
-        // If it's the initial positioning, just center on the cursor
+        // If it's the initial positioning, there is only one allowed position.
         if self.state.first_render {
             let desired_x = cursor_x - vp_width / 2.0;
             let desired_y = cursor_y - vp_height / 2.0;
@@ -576,7 +580,9 @@ impl<'a> Viewer<'a> {
 
             return;
         }
-        // Horizontal centering and clamping to one fixed point
+
+        // In future iterations we treat vertical and horizontal movement differently.
+        // Horizontal still clamps to one point
         let desired_x = cursor_x - vp_width / 2.0;
         let new_offset_x = if total_width >= vp_width {
             desired_x.clamp(min_x, max_x - vp_width)
@@ -584,7 +590,7 @@ impl<'a> Viewer<'a> {
             min_x - (vp_width - total_width) / 2.0
         };
 
-        // Vertical centering and clamping to a range of y-coordinates.
+        // Vertical is centering and clamping to a range of y-coordinates.
         let current_offset_y = self.state.offset_y as f64;
         let top_boundary = current_offset_y + bandwidth * vp_height;
         let bottom_boundary = current_offset_y + (1.0 - bandwidth) * vp_height;
