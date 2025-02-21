@@ -800,6 +800,26 @@ impl BlockGroup {
         paths[0].clone()
     }
 
+    pub fn get_path_by_name(
+        conn: &Connection,
+        block_group_id: i64,
+        path_name: &str,
+    ) -> Option<Path> {
+        let paths = Path::query(
+            conn,
+            "SELECT * FROM paths WHERE block_group_id = ?1 ORDER BY id DESC",
+            rusqlite::params!(SQLValue::from(block_group_id)),
+        );
+
+        for path in &paths {
+            if path.name == path_name {
+                return Some(path.clone());
+            }
+        }
+
+        None
+    }
+
     pub fn derive_subgraph(
         conn: &Connection,
         source_block_group_id: i64,
@@ -871,7 +891,7 @@ impl BlockGroup {
         let new_start_edge = Edge::create(
             conn,
             PATH_START_NODE_ID,
-            -1,
+            0,
             Strand::Forward,
             start_block.node_id,
             start_node_coordinate,
@@ -889,7 +909,7 @@ impl BlockGroup {
             end_node_coordinate,
             end_block.strand,
             PATH_END_NODE_ID,
-            -1,
+            0,
             Strand::Forward,
         );
         let new_end_edge_data = BlockGroupEdgeData {
