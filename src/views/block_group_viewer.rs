@@ -681,7 +681,7 @@ impl<'a> Viewer<'a> {
     }
 
     pub fn get_status_line() -> String {
-        "◀ ▼ ▲ ▶ select blocks (+shift/alt to scroll) | +/- zoom | return: show information on block | q=quit".to_string()
+        "◀ ▼ ▲ ▶ select blocks (+shift/alt to scroll) | +/- zoom | return: show information on block".to_string()
     }
 }
 
