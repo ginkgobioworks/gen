@@ -400,11 +400,7 @@ impl<'a> Viewer<'a> {
         }
     }
 
-    /// Cycle through nodes in a specified direction based on the label coordinates.
-    ///   - Left uses the end coordinate of the label
-    ///   - Right uses the start coordinate
-    ///   - Up/Down use the average of the start/end coordinates, attempting to find
-    ///     a node that is nearly horizontally aligned with the current selection.
+    /// Cycle through nodes in a specified direction.
     pub fn move_selection(&mut self, direction: NavDirection) {
         // Determine the reference point from BaseLayout's node_positions.
         let current_point = if let Some(selected) = self.state.selected_block {
