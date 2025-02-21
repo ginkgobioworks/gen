@@ -61,6 +61,7 @@ pub struct State {
     pub offset_x: i32,
     pub offset_y: i32,
     pub viewport: Rect,
+    pub world: ((f64, f64), (f64, f64)), // (min_x, min_y), (max_x, max_y)
     pub selected_block: Option<GraphNode>,
     pub first_render: bool,
 }
@@ -70,12 +71,14 @@ impl Default for State {
             offset_x: 0,
             offset_y: 0,
             viewport: Rect::new(0, 0, 0, 0),
+            world: ((0.0, 0.0), (0.0, 0.0)),
             selected_block: None,
             first_render: true,
         }
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 pub enum NavDirection {
     Left,
     Right,
@@ -155,6 +158,7 @@ impl<'a> Viewer<'a> {
     pub fn refresh(&mut self) {
         self.scaled_layout
             .refresh(&self.base_layout, &self.parameters);
+        self.state.world = self.compute_bounding_box();
     }
 
     /// Check if a block is visible in the viewport.
@@ -239,6 +243,7 @@ impl<'a> Viewer<'a> {
                 } else {
                     self.state.selected_block = Some(origin);
                 }
+                self.state.world = self.compute_bounding_box();
                 self.center_on_block(self.state.selected_block.unwrap());
                 self.state.first_render = false;
             }
@@ -382,22 +387,9 @@ impl<'a> Viewer<'a> {
         self.auto_expand();
     }
 
-    /// Check the viewport bounds against the layout and trigger expansion if needed.
+    /// Check the viewport bounds against the world bounds and trigger expansion if needed.
     pub fn auto_expand(&mut self) {
-        // Find the minimum and maximum x-coordinates of (left side of) labels in the layout so far
-        let xs: Vec<f64> = self
-            .scaled_layout
-            .labels
-            .values()
-            .map(|((x, _), _)| *x)
-            .collect();
-        if xs.is_empty() {
-            return;
-        }
-        // For floats, min and max are not defined, so use fold instead.
-        let x_min = xs.iter().cloned().fold(f64::INFINITY, f64::min);
-        let x_max = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-
+        let ((x_min, _), (x_max, _)) = self.state.world;
         // Check if we're a screen width away from the left/right boundary and expand if needed
         // - if we can't expand any further, this will do nothing
         if (x_min as i32) > (self.state.offset_x - self.state.viewport.width as i32) {
@@ -409,8 +401,10 @@ impl<'a> Viewer<'a> {
     }
 
     /// Cycle through nodes in a specified direction based on the label coordinates.
-    /// For moves to the left, it uses the end coordinate of the label; for right, the start coordinate;
-    /// and for up/down, the average of the start and end coordinates.
+    ///   - Left uses the end coordinate of the label
+    ///   - Right uses the start coordinate
+    ///   - Up/Down use the average of the start/end coordinates, attempting to find
+    ///     a node that is nearly horizontally aligned with the current selection.
     pub fn move_selection(&mut self, direction: NavDirection) {
         // Determine the reference point from BaseLayout's node_positions.
         let current_point = if let Some(selected) = self.state.selected_block {
@@ -431,58 +425,74 @@ impl<'a> Viewer<'a> {
             )
         };
 
-        let mut best_candidate: Option<(GraphNode, f64)> = None;
-        for (node, &position) in self.base_layout.node_positions.iter() {
-            // Skip the current selection and the start/end nodes.
-            if let Some(selected) = self.state.selected_block {
-                if *node == selected
-                    || Node::is_start_node(node.node_id)
-                    || Node::is_end_node(node.node_id)
-                {
-                    continue;
-                }
-            }
-
-            let candidate_point = position;
-
-            // For vertical movement, only consider candidates that are nearly horizontally aligned.
-            if matches!(direction, NavDirection::Up | NavDirection::Down) {
-                let horizontal_threshold = 1.0;
-                if (candidate_point.0 - current_point.0).abs() > horizontal_threshold {
-                    continue;
-                }
-            }
-
-            let is_candidate = match direction {
-                NavDirection::Left => candidate_point.0 < current_point.0,
-                NavDirection::Right => candidate_point.0 > current_point.0,
-                NavDirection::Up => candidate_point.1 < current_point.1,
-                NavDirection::Down => candidate_point.1 > current_point.1,
+        // Try to find a node in the specified direction closest to the current point.
+        if let Some(new_selection) = self.find_closest_block_in_direction(current_point, direction)
+        {
+            self.state.selected_block = Some(new_selection);
+            self.center_on_block(new_selection);
+        } else {
+            // If no valid node was found, scroll the viewport a bit to keep the user moving.
+            let scroll_amount = match direction {
+                NavDirection::Up => -3,
+                NavDirection::Down => 3,
+                // If left/right has no best candidate, do nothing for now
+                _ => 0,
             };
-            if !is_candidate {
+            self.state.offset_y += scroll_amount;
+        }
+    }
+
+    // Helper function to find the closest node in the given direction, skipping
+    // the currently selected block and ignoring start/end dummy nodes.
+    fn find_closest_block_in_direction(
+        &self,
+        current_point: (f64, f64),
+        direction: NavDirection,
+    ) -> Option<GraphNode> {
+        let mut closest_candidate: Option<(GraphNode, f64)> = None;
+
+        for (&node, &node_pos) in &self.base_layout.node_positions {
+            // Skip the currently selected block and any start/end node
+            if Some(node) == self.state.selected_block
+                || Node::is_start_node(node.node_id)
+                || Node::is_end_node(node.node_id)
+            {
                 continue;
             }
 
-            let dx = candidate_point.0 - current_point.0;
-            let dy = candidate_point.1 - current_point.1;
+            let dx = node_pos.0 - current_point.0;
+            let dy = node_pos.1 - current_point.1;
+
+            // Depending on the direction, decide if this node is a candidate
+            //   - Up/Down: only consider nodes that are vertically aligned
+            //   - Left/Right: consider all nodes in the correct half of the screen
+            if !match direction {
+                NavDirection::Up => node_pos.1 < current_point.1 && dx.abs() < f64::EPSILON,
+                NavDirection::Down => node_pos.1 > current_point.1 && dx.abs() < f64::EPSILON,
+                NavDirection::Left => dx < 0.0,
+                NavDirection::Right => dx > 0.0,
+            } {
+                continue;
+            }
+
+            // Calculate Euclidean distance
             let distance = (dx * dx + dy * dy).sqrt();
             if distance == 0.0 {
                 continue;
             }
 
-            if let Some((_, best_distance)) = best_candidate {
-                if distance < best_distance {
-                    best_candidate = Some((*node, distance));
+            // Keep track if it's closer than any previous candidate
+            if let Some((_, best_dist)) = closest_candidate {
+                if distance < best_dist {
+                    closest_candidate = Some((node, distance));
                 }
             } else {
-                best_candidate = Some((*node, distance));
+                closest_candidate = Some((node, distance));
             }
         }
 
-        if let Some((new_selection, _)) = best_candidate {
-            self.state.selected_block = Some(new_selection);
-            self.center_on_block(new_selection);
-        }
+        // Return the node with the minimum distance in the chosen direction
+        closest_candidate.map(|(n, _)| n)
     }
 
     /// Select the block closest to the center of the viewport using coordinates from scaled_layout.
@@ -511,59 +521,94 @@ impl<'a> Viewer<'a> {
         }
     }
 
-    /// Update scroll offset based on the cursor position (world coordinates of the selected label).
-    /// This method computes the world bounds from all labels and clamps the viewport's offset
-    /// so that the cursor is centered when possible, but moves towards the viewport edges when near world bounds.
-    pub fn update_scroll_for_cursor(&mut self, cursor_x: f64, cursor_y: f64) {
-        // The tolerance_y parameter allows for flexibility on what's considered "centered" to avoid jitter,
-        // it's a ratio of the viewport height.
-        let margin = 5.0;
-        let tolerance_y = 0.3;
-
-        let vp_width = self.state.viewport.width as f64;
-        let vp_height = self.state.viewport.height as f64;
+    fn compute_bounding_box(&self) -> ((f64, f64), (f64, f64)) {
+        let labels = &self.scaled_layout.labels;
 
         let mut xs = Vec::new();
         let mut ys = Vec::new();
-        for ((x, _), (x2, _)) in self.scaled_layout.labels.values() {
+        for ((x, _), (x2, _)) in labels.values() {
             xs.push(*x);
             xs.push(*x2);
         }
-        for ((_, y), (_, _)) in self.scaled_layout.labels.values() {
+        for ((_, y), (_, _)) in labels.values() {
             ys.push(*y);
         }
-        if xs.is_empty() || ys.is_empty() {
+        let world_min_x = xs.iter().cloned().fold(f64::INFINITY, f64::min);
+        let world_max_x = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let world_min_y = ys.iter().cloned().fold(f64::INFINITY, f64::min);
+        let world_max_y = ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        ((world_min_x, world_min_y), (world_max_x, world_max_y))
+    }
+
+    /// Update scroll offset based on the cursor position (world coordinates of the selected label).
+    /// This method computes the world bounds from all labels and clamps the viewport's offset.
+    /// On the initial call (first_render), it remains centered. Afterwards, we allow the cursor
+    /// to remain within a tolerance range vertically before scrolling.
+    pub fn update_scroll_for_cursor(&mut self, cursor_x: f64, cursor_y: f64) {
+        let margin = 10.0;
+        let vp_width = self.state.viewport.width as f64;
+        let vp_height = self.state.viewport.height as f64;
+        let bandwidth = 0.4;
+
+        let ((world_min_x, world_min_y), (world_max_x, world_max_y)) = self.state.world;
+        let min_x = world_min_x - margin;
+        let max_x = world_max_x + margin;
+        let min_y = world_min_y - margin;
+        let max_y = world_max_y + margin;
+
+        let total_width = max_x - min_x;
+        let total_height = max_y - min_y;
+
+        // If it's the initial positioning, just center on the cursor
+        if self.state.first_render {
+            let desired_x = cursor_x - vp_width / 2.0;
+            let desired_y = cursor_y - vp_height / 2.0;
+
+            let new_offset_x = if total_width >= vp_width {
+                desired_x.clamp(min_x, max_x - vp_width)
+            } else {
+                min_x - (vp_width - total_width) / 2.0
+            };
+            let new_offset_y = if total_height >= vp_height {
+                desired_y.clamp(min_y, max_y - vp_height)
+            } else {
+                min_y - (vp_height - total_height) / 2.0
+            };
+
+            self.state.offset_x = new_offset_x.round() as i32;
+            self.state.offset_y = new_offset_y.round() as i32;
+
             return;
         }
-
-        let world_min_x = xs.iter().cloned().fold(f64::INFINITY, f64::min) - margin;
-        let world_max_x = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max) + margin;
-        let world_min_y = ys.iter().cloned().fold(f64::INFINITY, f64::min) - margin;
-        let world_max_y = ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max) + margin;
-
-        let world_width = world_max_x - world_min_x;
-        let world_height = world_max_y - world_min_y;
-
+        // Horizontal centering and clamping to one fixed point
         let desired_x = cursor_x - vp_width / 2.0;
-        let desired_y = cursor_y - vp_height / 2.0;
-
-        let new_offset_x = if world_width >= vp_width {
-            desired_x.clamp(world_min_x, world_max_x - vp_width)
+        let new_offset_x = if total_width >= vp_width {
+            desired_x.clamp(min_x, max_x - vp_width)
         } else {
-            world_min_x - (vp_width - world_width) / 2.0
+            min_x - (vp_width - total_width) / 2.0
         };
 
-        let new_offset_y = if world_height >= vp_height {
-            desired_y.clamp(world_min_y, world_max_y - vp_height)
+        // Vertical centering and clamping to a range of y-coordinates.
+        let current_offset_y = self.state.offset_y as f64;
+        let top_boundary = current_offset_y + bandwidth * vp_height;
+        let bottom_boundary = current_offset_y + (1.0 - bandwidth) * vp_height;
+
+        let mut desired_y = current_offset_y;
+        if cursor_y < top_boundary {
+            desired_y -= top_boundary - cursor_y;
+        } else if cursor_y > bottom_boundary {
+            desired_y += cursor_y - bottom_boundary;
+        }
+
+        // Clamp vertically
+        if total_height >= vp_height {
+            desired_y = desired_y.clamp(min_y, max_y - vp_height);
         } else {
-            world_min_y - (vp_height - world_height) / 2.0
-        };
+            desired_y = min_y - (vp_height - total_height) / 2.0;
+        }
 
         self.state.offset_x = new_offset_x.round() as i32;
-
-        if (new_offset_y - self.state.offset_y as f64).abs() > tolerance_y * vp_height {
-            self.state.offset_y = new_offset_y.round() as i32;
-        }
+        self.state.offset_y = desired_y.round() as i32;
     }
 }
 

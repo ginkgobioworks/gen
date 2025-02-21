@@ -29,3 +29,6 @@ fixtures/*.ipynb
 # IDE
 .vscode/*
 flamegraph.svg
+
+# Terminal recording via VHS
+*.tape
