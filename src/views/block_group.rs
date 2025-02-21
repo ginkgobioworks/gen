@@ -9,7 +9,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{
-    layout::{Constraint, Rect},
+    layout::Constraint,
     style::{Color, Style},
     text::Text,
     widgets::{Block, Clear, Padding, Paragraph, Wrap},
@@ -69,6 +69,10 @@ pub fn view_block_group(
         Viewer::new(&block_graph, conn, PlotParameters::default())
     };
 
+    // Styling:
+    let sidebar_style = Style::default().bg(Color::DarkGray).fg(Color::White);
+    let panel_style = Style::default().bg(Color::DarkGray).fg(Color::White);
+
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
@@ -79,17 +83,19 @@ pub fn view_block_group(
     let tick_rate = Duration::from_millis(100);
     let mut last_tick = Instant::now();
     let mut show_panel = false;
+    let show_sidebar = true;
     let mut tui_layout_change = false;
     loop {
         // Draw the UI
         terminal.draw(|frame| {
-            // A layout consisting of a canvas and a status bar, with optionally a panel
+            // A layout consisting of a sidebar, canvas and a status bar, with optionally a panel
+            // - The sidebar is where the samples and block groups are displayed
             // - The canvas is where the graph is drawn
             // - The status bar is where the controls are displayed
             // - The panel is a scrollable paragraph that can be toggled on and off
             let status_bar_height: u16 = 1;
 
-            // The outer layout is a vertical split between the canvas and the status bar
+            // The outer layout is a vertical split between the status bar and everything else
             let outer_layout = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Vertical)
                 .constraints(vec![
@@ -98,29 +104,57 @@ pub fn view_block_group(
                 ])
                 .split(frame.area());
 
-            // The inner layout is a vertical split between the canvas and the panel
-            let inner_layout = ratatui::layout::Layout::default()
-                .direction(ratatui::layout::Direction::Vertical)
-                .constraints(vec![Constraint::Percentage(75), Constraint::Percentage(25)])
-                .split(outer_layout[0]);
-
-            let canvas_area = if show_panel {
-                inner_layout[0]
-            } else {
-                outer_layout[0]
-            };
-            let panel_area = if show_panel {
-                inner_layout[1]
-            } else {
-                Rect::default()
-            };
             let status_bar_area = outer_layout[1];
+
+            // The sidebar is a horizontal split of the area above the status bar
+            let sidebar_layout = ratatui::layout::Layout::default()
+                .direction(ratatui::layout::Direction::Horizontal)
+                .constraints(vec!
+                [
+                    Constraint::Percentage(20),
+                    Constraint::Percentage(80),
+                ]
+            )
+            .split(outer_layout[0]);
+            let sidebar_area = sidebar_layout[0];
+
+            // The panel pops up in the canvas area, it does not overlap with the sidebar
+            let panel_layout = ratatui::layout::Layout::default()
+                .direction(ratatui::layout::Direction::Vertical)
+                .constraints(vec!
+                [
+                    Constraint::Percentage(80),
+                    Constraint::Percentage(20),
+                ]
+            ).split(if show_sidebar { sidebar_layout[1] } else { outer_layout[0] });
+            let panel_area = panel_layout[1];
+
+            let canvas_area = match (show_sidebar, show_panel) {
+                (true, true) => panel_layout[0],
+                (true, false) => sidebar_layout[1],
+                (false, true) => panel_layout[0],
+                (false, false) => outer_layout[0],
+            };
 
             let status_message = format!(
                 "{message} | return: show information on block | q=quit",
                 message = Viewer::get_status_line()
             );
+
+            // Sidebar
+            if show_sidebar {
+                let sidebar_block = Block::default().padding(Padding::new(2, 2, 1, 1)).style(sidebar_style);
+                let sidebar_contents = "Samples\ntest\ntest".to_string();
+                let sidebar_content = Paragraph::new(Text::from(sidebar_contents)).block(sidebar_block);
+                frame.render_widget(sidebar_content, sidebar_area);
+            }
+
             // Status bar
+            let status_message = format!(
+                "{message} | return: show information on block | q=quit",
+                message = Viewer::get_status_line()
+            );
+
             let status_bar_contents = format!(
                 "{status_message:width$}",
                 width = status_bar_area.width as usize
@@ -140,7 +174,7 @@ pub fn view_block_group(
             if show_panel {
                 let panel_block = Block::bordered()
                     .padding(Padding::new(2, 2, 1, 1))
-                    .title("Details");
+                    .title("Details").style(panel_style);
                 let mut panel_text = Text::from("No content found");
 
                 // Get information about the currently selected block
