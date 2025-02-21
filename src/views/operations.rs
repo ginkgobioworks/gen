@@ -1,5 +1,8 @@
+use crate::graph::{GraphEdge, GraphNode};
+use crate::models::block_group::BlockGroup;
 use crate::models::operations::{Operation, OperationSummary};
 use crate::models::traits::Query;
+use crate::views::block_group_viewer::{PlotParameters, Viewer};
 use crossterm::event::KeyModifiers;
 use crossterm::{
     event::{self, KeyCode},
@@ -7,6 +10,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use itertools::Itertools;
+use petgraph::prelude::DiGraphMap;
 use ratatui::prelude::{Color, Style, Text};
 use ratatui::style::Modifier;
 use ratatui::widgets::Paragraph;
@@ -17,6 +21,7 @@ use ratatui::{
     Terminal,
 };
 use rusqlite::{params, types::Value, Connection};
+use std::backtrace::Backtrace;
 use std::collections::HashMap;
 use std::io;
 use std::rc::Rc;
@@ -36,7 +41,23 @@ struct OperationRow<'a> {
     summary: OperationSummary,
 }
 
-pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<(), io::Error> {
+fn restore_terminal() {
+    let _ = disable_raw_mode();
+    let _ = execute!(io::stdout(), LeaveAlternateScreen);
+}
+
+pub fn view_operations(
+    conn: &Connection,
+    op_conn: &Connection,
+    operations: &[Operation],
+) -> Result<(), io::Error> {
+    std::panic::set_hook(Box::new(|info| {
+        restore_terminal();
+        eprintln!("Application crashed: {info}");
+        let backtrace = Backtrace::capture();
+        eprintln!("Stack trace:\n{}", backtrace);
+    }));
+
     let operation_by_hash: HashMap<String, &Operation> = HashMap::from_iter(
         operations
             .iter()
@@ -44,7 +65,7 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
             .collect::<Vec<(String, &Operation)>>(),
     );
     let summaries = OperationSummary::query(
-        conn,
+        op_conn,
         "select * from operation_summary where operation_hash in rarray(?1)",
         params![Rc::new(
             operations
@@ -68,7 +89,18 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
     let mut terminal = Terminal::new(backend)?;
 
     let mut textarea = TextArea::default();
+    let mut empty_graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
+    let mut blockgroup_graphs: Vec<(i64, String, DiGraphMap<GraphNode, GraphEdge>)> = vec![];
+    let mut selected_blockgroup_graph: usize = 0;
+    empty_graph.add_node(GraphNode {
+        node_id: 1,
+        block_id: 0,
+        sequence_start: 0,
+        sequence_end: 1,
+    });
+    let mut graph_viewer = Viewer::new(&empty_graph, conn, PlotParameters::default());
     let mut view_message_panel = false;
+    let mut view_graph = false;
     let mut panel_focus = "operations";
     let mut focus_rotation = vec!["operations"];
     let mut focus_index: usize = 0;
@@ -143,6 +175,21 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
                     .borders(Borders::ALL)
                     .border_style(unfocused_style),
             );
+            if view_graph {
+                graph_viewer.set_block(
+                    Block::default()
+                        .title(if blockgroup_graphs.is_empty() {
+                            "Change Graph".to_string()
+                        } else {
+                            format!(
+                                "Change Graph {name}",
+                                name = blockgroup_graphs[selected_blockgroup_graph].1
+                            )
+                        })
+                        .borders(Borders::ALL)
+                        .border_style(unfocused_style),
+                );
+            }
 
             if panel_focus == "message_editor" {
                 panel_messages.push_str(", ctrl+s=save message, esc=close message editor");
@@ -153,7 +200,25 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
                         .border_style(focused_style),
                 );
             } else if panel_focus == "operations" {
-                panel_messages.push_str(", e or enter=edit message, esc or q=exit");
+                panel_messages.push_str(", e or enter=edit message, v=view graph, esc or q=exit");
+            } else if panel_focus == "graph_view" {
+                panel_messages.push_str(&format!(
+                    ", tab = cycle block group, {l}",
+                    l = Viewer::get_status_line()
+                ));
+                graph_viewer.set_block(
+                    Block::default()
+                        .title(if blockgroup_graphs.is_empty() {
+                            "Change Graph".to_string()
+                        } else {
+                            format!(
+                                "Change Graph {name}",
+                                name = blockgroup_graphs[selected_blockgroup_graph].1
+                            )
+                        })
+                        .borders(Borders::ALL)
+                        .border_style(focused_style),
+                );
             }
 
             if view_message_panel {
@@ -161,8 +226,24 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
                     .direction(Direction::Vertical)
                     .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
                     .split(main_area);
+                if view_graph {
+                    let sub_chunk = Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                        .split(chunks[1]);
+                    f.render_widget(&textarea, sub_chunk[0]);
+                    graph_viewer.draw(f, sub_chunk[1]);
+                } else {
+                    f.render_widget(&textarea, chunks[1]);
+                }
                 f.render_widget(table, chunks[0]);
-                f.render_widget(&textarea, chunks[1]);
+            } else if view_graph {
+                let chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                    .split(main_area);
+                f.render_widget(table, chunks[0]);
+                graph_viewer.draw(f, chunks[1]);
             } else {
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
@@ -218,13 +299,46 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
                     {
                         let new_summary = textarea.lines().iter().join("\n");
                         let _ = OperationSummary::set_message(
-                            conn,
+                            op_conn,
                             operation_summaries[selected].summary.id,
                             &new_summary,
                         );
                         operation_summaries[selected].summary.summary = new_summary;
                     } else {
                         textarea.input(key);
+                    }
+                } else if panel_focus == "graph_view" {
+                    if key.code == KeyCode::Esc {
+                        view_graph = false;
+                        if let Some((p, _)) =
+                            focus_rotation.iter().find_position(|s| **s == "graph_view")
+                        {
+                            focus_rotation.remove(p);
+                        }
+                        if focus_index >= focus_rotation.len() {
+                            focus_index = 0;
+                        }
+                        panel_focus = focus_rotation[focus_index];
+                    } else if key.code == KeyCode::Tab {
+                        if key.modifiers == KeyModifiers::SHIFT {
+                            if selected_blockgroup_graph == 0 {
+                                selected_blockgroup_graph = blockgroup_graphs.len() - 1;
+                            } else {
+                                selected_blockgroup_graph -= 1;
+                            }
+                        } else {
+                            selected_blockgroup_graph += 1;
+                            if selected_blockgroup_graph >= blockgroup_graphs.len() {
+                                selected_blockgroup_graph = 0;
+                            }
+                        }
+                        graph_viewer = Viewer::new(
+                            &blockgroup_graphs[selected_blockgroup_graph].2,
+                            conn,
+                            PlotParameters::default(),
+                        );
+                    } else {
+                        graph_viewer.handle_input(key);
                     }
                 } else {
                     let code = key.code;
@@ -255,6 +369,53 @@ pub fn view_operations(conn: &Connection, operations: &[Operation]) -> Result<()
                                 focus_rotation.len() - 1
                             };
                             panel_focus = focus_rotation[focus_index];
+                        }
+                        KeyCode::Char('v') => {
+                            view_graph = true;
+                            focus_index = if let Some((i, _)) =
+                                focus_rotation.iter().find_position(|s| **s == "graph_view")
+                            {
+                                i
+                            } else {
+                                focus_rotation.push("graph_view");
+                                focus_rotation.len() - 1
+                            };
+                            panel_focus = focus_rotation[focus_index];
+                            let hash = &operation_summaries[selected].operation.hash;
+                            let graphs = Operation::get_change_graph(op_conn, hash).unwrap();
+                            blockgroup_graphs.clear();
+                            let bg_info = BlockGroup::get_by_ids(
+                                conn,
+                                &graphs.keys().copied().collect::<Vec<i64>>(),
+                            );
+                            let bg_map: HashMap<i64, &BlockGroup> =
+                                HashMap::from_iter(bg_info.iter().map(|k| (k.id, k)));
+                            for (i, v) in graphs {
+                                blockgroup_graphs.push((
+                                    i,
+                                    format!(
+                                        "{collection} {sample} {name}",
+                                        collection = bg_map[&i].collection_name.clone(),
+                                        sample = bg_map[&i]
+                                            .sample_name
+                                            .clone()
+                                            .unwrap_or("Reference".to_string()),
+                                        name = bg_map[&i].name.clone()
+                                    ),
+                                    v,
+                                ));
+                            }
+                            selected_blockgroup_graph = 0;
+                            if blockgroup_graphs.is_empty() {
+                                graph_viewer =
+                                    Viewer::new(&empty_graph, conn, PlotParameters::default());
+                            } else {
+                                graph_viewer = Viewer::new(
+                                    &blockgroup_graphs[selected_blockgroup_graph].2,
+                                    conn,
+                                    PlotParameters::default(),
+                                );
+                            }
                         }
                         _ => {}
                     }

@@ -1,10 +1,10 @@
 use crate::models::{block_group::BlockGroup, node::Node, traits::Query};
-use crate::views::block_group_viewer::{NavDirection, PlotParameters, Viewer};
+use crate::views::block_group_viewer::{PlotParameters, Viewer};
 use rusqlite::{params, Connection};
 
 use core::panic;
 use crossterm::{
-    event::{self, KeyCode, KeyEventKind, KeyModifiers},
+    event::{self, KeyCode, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -92,53 +92,64 @@ pub fn view_block_group(
             // The outer layout is a vertical split between the canvas and the status bar
             let outer_layout = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Vertical)
-                .constraints(vec!
-                    [
-                        ratatui::layout::Constraint::Min(1),
-                        ratatui::layout::Constraint::Length(status_bar_height),
-                    ]
-                )
+                .constraints(vec![
+                    ratatui::layout::Constraint::Min(1),
+                    ratatui::layout::Constraint::Length(status_bar_height),
+                ])
                 .split(frame.area());
 
             // The inner layout is a vertical split between the canvas and the panel
             let inner_layout = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Vertical)
-                .constraints(vec!
-                    [
-                        Constraint::Percentage(75),
-                        Constraint::Percentage(25),
-                    ]
-                )
+                .constraints(vec![Constraint::Percentage(75), Constraint::Percentage(25)])
                 .split(outer_layout[0]);
 
-            let canvas_area = if show_panel { inner_layout[0] } else { outer_layout[0] };
-            let panel_area = if show_panel { inner_layout[1] } else { Rect::default() };
+            let canvas_area = if show_panel {
+                inner_layout[0]
+            } else {
+                outer_layout[0]
+            };
+            let panel_area = if show_panel {
+                inner_layout[1]
+            } else {
+                Rect::default()
+            };
             let status_bar_area = outer_layout[1];
-
-            // Ask the viewer to paint the canvas
-            viewer.paint_canvas(frame, canvas_area);
 
             // Status bar
             let status_bar_contents = format!(
-                "{:width$}",
-                "◀ ▼ ▲ ▶ select blocks (+shift/alt to scroll) | +/- zoom | return: show information on block | q=quit",
-                width = status_bar_area.width as usize);
+                "{message:width$}",
+                message = Viewer::get_status_line(),
+                width = status_bar_area.width as usize
+            );
 
-            let status_bar = Paragraph::new(Text::styled(status_bar_contents,
-                Style::default().bg(Color::DarkGray).fg(Color::White)));
+            let status_bar = Paragraph::new(Text::styled(
+                status_bar_contents,
+                Style::default().bg(Color::DarkGray).fg(Color::White),
+            ));
 
             frame.render_widget(status_bar, status_bar_area);
 
+            // Ask the viewer to paint the canvas
+            viewer.draw(frame, canvas_area);
+
             // Panel
             if show_panel {
-                let panel_block = Block::bordered().padding(Padding::new(2, 2, 1, 1)).title("Details");
+                let panel_block = Block::bordered()
+                    .padding(Padding::new(2, 2, 1, 1))
+                    .title("Details");
                 let mut panel_text = Text::from("No content found");
 
                 // Get information about the currently selected block
                 if viewer.state.selected_block.is_some() {
                     let selected_block = viewer.state.selected_block.unwrap();
-                    panel_text = Text::from(format!("Block ID: {}\nNode ID: {}\nStart: {}\nEnd: {}\n", 
-                        selected_block.block_id, selected_block.node_id, selected_block.sequence_start, selected_block.sequence_end));
+                    panel_text = Text::from(format!(
+                        "Block ID: {}\nNode ID: {}\nStart: {}\nEnd: {}\n",
+                        selected_block.block_id,
+                        selected_block.node_id,
+                        selected_block.sequence_start,
+                        selected_block.sequence_end
+                    ));
                 }
 
                 let panel_content = Paragraph::new(panel_text)
@@ -170,107 +181,6 @@ pub fn view_block_group(
                         break;
                     }
                     match key.code {
-                        // Scrolling through the graph
-                        KeyCode::Left => {
-                            if key.modifiers.contains(KeyModifiers::SHIFT) {
-                                viewer.state.offset_x -= viewer.state.viewport.width as i32 / 3;
-                                viewer.unselect_if_not_visible();
-                            } else if key.modifiers.contains(KeyModifiers::ALT) {
-                                viewer.state.offset_x -= 1;
-                            } else {
-                                // If no block is selected, select the center block
-                                if viewer.state.selected_block.is_none() {
-                                    viewer.select_center_block();
-                                }
-                                viewer.move_selection(NavDirection::Left);
-                            }
-                        }
-                        KeyCode::Right => {
-                            if key.modifiers.contains(KeyModifiers::SHIFT) {
-                                viewer.state.offset_x += viewer.state.viewport.width as i32 / 3;
-                                viewer.unselect_if_not_visible();
-                            } else if key.modifiers.contains(KeyModifiers::ALT) {
-                                viewer.state.offset_x += 1;
-                            } else {
-                                if viewer.state.selected_block.is_none() {
-                                    viewer.select_center_block();
-                                }
-                                viewer.move_selection(NavDirection::Right);
-                            }
-                        }
-                        KeyCode::Up => {
-                            if key.modifiers.contains(KeyModifiers::SHIFT) {
-                                viewer.state.offset_y += viewer.state.viewport.height as i32 / 3;
-                                viewer.unselect_if_not_visible();
-                            } else if key.modifiers.contains(KeyModifiers::ALT) {
-                                viewer.state.offset_y += 1;
-                            } else {
-                                if viewer.state.selected_block.is_none() {
-                                    viewer.select_center_block();
-                                }
-                                viewer.move_selection(NavDirection::Down);
-                            }
-                        }
-                        KeyCode::Down => {
-                            if key.modifiers.contains(KeyModifiers::SHIFT) {
-                                viewer.state.offset_y -= viewer.state.viewport.height as i32 / 3;
-                                viewer.unselect_if_not_visible();
-                            } else if key.modifiers.contains(KeyModifiers::ALT) {
-                                viewer.state.offset_y -= 1;
-                            } else {
-                                if viewer.state.selected_block.is_none() {
-                                    viewer.select_center_block();
-                                }
-                                viewer.move_selection(NavDirection::Up);
-                            }
-                        }
-                        // Zooming in and out
-                        KeyCode::Char('+') | KeyCode::Char('=') => {
-                            // Increase how much of the sequence is shown in each block label.
-                            if viewer.parameters.label_width == u32::MAX {
-                                viewer.parameters.scale += 1;
-                            } else {
-                                viewer.parameters.label_width = match viewer.parameters.label_width
-                                {
-                                    1 => 11,
-                                    11 => 100,
-                                    100 => u32::MAX,
-                                    _ => u32::MAX,
-                                }
-                            }
-
-                            // If no block is selected, select the center block
-                            if viewer.state.selected_block.is_none() {
-                                viewer.select_center_block();
-                            }
-
-                            // Recalculate the layout.
-                            viewer.refresh();
-                            viewer.center_on_block(viewer.state.selected_block.unwrap());
-                        }
-                        KeyCode::Char('-') | KeyCode::Char('_') => {
-                            // Decrease how much of the sequence is shown in each block label.
-                            if viewer.parameters.scale > 2 {
-                                viewer.parameters.scale -= 1;
-                            } else {
-                                viewer.parameters.label_width = match viewer.parameters.label_width
-                                {
-                                    u32::MAX => 100,
-                                    100 => 11,
-                                    11 => 1,
-                                    _ => 1,
-                                };
-                            }
-
-                            // If no block is selected, select the center block
-                            if viewer.state.selected_block.is_none() {
-                                viewer.select_center_block();
-                            }
-
-                            // Recalculate the layout
-                            viewer.refresh();
-                            viewer.center_on_block(viewer.state.selected_block.unwrap());
-                        }
                         // Performing actions on blocks
                         KeyCode::Tab => {
                             // Future implementation: switch between panels
@@ -285,7 +195,9 @@ pub fn view_block_group(
                             // Show information on the selected block, if there is one
                             show_panel = viewer.state.selected_block.is_some();
                         }
-                        _ => {}
+                        _ => {
+                            viewer.handle_input(key);
+                        }
                     }
                 }
             }

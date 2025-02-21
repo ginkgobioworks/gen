@@ -5,6 +5,7 @@ use crate::models::sequence::Sequence;
 use crate::views::block_layout::{BaseLayout, ScaledLayout};
 
 use core::panic;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
 use ratatui::{
@@ -27,6 +28,15 @@ pub mod label {
     pub const NODE: &str = "⏺";
 }
 
+/// Used for scrolling through the graph.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum NavDirection {
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
 /// Holds parameters that don't change when you scroll.
 /// - `label_width` = how many characters to show at most in each block label. If 0, labels are not shown.
 /// - `scale` = data units per 1 terminal cell.  
@@ -34,12 +44,19 @@ pub mod label {
 ///   - If `scale` = 2.0, each cell is 2 data units (you see *more* data).  
 ///   - If `scale` = 0.5, each cell is 0.5 data units (you see *less* data, zoomed in).
 /// - `aspect_ratio` = width / height of a terminal cell in data units.
-/// - `vertical_offset` = how much to offset the lines vertically to align the braille characters with the labels
+/// - `line_offset_y` = how much to offset the lines vertically to align the braille characters with the labels
+/// - `edge_style` = draw the edges as straight lines or as splines.
 pub struct PlotParameters {
     pub label_width: u32,
     pub scale: u32,
     pub aspect_ratio: f32,
     pub line_offset_y: f64,
+    pub edge_style: EdgeStyle,
+}
+
+pub enum EdgeStyle {
+    Straight,
+    Spline,
 }
 
 impl Default for PlotParameters {
@@ -49,6 +66,7 @@ impl Default for PlotParameters {
             scale: 4,
             aspect_ratio: 0.5,
             line_offset_y: 0.125,
+            edge_style: EdgeStyle::Straight,
         }
     }
 }
@@ -78,14 +96,6 @@ impl Default for State {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum NavDirection {
-    Left,
-    Right,
-    Up,
-    Down,
-}
-
 pub struct Viewer<'a> {
     pub block_graph: &'a DiGraphMap<GraphNode, GraphEdge>,
     pub conn: &'a Connection,
@@ -95,6 +105,7 @@ pub struct Viewer<'a> {
     pub state: State,
     pub parameters: PlotParameters,
     pub origin_block: Option<GraphNode>,
+    view_block: Block<'a>,
 }
 
 impl<'a> Viewer<'a> {
@@ -151,6 +162,7 @@ impl<'a> Viewer<'a> {
             state: State::default(),
             parameters: plot_parameters,
             origin_block,
+            view_block: Block::default(),
         }
     }
 
@@ -159,6 +171,10 @@ impl<'a> Viewer<'a> {
         self.scaled_layout
             .refresh(&self.base_layout, &self.parameters);
         self.state.world = self.compute_bounding_box();
+    }
+
+    pub fn set_block(&mut self, block: Block<'a>) {
+        self.view_block = block;
     }
 
     /// Check if a block is visible in the viewport.
@@ -194,7 +210,7 @@ impl<'a> Viewer<'a> {
 
     /// Draw and render blocks and lines to a canvas through a scrollable window.
     /// TODO: turn this into the render function of a custom stateful widget
-    pub fn paint_canvas(&mut self, frame: &mut ratatui::Frame, area: Rect) {
+    pub fn draw(&mut self, frame: &mut ratatui::Frame, area: Rect) {
         // Set up the coordinate systems for the window and the canvas,
         // we need to keep a 1:1 mapping between coordinates to avoid glitches.
 
@@ -207,7 +223,7 @@ impl<'a> Viewer<'a> {
         // viewport has data coordinates (0,0). We must keep a 1:1 mapping between the size of the viewport
         // in data units and in terminal cells to avoid glitches.
 
-        let canvas_block = Block::default();
+        let canvas_block = self.view_block.clone();
         let viewport = canvas_block.inner(area);
 
         // Check if the viewport has changed size, and if so, update the offset to keep our reference
@@ -264,23 +280,72 @@ impl<'a> Viewer<'a> {
             .paint(|ctx| {
                 // Draw the lines described in the processed layout
                 for &((x1, y1), (x2, y2)) in self.scaled_layout.lines.iter() {
-                    // Clip the line to the visible area, skip if it's not visible itself
-                    if let Some(((x1c, y1c), (x2c, y2c))) = clip_line(
-                        (x1, y1 + self.parameters.line_offset_y),
-                        (x2, y2 + self.parameters.line_offset_y),
-                        (self.state.offset_x as f64, self.state.offset_y as f64),
-                        (
-                            (self.state.offset_x + self.state.viewport.width as i32) as f64,
-                            (self.state.offset_y + self.state.viewport.height as i32) as f64,
-                        ),
-                    ) {
-                        ctx.draw(&Line {
-                            x1: x1c,
-                            y1: y1c,
-                            x2: x2c,
-                            y2: y2c,
-                            color: Color::DarkGray,
-                        });
+                    match self.parameters.edge_style {
+                        EdgeStyle::Straight => {
+                            if let Some(((x1c, y1c), (x2c, y2c))) = clip_line(
+                                (x1, y1 + self.parameters.line_offset_y),
+                                (x2, y2 + self.parameters.line_offset_y),
+                                (self.state.offset_x as f64, self.state.offset_y as f64),
+                                (
+                                    (self.state.offset_x + self.state.viewport.width as i32) as f64,
+                                    (self.state.offset_y + self.state.viewport.height as i32)
+                                        as f64,
+                                ),
+                            ) {
+                                ctx.draw(&Line {
+                                    x1: x1c,
+                                    y1: y1c,
+                                    x2: x2c,
+                                    y2: y2c,
+                                    color: Color::DarkGray,
+                                });
+                            }
+                        }
+                        EdgeStyle::Spline => {
+                            // Bezier curves are always contained within the box defined by their endpoints,
+                            // so we reject any curves that don't have a bounding box that intersects the viewport.
+                            if !rectangles_intersect(
+                                (x1, y1 + self.parameters.line_offset_y),
+                                (x2, y2 + self.parameters.line_offset_y),
+                                (self.state.offset_x as f64, self.state.offset_y as f64),
+                                (
+                                    (self.state.offset_x + self.state.viewport.width as i32) as f64,
+                                    (self.state.offset_y + self.state.viewport.height as i32)
+                                        as f64,
+                                ),
+                            ) {
+                                continue;
+                            }
+                            let num_points = ((x2.round() - x1.round() + 1.0) as u32).min(16); // Don't go too crazy
+                            let curve_points = generate_cubic_bezier_curve(
+                                (x1, y1 + self.parameters.line_offset_y),
+                                (x2, y2 + self.parameters.line_offset_y),
+                                num_points,
+                            );
+
+                            // Draw lines between consecutive points of the curve
+                            for points in curve_points.windows(2) {
+                                if let Some(((x1c, y1c), (x2c, y2c))) = clip_line(
+                                    points[0],
+                                    points[1],
+                                    (self.state.offset_x as f64, self.state.offset_y as f64),
+                                    (
+                                        (self.state.offset_x + self.state.viewport.width as i32)
+                                            as f64,
+                                        (self.state.offset_y + self.state.viewport.height as i32)
+                                            as f64,
+                                    ),
+                                ) {
+                                    ctx.draw(&Line {
+                                        x1: x1c,
+                                        y1: y1c,
+                                        x2: x2c,
+                                        y2: y2c,
+                                        color: Color::DarkGray,
+                                    });
+                                }
+                            }
+                        }
                     }
                 }
                 // Print the labels
@@ -581,7 +646,7 @@ impl<'a> Viewer<'a> {
             return;
         }
 
-        // In future iterations we treat vertical and horizontal movement differently.
+        // In later iterations we treat vertical and horizontal movement differently.
         // Horizontal still clamps to one point
         let desired_x = cursor_x - vp_width / 2.0;
         let new_offset_x = if total_width >= vp_width {
@@ -611,6 +676,139 @@ impl<'a> Viewer<'a> {
 
         self.state.offset_x = new_offset_x.round() as i32;
         self.state.offset_y = desired_y.round() as i32;
+    }
+
+    pub fn handle_input(&mut self, key: KeyEvent) {
+        // Scrolling through the graph
+        match key.code {
+            KeyCode::Left => {
+                if key.modifiers.contains(KeyModifiers::SHIFT) {
+                    self.state.offset_x -= self.state.viewport.width as i32 / 3;
+                    self.unselect_if_not_visible();
+                } else if key.modifiers.contains(KeyModifiers::ALT) {
+                    self.state.offset_x -= 1;
+                } else {
+                    // Try to select center block if no block is selected
+                    if self.state.selected_block.is_none() && self.select_center_block().is_none() {
+                        // If we couldn't find a center block, move the offset directly
+                        self.state.offset_x -= self.state.viewport.width as i32 / 3;
+                    } else {
+                        // Move selection if we have a block selected (either from before or just now)
+                        self.move_selection(NavDirection::Left);
+                    }
+                }
+            }
+            KeyCode::Right => {
+                if key.modifiers.contains(KeyModifiers::SHIFT) {
+                    self.state.offset_x += self.state.viewport.width as i32 / 3;
+                    self.unselect_if_not_visible();
+                } else if key.modifiers.contains(KeyModifiers::ALT) {
+                    self.state.offset_x += 1;
+                } else if self.state.selected_block.is_none()
+                    && self.select_center_block().is_none()
+                {
+                    self.state.offset_x += self.state.viewport.width as i32 / 3;
+                } else {
+                    self.move_selection(NavDirection::Right);
+                }
+            }
+            KeyCode::Up => {
+                if key.modifiers.contains(KeyModifiers::SHIFT) {
+                    self.state.offset_y += self.state.viewport.height as i32 / 3;
+                    self.unselect_if_not_visible();
+                } else if key.modifiers.contains(KeyModifiers::ALT) {
+                    self.state.offset_y += 1;
+                } else if self.state.selected_block.is_none()
+                    && self.select_center_block().is_none()
+                {
+                    self.state.offset_y += self.state.viewport.height as i32 / 3;
+                } else {
+                    self.move_selection(NavDirection::Down);
+                }
+            }
+            KeyCode::Down => {
+                if key.modifiers.contains(KeyModifiers::SHIFT) {
+                    self.state.offset_y -= self.state.viewport.height as i32 / 3;
+                    self.unselect_if_not_visible();
+                } else if key.modifiers.contains(KeyModifiers::ALT) {
+                    self.state.offset_y -= 1;
+                } else if self.state.selected_block.is_none()
+                    && self.select_center_block().is_none()
+                {
+                    self.state.offset_y -= self.state.viewport.height as i32 / 3;
+                } else {
+                    self.move_selection(NavDirection::Up);
+                }
+            }
+            // Zooming in and out
+            KeyCode::Char('+') | KeyCode::Char('=') => {
+                // Increase how much of the sequence is shown in each block label.
+                if self.parameters.label_width == u32::MAX {
+                    self.parameters.scale += 2; // Even increments look better
+                } else {
+                    self.parameters.label_width = match self.parameters.label_width {
+                        1 => 11,
+                        11 => 100,
+                        100 => u32::MAX,
+                        _ => u32::MAX,
+                    }
+                }
+
+                // If no block is selected, try to select the center block
+                if self.state.selected_block.is_none() {
+                    self.select_center_block();
+                }
+
+                // Recalculate the layout.
+                self.scaled_layout
+                    .refresh(&self.base_layout, &self.parameters);
+
+                // Only center on block if we have one selected
+                if let Some(block) = self.state.selected_block {
+                    self.center_on_block(block);
+                }
+            }
+            KeyCode::Char('-') | KeyCode::Char('_') => {
+                // Decrease how much of the sequence is shown in each block label.
+                if self.parameters.scale > 2 {
+                    self.parameters.scale -= 2;
+                } else {
+                    self.parameters.label_width = match self.parameters.label_width {
+                        u32::MAX => 100,
+                        100 => 11,
+                        11 => 1,
+                        _ => 1,
+                    };
+                }
+
+                if self.state.selected_block.is_none() {
+                    self.select_center_block();
+                }
+
+                self.scaled_layout
+                    .refresh(&self.base_layout, &self.parameters);
+
+                if let Some(block) = self.state.selected_block {
+                    self.center_on_block(block);
+                }
+            }
+            KeyCode::Char('s') | KeyCode::Char('S') => {
+                // Toggle between straight lines and splines
+                // I ended up not liking them as much as I thought I would,
+                // so it's not the default and I'm not documenting it in the status bar.
+                self.parameters.edge_style = match self.parameters.edge_style {
+                    EdgeStyle::Straight => EdgeStyle::Spline,
+                    EdgeStyle::Spline => EdgeStyle::Straight,
+                };
+                self.scaled_layout
+                    .refresh(&self.base_layout, &self.parameters);
+            }
+            _ => {}
+        }
+    }
+
+    pub fn get_status_line() -> String {
+        "◀ ▼ ▲ ▶ select blocks (+shift/alt to scroll) | +/- zoom".to_string()
     }
 }
 
@@ -739,6 +937,73 @@ pub fn clip_line(
     } else {
         None
     }
+}
+
+/// Check if two rectangles intersect.
+/// - Each rectangle is defined by any two opposite corners.
+/// - Returns true if the rectangles overlap or touch, false otherwise.
+pub fn rectangles_intersect(
+    (x1, y1): (f64, f64), // First corner of rectangle 1
+    (x2, y2): (f64, f64), // Opposite corner of rectangle 1
+    (x3, y3): (f64, f64), // First corner of rectangle 2
+    (x4, y4): (f64, f64), // Opposite corner of rectangle 2
+) -> bool {
+    // For each axis, one rectangle's maximum must be >= other's minimum
+    // and one rectangle's minimum must be <= other's maximum
+    x1.max(x2) >= x3.min(x4)
+        && x3.max(x4) >= x1.min(x2)
+        && y1.max(y2) >= y3.min(y4)
+        && y3.max(y4) >= y1.min(y2)
+}
+
+/// Generate a cubic bezier curve between two points A and B, given a resolution value.
+/// - Control points 0 and 3 are equal to A and B.
+/// - Control point 1 is halfway between A and B, at the same height as A.
+/// - Control point 2 is halfway between A and B, at the same height as B.
+///
+/// The function returns resolution + 2 points:
+/// - First point is exactly A
+/// - Last point is exactly B
+/// - For resolution=0: returns [A, B]
+/// - For resolution=1: returns [A, midpoint, B] where midpoint is the true curve midpoint at t=0.5
+/// - For resolution>1: returns [A, ...resolution points along the curve..., B]
+pub fn generate_cubic_bezier_curve(
+    a: (f64, f64),
+    b: (f64, f64),
+    num_points: u32,
+) -> Vec<(f64, f64)> {
+    let (ax, ay) = a;
+    let (bx, by) = b;
+    // Define control points following Graphviz's style:
+    // p0: a, p1: midpoint between a and b at the same height as a,
+    // p2: midpoint between a and b at the same height as b, p3: b
+    let p0 = a;
+    let p1 = (((ax + bx) / 2.0), ay);
+    let p2 = (((ax + bx) / 2.0), by);
+    let p3 = b;
+
+    let mut points = Vec::with_capacity(num_points as usize);
+    // First point is exactly a
+    points.push(a);
+
+    // Calculate intermediate points
+    for i in 1..num_points - 1 {
+        let t = i as f64 / ((num_points - 1) as f64);
+        let one_minus_t = 1.0_f64 - t;
+        let x = one_minus_t.powi(3) * p0.0
+            + 3.0_f64 * one_minus_t.powi(2) * t * p1.0
+            + 3.0_f64 * one_minus_t * t.powi(2) * p2.0
+            + t.powi(3) * p3.0;
+        let y = one_minus_t.powi(3) * p0.1
+            + 3.0_f64 * one_minus_t.powi(2) * t * p1.1
+            + 3.0_f64 * one_minus_t * t.powi(2) * p2.1
+            + t.powi(3) * p3.1;
+        points.push((x, y));
+    }
+
+    // Last point is exactly b
+    points.push(b);
+    points
 }
 
 #[cfg(test)]
@@ -877,5 +1142,56 @@ mod tests {
         //     A B[C D E]F G H
         let clipped = clip_label("ABCDEFGH", 2, 4, 3);
         assert_eq!(clipped, "…D…");
+    }
+
+    #[test]
+    fn test_rectangles_intersect() {
+        // Overlapping rectangles (corners in standard order)
+        assert!(rectangles_intersect(
+            (0.0, 0.0),
+            (2.0, 2.0),
+            (1.0, 1.0),
+            (3.0, 3.0)
+        ));
+
+        // Overlapping rectangles (corners in reverse order)
+        assert!(rectangles_intersect(
+            (2.0, 2.0),
+            (0.0, 0.0), // bottom-right to top-left
+            (3.0, 3.0),
+            (1.0, 1.0) // bottom-right to top-left
+        ));
+
+        // Touching rectangles (edge) with mixed corner order
+        assert!(rectangles_intersect(
+            (2.0, 2.0),
+            (0.0, 0.0), // reversed
+            (2.0, 0.0),
+            (4.0, 2.0) // standard
+        ));
+
+        // Touching rectangles (corner) with diagonal corners
+        assert!(rectangles_intersect(
+            (0.0, 2.0),
+            (2.0, 0.0), // top-right to bottom-left
+            (2.0, 2.0),
+            (4.0, 4.0) // standard
+        ));
+
+        // Non-intersecting rectangles with mixed corners
+        assert!(!rectangles_intersect(
+            (1.0, 1.0),
+            (0.0, 0.0), // reversed
+            (3.0, 3.0),
+            (2.0, 2.0) // reversed
+        ));
+
+        // One rectangle inside another with diagonal corners
+        assert!(rectangles_intersect(
+            (0.0, 4.0),
+            (4.0, 0.0), // top-right to bottom-left
+            (1.0, 2.0),
+            (2.0, 1.0) // bottom-right to top-left
+        ));
     }
 }

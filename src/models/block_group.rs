@@ -183,6 +183,17 @@ impl BlockGroup {
         }
     }
 
+    pub fn get_by_ids(conn: &Connection, ids: &[i64]) -> Vec<BlockGroup> {
+        let query = "SELECT * FROM block_groups WHERE id IN rarray(?1)";
+        Self::query(
+            conn,
+            query,
+            params!(Rc::new(
+                ids.iter().map(|i| SQLValue::from(*i)).collect::<Vec<_>>()
+            )),
+        )
+    }
+
     pub fn clone(conn: &Connection, source_block_group_id: i64, target_block_group_id: i64) {
         let existing_paths = Path::query(
             conn,
