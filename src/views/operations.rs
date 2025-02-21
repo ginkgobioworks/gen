@@ -192,7 +192,7 @@ pub fn view_operations(
             }
 
             if panel_focus == "message_editor" {
-                panel_messages.push_str(", ctrl+s=save message, esc=close message editor");
+                panel_messages.push_str("| ctrl+s=save message | esc=close message editor");
                 textarea.set_block(
                     Block::default()
                         .title("Operation Summary")
@@ -200,10 +200,10 @@ pub fn view_operations(
                         .border_style(focused_style),
                 );
             } else if panel_focus == "operations" {
-                panel_messages.push_str(", e or enter=edit message, v=view graph, esc or q=exit");
+                panel_messages.push_str("| e or enter=edit message | v=view graph | esc or q=exit");
             } else if panel_focus == "graph_view" {
                 panel_messages.push_str(&format!(
-                    ", tab = cycle block group, {l}",
+                    " | tab = cycle block group | {l} | esc or q=exit",
                     l = Viewer::get_status_line()
                 ));
                 graph_viewer.set_block(
@@ -308,7 +308,7 @@ pub fn view_operations(
                         textarea.input(key);
                     }
                 } else if panel_focus == "graph_view" {
-                    if key.code == KeyCode::Esc {
+                    if key.code == KeyCode::Esc || key.code == KeyCode::Char('q') {
                         view_graph = false;
                         if let Some((p, _)) =
                             focus_rotation.iter().find_position(|s| **s == "graph_view")
@@ -319,8 +319,8 @@ pub fn view_operations(
                             focus_index = 0;
                         }
                         panel_focus = focus_rotation[focus_index];
-                    } else if key.code == KeyCode::Tab {
-                        if key.modifiers == KeyModifiers::SHIFT {
+                    } else if key.code == KeyCode::Tab || key.code == KeyCode::BackTab {
+                        if key.code == KeyCode::BackTab {
                             if selected_blockgroup_graph == 0 {
                                 selected_blockgroup_graph = blockgroup_graphs.len() - 1;
                             } else {
