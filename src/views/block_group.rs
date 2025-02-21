@@ -116,10 +116,10 @@ pub fn view_block_group(
             };
             let status_bar_area = outer_layout[1];
 
+            let status_message = format!("{message} | q=quit", message = Viewer::get_status_line());
             // Status bar
             let status_bar_contents = format!(
-                "{message:width$}",
-                message = Viewer::get_status_line(),
+                "{status_message:width$}",
                 width = status_bar_area.width as usize
             );
 
