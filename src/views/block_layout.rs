@@ -986,6 +986,7 @@ mod tests {
             scale: 1,
             aspect_ratio: 1.0,
             line_offset_y: 0.5,
+            ..Default::default()
         };
         let scaled_layout = ScaledLayout::from_base_layout(&base_layout, &parameters);
 
@@ -1030,6 +1031,7 @@ mod tests {
             scale: 10,
             aspect_ratio: 1.0,
             line_offset_y: 0.5,
+            ..Default::default()
         };
         let scaled_layout = ScaledLayout::from_base_layout(&base_layout, &parameters);
 
@@ -1075,6 +1077,7 @@ mod tests {
             scale: 1,
             aspect_ratio: 1.0,
             line_offset_y: 0.5,
+            ..Default::default()
         };
         let scaled_layout = ScaledLayout::from_base_layout(&base_layout, &parameters);
 

@@ -1,4 +1,5 @@
 use crate::models::{block_group::BlockGroup, node::Node, traits::Query};
+use crate::progress_bar::{get_handler, get_message_bar, get_progress_bar, get_time_elapsed_bar};
 use crate::views::block_group_viewer::{PlotParameters, Viewer};
 use rusqlite::{params, Connection};
 
@@ -24,6 +25,9 @@ pub fn view_block_group(
     collection_name: &str,
     position: Option<String>, // Node ID and offset
 ) -> Result<(), Box<dyn Error>> {
+    let progress_bar = get_handler();
+    let bar = progress_bar.add(get_time_elapsed_bar());
+    let _ = progress_bar.println("Loading block group");
     // Get the block group for two cases: with and without a sample
     let block_group = if let Some(ref sample_name) = sample_name {
         BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name = ?2 AND name = ?3", 
@@ -60,14 +64,17 @@ pub fn view_block_group(
 
     let block_group_id = block_group.unwrap().id;
     let block_graph = BlockGroup::get_graph(conn, block_group_id);
+    bar.finish();
 
     // Create the viewer
-    println!("Pre-calculating chunked layout...");
+    let bar = progress_bar.add(get_time_elapsed_bar());
+    let _ = progress_bar.println("Pre-computing layout in chunks");
     let mut viewer = if let Some(origin) = origin {
         Viewer::with_origin(&block_graph, conn, PlotParameters::default(), origin)
     } else {
         Viewer::new(&block_graph, conn, PlotParameters::default())
     };
+    bar.finish();
 
     // Styling:
     let sidebar_style = Style::default().bg(Color::DarkGray).fg(Color::White);
@@ -83,7 +90,7 @@ pub fn view_block_group(
     let tick_rate = Duration::from_millis(100);
     let mut last_tick = Instant::now();
     let mut show_panel = false;
-    let show_sidebar = true;
+    let show_sidebar = false;
     let mut tui_layout_change = false;
     loop {
         // Draw the UI
@@ -109,24 +116,19 @@ pub fn view_block_group(
             // The sidebar is a horizontal split of the area above the status bar
             let sidebar_layout = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Horizontal)
-                .constraints(vec!
-                [
-                    Constraint::Percentage(20),
-                    Constraint::Percentage(80),
-                ]
-            )
-            .split(outer_layout[0]);
+                .constraints(vec![Constraint::Percentage(20), Constraint::Percentage(80)])
+                .split(outer_layout[0]);
             let sidebar_area = sidebar_layout[0];
 
             // The panel pops up in the canvas area, it does not overlap with the sidebar
             let panel_layout = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Vertical)
-                .constraints(vec!
-                [
-                    Constraint::Percentage(80),
-                    Constraint::Percentage(20),
-                ]
-            ).split(if show_sidebar { sidebar_layout[1] } else { outer_layout[0] });
+                .constraints(vec![Constraint::Percentage(80), Constraint::Percentage(20)])
+                .split(if show_sidebar {
+                    sidebar_layout[1]
+                } else {
+                    outer_layout[0]
+                });
             let panel_area = panel_layout[1];
 
             let canvas_area = match (show_sidebar, show_panel) {
@@ -143,9 +145,12 @@ pub fn view_block_group(
 
             // Sidebar
             if show_sidebar {
-                let sidebar_block = Block::default().padding(Padding::new(2, 2, 1, 1)).style(sidebar_style);
+                let sidebar_block = Block::default()
+                    .padding(Padding::new(2, 2, 1, 1))
+                    .style(sidebar_style);
                 let sidebar_contents = "Samples\ntest\ntest".to_string();
-                let sidebar_content = Paragraph::new(Text::from(sidebar_contents)).block(sidebar_block);
+                let sidebar_content =
+                    Paragraph::new(Text::from(sidebar_contents)).block(sidebar_block);
                 frame.render_widget(sidebar_content, sidebar_area);
             }
 
@@ -174,7 +179,8 @@ pub fn view_block_group(
             if show_panel {
                 let panel_block = Block::bordered()
                     .padding(Padding::new(2, 2, 1, 1))
-                    .title("Details").style(panel_style);
+                    .title("Details")
+                    .style(panel_style);
                 let mut panel_text = Text::from("No content found");
 
                 // Get information about the currently selected block
