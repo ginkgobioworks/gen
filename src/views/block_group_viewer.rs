@@ -4,8 +4,8 @@ use crate::models::node::Node;
 use crate::models::sequence::Sequence;
 use crate::views::block_layout::{BaseLayout, ScaledLayout};
 
-use core::panic;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use log::warn;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
 use ratatui::{
@@ -18,6 +18,8 @@ use ratatui::{
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
 
+// Show more visual information if DEBUG
+const DEBUG: bool = false;
 /// Labels used in the graph visualization (selected, not-selected)
 /// the trick is to get them to align with the braille characters
 /// we use to draw lines:
@@ -179,11 +181,28 @@ impl<'a> Viewer<'a> {
 
     /// Check if a block is visible in the viewport.
     pub fn is_block_visible(&self, block: GraphNode) -> bool {
-        if let Some(((x, y), _)) = self.scaled_layout.labels.get(&block) {
-            return (*y as i32) >= self.state.offset_y
-                && (*y as i32) < self.state.offset_y + self.state.viewport.height as i32
-                && (*x as i32) >= self.state.offset_x
-                && (*x as i32) < self.state.offset_x + self.state.viewport.width as i32;
+        if let Some(((x1, y), (x2, _))) = self.scaled_layout.labels.get(&block) {
+            // Check vertical overlap first (simpler)
+            let y_visible = (*y as i32) >= self.state.offset_y
+                && (*y as i32) < self.state.offset_y + self.state.viewport.height as i32;
+
+            if !y_visible {
+                return false;
+            }
+
+            // Check horizontal overlap
+            // Block is visible if either:
+            // 1. Start point is in viewport
+            // 2. End point is in viewport
+            // 3. Block spans the entire viewport
+            let x1_in_view = (*x1 as i32) >= self.state.offset_x
+                && (*x1 as i32) < self.state.offset_x + self.state.viewport.width as i32;
+            let x2_in_view = (*x2 as i32) >= self.state.offset_x
+                && (*x2 as i32) < self.state.offset_x + self.state.viewport.width as i32;
+            let spans_viewport = (*x1 as i32) <= self.state.offset_x
+                && (*x2 as i32) >= self.state.offset_x + self.state.viewport.width as i32;
+
+            return x1_in_view || x2_in_view || spans_viewport;
         }
         false
     }
@@ -198,13 +217,14 @@ impl<'a> Viewer<'a> {
     }
 
     /// Center the viewport on a specific block.
-    pub fn center_on_block(&mut self, block: GraphNode) {
+    pub fn center_on_block(&mut self, block: GraphNode) -> Result<(f64, f64), String> {
         if let Some(((start, y), (end, _))) = self.scaled_layout.labels.get(&block) {
-            let block_center_x = (start + end) / 2.0;
-            let block_center_y = *y;
-            self.update_scroll_for_cursor(block_center_x, block_center_y);
+            let cursor_x = (start + end) / 2.0;
+            let cursor_y = *y;
+            self.update_scroll_for_cursor(cursor_x, cursor_y);
+            Ok((cursor_x, cursor_y))
         } else {
-            panic!("Block ID {:?} not found in layout", block);
+            Err(format!("Block ID {:?} not found in layout", block))
         }
     }
 
@@ -220,8 +240,7 @@ impl<'a> Viewer<'a> {
         //
         // From the data's perspective, the viewport is a moving window defined by a width, height, and
         // offset from the data origin. When offset_x = 0 and offset_y = 0, the bottom-left corner of the
-        // viewport has data coordinates (0,0). We must keep a 1:1 mapping between the size of the viewport
-        // in data units and in terminal cells to avoid glitches.
+        // viewport has data coordinates (0,0) and the y-axis points upwards.
 
         let canvas_block = self.view_block.clone();
         let viewport = canvas_block.inner(area);
@@ -259,7 +278,8 @@ impl<'a> Viewer<'a> {
                     self.state.selected_block = Some(origin);
                 }
                 self.state.world = self.compute_bounding_box();
-                self.center_on_block(self.state.selected_block.unwrap());
+                self.center_on_block(self.state.selected_block.unwrap())
+                    .unwrap();
                 self.state.first_render = false;
             }
         }
@@ -278,6 +298,47 @@ impl<'a> Viewer<'a> {
                 (self.state.offset_y + self.state.viewport.height as i32) as f64,
             ])
             .paint(|ctx| {
+                if DEBUG {
+                    // Show cartesian axes + coordinates of all nodes
+                    let ((x_min, y_min), (x_max, y_max)) = self.state.world;
+                    let viewport = (
+                        (self.state.offset_x as f64, self.state.offset_y as f64),
+                        (
+                            (self.state.offset_x + self.state.viewport.width as i32) as f64,
+                            (self.state.offset_y + self.state.viewport.height as i32) as f64,
+                        ),
+                    );
+                    if let Some(((x1c, y1c), (x2c, y2c))) =
+                        clip_line((x_min, 0.0), (x_max, 0.0), viewport.0, viewport.1)
+                    {
+                        ctx.draw(&Line {
+                            x1: x1c,
+                            y1: y1c,
+                            x2: x2c,
+                            y2: y2c,
+                            color: Color::Red,
+                        });
+                    }
+                    if let Some(((x1c, y1c), (x2c, y2c))) =
+                        clip_line((0.0, y_min), (0.0, y_max), viewport.0, viewport.1)
+                    {
+                        ctx.draw(&Line {
+                            x1: x1c,
+                            y1: y1c,
+                            x2: x2c,
+                            y2: y2c,
+                            color: Color::Red,
+                        });
+                    }
+                    ctx.print(
+                        self.state.offset_x as f64,
+                        self.state.offset_y as f64,
+                        Span::styled(
+                            format!("({},{})", self.state.offset_x, self.state.offset_y),
+                            Style::default().fg(Color::Red),
+                        ),
+                    );
+                }
                 // Draw the lines described in the processed layout
                 for &((x1, y1), (x2, y2)) in self.scaled_layout.lines.iter() {
                     match self.parameters.edge_style {
@@ -397,6 +458,16 @@ impl<'a> Viewer<'a> {
                             Span::styled(clipped_label, style),
                         );
                     }
+                    if DEBUG {
+                        ctx.print(
+                            *x,
+                            *y + 1.0,
+                            Span::styled(
+                                format!("↓({},{})", *x, *y),
+                                Style::default().fg(Color::Red),
+                            ),
+                        );
+                    }
 
                     // Indicate if the block is connected to the start node (not shown)
                     if self
@@ -443,6 +514,22 @@ impl<'a> Viewer<'a> {
                             );
                         }
                     }
+
+                    // Draw a cursor if no block was selected or is visible
+                    if !self
+                        .state
+                        .selected_block
+                        .is_some_and(|selected| self.is_block_visible(selected))
+                    {
+                        // Determine the middle of the viewport
+                        let x_mid = self.state.offset_x + self.state.viewport.width as i32 / 2;
+                        let y_mid = self.state.offset_y + self.state.viewport.height as i32 / 2;
+                        ctx.print(
+                            x_mid as f64,
+                            y_mid as f64,
+                            Span::styled("█", Style::default()),
+                        );
+                    }
                 }
             });
         frame.render_widget(canvas, area);
@@ -466,7 +553,8 @@ impl<'a> Viewer<'a> {
 
     /// Cycle through nodes in a specified direction.
     pub fn move_selection(&mut self, direction: NavDirection) {
-        // Determine the reference point from BaseLayout's node_positions.
+        // Determine the reference point from BaseLayout's node_positions,
+        // or use the center of the viewport if no block is selected.
         let current_point = if let Some(selected) = self.state.selected_block {
             self.base_layout
                 .node_positions
@@ -489,16 +577,9 @@ impl<'a> Viewer<'a> {
         if let Some(new_selection) = self.find_closest_block_in_direction(current_point, direction)
         {
             self.state.selected_block = Some(new_selection);
-            self.center_on_block(new_selection);
-        } else {
-            // If no valid node was found, scroll the viewport a bit to keep the user moving.
-            let scroll_amount = match direction {
-                NavDirection::Up => -3,
-                NavDirection::Down => 3,
-                // If left/right has no best candidate, do nothing for now
-                _ => 0,
-            };
-            self.state.offset_y += scroll_amount;
+            if let Err(e) = self.center_on_block(new_selection) {
+                warn!("Viewer - error finding block to switch to: {}", e);
+            }
         }
     }
 
@@ -624,7 +705,7 @@ impl<'a> Viewer<'a> {
         let total_width = max_x - min_x;
         let total_height = max_y - min_y;
 
-        // If it's the initial positioning, there is only one allowed position.
+        // If it's the initial placement, there is only one allowed position.
         if self.state.first_render {
             let desired_x = cursor_x - vp_width / 2.0;
             let desired_y = cursor_y - vp_height / 2.0;
@@ -678,6 +759,22 @@ impl<'a> Viewer<'a> {
         self.state.offset_y = desired_y.round() as i32;
     }
 
+    /// Get the terminal coordinates of a block's center point
+    fn get_block_terminal_coords(&self, block: GraphNode) -> Option<(f64, f64)> {
+        if let Some(((start, y), (end, _))) = self.scaled_layout.labels.get(&block) {
+            let block_center_x = (start + end) / 2.0;
+            let block_center_y = *y;
+
+            // Convert from world coordinates to terminal coordinates
+            let terminal_x = block_center_x - self.state.offset_x as f64;
+            let terminal_y = block_center_y - self.state.offset_y as f64;
+
+            Some((terminal_x, terminal_y))
+        } else {
+            None
+        }
+    }
+
     pub fn handle_input(&mut self, key: KeyEvent) {
         // Scrolling through the graph
         match key.code {
@@ -688,14 +785,7 @@ impl<'a> Viewer<'a> {
                 } else if key.modifiers.contains(KeyModifiers::ALT) {
                     self.state.offset_x -= 1;
                 } else {
-                    // Try to select center block if no block is selected
-                    if self.state.selected_block.is_none() && self.select_center_block().is_none() {
-                        // If we couldn't find a center block, move the offset directly
-                        self.state.offset_x -= self.state.viewport.width as i32 / 3;
-                    } else {
-                        // Move selection if we have a block selected (either from before or just now)
-                        self.move_selection(NavDirection::Left);
-                    }
+                    self.move_selection(NavDirection::Left);
                 }
             }
             KeyCode::Right => {
@@ -704,10 +794,6 @@ impl<'a> Viewer<'a> {
                     self.unselect_if_not_visible();
                 } else if key.modifiers.contains(KeyModifiers::ALT) {
                     self.state.offset_x += 1;
-                } else if self.state.selected_block.is_none()
-                    && self.select_center_block().is_none()
-                {
-                    self.state.offset_x += self.state.viewport.width as i32 / 3;
                 } else {
                     self.move_selection(NavDirection::Right);
                 }
@@ -718,10 +804,6 @@ impl<'a> Viewer<'a> {
                     self.unselect_if_not_visible();
                 } else if key.modifiers.contains(KeyModifiers::ALT) {
                     self.state.offset_y += 1;
-                } else if self.state.selected_block.is_none()
-                    && self.select_center_block().is_none()
-                {
-                    self.state.offset_y += self.state.viewport.height as i32 / 3;
                 } else {
                     self.move_selection(NavDirection::Down);
                 }
@@ -732,16 +814,18 @@ impl<'a> Viewer<'a> {
                     self.unselect_if_not_visible();
                 } else if key.modifiers.contains(KeyModifiers::ALT) {
                     self.state.offset_y -= 1;
-                } else if self.state.selected_block.is_none()
-                    && self.select_center_block().is_none()
-                {
-                    self.state.offset_y -= self.state.viewport.height as i32 / 3;
                 } else {
                     self.move_selection(NavDirection::Up);
                 }
             }
             // Zooming in and out
             KeyCode::Char('+') | KeyCode::Char('=') => {
+                // Record terminal coordinates of selected block before zoom
+                let terminal_coords = self
+                    .state
+                    .selected_block
+                    .and_then(|block| self.get_block_terminal_coords(block));
+
                 // Increase how much of the sequence is shown in each block label.
                 if self.parameters.label_width == u32::MAX {
                     self.parameters.scale += 2; // Even increments look better
@@ -762,13 +846,30 @@ impl<'a> Viewer<'a> {
                 // Recalculate the layout.
                 self.scaled_layout
                     .refresh(&self.base_layout, &self.parameters);
+                self.state.world = self.compute_bounding_box();
 
-                // Only center on block if we have one selected
-                if let Some(block) = self.state.selected_block {
-                    self.center_on_block(block);
+                // Adjust viewport to maintain terminal coordinates of selected block
+                if let Some((old_x, old_y)) = terminal_coords {
+                    if let Some(block) = self.state.selected_block {
+                        if let Some(((start, y), (end, _))) = self.scaled_layout.labels.get(&block)
+                        {
+                            let new_center_x = (start + end) / 2.0;
+                            let new_center_y = *y;
+
+                            // Calculate new offsets to maintain terminal coordinates
+                            self.state.offset_x = (new_center_x - old_x).round() as i32;
+                            self.state.offset_y = (new_center_y - old_y).round() as i32;
+                        }
+                    }
                 }
             }
             KeyCode::Char('-') | KeyCode::Char('_') => {
+                // Record terminal coordinates of selected block before zoom
+                let terminal_coords = self
+                    .state
+                    .selected_block
+                    .and_then(|block| self.get_block_terminal_coords(block));
+
                 // Decrease how much of the sequence is shown in each block label.
                 if self.parameters.scale > 2 {
                     self.parameters.scale -= 2;
@@ -787,9 +888,21 @@ impl<'a> Viewer<'a> {
 
                 self.scaled_layout
                     .refresh(&self.base_layout, &self.parameters);
+                self.state.world = self.compute_bounding_box();
 
-                if let Some(block) = self.state.selected_block {
-                    self.center_on_block(block);
+                // Adjust viewport to maintain terminal coordinates of selected block
+                if let Some((old_x, old_y)) = terminal_coords {
+                    if let Some(block) = self.state.selected_block {
+                        if let Some(((start, y), (end, _))) = self.scaled_layout.labels.get(&block)
+                        {
+                            let new_center_x = (start + end) / 2.0;
+                            let new_center_y = *y;
+
+                            // Calculate new offsets to maintain terminal coordinates
+                            self.state.offset_x = (new_center_x - old_x).round() as i32;
+                            self.state.offset_y = (new_center_y - old_y).round() as i32;
+                        }
+                    }
                 }
             }
             KeyCode::Char('s') | KeyCode::Char('S') => {

@@ -1,9 +1,8 @@
 use crate::models::{block_group::BlockGroup, node::Node, traits::Query};
-use crate::progress_bar::{get_handler, get_message_bar, get_progress_bar, get_time_elapsed_bar};
+use crate::progress_bar::{get_handler, get_time_elapsed_bar};
 use crate::views::block_group_viewer::{PlotParameters, Viewer};
 use rusqlite::{params, Connection};
 
-use core::panic;
 use crossterm::{
     event::{self, KeyCode, KeyEventKind},
     execute,
@@ -137,11 +136,6 @@ pub fn view_block_group(
                 (false, true) => panel_layout[0],
                 (false, false) => outer_layout[0],
             };
-
-            let status_message = format!(
-                "{message} | return: show information on block | q=quit",
-                message = Viewer::get_status_line()
-            );
 
             // Sidebar
             if show_sidebar {
