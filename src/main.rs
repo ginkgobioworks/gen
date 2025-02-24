@@ -24,6 +24,7 @@ use gen::models::sample::Sample;
 use gen::operation_management;
 use gen::operation_management::{parse_patch_operations, OperationError};
 use gen::patch;
+use gen::translate;
 use gen::updates::fasta::update_with_fasta;
 use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
 use gen::updates::genbank::update_with_genbank;
@@ -36,7 +37,6 @@ use gen::views::patch::view_patches;
 
 use itertools::Itertools;
 use noodles::core::Region;
-use noodles::gff::directive::name;
 use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
 use std::fs::File;
@@ -72,6 +72,16 @@ enum Commands {
         /// For update-gaf, this transforms the csv to a fasta for use in alignments
         #[arg(long)]
         format_csv_for_gaf: Option<String>,
+    },
+    /// Commands for transforming file types for input to Gen.
+    #[command(arg_required_else_help(true))]
+    Translate {
+        /// Transform coordinates of a BED to graph nodes
+        translate_bed: Option<String>,
+        /// Transform coordinates of a GFF to graph nodes
+        translate_gff: Option<String>,
+        collection: Option<String>,
+        sample: Option<String>,
     },
     /// Import a new sequence collection.
     #[command(arg_required_else_help(true))]
@@ -702,6 +712,29 @@ fn main() {
             );
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
+        }
+        Some(Commands::Translate {
+            translate_bed,
+            translate_gff,
+            collection,
+            sample,
+        }) => {
+            let collection = &collection
+                .clone()
+                .unwrap_or_else(|| get_default_collection(&operation_conn));
+            if let Some(bed) = translate_bed {
+                let stdout = io::stdout();
+                let mut handle = stdout.lock();
+                let mut bed_file = File::open(bed).unwrap();
+                translate::bed::translate_bed(
+                    &conn,
+                    collection,
+                    sample.as_deref(),
+                    &mut bed_file,
+                    &mut handle,
+                );
+            } else if let Some(gff) = translate_gff {
+            }
         }
         Some(Commands::Operations {
             interactive,
