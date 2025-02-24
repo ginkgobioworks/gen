@@ -10,7 +10,7 @@ use gen::exports::fasta::export_fasta;
 use gen::exports::genbank::export_genbank;
 use gen::exports::gfa::export_gfa;
 use gen::get_connection;
-use gen::graph_operators::{derive_chunks, get_breakpoint_ranges, get_sized_ranges};
+use gen::graph_operators::{derive_chunks, get_path};
 use gen::imports::fasta::{import_fasta, FastaError};
 use gen::imports::genbank::import_genbank;
 use gen::imports::gfa::{import_gfa, GFAImportError};
@@ -1125,7 +1125,7 @@ fn main() {
             let interval = parsed_region.interval();
             let start_coordinate = interval.start().unwrap().get() as i64;
             let end_coordinate = interval.end().unwrap().get() as i64;
-            derive_chunks(
+            match derive_chunks(
                 &conn,
                 &operation_conn,
                 name,
@@ -1137,7 +1137,10 @@ fn main() {
                     start: start_coordinate,
                     end: end_coordinate,
                 }],
-            );
+            ) {
+                Ok(_) => {}
+                Err(e) => panic!("Error deriving subgraph: {e}"),
+            }
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
         }
@@ -1160,32 +1163,55 @@ fn main() {
             let parsed_region = region.parse::<Region>().unwrap();
             let interval = parsed_region.interval();
 
-            let chunk_ranges;
+            let path_length = match get_path(
+                &conn,
+                name,
+                sample_name.as_deref(),
+                &parsed_region.name().to_string(),
+                backbone.as_deref(),
+            ) {
+                Ok(path) => path.length(&conn),
+                Err(e) => panic!("Error deriving subgraph(s): {e}"),
+            };
+
+            let chunk_points;
             if let Some(breakpoints) = breakpoints {
-                chunk_ranges = get_breakpoint_ranges(
-                    &conn,
-                    name,
-                    sample_name.as_deref(),
-                    &new_sample_name,
-                    &parsed_region.name().to_string(),
-                    backbone.as_deref(),
-                    breakpoints,
-                );
+                chunk_points = breakpoints
+                    .split(",")
+                    .map(|x| x.parse::<i64>().unwrap())
+                    .sorted()
+                    .collect::<Vec<i64>>();
             } else if let Some(chunk_size) = chunk_size {
-                chunk_ranges = get_sized_ranges(
-                    &conn,
-                    name,
-                    sample_name.as_deref(),
-                    &new_sample_name,
-                    &parsed_region.name().to_string(),
-                    backbone.as_deref(),
-                    *chunk_size,
-                );
+                let chunk_count = path_length / chunk_size;
+                chunk_points = (0..chunk_count)
+                    .map(|i| i * chunk_size)
+                    .collect::<Vec<i64>>();
             } else {
                 panic!("No chunking method specified.");
             }
 
-            derive_chunks(
+            if chunk_points.is_empty() {
+                panic!("No chunk coordinates provided.");
+            }
+            if chunk_points[chunk_points.len() - 1] > path_length {
+                panic!("At least one chunk coordinate exceeds path length.");
+            }
+
+            let mut range_start = 0;
+            let mut chunk_ranges = vec![];
+            for chunk_point in chunk_points {
+                chunk_ranges.push(Range {
+                    start: range_start,
+                    end: chunk_point,
+                });
+                range_start = chunk_point;
+            }
+            chunk_ranges.push(Range {
+                start: range_start,
+                end: path_length,
+            });
+
+            match derive_chunks(
                 &conn,
                 &operation_conn,
                 name,
@@ -1194,7 +1220,10 @@ fn main() {
                 &parsed_region.name().to_string(),
                 backbone.as_deref(),
                 chunk_ranges,
-            );
+            ) {
+                Ok(_) => {}
+                Err(e) => panic!("Error deriving subgraph(s): {e}"),
+            }
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
         }

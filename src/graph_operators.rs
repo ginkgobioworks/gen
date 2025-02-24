@@ -4,109 +4,50 @@ use crate::models::{
     block_group_edge::BlockGroupEdge,
     file_types::FileTypes,
     node::{PATH_END_NODE_ID, PATH_START_NODE_ID},
-    operations::OperationInfo,
+    operations::{Operation, OperationInfo},
     path::Path,
     path_edge::PathEdge,
     sample::Sample,
 };
-use crate::operation_management;
+use crate::operation_management::{end_operation, start_operation, OperationError};
 use core::ops::Range;
 use rusqlite::Connection;
 use std::collections::HashSet;
-use std::io;
+use thiserror::Error;
 
-fn get_path(conn: &Connection, block_group_id: i64, backbone: Option<&str>) -> Path {
+#[derive(Debug, Error, PartialEq)]
+pub enum DeriveGraphError {
+    #[error("Operation Error: {0}")]
+    OperationError(#[from] OperationError),
+    #[error("Invalid coordinate(s): {0}")]
+    InvalidCoordinate(String),
+    #[error("Region not found: {0}")]
+    RegionNotFound(String),
+    #[error("Path not found: {0}")]
+    PathNotFound(String),
+}
+
+pub fn get_path(
+    conn: &Connection,
+    collection_name: &str,
+    sample_name: Option<&str>,
+    region_name: &str,
+    backbone: Option<&str>,
+) -> Result<Path, DeriveGraphError> {
+    let block_group_id = get_block_group_id(conn, collection_name, sample_name, region_name)?;
+
     if let Some(backbone) = backbone {
         let path = BlockGroup::get_path_by_name(conn, block_group_id, backbone);
         if path.is_none() {
-            panic!("No path found with name {}", backbone);
+            return Err(DeriveGraphError::PathNotFound(format!(
+                "No path found with name {}",
+                backbone
+            )));
         }
-        path.unwrap()
+        Ok(path.unwrap())
     } else {
-        BlockGroup::get_current_path(conn, block_group_id)
+        Ok(BlockGroup::get_current_path(conn, block_group_id))
     }
-}
-
-// Given a specific chunk size, returns a list of ranges of that chunk size that cover the entire
-// path
-pub fn get_sized_ranges(
-    conn: &Connection,
-    collection_name: &str,
-    parent_sample_name: Option<&str>,
-    new_sample_name: &str,
-    region_name: &str,
-    backbone: Option<&str>,
-    chunk_size: i64,
-) -> Vec<Range<i64>> {
-    let _new_sample = Sample::get_or_create(conn, new_sample_name);
-    let parent_block_group_id =
-        get_parent_block_group_id(conn, collection_name, parent_sample_name, region_name);
-
-    let current_path = get_path(conn, parent_block_group_id, backbone);
-
-    let path_length = current_path.sequence(conn).len() as i64;
-
-    let mut range_start = 0;
-    let chunk_count = path_length / chunk_size;
-    let chunk_remainder = path_length % chunk_size;
-
-    let mut chunk_ranges = vec![];
-    for _ in 0..chunk_count {
-        chunk_ranges.push(Range {
-            start: range_start,
-            end: range_start + chunk_size,
-        });
-        range_start += chunk_size;
-    }
-    if chunk_remainder > 0 {
-        chunk_ranges.push(Range {
-            start: range_start,
-            end: path_length,
-        });
-    }
-
-    chunk_ranges
-}
-
-// Given specific points on a path, returns a list of ranges that cover the entire path, broken up
-// by the input points
-pub fn get_breakpoint_ranges(
-    conn: &Connection,
-    collection_name: &str,
-    parent_sample_name: Option<&str>,
-    new_sample_name: &str,
-    region_name: &str,
-    backbone: Option<&str>,
-    breakpoints: &str,
-) -> Vec<Range<i64>> {
-    let _new_sample = Sample::get_or_create(conn, new_sample_name);
-    let parent_block_group_id =
-        get_parent_block_group_id(conn, collection_name, parent_sample_name, region_name);
-
-    let current_path = get_path(conn, parent_block_group_id, backbone);
-
-    let path_length = current_path.sequence(conn).len() as i64;
-
-    let parsed_breakpoints = breakpoints
-        .split(",")
-        .map(|x| x.parse::<i64>().unwrap())
-        .collect::<Vec<i64>>();
-
-    let mut range_start = 0;
-    let mut chunk_ranges = vec![];
-    for breakpoint in parsed_breakpoints {
-        chunk_ranges.push(Range {
-            start: range_start,
-            end: breakpoint,
-        });
-        range_start = breakpoint;
-    }
-    chunk_ranges.push(Range {
-        start: range_start,
-        end: path_length,
-    });
-
-    chunk_ranges
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -119,15 +60,21 @@ pub fn derive_chunks(
     region_name: &str,
     backbone: Option<&str>,
     chunk_ranges: Vec<Range<i64>>,
-) -> io::Result<()> {
-    let mut session = operation_management::start_operation(conn);
+) -> Result<Operation, DeriveGraphError> {
+    let mut session = start_operation(conn);
     let _new_sample = Sample::get_or_create(conn, new_sample_name);
+
     let parent_block_group_id =
-        get_parent_block_group_id(conn, collection_name, parent_sample_name, region_name);
+        get_block_group_id(conn, collection_name, parent_sample_name, region_name)?;
+    let current_path = get_path(
+        conn,
+        collection_name,
+        parent_sample_name,
+        region_name,
+        backbone,
+    )?;
 
-    let current_path = get_path(conn, parent_block_group_id, backbone);
-
-    let current_path_length = current_path.sequence(conn).len() as i64;
+    let current_path_length = current_path.length(conn);
     let current_intervaltree = current_path.intervaltree(conn);
     let current_edges = PathEdge::edges_for_path(conn, current_path.id);
 
@@ -146,10 +93,10 @@ pub fn derive_chunks(
         if (start_coordinate < 0 || start_coordinate > current_path_length)
             || (end_coordinate < 0 || end_coordinate > current_path_length)
         {
-            panic!(
+            return Err(DeriveGraphError::InvalidCoordinate(format!(
                 "Start and/or end coordinates ({}, {}) are out of range for the current path.",
                 start_coordinate, end_coordinate
-            );
+            )));
         }
 
         let mut blocks = current_intervaltree
@@ -226,7 +173,7 @@ pub fn derive_chunks(
         new_sample_name,
         chunk_ranges.len()
     );
-    operation_management::end_operation(
+    let op = end_operation(
         conn,
         operation_conn,
         &mut session,
@@ -240,28 +187,31 @@ pub fn derive_chunks(
         &summary_str,
         None,
     )
-    .unwrap();
+    .map_err(DeriveGraphError::OperationError);
 
     println!("Derived chunks successfully.");
 
-    Ok(())
+    op
 }
 
-fn get_parent_block_group_id(
+fn get_block_group_id(
     conn: &Connection,
     collection_name: &str,
     parent_sample_name: Option<&str>,
     region_name: &str,
-) -> i64 {
+) -> Result<i64, DeriveGraphError> {
     let block_groups = Sample::get_block_groups(conn, collection_name, parent_sample_name);
 
     for block_group in &block_groups {
         if block_group.name == region_name {
-            return block_group.id;
+            return Ok(block_group.id);
         }
     }
 
-    panic!("No region found with name: {}", region_name);
+    Err(DeriveGraphError::RegionNotFound(format!(
+        "No region found with name: {}",
+        region_name
+    )))
 }
 
 #[cfg(test)]
