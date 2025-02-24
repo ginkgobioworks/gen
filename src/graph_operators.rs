@@ -331,9 +331,9 @@ pub fn make_stitch(
         }
     }
 
-    let new_block_group =
+    let child_block_group =
         BlockGroup::create(conn, collection_name, Some(new_sample_name), new_name);
-    let new_block_group_id = new_block_group.id;
+    let child_block_group_id = child_block_group.id;
 
     let mut new_path_edge_ids = vec![concatenated_path_edges[0].id];
     let mut stitch_count = 0;
@@ -348,12 +348,12 @@ pub fn make_stitch(
 
     new_path_edge_ids.push(concatenated_path_edges[concatenated_path_edges.len() - 1].id);
 
-    Path::create(conn, new_name, new_block_group_id, &new_path_edge_ids);
+    Path::create(conn, new_name, child_block_group_id, &new_path_edge_ids);
 
     let bg_edges_for_existing_edges = edges_to_reuse
         .iter()
         .map(|edge| BlockGroupEdgeData {
-            block_group_id: new_block_group_id,
+            block_group_id: child_block_group_id,
             edge_id: edge.edge.id,
             chromosome_index: edge.chromosome_index,
             phased: edge.phased,
@@ -372,14 +372,14 @@ pub fn make_stitch(
     for created_edge in created_edges {
         if path_edge_id_set.contains(&created_edge.id) {
             bg_edges.push(BlockGroupEdgeData {
-                block_group_id: new_block_group_id,
+                block_group_id: child_block_group_id,
                 edge_id: created_edge.id,
                 chromosome_index: 0,
                 phased: 0,
             });
         } else {
             bg_edges.push(BlockGroupEdgeData {
-                block_group_id: new_block_group_id,
+                block_group_id: child_block_group_id,
                 edge_id: created_edge.id,
                 chromosome_index: chromosome_index_counter,
                 phased: 0,
@@ -455,7 +455,11 @@ mod tests {
             .sequence_type("DNA")
             .sequence("AAAAAAAA")
             .save(conn);
-        let insert_node_id = Node::create(conn, insert_sequence.hash.as_str(), None);
+        let insert_node_id = Node::create(
+            conn,
+            insert_sequence.hash.as_str(),
+            format!("test-insert-a.{}", insert_sequence.hash),
+        );
         let edge_into_insert = Edge::create(
             conn,
             insert_start_node_id,
