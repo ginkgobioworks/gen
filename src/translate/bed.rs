@@ -37,8 +37,10 @@ where
 
     while bed_reader.read_record(&mut record)? != 0 {
         let ref_name = record.reference_sequence_name().to_string();
-        let start = record.feature_start().unwrap().get() as i64;
+        // noodles converts to 1 index, keep it 0.
+        let start = (record.feature_start().unwrap().get() as i64 - 1);
         let end = record.feature_end().unwrap().unwrap().get() as i64;
+        println!("{ref_name:?} {start} {end}");
         if let Some(bg) = sample_bgs.get(&ref_name) {
             let projection = paths.entry(bg.id).or_insert_with(|| {
                 let path = BlockGroup::get_current_path(conn, bg.id);
@@ -58,9 +60,10 @@ where
             for (overlap, (node, _strand)) in projection.iter_overlaps(&range) {
                 let overlap_start = max(start, overlap.start) as usize;
                 let overlap_end = min(end, overlap.end) as usize;
+                println!("ol is {overlap:?} {overlap_start} {overlap_end}");
                 let out_record = bed::feature::RecordBuf::<3>::builder()
                     .set_reference_sequence_name(format!("{nid}", nid = node.node_id))
-                    .set_feature_start(Position::try_from(overlap_start - 1).unwrap())
+                    .set_feature_start(Position::try_from(overlap_start + 1).unwrap())
                     .set_feature_end(Position::try_from(overlap_end).unwrap())
                     .set_other_fields(other_fields.clone())
                     .build();
@@ -126,12 +129,12 @@ mod tests {
         assert_eq!(
             results,
             "\
-        3\t0\t3\tabc123.1\t0\t-\t1\t10\t0,0,0\t3\t102,188,129,\t0,3508,4691,\n\
-        3\t1\t5\tabc123.1\t0\t-\t1\t10\t0,0,0\t3\t102,188,129,\t0,3508,4691,\n\
-        3\t3\t10\tabc123.1\t0\t-\t1\t10\t0,0,0\t3\t102,188,129,\t0,3508,4691,\n\
-        3\t4\t8\txyz.1\t0\t-\t5\t8\t0,0,0\t1\t113,\t0,\n\
-        3\t9\t16\txyz.2\t0\t+\t10\t16\t0,0,0\t2\t142,326,\t0,10710,\n\
-        3\t13\t23\tfoo.1\t0\t+\t14\t23\t0,0,0\t2\t142,326,\t0,10710,\n"
+        3\t1\t3\tabc123.1\t0\t-\t1\t10\t0,0,0\t3\t102,188,129,\t0,3508,4691,\n\
+        3\t3\t5\tabc123.1\t0\t-\t1\t10\t0,0,0\t3\t102,188,129,\t0,3508,4691,\n\
+        3\t5\t10\tabc123.1\t0\t-\t1\t10\t0,0,0\t3\t102,188,129,\t0,3508,4691,\n\
+        3\t5\t8\txyz.1\t0\t-\t5\t8\t0,0,0\t1\t113,\t0,\n\
+        3\t10\t16\txyz.2\t0\t+\t10\t16\t0,0,0\t2\t142,326,\t0,10710,\n\
+        3\t14\t23\tfoo.1\t0\t+\t14\t23\t0,0,0\t2\t142,326,\t0,10710,\n"
         );
 
         // The None sample is not split, so should be a simple mapping
@@ -147,10 +150,10 @@ mod tests {
         assert_eq!(
             results,
             "\
-        3\t0\t10\tabc123.1\t0\t-\t1\t10\t0,0,0\t3\t102,188,129,\t0,3508,4691,\n\
-        3\t4\t8\txyz.1\t0\t-\t5\t8\t0,0,0\t1\t113,\t0,\n\
-        3\t9\t16\txyz.2\t0\t+\t10\t16\t0,0,0\t2\t142,326,\t0,10710,\n\
-        3\t13\t23\tfoo.1\t0\t+\t14\t23\t0,0,0\t2\t142,326,\t0,10710,\n"
+        3\t1\t10\tabc123.1\t0\t-\t1\t10\t0,0,0\t3\t102,188,129,\t0,3508,4691,\n\
+        3\t5\t8\txyz.1\t0\t-\t5\t8\t0,0,0\t1\t113,\t0,\n\
+        3\t10\t16\txyz.2\t0\t+\t10\t16\t0,0,0\t2\t142,326,\t0,10710,\n\
+        3\t14\t23\tfoo.1\t0\t+\t14\t23\t0,0,0\t2\t142,326,\t0,10710,\n"
         );
     }
 }
