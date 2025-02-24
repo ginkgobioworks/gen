@@ -1,6 +1,7 @@
 use crate::models::{block_group::BlockGroup, node::Node, traits::Query};
 use crate::progress_bar::{get_handler, get_time_elapsed_bar};
 use crate::views::block_group_viewer::{PlotParameters, Viewer};
+use crate::views::collection::CollectionExplorer;
 use rusqlite::{params, Connection};
 
 use crossterm::{
@@ -16,6 +17,7 @@ use ratatui::{
 };
 use std::error::Error;
 use std::time::{Duration, Instant};
+use tui_scrollview::ScrollViewState;
 
 pub fn view_block_group(
     conn: &Connection,
@@ -76,7 +78,7 @@ pub fn view_block_group(
     bar.finish();
 
     // Styling:
-    let sidebar_style = Style::default().bg(Color::DarkGray).fg(Color::White);
+    //let sidebar_style = Style::default().bg(Color::DarkGray).fg(Color::White);
     let panel_style = Style::default().bg(Color::DarkGray).fg(Color::White);
 
     // Setup terminal
@@ -89,7 +91,7 @@ pub fn view_block_group(
     let tick_rate = Duration::from_millis(100);
     let mut last_tick = Instant::now();
     let mut show_panel = false;
-    let show_sidebar = false;
+    let show_sidebar = true;
     let mut tui_layout_change = false;
     loop {
         // Draw the UI
@@ -141,11 +143,26 @@ pub fn view_block_group(
             if show_sidebar {
                 let sidebar_block = Block::default()
                     .padding(Padding::new(2, 2, 1, 1))
-                    .style(sidebar_style);
-                let sidebar_contents = "Samples\ntest\ntest".to_string();
-                let sidebar_content =
-                    Paragraph::new(Text::from(sidebar_contents)).block(sidebar_block);
-                frame.render_widget(sidebar_content, sidebar_area);
+                    .style(Style::default().bg(Color::Indexed(233)));
+                let sidebar_content_area = sidebar_block.inner(sidebar_area);
+
+                // Get the default collection from the defaults table
+                // let mut stmt = conn
+                //     .prepare("select collection_name from defaults where id = 1")
+                //     .unwrap();
+                // let default_collection = stmt.query_row((), |row| row.get(0))
+                //     .unwrap_or("default".to_string());
+
+                let default_collection = "default";
+
+                let explorer = CollectionExplorer::new(conn, default_collection);
+
+                let mut scroll_state = ScrollViewState::default();
+
+                // Render the block first to set the background
+                frame.render_widget(sidebar_block.clone(), sidebar_area);
+                // Then render the explorer content
+                frame.render_stateful_widget(explorer, sidebar_content_area, &mut scroll_state);
             }
 
             // Status bar

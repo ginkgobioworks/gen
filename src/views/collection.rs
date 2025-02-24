@@ -2,8 +2,17 @@ use crate::models::block_group::BlockGroup;
 use crate::models::collection::Collection;
 use crate::models::sample::Sample;
 use crate::models::traits::Query;
+use ratatui::style::Modifier;
+use ratatui::{
+    buffer::Buffer,
+    layout::{Rect, Size},
+    style::{Color, Style},
+    text::{Line, Span},
+    widgets::{Paragraph, StatefulWidget},
+};
 use rusqlite::{params, Connection};
 use std::collections::{HashMap, HashSet};
+use tui_scrollview::{ScrollView, ScrollViewState};
 
 /// Normalize a hierarchical collection name by removing trailing delimiters
 /// (except if the entire collection name is "/"). For example:
@@ -78,14 +87,14 @@ pub struct CollectionExplorerData {
     pub nested_collections: Vec<String>,
 }
 
-/// Gathers information about a hierarchical collection, enumerating direct
-/// block groups, sampled block groups, and immediate sub-collections.
+/// Gathers information about a hierarchical collection, enumerating reference (null-sample)
+/// block groups, sample block groups, and immediate sub-collections.
 pub fn gather_collection_explorer_data(
     conn: &Connection,
     full_collection_name: &str,
 ) -> CollectionExplorerData {
     let current_collection = collection_basename(full_collection_name).to_string();
-    let parent = parent_collection(full_collection_name);
+    let _parent = parent_collection(full_collection_name);
 
     // 2) Query block groups that have sample_name = NULL for the entire collection
     let base_bgs = BlockGroup::query(
@@ -144,6 +153,109 @@ pub fn gather_collection_explorer_data(
         collection_samples,
         sample_block_groups,
         nested_collections,
+    }
+}
+
+pub struct CollectionExplorer {
+    // Add fields to store the data we want to display
+    pub data: CollectionExplorerData,
+}
+
+impl CollectionExplorer {
+    pub fn new(conn: &Connection, full_collection_name: &str) -> Self {
+        // Gather the data directly in the constructor
+        let data = gather_collection_explorer_data(conn, full_collection_name);
+        Self { data }
+    }
+}
+
+impl StatefulWidget for CollectionExplorer {
+    type State = ScrollViewState;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        let mut lines = Vec::new();
+
+        // Add current collection name
+        lines.push(Line::from(vec![
+            Span::raw("Collection: "),
+            Span::raw(&self.data.current_collection),
+        ]));
+        lines.push(Line::raw(String::new()));
+
+        // Add reference block groups
+        lines.push(Line::raw("Reference graphs:"));
+        for (_, name) in &self.data.reference_block_groups {
+            lines.push(Line::from(vec![
+                Span::styled(format!("- {}", name), Style::default().fg(Color::Gray)),
+                Span::styled(
+                    " g",
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .add_modifier(Modifier::ITALIC),
+                ),
+            ]));
+        }
+        lines.push(Line::raw(String::new()));
+
+        // Add samples and their block groups
+        lines.push(Line::raw("Samples:"));
+        for sample in &self.data.collection_samples {
+            lines.push(Line::from(vec![
+                Span::raw("  ▼ "),
+                Span::styled(sample, Style::default().fg(Color::Gray)),
+                Span::styled(
+                    " s",
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .add_modifier(Modifier::ITALIC),
+                ),
+            ]));
+            if let Some(block_groups) = self.data.sample_block_groups.get(sample) {
+                for (_, name) in block_groups {
+                    lines.push(Line::from(vec![
+                        Span::styled(format!("- {}", name), Style::default().fg(Color::Gray)),
+                        Span::styled(
+                            " g",
+                            Style::default()
+                                .fg(Color::DarkGray)
+                                .add_modifier(Modifier::ITALIC),
+                        ),
+                    ]));
+                }
+            }
+        }
+        lines.push(Line::raw(String::new()));
+
+        // Add nested collections
+        lines.push(Line::raw("Nested Collections:"));
+        for collection in &self.data.nested_collections {
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(collection, Style::default().fg(Color::Gray)),
+                Span::styled(
+                    " c",
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .add_modifier(Modifier::ITALIC),
+                ),
+            ]));
+        }
+
+        // Calculate content size
+        let content_height = lines.len() as u16;
+        let content_size = Size::new(area.width, content_height);
+
+        // Create scroll view
+        let mut scroll_view = ScrollView::new(content_size);
+
+        // Render the content and then the scroll view itself
+        scroll_view.render_widget(
+            Paragraph::new(lines)
+                .wrap(ratatui::widgets::Wrap { trim: true })
+                .style(Style::default().bg(Color::Indexed(233))),
+            Rect::new(0, 0, area.width, content_height),
+        );
+        scroll_view.render(area, buf, state);
     }
 }
 
