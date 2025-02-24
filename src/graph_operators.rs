@@ -253,8 +253,8 @@ pub fn make_stitch(
     collection_name: &str,
     parent_sample_name: Option<&str>,
     new_sample_name: &str,
-    region_names: Vec<&str>,
-    new_name: &str,
+    region_names: &Vec<&str>,
+    new_region_name: &str,
 ) -> Result<Operation, GraphOperationError> {
     let mut session = start_operation(conn);
 
@@ -279,7 +279,7 @@ pub fn make_stitch(
     // * Except edges to/from terminal nodes
     // * Also build up a list of edges to create to stitch end nodes of one region to start nodes of
     // the next region
-    for region_name in &region_names {
+    for region_name in region_names {
         if let Some(block_group) = block_groups_by_name.get(region_name) {
             let edges = BlockGroupEdge::edges_for_block_group(conn, block_group.id);
 
@@ -354,8 +354,12 @@ pub fn make_stitch(
     // new edges.
     // We'll do a bulk create for the bg edges later in one big call, once we have more information
     // for the new edges (which will also get bg edges created then)
-    let child_block_group =
-        BlockGroup::create(conn, collection_name, Some(new_sample_name), new_name);
+    let child_block_group = BlockGroup::create(
+        conn,
+        collection_name,
+        Some(new_sample_name),
+        new_region_name,
+    );
     let child_block_group_id = child_block_group.id;
 
     let mut bg_edges = edges_to_reuse
@@ -453,7 +457,12 @@ pub fn make_stitch(
 
     BlockGroupEdge::bulk_create(conn, &bg_edges);
 
-    Path::create(conn, new_name, child_block_group_id, &new_path_edge_ids);
+    Path::create(
+        conn,
+        new_region_name,
+        child_block_group_id,
+        &new_path_edge_ids,
+    );
 
     let summary_str = format!(
         " {}: stitched {} chunks into new graph",
@@ -833,7 +842,7 @@ mod tests {
             collection,
             Some("test3"),
             "test4",
-            vec!["m123.2", "m123.3"],
+            &vec!["m123.2", "m123.3"],
             "m123.stitched",
         )
         .unwrap();
@@ -866,7 +875,7 @@ mod tests {
             collection,
             Some("test3"),
             "test5",
-            vec!["m123.3", "m123.2"],
+            &vec!["m123.3", "m123.2"],
             "m123.reverse-stitched",
         )
         .unwrap();
