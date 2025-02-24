@@ -40,7 +40,6 @@ where
         // noodles converts to 1 index, keep it 0.
         let start = (record.feature_start().unwrap().get() as i64 - 1);
         let end = record.feature_end().unwrap().unwrap().get() as i64;
-        println!("{ref_name:?} {start} {end}");
         if let Some(bg) = sample_bgs.get(&ref_name) {
             let projection = paths.entry(bg.id).or_insert_with(|| {
                 let path = BlockGroup::get_current_path(conn, bg.id);
@@ -60,7 +59,6 @@ where
             for (overlap, (node, _strand)) in projection.iter_overlaps(&range) {
                 let overlap_start = max(start, overlap.start) as usize;
                 let overlap_end = min(end, overlap.end) as usize;
-                println!("ol is {overlap:?} {overlap_start} {overlap_end}");
                 let out_record = bed::feature::RecordBuf::<3>::builder()
                     .set_reference_sequence_name(format!("{nid}", nid = node.node_id))
                     .set_feature_start(Position::try_from(overlap_start + 1).unwrap())
