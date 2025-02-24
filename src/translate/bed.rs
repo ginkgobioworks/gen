@@ -38,7 +38,7 @@ where
     while bed_reader.read_record(&mut record)? != 0 {
         let ref_name = record.reference_sequence_name().to_string();
         // noodles converts to 1 index, keep it 0.
-        let start = (record.feature_start().unwrap().get() as i64 - 1);
+        let start = record.feature_start().unwrap().get() as i64 - 1;
         let end = record.feature_end().unwrap().unwrap().get() as i64;
         if let Some(bg) = sample_bgs.get(&ref_name) {
             let projection = paths.entry(bg.id).or_insert_with(|| {

@@ -65,7 +65,6 @@ impl From<Strand> for GFFStrand {
             Strand::Forward => GFFStrand::Forward,
             Strand::Unknown => GFFStrand::Unknown,
             Strand::Reverse => GFFStrand::Reverse,
-            Strand::Unknown => GFFStrand::None,
             Strand::ImportantButUnknown => GFFStrand::None,
         }
     }

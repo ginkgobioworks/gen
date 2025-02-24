@@ -40,7 +40,7 @@ use noodles::core::Region;
 use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
 use std::fs::File;
-use std::io::Write;
+use std::io::{BufReader, Write};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::{io, str};
@@ -73,14 +73,20 @@ enum Commands {
         #[arg(long)]
         format_csv_for_gaf: Option<String>,
     },
-    /// Commands for transforming file types for input to Gen.
+    /// Translate coordinates of standard bioinformatic file formats.
     #[command(arg_required_else_help(true))]
     Translate {
         /// Transform coordinates of a BED to graph nodes
+        #[arg(long)]
         translate_bed: Option<String>,
         /// Transform coordinates of a GFF to graph nodes
+        #[arg(long)]
         translate_gff: Option<String>,
+        /// The name of the collection to map sequences against
+        #[arg(short, long)]
         collection: Option<String>,
+        /// The sample name whose graph coordinates are mapped against
+        #[arg(short, long)]
         sample: Option<String>,
     },
     /// Import a new sequence collection.
@@ -732,8 +738,20 @@ fn main() {
                     sample.as_deref(),
                     &mut bed_file,
                     &mut handle,
-                );
+                )
+                .unwrap();
             } else if let Some(gff) = translate_gff {
+                let stdout = io::stdout();
+                let mut handle = stdout.lock();
+                let mut gff_file = BufReader::new(File::open(gff).unwrap());
+                translate::gff::translate_gff(
+                    &conn,
+                    collection,
+                    sample.as_deref(),
+                    &mut gff_file,
+                    &mut handle,
+                )
+                .unwrap();
             }
         }
         Some(Commands::Operations {

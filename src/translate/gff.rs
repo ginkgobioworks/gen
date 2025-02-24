@@ -38,7 +38,6 @@ where
         let ref_name = record.reference_sequence_name();
         let start = record.start().get() as i64;
         let end = record.end().get() as i64;
-        let strand = Strand::from(record.strand());
         if let Some(bg) = sample_bgs.get(ref_name) {
             let projection = paths.entry(bg.id).or_insert_with(|| {
                 let path = BlockGroup::get_current_path(conn, bg.id);
@@ -55,15 +54,11 @@ where
             });
             let range = start..end;
             for (overlap, (node, _overlap_strand)) in projection.iter_overlaps(&range) {
-                // if !Strand::is_compatible(*overlap_strand, strand) {
-                //     println!("not compat {overlap_strand:?} {strand:?}");
-                //     continue;
-                // }
                 let overlap_start = max(start, overlap.start) as usize;
                 let overlap_end = min(end, overlap.end) as usize;
                 println!("of is {overlap_start:?}");
 
-                let mut updated_record_builder =
+                let updated_record_builder =
                     gff::RecordBuf::builder()
                         .set_reference_sequence_name(format!("{nid}", nid = node.node_id))
                         .set_source(record.source().to_string())
