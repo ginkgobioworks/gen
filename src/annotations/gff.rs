@@ -47,7 +47,7 @@ pub fn propagate_gff(
         .map(|(name, path)| (name.clone(), path.sequence(conn).len() as i64))
         .collect::<HashMap<String, i64>>();
 
-    for result in reader.records() {
+    for result in reader.record_bufs() {
         let record = result?;
         let path_name = record.reference_sequence_name().to_string();
         let annotation = Annotation {
@@ -62,7 +62,7 @@ pub fn propagate_gff(
 
         let score = record.score();
         let phase = record.phase();
-        let mut updated_record_builder = gff::Record::builder()
+        let mut updated_record_builder = gff::RecordBuf::builder()
             .set_reference_sequence_name(path_name)
             .set_source(record.source().to_string())
             .set_type(record.ty().to_string())
@@ -156,7 +156,7 @@ mod tests {
 
         for (i, result) in reader
             .expect("Could not read output file!")
-            .records()
+            .record_bufs()
             .enumerate()
         {
             let record = result.unwrap();

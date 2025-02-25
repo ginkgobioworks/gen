@@ -22,7 +22,7 @@ include_dir = "0.7.4"
 intervaltree = "0.2.7"
 itertools = "0.13.0"
 lexical-core = "1.0.2"
-noodles = { version = "0.85.0", features = ["async", "bgzf", "core", "fasta", "gff", "vcf"] }
+noodles = { version = "0.93.0", features = ["async", "bed", "bgzf", "core", "fasta", "gff", "gtf", "vcf"] }
 petgraph = "0.6.5"
 remove_dir_all = "1.0.0"
 rusqlite = { version = "0.32.1", features = ["bundled", "array", "session"] }

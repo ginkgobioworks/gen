@@ -21,6 +21,7 @@ mod progress_bar;
 pub mod range;
 #[cfg(test)]
 pub mod test_helpers;
+pub mod translate;
 pub mod updates;
 pub mod views;
 
