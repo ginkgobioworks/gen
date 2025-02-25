@@ -107,6 +107,7 @@ pub fn view_block_group(
 
     loop {
         // Refresh explorer data and force reload on change
+        // TODO: this doesn't work as expected, and I don't understand why
         if explorer.refresh(conn, collection_name) {
             explorer.force_reload(&mut explorer_state);
         }
@@ -166,7 +167,7 @@ pub fn view_block_group(
             // Status bar
             let mut status_message = match focus_zone {
                 "canvas" => Viewer::get_status_line(),
-                "panel" => "esc: close panel | q".to_string(),
+                "panel" => "esc: close panel".to_string(),
                 "sidebar" => CollectionExplorer::get_status_line(),
                 _ => "".to_string(),
             };
@@ -175,7 +176,7 @@ pub fn view_block_group(
             status_message.push_str(" | tab: cycle focus | q: quit");
 
             let status_bar_contents = format!(
-                "{status_message:width$}",
+                "{status_message:^width$}",
                 width = status_bar_area.width as usize
             );
 
