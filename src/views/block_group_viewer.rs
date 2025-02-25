@@ -4,8 +4,8 @@ use crate::models::node::Node;
 use crate::models::sequence::Sequence;
 use crate::views::block_layout::{BaseLayout, ScaledLayout};
 
-use core::panic;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use log::warn;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
 use ratatui::{
@@ -18,6 +18,8 @@ use ratatui::{
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
 
+// Show more visual information if DEBUG
+const DEBUG: bool = false;
 /// Labels used in the graph visualization (selected, not-selected)
 /// the trick is to get them to align with the braille characters
 /// we use to draw lines:
@@ -28,6 +30,15 @@ pub mod label {
     pub const NODE: &str = "⏺";
 }
 
+/// Used for scrolling through the graph.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum NavDirection {
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
 /// Holds parameters that don't change when you scroll.
 /// - `label_width` = how many characters to show at most in each block label. If 0, labels are not shown.
 /// - `scale` = data units per 1 terminal cell.  
@@ -35,12 +46,19 @@ pub mod label {
 ///   - If `scale` = 2.0, each cell is 2 data units (you see *more* data).  
 ///   - If `scale` = 0.5, each cell is 0.5 data units (you see *less* data, zoomed in).
 /// - `aspect_ratio` = width / height of a terminal cell in data units.
-/// - `vertical_offset` = how much to offset the lines vertically to align the braille characters with the labels
+/// - `line_offset_y` = how much to offset the lines vertically to align the braille characters with the labels
+/// - `edge_style` = draw the edges as straight lines or as splines.
 pub struct PlotParameters {
     pub label_width: u32,
     pub scale: u32,
     pub aspect_ratio: f32,
     pub line_offset_y: f64,
+    pub edge_style: EdgeStyle,
+}
+
+pub enum EdgeStyle {
+    Straight,
+    Spline,
 }
 
 impl Default for PlotParameters {
@@ -50,6 +68,7 @@ impl Default for PlotParameters {
             scale: 4,
             aspect_ratio: 0.5,
             line_offset_y: 0.125,
+            edge_style: EdgeStyle::Straight,
         }
     }
 }
@@ -62,6 +81,7 @@ pub struct State {
     pub offset_x: i32,
     pub offset_y: i32,
     pub viewport: Rect,
+    pub world: ((f64, f64), (f64, f64)), // (min_x, min_y), (max_x, max_y)
     pub selected_block: Option<GraphNode>,
     pub first_render: bool,
 }
@@ -71,17 +91,11 @@ impl Default for State {
             offset_x: 0,
             offset_y: 0,
             viewport: Rect::new(0, 0, 0, 0),
+            world: ((0.0, 0.0), (0.0, 0.0)),
             selected_block: None,
             first_render: true,
         }
     }
-}
-
-pub enum NavDirection {
-    Left,
-    Right,
-    Up,
-    Down,
 }
 
 pub struct Viewer<'a> {
@@ -94,6 +108,7 @@ pub struct Viewer<'a> {
     pub parameters: PlotParameters,
     pub origin_block: Option<GraphNode>,
     view_block: Block<'a>,
+    pub has_focus: bool,
 }
 
 impl<'a> Viewer<'a> {
@@ -151,6 +166,7 @@ impl<'a> Viewer<'a> {
             parameters: plot_parameters,
             origin_block,
             view_block: Block::default(),
+            has_focus: false,
         }
     }
 
@@ -158,6 +174,7 @@ impl<'a> Viewer<'a> {
     pub fn refresh(&mut self) {
         self.scaled_layout
             .refresh(&self.base_layout, &self.parameters);
+        self.state.world = self.compute_bounding_box();
     }
 
     pub fn set_block(&mut self, block: Block<'a>) {
@@ -166,11 +183,28 @@ impl<'a> Viewer<'a> {
 
     /// Check if a block is visible in the viewport.
     pub fn is_block_visible(&self, block: GraphNode) -> bool {
-        if let Some(((x, y), _)) = self.scaled_layout.labels.get(&block) {
-            return (*y as i32) >= self.state.offset_y
-                && (*y as i32) < self.state.offset_y + self.state.viewport.height as i32
-                && (*x as i32) >= self.state.offset_x
-                && (*x as i32) < self.state.offset_x + self.state.viewport.width as i32;
+        if let Some(((x1, y), (x2, _))) = self.scaled_layout.labels.get(&block) {
+            // Check vertical overlap first (simpler)
+            let y_visible = (*y as i32) >= self.state.offset_y
+                && (*y as i32) < self.state.offset_y + self.state.viewport.height as i32;
+
+            if !y_visible {
+                return false;
+            }
+
+            // Check horizontal overlap
+            // Block is visible if either:
+            // 1. Start point is in viewport
+            // 2. End point is in viewport
+            // 3. Block spans the entire viewport
+            let x1_in_view = (*x1 as i32) >= self.state.offset_x
+                && (*x1 as i32) < self.state.offset_x + self.state.viewport.width as i32;
+            let x2_in_view = (*x2 as i32) >= self.state.offset_x
+                && (*x2 as i32) < self.state.offset_x + self.state.viewport.width as i32;
+            let spans_viewport = (*x1 as i32) <= self.state.offset_x
+                && (*x2 as i32) >= self.state.offset_x + self.state.viewport.width as i32;
+
+            return x1_in_view || x2_in_view || spans_viewport;
         }
         false
     }
@@ -184,15 +218,15 @@ impl<'a> Viewer<'a> {
         }
     }
 
-    /// Center the viewport on a specific block with minimal whitespace around the layout bounds.
-    /// Only show at most 5 units of margin on the left side.
-    pub fn center_on_block(&mut self, block: GraphNode) {
+    /// Center the viewport on a specific block.
+    pub fn center_on_block(&mut self, block: GraphNode) -> Result<(f64, f64), String> {
         if let Some(((start, y), (end, _))) = self.scaled_layout.labels.get(&block) {
-            let block_center_x = (start + end) / 2.0;
-            let block_center_y = *y;
-            self.update_scroll_for_cursor(block_center_x, block_center_y);
+            let cursor_x = (start + end) / 2.0;
+            let cursor_y = *y;
+            self.update_scroll_for_cursor(cursor_x, cursor_y);
+            Ok((cursor_x, cursor_y))
         } else {
-            panic!("Block ID {:?} not found in layout", block);
+            Err(format!("Block ID {:?} not found in layout", block))
         }
     }
 
@@ -208,8 +242,7 @@ impl<'a> Viewer<'a> {
         //
         // From the data's perspective, the viewport is a moving window defined by a width, height, and
         // offset from the data origin. When offset_x = 0 and offset_y = 0, the bottom-left corner of the
-        // viewport has data coordinates (0,0). We must keep a 1:1 mapping between the size of the viewport
-        // in data units and in terminal cells to avoid glitches.
+        // viewport has data coordinates (0,0) and the y-axis points upwards.
 
         let canvas_block = self.view_block.clone();
         let viewport = canvas_block.inner(area);
@@ -246,7 +279,9 @@ impl<'a> Viewer<'a> {
                 } else {
                     self.state.selected_block = Some(origin);
                 }
-                self.center_on_block(self.state.selected_block.unwrap());
+                self.state.world = self.compute_bounding_box();
+                self.center_on_block(self.state.selected_block.unwrap())
+                    .unwrap();
                 self.state.first_render = false;
             }
         }
@@ -265,25 +300,115 @@ impl<'a> Viewer<'a> {
                 (self.state.offset_y + self.state.viewport.height as i32) as f64,
             ])
             .paint(|ctx| {
-                // Draw the lines described in the processed layout
-                for &((x1, y1), (x2, y2)) in self.scaled_layout.lines.iter() {
-                    // Clip the line to the visible area, skip if it's not visible itself
-                    if let Some(((x1c, y1c), (x2c, y2c))) = clip_line(
-                        (x1, y1 + self.parameters.line_offset_y),
-                        (x2, y2 + self.parameters.line_offset_y),
+                if DEBUG {
+                    // Show cartesian axes + coordinates of all nodes
+                    let ((x_min, y_min), (x_max, y_max)) = self.state.world;
+                    let viewport = (
                         (self.state.offset_x as f64, self.state.offset_y as f64),
                         (
                             (self.state.offset_x + self.state.viewport.width as i32) as f64,
                             (self.state.offset_y + self.state.viewport.height as i32) as f64,
                         ),
-                    ) {
+                    );
+                    if let Some(((x1c, y1c), (x2c, y2c))) =
+                        clip_line((x_min, 0.0), (x_max, 0.0), viewport.0, viewport.1)
+                    {
                         ctx.draw(&Line {
                             x1: x1c,
                             y1: y1c,
                             x2: x2c,
                             y2: y2c,
-                            color: Color::DarkGray,
+                            color: Color::Red,
                         });
+                    }
+                    if let Some(((x1c, y1c), (x2c, y2c))) =
+                        clip_line((0.0, y_min), (0.0, y_max), viewport.0, viewport.1)
+                    {
+                        ctx.draw(&Line {
+                            x1: x1c,
+                            y1: y1c,
+                            x2: x2c,
+                            y2: y2c,
+                            color: Color::Red,
+                        });
+                    }
+                    ctx.print(
+                        self.state.offset_x as f64,
+                        self.state.offset_y as f64,
+                        Span::styled(
+                            format!("({},{})", self.state.offset_x, self.state.offset_y),
+                            Style::default().fg(Color::Red),
+                        ),
+                    );
+                }
+                // Draw the lines described in the processed layout
+                for &((x1, y1), (x2, y2)) in self.scaled_layout.lines.iter() {
+                    match self.parameters.edge_style {
+                        EdgeStyle::Straight => {
+                            if let Some(((x1c, y1c), (x2c, y2c))) = clip_line(
+                                (x1, y1 + self.parameters.line_offset_y),
+                                (x2, y2 + self.parameters.line_offset_y),
+                                (self.state.offset_x as f64, self.state.offset_y as f64),
+                                (
+                                    (self.state.offset_x + self.state.viewport.width as i32) as f64,
+                                    (self.state.offset_y + self.state.viewport.height as i32)
+                                        as f64,
+                                ),
+                            ) {
+                                ctx.draw(&Line {
+                                    x1: x1c,
+                                    y1: y1c,
+                                    x2: x2c,
+                                    y2: y2c,
+                                    color: Color::DarkGray,
+                                });
+                            }
+                        }
+                        EdgeStyle::Spline => {
+                            // Bezier curves are always contained within the box defined by their endpoints,
+                            // so we reject any curves that don't have a bounding box that intersects the viewport.
+                            if !rectangles_intersect(
+                                (x1, y1 + self.parameters.line_offset_y),
+                                (x2, y2 + self.parameters.line_offset_y),
+                                (self.state.offset_x as f64, self.state.offset_y as f64),
+                                (
+                                    (self.state.offset_x + self.state.viewport.width as i32) as f64,
+                                    (self.state.offset_y + self.state.viewport.height as i32)
+                                        as f64,
+                                ),
+                            ) {
+                                continue;
+                            }
+                            let num_points = ((x2.round() - x1.round() + 1.0) as u32).min(16); // Don't go too crazy
+                            let curve_points = generate_cubic_bezier_curve(
+                                (x1, y1 + self.parameters.line_offset_y),
+                                (x2, y2 + self.parameters.line_offset_y),
+                                num_points,
+                            );
+
+                            // Draw lines between consecutive points of the curve
+                            for points in curve_points.windows(2) {
+                                if let Some(((x1c, y1c), (x2c, y2c))) = clip_line(
+                                    points[0],
+                                    points[1],
+                                    (self.state.offset_x as f64, self.state.offset_y as f64),
+                                    (
+                                        (self.state.offset_x + self.state.viewport.width as i32)
+                                            as f64,
+                                        (self.state.offset_y + self.state.viewport.height as i32)
+                                            as f64,
+                                    ),
+                                ) {
+                                    ctx.draw(&Line {
+                                        x1: x1c,
+                                        y1: y1c,
+                                        x2: x2c,
+                                        y2: y2c,
+                                        color: Color::DarkGray,
+                                    });
+                                }
+                            }
+                        }
                     }
                 }
                 // Print the labels
@@ -310,15 +435,26 @@ impl<'a> Viewer<'a> {
                     } else {
                         label::NODE.to_string()
                     };
-                    // Style the label depending on whether it's selected
-                    let style = if Some(block) == self.state.selected_block.as_ref() {
-                        // Selected blocks
-                        match label.as_str() {
-                            label::NODE => Style::default().fg(Color::LightGreen),
-                            _ => Style::default().fg(Color::Black).bg(Color::White),
+
+                    // The style of the label is determined by 3 factors:
+                    // 1. Whether the viewer has focus
+                    // 2. Whether the block is selected
+                    // 3. Whether the label consists of text or a glyph (the dot for zoomed out views)
+
+                    let is_selected = Some(block) == self.state.selected_block.as_ref();
+                    let is_glyph = label.as_str() == label::NODE;
+
+                    let style = match (self.has_focus, is_selected, is_glyph) {
+                        (true, true, false) => Style::default().fg(Color::White).bg(Color::Blue),
+                        (true, true, true) => Style::default().fg(Color::Blue),
+                        (true, false, false) => {
+                            Style::default().fg(Color::White).bg(Color::Indexed(236))
                         }
-                    } else {
-                        Style::default().fg(Color::White)
+                        (true, false, true) => Style::default().fg(Color::White),
+                        (false, _, false) => {
+                            Style::default().fg(Color::White).bg(Color::Indexed(236))
+                        }
+                        (false, _, true) => Style::default().fg(Color::White),
                     };
 
                     // Clip labels that are potentially in the window (horizontal)
@@ -333,6 +469,16 @@ impl<'a> Viewer<'a> {
                             f64::max(*x, self.state.offset_x as f64),
                             *y,
                             Span::styled(clipped_label, style),
+                        );
+                    }
+                    if DEBUG {
+                        ctx.print(
+                            *x,
+                            *y + 1.0,
+                            Span::styled(
+                                format!("↓({},{})", *x, *y),
+                                Style::default().fg(Color::Red),
+                            ),
                         );
                     }
 
@@ -381,6 +527,22 @@ impl<'a> Viewer<'a> {
                             );
                         }
                     }
+
+                    // Draw a cursor if no block was selected or is visible
+                    if !self
+                        .state
+                        .selected_block
+                        .is_some_and(|selected| self.is_block_visible(selected))
+                    {
+                        // Determine the middle of the viewport
+                        let x_mid = self.state.offset_x + self.state.viewport.width as i32 / 2;
+                        let y_mid = self.state.offset_y + self.state.viewport.height as i32 / 2;
+                        ctx.print(
+                            x_mid as f64,
+                            y_mid as f64,
+                            Span::styled("█", Style::default()),
+                        );
+                    }
                 }
             });
         frame.render_widget(canvas, area);
@@ -389,22 +551,9 @@ impl<'a> Viewer<'a> {
         self.auto_expand();
     }
 
-    /// Check the viewport bounds against the layout and trigger expansion if needed.
+    /// Check the viewport bounds against the world bounds and trigger expansion if needed.
     pub fn auto_expand(&mut self) {
-        // Find the minimum and maximum x-coordinates of (left side of) labels in the layout so far
-        let xs: Vec<f64> = self
-            .scaled_layout
-            .labels
-            .values()
-            .map(|((x, _), _)| *x)
-            .collect();
-        if xs.is_empty() {
-            return;
-        }
-        // For floats, min and max are not defined, so use fold instead.
-        let x_min = xs.iter().cloned().fold(f64::INFINITY, f64::min);
-        let x_max = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-
+        let ((x_min, _), (x_max, _)) = self.state.world;
         // Check if we're a screen width away from the left/right boundary and expand if needed
         // - if we can't expand any further, this will do nothing
         if (x_min as i32) > (self.state.offset_x - self.state.viewport.width as i32) {
@@ -415,11 +564,10 @@ impl<'a> Viewer<'a> {
         }
     }
 
-    /// Cycle through nodes in a specified direction based on the label coordinates.
-    /// For moves to the left, it uses the end coordinate of the label; for right, the start coordinate;
-    /// and for up/down, the average of the start and end coordinates.
+    /// Cycle through nodes in a specified direction.
     pub fn move_selection(&mut self, direction: NavDirection) {
-        // Determine the reference point from BaseLayout's node_positions.
+        // Determine the reference point from BaseLayout's node_positions,
+        // or use the center of the viewport if no block is selected.
         let current_point = if let Some(selected) = self.state.selected_block {
             self.base_layout
                 .node_positions
@@ -438,58 +586,72 @@ impl<'a> Viewer<'a> {
             )
         };
 
-        let mut best_candidate: Option<(GraphNode, f64)> = None;
-        for (node, &position) in self.base_layout.node_positions.iter() {
-            // Skip the current selection and the start/end nodes.
-            if let Some(selected) = self.state.selected_block {
-                if *node == selected
-                    || Node::is_start_node(node.node_id)
-                    || Node::is_end_node(node.node_id)
-                {
-                    continue;
-                }
+        // Try to find a node in the specified direction closest to the current point.
+        if let Some(new_selection) = self.find_closest_block_in_direction(current_point, direction)
+        {
+            self.state.selected_block = Some(new_selection);
+            if let Err(e) = self.center_on_block(new_selection) {
+                warn!("Viewer - error finding block to switch to: {}", e);
             }
+        }
+    }
 
-            let candidate_point = position;
+    // Helper function to find the closest node in the given direction, skipping
+    // the currently selected block and ignoring start/end dummy nodes.
+    fn find_closest_block_in_direction(
+        &self,
+        current_point: (f64, f64),
+        direction: NavDirection,
+    ) -> Option<GraphNode> {
+        let mut closest_candidate: Option<(GraphNode, f64)> = None;
 
-            // For vertical movement, only consider candidates that are nearly horizontally aligned.
-            if matches!(direction, NavDirection::Up | NavDirection::Down) {
-                let horizontal_threshold = 1.0;
-                if (candidate_point.0 - current_point.0).abs() > horizontal_threshold {
-                    continue;
-                }
-            }
-
-            let is_candidate = match direction {
-                NavDirection::Left => candidate_point.0 < current_point.0,
-                NavDirection::Right => candidate_point.0 > current_point.0,
-                NavDirection::Up => candidate_point.1 < current_point.1,
-                NavDirection::Down => candidate_point.1 > current_point.1,
-            };
-            if !is_candidate {
+        for (&node, &node_pos) in &self.base_layout.node_positions {
+            // Skip the currently selected block and any start/end node
+            if Some(node) == self.state.selected_block
+                || Node::is_start_node(node.node_id)
+                || Node::is_end_node(node.node_id)
+            {
                 continue;
             }
 
-            let dx = candidate_point.0 - current_point.0;
-            let dy = candidate_point.1 - current_point.1;
+            let dx = node_pos.0 - current_point.0;
+            let dy = node_pos.1 - current_point.1;
+
+            // Depending on the direction, decide if this node is a candidate
+            //   - Up/Down: only consider nodes that are vertically aligned
+            //   - Left/Right: consider all nodes in the correct half of the screen
+            if !match direction {
+                NavDirection::Up => node_pos.1 < current_point.1 && dx.abs() < f64::EPSILON,
+                NavDirection::Down => node_pos.1 > current_point.1 && dx.abs() < f64::EPSILON,
+                NavDirection::Left => dx < 0.0,
+                NavDirection::Right => dx > 0.0,
+            } {
+                continue;
+            }
+
+            // Calculate Euclidean distance
             let distance = (dx * dx + dy * dy).sqrt();
-            if distance == 0.0 {
-                continue;
-            }
 
-            if let Some((_, best_distance)) = best_candidate {
-                if distance < best_distance {
-                    best_candidate = Some((*node, distance));
+            // Keep track if it's closer than any previous candidate
+            if let Some((_, best_dist)) = closest_candidate {
+                // When scrolling horizontally, break ties by preferring the down direction
+                // (otherwise it looks random to the user)
+                if (direction == NavDirection::Left || direction == NavDirection::Right)
+                    && (distance - best_dist).abs() < f64::EPSILON
+                    && dy < 0.0
+                {
+                    closest_candidate = Some((node, distance));
+                } else if distance < best_dist {
+                    // No tie-breaking needed
+                    closest_candidate = Some((node, distance));
                 }
             } else {
-                best_candidate = Some((*node, distance));
+                closest_candidate = Some((node, distance));
             }
         }
 
-        if let Some((new_selection, _)) = best_candidate {
-            self.state.selected_block = Some(new_selection);
-            self.center_on_block(new_selection);
-        }
+        // Return the node with the minimum distance in the chosen direction
+        closest_candidate.map(|(n, _)| n)
     }
 
     /// Select the block closest to the center of the viewport using coordinates from scaled_layout.
@@ -518,58 +680,111 @@ impl<'a> Viewer<'a> {
         }
     }
 
-    /// Update scroll offset based on the cursor position (world coordinates of the selected label).
-    /// This method computes the world bounds from all labels and clamps the viewport's offset
-    /// so that the cursor is centered when possible, but moves towards the viewport edges when near world bounds.
-    pub fn update_scroll_for_cursor(&mut self, cursor_x: f64, cursor_y: f64) {
-        // The tolerance_y parameter allows for flexibility on what's considered "centered" to avoid jitter,
-        // it's a ratio of the viewport height.
-        let margin = 5.0;
-        let tolerance_y = 0.3;
-
-        let vp_width = self.state.viewport.width as f64;
-        let vp_height = self.state.viewport.height as f64;
+    fn compute_bounding_box(&self) -> ((f64, f64), (f64, f64)) {
+        let labels = &self.scaled_layout.labels;
 
         let mut xs = Vec::new();
         let mut ys = Vec::new();
-        for ((x, _), (x2, _)) in self.scaled_layout.labels.values() {
+        for ((x, _), (x2, _)) in labels.values() {
             xs.push(*x);
             xs.push(*x2);
         }
-        for ((_, y), (_, _)) in self.scaled_layout.labels.values() {
+        for ((_, y), (_, _)) in labels.values() {
             ys.push(*y);
         }
-        if xs.is_empty() || ys.is_empty() {
+        let world_min_x = xs.iter().cloned().fold(f64::INFINITY, f64::min);
+        let world_max_x = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let world_min_y = ys.iter().cloned().fold(f64::INFINITY, f64::min);
+        let world_max_y = ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        ((world_min_x, world_min_y), (world_max_x, world_max_y))
+    }
+
+    /// Update scroll offset based on the cursor position (world coordinates of the selected label).
+    /// This method computes the world bounds from all labels and clamps the viewport's offset.
+    /// On the initial call (first_render), it remains centered. Afterwards, we allow the cursor
+    /// to drift within a tolerance range vertically before scrolling.
+    pub fn update_scroll_for_cursor(&mut self, cursor_x: f64, cursor_y: f64) {
+        let margin = 10.0;
+        let vp_width = self.state.viewport.width as f64;
+        let vp_height = self.state.viewport.height as f64;
+        let bandwidth = 0.4;
+
+        let ((world_min_x, world_min_y), (world_max_x, world_max_y)) = self.state.world;
+        let min_x = world_min_x - margin;
+        let max_x = world_max_x + margin;
+        let min_y = world_min_y - margin;
+        let max_y = world_max_y + margin;
+
+        let total_width = max_x - min_x;
+        let total_height = max_y - min_y;
+
+        // If it's the initial placement, there is only one allowed position.
+        if self.state.first_render {
+            let desired_x = cursor_x - vp_width / 2.0;
+            let desired_y = cursor_y - vp_height / 2.0;
+
+            let new_offset_x = if total_width >= vp_width {
+                desired_x.clamp(min_x, max_x - vp_width)
+            } else {
+                min_x - (vp_width - total_width) / 2.0
+            };
+            let new_offset_y = if total_height >= vp_height {
+                desired_y.clamp(min_y, max_y - vp_height)
+            } else {
+                min_y - (vp_height - total_height) / 2.0
+            };
+
+            self.state.offset_x = new_offset_x.round() as i32;
+            self.state.offset_y = new_offset_y.round() as i32;
+
             return;
         }
 
-        let world_min_x = xs.iter().cloned().fold(f64::INFINITY, f64::min) - margin;
-        let world_max_x = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max) + margin;
-        let world_min_y = ys.iter().cloned().fold(f64::INFINITY, f64::min) - margin;
-        let world_max_y = ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max) + margin;
-
-        let world_width = world_max_x - world_min_x;
-        let world_height = world_max_y - world_min_y;
-
+        // In later iterations we treat vertical and horizontal movement differently.
+        // Horizontal still clamps to one point
         let desired_x = cursor_x - vp_width / 2.0;
-        let desired_y = cursor_y - vp_height / 2.0;
-
-        let new_offset_x = if world_width >= vp_width {
-            desired_x.clamp(world_min_x, world_max_x - vp_width)
+        let new_offset_x = if total_width >= vp_width {
+            desired_x.clamp(min_x, max_x - vp_width)
         } else {
-            world_min_x - (vp_width - world_width) / 2.0
+            min_x - (vp_width - total_width) / 2.0
         };
 
-        let new_offset_y = if world_height >= vp_height {
-            desired_y.clamp(world_min_y, world_max_y - vp_height)
+        // Vertical is centering and clamping to a range of y-coordinates.
+        let current_offset_y = self.state.offset_y as f64;
+        let top_boundary = current_offset_y + bandwidth * vp_height;
+        let bottom_boundary = current_offset_y + (1.0 - bandwidth) * vp_height;
+
+        let mut desired_y = current_offset_y;
+        if cursor_y < top_boundary {
+            desired_y -= top_boundary - cursor_y;
+        } else if cursor_y > bottom_boundary {
+            desired_y += cursor_y - bottom_boundary;
+        }
+
+        // Clamp vertically
+        if total_height >= vp_height {
+            desired_y = desired_y.clamp(min_y, max_y - vp_height);
         } else {
-            world_min_y - (vp_height - world_height) / 2.0
-        };
+            desired_y = min_y - (vp_height - total_height) / 2.0;
+        }
 
         self.state.offset_x = new_offset_x.round() as i32;
+        self.state.offset_y = desired_y.round() as i32;
+    }
 
-        if (new_offset_y - self.state.offset_y as f64).abs() > tolerance_y * vp_height {
-            self.state.offset_y = new_offset_y.round() as i32;
+    /// Get the terminal coordinates of a block's center point
+    fn get_block_terminal_coords(&self, block: GraphNode) -> Option<(f64, f64)> {
+        if let Some(((start, y), (end, _))) = self.scaled_layout.labels.get(&block) {
+            let block_center_x = (start + end) / 2.0;
+            let block_center_y = *y;
+
+            // Convert from world coordinates to terminal coordinates
+            let terminal_x = block_center_x - self.state.offset_x as f64;
+            let terminal_y = block_center_y - self.state.offset_y as f64;
+
+            Some((terminal_x, terminal_y))
+        } else {
+            None
         }
     }
 
@@ -583,10 +798,6 @@ impl<'a> Viewer<'a> {
                 } else if key.modifiers.contains(KeyModifiers::ALT) {
                     self.state.offset_x -= 1;
                 } else {
-                    // If no block is selected, select the center block
-                    if self.state.selected_block.is_none() {
-                        self.select_center_block();
-                    }
                     self.move_selection(NavDirection::Left);
                 }
             }
@@ -597,9 +808,6 @@ impl<'a> Viewer<'a> {
                 } else if key.modifiers.contains(KeyModifiers::ALT) {
                     self.state.offset_x += 1;
                 } else {
-                    if self.state.selected_block.is_none() {
-                        self.select_center_block();
-                    }
                     self.move_selection(NavDirection::Right);
                 }
             }
@@ -610,9 +818,6 @@ impl<'a> Viewer<'a> {
                 } else if key.modifiers.contains(KeyModifiers::ALT) {
                     self.state.offset_y += 1;
                 } else {
-                    if self.state.selected_block.is_none() {
-                        self.select_center_block();
-                    }
                     self.move_selection(NavDirection::Down);
                 }
             }
@@ -623,17 +828,20 @@ impl<'a> Viewer<'a> {
                 } else if key.modifiers.contains(KeyModifiers::ALT) {
                     self.state.offset_y -= 1;
                 } else {
-                    if self.state.selected_block.is_none() {
-                        self.select_center_block();
-                    }
                     self.move_selection(NavDirection::Up);
                 }
             }
             // Zooming in and out
             KeyCode::Char('+') | KeyCode::Char('=') => {
+                // Record terminal coordinates of selected block before zoom
+                let terminal_coords = self
+                    .state
+                    .selected_block
+                    .and_then(|block| self.get_block_terminal_coords(block));
+
                 // Increase how much of the sequence is shown in each block label.
                 if self.parameters.label_width == u32::MAX {
-                    self.parameters.scale += 1;
+                    self.parameters.scale += 2; // Even increments look better
                 } else {
                     self.parameters.label_width = match self.parameters.label_width {
                         1 => 11,
@@ -643,7 +851,7 @@ impl<'a> Viewer<'a> {
                     }
                 }
 
-                // If no block is selected, select the center block
+                // If no block is selected, try to select the center block
                 if self.state.selected_block.is_none() {
                     self.select_center_block();
                 }
@@ -651,12 +859,33 @@ impl<'a> Viewer<'a> {
                 // Recalculate the layout.
                 self.scaled_layout
                     .refresh(&self.base_layout, &self.parameters);
-                self.center_on_block(self.state.selected_block.unwrap());
+                self.state.world = self.compute_bounding_box();
+
+                // Adjust viewport to maintain terminal coordinates of selected block
+                if let Some((old_x, old_y)) = terminal_coords {
+                    if let Some(block) = self.state.selected_block {
+                        if let Some(((start, y), (end, _))) = self.scaled_layout.labels.get(&block)
+                        {
+                            let new_center_x = (start + end) / 2.0;
+                            let new_center_y = *y;
+
+                            // Calculate new offsets to maintain terminal coordinates
+                            self.state.offset_x = (new_center_x - old_x).round() as i32;
+                            self.state.offset_y = (new_center_y - old_y).round() as i32;
+                        }
+                    }
+                }
             }
             KeyCode::Char('-') | KeyCode::Char('_') => {
+                // Record terminal coordinates of selected block before zoom
+                let terminal_coords = self
+                    .state
+                    .selected_block
+                    .and_then(|block| self.get_block_terminal_coords(block));
+
                 // Decrease how much of the sequence is shown in each block label.
                 if self.parameters.scale > 2 {
-                    self.parameters.scale -= 1;
+                    self.parameters.scale -= 2;
                 } else {
                     self.parameters.label_width = match self.parameters.label_width {
                         u32::MAX => 100,
@@ -666,15 +895,39 @@ impl<'a> Viewer<'a> {
                     };
                 }
 
-                // If no block is selected, select the center block
                 if self.state.selected_block.is_none() {
                     self.select_center_block();
                 }
 
-                // Recalculate the layout.
                 self.scaled_layout
                     .refresh(&self.base_layout, &self.parameters);
-                self.center_on_block(self.state.selected_block.unwrap());
+                self.state.world = self.compute_bounding_box();
+
+                // Adjust viewport to maintain terminal coordinates of selected block
+                if let Some((old_x, old_y)) = terminal_coords {
+                    if let Some(block) = self.state.selected_block {
+                        if let Some(((start, y), (end, _))) = self.scaled_layout.labels.get(&block)
+                        {
+                            let new_center_x = (start + end) / 2.0;
+                            let new_center_y = *y;
+
+                            // Calculate new offsets to maintain terminal coordinates
+                            self.state.offset_x = (new_center_x - old_x).round() as i32;
+                            self.state.offset_y = (new_center_y - old_y).round() as i32;
+                        }
+                    }
+                }
+            }
+            KeyCode::Char('s') | KeyCode::Char('S') => {
+                // Toggle between straight lines and splines
+                // I ended up not liking them as much as I thought I would,
+                // so it's not the default and I'm not documenting it in the status bar.
+                self.parameters.edge_style = match self.parameters.edge_style {
+                    EdgeStyle::Straight => EdgeStyle::Spline,
+                    EdgeStyle::Spline => EdgeStyle::Straight,
+                };
+                self.scaled_layout
+                    .refresh(&self.base_layout, &self.parameters);
             }
             _ => {}
         }
@@ -691,7 +944,7 @@ fn inner_truncation(s: &str, target_length: u32) -> String {
     if input_length <= target_length {
         return s.to_string();
     } else if target_length < 5 {
-        return "●".to_string(); // ○ is U+25CB; ● is U+25CF
+        return label::NODE.to_string(); // ○ is U+25CB; ● is U+25CF
     }
     // length - 3 because we need space for the ellipsis
     let left_len = (target_length - 3) / 2 + ((target_length - 3) % 2);
@@ -810,6 +1063,73 @@ pub fn clip_line(
     } else {
         None
     }
+}
+
+/// Check if two rectangles intersect.
+/// - Each rectangle is defined by any two opposite corners.
+/// - Returns true if the rectangles overlap or touch, false otherwise.
+pub fn rectangles_intersect(
+    (x1, y1): (f64, f64), // First corner of rectangle 1
+    (x2, y2): (f64, f64), // Opposite corner of rectangle 1
+    (x3, y3): (f64, f64), // First corner of rectangle 2
+    (x4, y4): (f64, f64), // Opposite corner of rectangle 2
+) -> bool {
+    // For each axis, one rectangle's maximum must be >= other's minimum
+    // and one rectangle's minimum must be <= other's maximum
+    x1.max(x2) >= x3.min(x4)
+        && x3.max(x4) >= x1.min(x2)
+        && y1.max(y2) >= y3.min(y4)
+        && y3.max(y4) >= y1.min(y2)
+}
+
+/// Generate a cubic bezier curve between two points A and B, given a resolution value.
+/// - Control points 0 and 3 are equal to A and B.
+/// - Control point 1 is halfway between A and B, at the same height as A.
+/// - Control point 2 is halfway between A and B, at the same height as B.
+///
+/// The function returns resolution + 2 points:
+/// - First point is exactly A
+/// - Last point is exactly B
+/// - For resolution=0: returns [A, B]
+/// - For resolution=1: returns [A, midpoint, B] where midpoint is the true curve midpoint at t=0.5
+/// - For resolution>1: returns [A, ...resolution points along the curve..., B]
+pub fn generate_cubic_bezier_curve(
+    a: (f64, f64),
+    b: (f64, f64),
+    num_points: u32,
+) -> Vec<(f64, f64)> {
+    let (ax, ay) = a;
+    let (bx, by) = b;
+    // Define control points following Graphviz's style:
+    // p0: a, p1: midpoint between a and b at the same height as a,
+    // p2: midpoint between a and b at the same height as b, p3: b
+    let p0 = a;
+    let p1 = (((ax + bx) / 2.0), ay);
+    let p2 = (((ax + bx) / 2.0), by);
+    let p3 = b;
+
+    let mut points = Vec::with_capacity(num_points as usize);
+    // First point is exactly a
+    points.push(a);
+
+    // Calculate intermediate points
+    for i in 1..num_points - 1 {
+        let t = i as f64 / ((num_points - 1) as f64);
+        let one_minus_t = 1.0_f64 - t;
+        let x = one_minus_t.powi(3) * p0.0
+            + 3.0_f64 * one_minus_t.powi(2) * t * p1.0
+            + 3.0_f64 * one_minus_t * t.powi(2) * p2.0
+            + t.powi(3) * p3.0;
+        let y = one_minus_t.powi(3) * p0.1
+            + 3.0_f64 * one_minus_t.powi(2) * t * p1.1
+            + 3.0_f64 * one_minus_t * t.powi(2) * p2.1
+            + t.powi(3) * p3.1;
+        points.push((x, y));
+    }
+
+    // Last point is exactly b
+    points.push(b);
+    points
 }
 
 #[cfg(test)]
@@ -948,5 +1268,56 @@ mod tests {
         //     A B[C D E]F G H
         let clipped = clip_label("ABCDEFGH", 2, 4, 3);
         assert_eq!(clipped, "…D…");
+    }
+
+    #[test]
+    fn test_rectangles_intersect() {
+        // Overlapping rectangles (corners in standard order)
+        assert!(rectangles_intersect(
+            (0.0, 0.0),
+            (2.0, 2.0),
+            (1.0, 1.0),
+            (3.0, 3.0)
+        ));
+
+        // Overlapping rectangles (corners in reverse order)
+        assert!(rectangles_intersect(
+            (2.0, 2.0),
+            (0.0, 0.0), // bottom-right to top-left
+            (3.0, 3.0),
+            (1.0, 1.0) // bottom-right to top-left
+        ));
+
+        // Touching rectangles (edge) with mixed corner order
+        assert!(rectangles_intersect(
+            (2.0, 2.0),
+            (0.0, 0.0), // reversed
+            (2.0, 0.0),
+            (4.0, 2.0) // standard
+        ));
+
+        // Touching rectangles (corner) with diagonal corners
+        assert!(rectangles_intersect(
+            (0.0, 2.0),
+            (2.0, 0.0), // top-right to bottom-left
+            (2.0, 2.0),
+            (4.0, 4.0) // standard
+        ));
+
+        // Non-intersecting rectangles with mixed corners
+        assert!(!rectangles_intersect(
+            (1.0, 1.0),
+            (0.0, 0.0), // reversed
+            (3.0, 3.0),
+            (2.0, 2.0) // reversed
+        ));
+
+        // One rectangle inside another with diagonal corners
+        assert!(rectangles_intersect(
+            (0.0, 4.0),
+            (4.0, 0.0), // top-right to bottom-left
+            (1.0, 2.0),
+            (2.0, 1.0) // bottom-right to top-left
+        ));
     }
 }
