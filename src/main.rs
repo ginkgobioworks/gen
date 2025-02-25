@@ -1,5 +1,6 @@
 #![allow(warnings)]
 use clap::{Parser, Subcommand};
+use core::ops::Range;
 use gen::config;
 use gen::config::{get_gen_dir, get_operation_connection};
 
@@ -9,7 +10,7 @@ use gen::exports::fasta::export_fasta;
 use gen::exports::genbank::export_genbank;
 use gen::exports::gfa::export_gfa;
 use gen::get_connection;
-use gen::graph_operators::derive_subgraph;
+use gen::graph_operators::{derive_chunks, get_path};
 use gen::imports::fasta::{import_fasta, FastaError};
 use gen::imports::genbank::import_genbank;
 use gen::imports::gfa::{import_gfa, GFAImportError};
@@ -391,6 +392,33 @@ enum Commands {
         /// The name of the region to derive the subgraph from
         #[arg(short, long)]
         region: String,
+        /// Name of alternate path (not current) to use
+        #[arg(long)]
+        backbone: Option<String>,
+    },
+    /// Replace a sequence graph with subgraphs in the ranges of the specified coordinates
+    DeriveChunks {
+        /// The name of the collection to derive the subgraph from
+        #[arg(short, long)]
+        name: Option<String>,
+        /// The name of the parent sample
+        #[arg(short, long)]
+        sample: Option<String>,
+        /// The name of the new sample
+        #[arg(long)]
+        new_sample: String,
+        /// The name of the region to derive the subgraph from
+        #[arg(short, long)]
+        region: String,
+        /// Name of alternate path (not current) to use
+        #[arg(long)]
+        backbone: Option<String>,
+        /// Breakpoints to derive chunks from
+        #[arg(long)]
+        breakpoints: Option<String>,
+        /// The size of the chunks to derive
+        #[arg(long)]
+        chunk_size: Option<i64>,
     },
 }
 
@@ -1084,6 +1112,7 @@ fn main() {
             sample,
             new_sample,
             region,
+            backbone,
         }) => {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
@@ -1096,16 +1125,105 @@ fn main() {
             let interval = parsed_region.interval();
             let start_coordinate = interval.start().unwrap().get() as i64;
             let end_coordinate = interval.end().unwrap().get() as i64;
-            derive_subgraph(
+            match derive_chunks(
                 &conn,
                 &operation_conn,
                 name,
                 sample_name.as_deref(),
                 &new_sample_name,
                 &parsed_region.name().to_string(),
-                start_coordinate,
-                end_coordinate,
-            );
+                backbone.as_deref(),
+                vec![Range {
+                    start: start_coordinate,
+                    end: end_coordinate,
+                }],
+            ) {
+                Ok(_) => {}
+                Err(e) => panic!("Error deriving subgraph: {e}"),
+            }
+            conn.execute("END TRANSACTION", []).unwrap();
+            operation_conn.execute("END TRANSACTION", []).unwrap();
+        }
+        Some(Commands::DeriveChunks {
+            name,
+            sample,
+            new_sample,
+            region,
+            backbone,
+            breakpoints,
+            chunk_size,
+        }) => {
+            conn.execute("BEGIN TRANSACTION", []).unwrap();
+            operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
+            let name = &name
+                .clone()
+                .unwrap_or_else(|| get_default_collection(&operation_conn));
+            let sample_name = sample.clone();
+            let new_sample_name = new_sample.clone();
+            let parsed_region = region.parse::<Region>().unwrap();
+            let interval = parsed_region.interval();
+
+            let path_length = match get_path(
+                &conn,
+                name,
+                sample_name.as_deref(),
+                &parsed_region.name().to_string(),
+                backbone.as_deref(),
+            ) {
+                Ok(path) => path.length(&conn),
+                Err(e) => panic!("Error deriving subgraph(s): {e}"),
+            };
+
+            let chunk_points;
+            if let Some(breakpoints) = breakpoints {
+                chunk_points = breakpoints
+                    .split(",")
+                    .map(|x| x.parse::<i64>().unwrap())
+                    .sorted()
+                    .collect::<Vec<i64>>();
+            } else if let Some(chunk_size) = chunk_size {
+                let chunk_count = path_length / chunk_size;
+                chunk_points = (0..chunk_count)
+                    .map(|i| i * chunk_size)
+                    .collect::<Vec<i64>>();
+            } else {
+                panic!("No chunking method specified.");
+            }
+
+            if chunk_points.is_empty() {
+                panic!("No chunk coordinates provided.");
+            }
+            if chunk_points[chunk_points.len() - 1] > path_length {
+                panic!("At least one chunk coordinate exceeds path length.");
+            }
+
+            let mut range_start = 0;
+            let mut chunk_ranges = vec![];
+            for chunk_point in chunk_points {
+                chunk_ranges.push(Range {
+                    start: range_start,
+                    end: chunk_point,
+                });
+                range_start = chunk_point;
+            }
+            chunk_ranges.push(Range {
+                start: range_start,
+                end: path_length,
+            });
+
+            match derive_chunks(
+                &conn,
+                &operation_conn,
+                name,
+                sample_name.as_deref(),
+                &new_sample_name,
+                &parsed_region.name().to_string(),
+                backbone.as_deref(),
+                chunk_ranges,
+            ) {
+                Ok(_) => {}
+                Err(e) => panic!("Error deriving subgraph(s): {e}"),
+            }
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
         }
