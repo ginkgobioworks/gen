@@ -1,23 +1,22 @@
 use crate::models::{block_group::BlockGroup, node::Node, traits::Query};
 use crate::progress_bar::{get_handler, get_time_elapsed_bar};
 use crate::views::block_group_viewer::{PlotParameters, Viewer};
-use crate::views::collection::CollectionExplorer;
+use crate::views::collection::{CollectionExplorer, CollectionExplorerState};
 use rusqlite::{params, Connection};
 
 use crossterm::{
-    event::{self, KeyCode, KeyEventKind},
+    event::{self, KeyCode, KeyEventKind, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{
     layout::Constraint,
-    style::{Color, Style},
-    text::Text,
+    style::{Color, Modifier, Style},
+    text::{Line, Span, Text},
     widgets::{Block, Clear, Padding, Paragraph, Wrap},
 };
 use std::error::Error;
 use std::time::{Duration, Instant};
-use tui_scrollview::ScrollViewState;
 
 pub fn view_block_group(
     conn: &Connection,
@@ -47,7 +46,10 @@ pub fn view_block_group(
         );
     }
 
-    // Get the node object corresponding to a node id
+    let block_group = block_group.unwrap();
+    let block_group_id = block_group.id;
+
+    // Get the node object corresponding to the position given by the user
     let origin = if let Some(position_str) = position {
         let parts = position_str.split(":").collect::<Vec<&str>>();
         if parts.len() != 2 {
@@ -62,24 +64,18 @@ pub fn view_block_group(
     } else {
         None
     };
-
-    let block_group_id = block_group.unwrap().id;
-    let block_graph = BlockGroup::get_graph(conn, block_group_id);
     bar.finish();
 
-    // Create the viewer
+    // Create the viewer and the initial graph
     let bar = progress_bar.add(get_time_elapsed_bar());
     let _ = progress_bar.println("Pre-computing layout in chunks");
+    let mut block_graph = BlockGroup::get_graph(conn, block_group_id);
     let mut viewer = if let Some(origin) = origin {
         Viewer::with_origin(&block_graph, conn, PlotParameters::default(), origin)
     } else {
         Viewer::new(&block_graph, conn, PlotParameters::default())
     };
     bar.finish();
-
-    // Styling:
-    //let sidebar_style = Style::default().bg(Color::DarkGray).fg(Color::White);
-    let panel_style = Style::default().bg(Color::DarkGray).fg(Color::White);
 
     // Setup terminal
     enable_raw_mode()?;
@@ -93,14 +89,36 @@ pub fn view_block_group(
     let mut show_panel = false;
     let show_sidebar = true;
     let mut tui_layout_change = false;
+
+    // Focus management
+    let mut focus_zone = "canvas";
+
+    // Create explorer and its state that persists across frames
+    let mut explorer = CollectionExplorer::new(conn, collection_name);
+    let mut explorer_state =
+        CollectionExplorerState::with_selected_block_group(Some(block_group_id));
+    if let Some(ref s) = sample_name {
+        explorer_state.toggle_sample(s);
+    }
+
+    // Track the last selected block group to detect changes
+    let mut last_selected_block_group_id = Some(block_group_id);
+    let mut is_loading = false;
+
     loop {
+        // Refresh explorer data and force reload on change
+        if explorer.refresh(conn, collection_name) {
+            explorer.force_reload(&mut explorer_state);
+        }
+
+        // Trigger reload if selection changed to a new block group
+        if explorer_state.selected_block_group_id != last_selected_block_group_id {
+            is_loading = true;
+            last_selected_block_group_id = explorer_state.selected_block_group_id;
+        }
+
         // Draw the UI
         terminal.draw(|frame| {
-            // A layout consisting of a sidebar, canvas and a status bar, with optionally a panel
-            // - The sidebar is where the samples and block groups are displayed
-            // - The canvas is where the graph is drawn
-            // - The status bar is where the controls are displayed
-            // - The panel is a scrollable paragraph that can be toggled on and off
             let status_bar_height: u16 = 1;
 
             // The outer layout is a vertical split between the status bar and everything else
@@ -111,7 +129,6 @@ pub fn view_block_group(
                     ratatui::layout::Constraint::Length(status_bar_height),
                 ])
                 .split(frame.area());
-
             let status_bar_area = outer_layout[1];
 
             // The sidebar is a horizontal split of the area above the status bar
@@ -125,51 +142,37 @@ pub fn view_block_group(
             let panel_layout = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Vertical)
                 .constraints(vec![Constraint::Percentage(80), Constraint::Percentage(20)])
-                .split(if show_sidebar {
-                    sidebar_layout[1]
-                } else {
-                    outer_layout[0]
-                });
+                .split(sidebar_layout[1]);
             let panel_area = panel_layout[1];
 
-            let canvas_area = match (show_sidebar, show_panel) {
-                (true, true) => panel_layout[0],
-                (true, false) => sidebar_layout[1],
-                (false, true) => panel_layout[0],
-                (false, false) => outer_layout[0],
+            let canvas_area = if show_panel {
+                panel_layout[0]
+            } else {
+                sidebar_layout[1]
             };
 
             // Sidebar
+            explorer_state.has_focus = focus_zone == "sidebar";
             if show_sidebar {
                 let sidebar_block = Block::default()
-                    .padding(Padding::new(2, 2, 1, 1))
+                    .padding(Padding::new(0, 0, 1, 1))
                     .style(Style::default().bg(Color::Indexed(233)));
                 let sidebar_content_area = sidebar_block.inner(sidebar_area);
 
-                // Get the default collection from the defaults table
-                // let mut stmt = conn
-                //     .prepare("select collection_name from defaults where id = 1")
-                //     .unwrap();
-                // let default_collection = stmt.query_row((), |row| row.get(0))
-                //     .unwrap_or("default".to_string());
-
-                let default_collection = "default";
-
-                let explorer = CollectionExplorer::new(conn, default_collection);
-
-                let mut scroll_state = ScrollViewState::default();
-
-                // Render the block first to set the background
                 frame.render_widget(sidebar_block.clone(), sidebar_area);
-                // Then render the explorer content
-                frame.render_stateful_widget(explorer, sidebar_content_area, &mut scroll_state);
+                frame.render_stateful_widget(&explorer, sidebar_content_area, &mut explorer_state);
             }
 
             // Status bar
-            let status_message = format!(
-                "{message} | return: show information on block | q=quit",
-                message = Viewer::get_status_line()
-            );
+            let mut status_message = match focus_zone {
+                "canvas" => Viewer::get_status_line(),
+                "panel" => "esc: close panel | q".to_string(),
+                "sidebar" => CollectionExplorer::get_status_line(),
+                _ => "".to_string(),
+            };
+
+            // Add focus controls to status message
+            status_message.push_str(" | tab: cycle focus | q: quit");
 
             let status_bar_contents = format!(
                 "{status_message:width$}",
@@ -178,38 +181,90 @@ pub fn view_block_group(
 
             let status_bar = Paragraph::new(Text::styled(
                 status_bar_contents,
-                Style::default().bg(Color::DarkGray).fg(Color::White),
+                Style::default().bg(Color::Black).fg(Color::DarkGray),
             ));
 
             frame.render_widget(status_bar, status_bar_area);
 
-            // Ask the viewer to paint the canvas
-            viewer.draw(frame, canvas_area);
+            // Canvas area
+            if is_loading {
+                // Draw loading message in canvas area
+                let loading_text = Text::styled(
+                    "Loading...",
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                );
+                let loading_para =
+                    Paragraph::new(loading_text).alignment(ratatui::layout::Alignment::Center);
+
+                // Center the loading message vertically in the canvas area
+                let loading_area = ratatui::layout::Layout::default()
+                    .direction(ratatui::layout::Direction::Vertical)
+                    .constraints([
+                        ratatui::layout::Constraint::Percentage(45),
+                        ratatui::layout::Constraint::Length(1),
+                        ratatui::layout::Constraint::Percentage(45),
+                    ])
+                    .split(canvas_area)[1];
+
+                frame.render_widget(Clear, canvas_area); // Clear the canvas area first
+                frame.render_widget(loading_para, loading_area);
+            } else {
+                // Ask the viewer to paint the canvas
+                viewer.has_focus = focus_zone == "canvas";
+                viewer.draw(frame, canvas_area);
+            }
 
             // Panel
             if show_panel {
                 let panel_block = Block::bordered()
                     .padding(Padding::new(2, 2, 1, 1))
                     .title("Details")
-                    .style(panel_style);
-                let mut panel_text = Text::from("No content found");
+                    .style(Style::default().bg(Color::Indexed(233)))
+                    .border_style(if focus_zone == "panel" {
+                        Style::default()
+                            .fg(Color::Blue)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::Gray)
+                    });
 
-                // Get information about the currently selected block
-                if viewer.state.selected_block.is_some() {
-                    let selected_block = viewer.state.selected_block.unwrap();
-                    panel_text = Text::from(format!(
-                        "Block ID: {}\nNode ID: {}\nStart: {}\nEnd: {}\n",
-                        selected_block.block_id,
-                        selected_block.node_id,
-                        selected_block.sequence_start,
-                        selected_block.sequence_end
-                    ));
-                }
+                let panel_text = if let Some(selected_block) = viewer.state.selected_block {
+                    vec![
+                        Line::from(vec![
+                            Span::styled(
+                                "Block ID: ",
+                                Style::default().add_modifier(Modifier::BOLD),
+                            ),
+                            Span::raw(selected_block.block_id.to_string()),
+                        ]),
+                        Line::from(vec![
+                            Span::styled(
+                                "Node ID: ",
+                                Style::default().add_modifier(Modifier::BOLD),
+                            ),
+                            Span::raw(selected_block.node_id.to_string()),
+                        ]),
+                        Line::from(vec![
+                            Span::styled("Start: ", Style::default().add_modifier(Modifier::BOLD)),
+                            Span::raw(selected_block.sequence_start.to_string()),
+                        ]),
+                        Line::from(vec![
+                            Span::styled("End: ", Style::default().add_modifier(Modifier::BOLD)),
+                            Span::raw(selected_block.sequence_end.to_string()),
+                        ]),
+                    ]
+                } else {
+                    vec![Line::from(vec![Span::styled(
+                        "No block selected",
+                        Style::default().fg(Color::DarkGray),
+                    )])]
+                };
 
                 let panel_content = Paragraph::new(panel_text)
                     .wrap(Wrap { trim: true })
-                    .scroll((0, 0))
-                    .style(Style::default().bg(Color::Reset))
+                    .alignment(ratatui::layout::Alignment::Left)
                     .block(panel_block);
 
                 // Clear the panel area if we just changed the layout
@@ -223,6 +278,18 @@ pub fn view_block_group(
             }
         })?;
 
+        // After drawing, update the viewer if needed
+        if is_loading {
+            if let Some(new_block_group_id) = explorer_state.selected_block_group_id {
+                // Create a new graph for the selected block group
+                block_graph = BlockGroup::get_graph(conn, new_block_group_id);
+                // Update the viewer
+                viewer = Viewer::new(&block_graph, conn, PlotParameters::default());
+                viewer.state.selected_block = None;
+                is_loading = false;
+            }
+        }
+
         // Handle input
         let timeout = tick_rate
             .checked_sub(last_tick.elapsed())
@@ -230,28 +297,69 @@ pub fn view_block_group(
         if crossterm::event::poll(timeout)? {
             if let event::Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
-                    // Exit on q
-                    if key.code == KeyCode::Char('q') {
-                        break;
-                    }
+                    // Global handlers
                     match key.code {
-                        // Performing actions on blocks
+                        KeyCode::Char('q') => break,
                         KeyCode::Tab => {
-                            // Future implementation: switch between panels
+                            if key.modifiers == KeyModifiers::SHIFT {
+                                // Shift+Tab - cycle backwards
+                                focus_zone = match focus_zone {
+                                    "canvas" => "sidebar",
+                                    "sidebar" => {
+                                        if show_panel {
+                                            "panel"
+                                        } else {
+                                            "canvas"
+                                        }
+                                    }
+                                    "panel" => "canvas",
+                                    _ => "canvas",
+                                };
+                            } else {
+                                // Tab - cycle forwards
+                                focus_zone = match focus_zone {
+                                    "canvas" => {
+                                        if show_panel {
+                                            "panel"
+                                        } else {
+                                            "sidebar"
+                                        }
+                                    }
+                                    "sidebar" => "canvas",
+                                    "panel" => "sidebar",
+                                    _ => "canvas",
+                                };
+                            }
+                            continue;
                         }
-                        KeyCode::BackTab => {
-                            // Future implementation: switch between panels
+                        _ => {}
+                    }
+
+                    // Focus-specific handlers
+                    match focus_zone {
+                        "canvas" => match key.code {
+                            KeyCode::Enter => {
+                                if viewer.state.selected_block.is_some() {
+                                    show_panel = true;
+                                    focus_zone = "panel";
+                                    tui_layout_change = true;
+                                }
+                            }
+                            _ => {
+                                viewer.handle_input(key);
+                            }
+                        },
+                        "panel" => {
+                            if key.code == KeyCode::Esc {
+                                show_panel = false;
+                                focus_zone = "canvas";
+                                tui_layout_change = true;
+                            }
                         }
-                        KeyCode::Esc => {
-                            show_panel = false;
+                        "sidebar" => {
+                            explorer.handle_input(&mut explorer_state, key);
                         }
-                        KeyCode::Enter => {
-                            // Show information on the selected block, if there is one
-                            show_panel = viewer.state.selected_block.is_some();
-                        }
-                        _ => {
-                            viewer.handle_input(key);
-                        }
+                        _ => {}
                     }
                 }
             }

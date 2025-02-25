@@ -2,17 +2,17 @@ use crate::models::block_group::BlockGroup;
 use crate::models::collection::Collection;
 use crate::models::sample::Sample;
 use crate::models::traits::Query;
-use ratatui::style::Modifier;
+use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     buffer::Buffer,
-    layout::{Rect, Size},
-    style::{Color, Style},
+    layout::Rect,
+    style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Paragraph, StatefulWidget},
+    widgets::{Block, Paragraph, StatefulWidget},
 };
 use rusqlite::{params, Connection};
 use std::collections::{HashMap, HashSet};
-use tui_scrollview::{ScrollView, ScrollViewState};
+use tui_widget_list::{ListBuilder, ListState, ListView};
 
 /// Normalize a hierarchical collection name by removing trailing delimiters
 /// (except if the entire collection name is "/"). For example:
@@ -156,106 +156,388 @@ pub fn gather_collection_explorer_data(
     }
 }
 
+#[derive(Debug)]
+pub enum ExplorerItem {
+    Collection {
+        name: String,
+        /// Whether this is the current collection (listed at the top), or a link to another collection
+        is_current: bool,
+    },
+    BlockGroup {
+        id: i64,
+        name: String,
+    },
+    Sample {
+        name: String,
+        expanded: bool,
+    },
+    Header {
+        text: String,
+    },
+}
+
+impl ExplorerItem {
+    /// Skip over headers and the top-level collection name
+    pub fn is_selectable(&self) -> bool {
+        match self {
+            ExplorerItem::Collection { is_current, .. } => !is_current,
+            ExplorerItem::BlockGroup { .. } => true,
+            ExplorerItem::Sample { .. } => true,
+            ExplorerItem::Header { .. } => false,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct CollectionExplorerState {
+    pub list_state: ListState,
+    pub total_items: usize,
+    pub has_focus: bool,
+    /// The currently selected block group
+    pub selected_block_group_id: Option<i64>,
+    /// Tracks which samples are expanded/collapsed
+    expanded_samples: HashSet<String>,
+}
+
+impl CollectionExplorerState {
+    pub fn new() -> Self {
+        Self::with_selected_block_group(None)
+    }
+
+    pub fn with_selected_block_group(block_group_id: Option<i64>) -> Self {
+        Self {
+            list_state: ListState::default(),
+            total_items: 0,
+            has_focus: false,
+            selected_block_group_id: block_group_id,
+            expanded_samples: HashSet::new(),
+        }
+    }
+
+    /// Toggle expansion state of a sample
+    pub fn toggle_sample(&mut self, sample_name: &str) {
+        if self.expanded_samples.contains(sample_name) {
+            self.expanded_samples.remove(sample_name);
+        } else {
+            self.expanded_samples.insert(sample_name.to_string());
+        }
+    }
+
+    /// Check if a sample is expanded
+    pub fn is_sample_expanded(&self, sample_name: &str) -> bool {
+        self.expanded_samples.contains(sample_name)
+    }
+}
+
+#[derive(Debug)]
 pub struct CollectionExplorer {
-    // Add fields to store the data we want to display
     pub data: CollectionExplorerData,
 }
 
 impl CollectionExplorer {
     pub fn new(conn: &Connection, full_collection_name: &str) -> Self {
-        // Gather the data directly in the constructor
         let data = gather_collection_explorer_data(conn, full_collection_name);
         Self { data }
     }
-}
 
-impl StatefulWidget for CollectionExplorer {
-    type State = ScrollViewState;
+    /// Refresh the explorer data from the database and return true if data changed
+    pub fn refresh(&mut self, conn: &Connection, full_collection_name: &str) -> bool {
+        let new_data = gather_collection_explorer_data(conn, full_collection_name);
+        let changed = self.data.reference_block_groups.len()
+            != new_data.reference_block_groups.len()
+            || self.data.sample_block_groups != new_data.sample_block_groups;
+        self.data = new_data;
+        changed
+    }
 
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let mut lines = Vec::new();
+    /// Force the widget to reload by resetting its state
+    pub fn force_reload(&self, state: &mut CollectionExplorerState) {
+        state.list_state = ListState::default();
+        // Find first selectable item to maintain a valid selection
+        state.list_state.selected = self.find_next_selectable(state, 0);
+    }
 
-        // Add current collection name
-        lines.push(Line::from(vec![
-            Span::raw("Collection: "),
-            Span::raw(&self.data.current_collection),
-        ]));
-        lines.push(Line::raw(String::new()));
+    /// Find the next selectable item after the given index, wrapping around to the start if needed
+    fn find_next_selectable(
+        &self,
+        state: &CollectionExplorerState,
+        from_idx: usize,
+    ) -> Option<usize> {
+        let items = self.get_display_items(state);
+        // First try after the current index
+        items
+            .iter()
+            .enumerate()
+            .skip(from_idx)
+            .find(|(_, item)| item.is_selectable())
+            .map(|(i, _)| i)
+            // If nothing found after current index, wrap around to start
+            .or_else(|| {
+                items
+                    .iter()
+                    .enumerate()
+                    .take(from_idx)
+                    .find(|(_, item)| item.is_selectable())
+                    .map(|(i, _)| i)
+            })
+    }
 
-        // Add reference block groups
-        lines.push(Line::raw("Reference graphs:"));
-        for (_, name) in &self.data.reference_block_groups {
-            lines.push(Line::from(vec![
-                Span::styled(format!("- {}", name), Style::default().fg(Color::Gray)),
-                Span::styled(
-                    " g",
-                    Style::default()
-                        .fg(Color::DarkGray)
-                        .add_modifier(Modifier::ITALIC),
-                ),
-            ]));
+    /// Find the previous selectable item before the given index, wrapping around to the end if needed
+    fn find_prev_selectable(
+        &self,
+        state: &CollectionExplorerState,
+        from_idx: usize,
+    ) -> Option<usize> {
+        let items = self.get_display_items(state);
+        // First try before the current index
+        items
+            .iter()
+            .enumerate()
+            .take(from_idx)
+            .rev()
+            .find(|(_, item)| item.is_selectable())
+            .map(|(i, _)| i)
+            // If nothing found before current index, wrap around to end
+            .or_else(|| {
+                items
+                    .iter()
+                    .enumerate()
+                    .skip(from_idx)
+                    .rev()
+                    .find(|(_, item)| item.is_selectable())
+                    .map(|(i, _)| i)
+            })
+    }
+
+    pub fn next(&self, state: &mut CollectionExplorerState) {
+        let items = self.get_display_items(state);
+        if items.is_empty() {
+            return;
         }
-        lines.push(Line::raw(String::new()));
 
-        // Add samples and their block groups
-        lines.push(Line::raw("Samples:"));
+        let current_idx = state.list_state.selected.unwrap_or(0);
+        state.list_state.selected = self.find_next_selectable(state, current_idx + 1);
+    }
+
+    pub fn previous(&self, state: &mut CollectionExplorerState) {
+        let items = self.get_display_items(state);
+        if items.is_empty() {
+            return;
+        }
+
+        let current_idx = state.list_state.selected.unwrap_or(0);
+        state.list_state.selected = self.find_prev_selectable(state, current_idx);
+    }
+
+    pub fn handle_input(&self, state: &mut CollectionExplorerState, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up => self.previous(state),
+            KeyCode::Down => self.next(state),
+            KeyCode::Enter | KeyCode::Char(' ') => {
+                if let Some(selected_idx) = state.list_state.selected {
+                    let items = self.get_display_items(state);
+                    match &items[selected_idx] {
+                        ExplorerItem::BlockGroup { id, .. } => {
+                            state.selected_block_group_id = Some(*id);
+                        }
+                        ExplorerItem::Sample { .. } => {
+                            self.toggle_sample_expansion(state);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub fn get_status_line() -> String {
+        "▼ ▲ navigate | return: select".to_string()
+    }
+
+    /// Get all items to display, taking into account the current state
+    fn get_display_items(&self, state: &CollectionExplorerState) -> Vec<ExplorerItem> {
+        let mut items = Vec::new();
+
+        // Current collection name
+        items.push(ExplorerItem::Collection {
+            name: self.data.current_collection.clone(),
+            is_current: true,
+        });
+
+        // Blank line
+        items.push(ExplorerItem::Header {
+            text: String::new(),
+        });
+
+        // Reference graphs section
+        items.push(ExplorerItem::Header {
+            text: "Reference graphs:".to_string(),
+        });
+
+        // Reference block groups
+        for (id, name) in &self.data.reference_block_groups {
+            items.push(ExplorerItem::BlockGroup {
+                id: *id,
+                name: name.clone(),
+            });
+        }
+
+        // Blank line
+        items.push(ExplorerItem::Header {
+            text: String::new(),
+        });
+
+        // Samples section
+        items.push(ExplorerItem::Header {
+            text: "Samples:".to_string(),
+        });
+
+        // Samples and their block groups
         for sample in &self.data.collection_samples {
-            lines.push(Line::from(vec![
-                Span::raw("  ▼ "),
-                Span::styled(sample, Style::default().fg(Color::Gray)),
-                Span::styled(
-                    " s",
-                    Style::default()
-                        .fg(Color::DarkGray)
-                        .add_modifier(Modifier::ITALIC),
-                ),
-            ]));
-            if let Some(block_groups) = self.data.sample_block_groups.get(sample) {
-                for (_, name) in block_groups {
-                    lines.push(Line::from(vec![
-                        Span::styled(format!("- {}", name), Style::default().fg(Color::Gray)),
-                        Span::styled(
-                            " g",
-                            Style::default()
-                                .fg(Color::DarkGray)
-                                .add_modifier(Modifier::ITALIC),
-                        ),
-                    ]));
+            items.push(ExplorerItem::Sample {
+                name: sample.clone(),
+                expanded: state.is_sample_expanded(sample),
+            });
+
+            if state.is_sample_expanded(sample) {
+                if let Some(block_groups) = self.data.sample_block_groups.get(sample) {
+                    for (id, name) in block_groups {
+                        items.push(ExplorerItem::BlockGroup {
+                            id: *id,
+                            name: name.clone(),
+                        });
+                    }
                 }
             }
         }
-        lines.push(Line::raw(String::new()));
 
-        // Add nested collections
-        lines.push(Line::raw("Nested Collections:"));
+        // Blank line
+        items.push(ExplorerItem::Header {
+            text: String::new(),
+        });
+
+        // Nested collections section
+        items.push(ExplorerItem::Header {
+            text: "Nested Collections:".to_string(),
+        });
+
+        // Nested collections
         for collection in &self.data.nested_collections {
-            lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled(collection, Style::default().fg(Color::Gray)),
-                Span::styled(
-                    " c",
-                    Style::default()
-                        .fg(Color::DarkGray)
-                        .add_modifier(Modifier::ITALIC),
-                ),
-            ]));
+            items.push(ExplorerItem::Collection {
+                name: collection.clone(),
+                is_current: false,
+            });
         }
 
-        // Calculate content size
-        let content_height = lines.len() as u16;
-        let content_size = Size::new(area.width, content_height);
+        items
+    }
 
-        // Create scroll view
-        let mut scroll_view = ScrollView::new(content_size);
+    pub fn toggle_sample_expansion(&self, state: &mut CollectionExplorerState) {
+        if let Some(selected_idx) = state.list_state.selected {
+            let items = self.get_display_items(state);
+            if let Some(ExplorerItem::Sample { name, .. }) = items.get(selected_idx) {
+                state.toggle_sample(name);
+            }
+        }
+    }
+}
 
-        // Render the content and then the scroll view itself
-        scroll_view.render_widget(
-            Paragraph::new(lines)
-                .wrap(ratatui::widgets::Wrap { trim: true })
-                .style(Style::default().bg(Color::Indexed(233))),
-            Rect::new(0, 0, area.width, content_height),
-        );
-        scroll_view.render(area, buf, state);
+impl StatefulWidget for &CollectionExplorer {
+    type State = CollectionExplorerState;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        let items = self.get_display_items(state);
+        let mut display_items = Vec::new();
+
+        // Convert ExplorerItems to display items
+        for item in &items {
+            let paragraph = match item {
+                ExplorerItem::Collection { name, is_current } => {
+                    if *is_current {
+                        // This is the current collection header
+                        Paragraph::new(Line::from(vec![
+                            Span::styled(
+                                "  Collection:",
+                                Style::default().add_modifier(Modifier::BOLD),
+                            ),
+                            Span::raw(format!(" {}", name)),
+                        ]))
+                    } else {
+                        // This is a link to another collection
+                        Paragraph::new(Line::from(vec![Span::raw(format!("  • {}", name))]))
+                    }
+                }
+                ExplorerItem::BlockGroup { id, name, .. } => {
+                    // Check if this block group is one of the sample_name = NULL reference block groups
+                    // This influences the indentation
+                    let is_reference = self
+                        .data
+                        .reference_block_groups
+                        .iter()
+                        .any(|(ref_id, _)| *ref_id == *id);
+
+                    if is_reference {
+                        Paragraph::new(Line::from(vec![Span::raw(format!("   • {}", name))]))
+                    } else {
+                        Paragraph::new(Line::from(vec![Span::raw(format!("     • {}", name))]))
+                    }
+                }
+                ExplorerItem::Sample { name, expanded } => Paragraph::new(Line::from(vec![
+                    Span::raw(if *expanded { "   ▼ " } else { "   ▶ " }),
+                    Span::styled(name, Style::default().fg(Color::Gray)),
+                ])),
+                ExplorerItem::Header { text } => Paragraph::new(Line::from(vec![Span::styled(
+                    format!("  {}", text),
+                    Style::default().add_modifier(Modifier::BOLD),
+                )])),
+            };
+
+            display_items.push(paragraph);
+        }
+
+        // Store total items
+        let total_items = display_items.len();
+        let has_focus = state.has_focus;
+
+        // Create and render the list
+        let builder = ListBuilder::new(move |context| {
+            let item = display_items[context.index].clone();
+            if context.is_selected {
+                let style = if has_focus {
+                    Style::default().bg(Color::Blue).fg(Color::White)
+                } else {
+                    Style::default().bg(Color::DarkGray).fg(Color::Gray)
+                };
+                (item.style(style), 1)
+            } else {
+                (item, 1)
+            }
+        });
+
+        let list = ListView::new(builder, total_items).block(Block::default());
+
+        state.total_items = total_items;
+
+        // Ensure selection is valid for the current items
+        if state.list_state.selected.is_none() || state.list_state.selected.unwrap() >= total_items
+        {
+            // Selection is invalid or missing - try to find a valid one
+            state.list_state.selected = if let Some(block_group_id) = state.selected_block_group_id
+            {
+                // Try to find the selected block group in the current items
+                self.get_display_items(state).iter()
+                    .enumerate()
+                    .find(|(_, item)| matches!(item, ExplorerItem::BlockGroup { id, .. } if *id == block_group_id))
+                    .map(|(i, _)| i)
+                    .or_else(|| self.find_next_selectable(state, 0))
+            } else {
+                // No block group selected, just find the next selectable item
+                self.find_next_selectable(state, 0)
+            };
+        }
+
+        list.render(area, buf, &mut state.list_state);
     }
 }
 

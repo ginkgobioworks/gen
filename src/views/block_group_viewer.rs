@@ -108,6 +108,7 @@ pub struct Viewer<'a> {
     pub parameters: PlotParameters,
     pub origin_block: Option<GraphNode>,
     view_block: Block<'a>,
+    pub has_focus: bool,
 }
 
 impl<'a> Viewer<'a> {
@@ -165,6 +166,7 @@ impl<'a> Viewer<'a> {
             parameters: plot_parameters,
             origin_block,
             view_block: Block::default(),
+            has_focus: false,
         }
     }
 
@@ -433,15 +435,26 @@ impl<'a> Viewer<'a> {
                     } else {
                         label::NODE.to_string()
                     };
-                    // Style the label depending on whether it's selected
-                    let style = if Some(block) == self.state.selected_block.as_ref() {
-                        // Selected blocks
-                        match label.as_str() {
-                            label::NODE => Style::default().fg(Color::LightGreen),
-                            _ => Style::default().fg(Color::Black).bg(Color::White),
+
+                    // The style of the label is determined by 3 factors:
+                    // 1. Whether the viewer has focus
+                    // 2. Whether the block is selected
+                    // 3. Whether the label consists of text or a glyph (the dot for zoomed out views)
+
+                    let is_selected = Some(block) == self.state.selected_block.as_ref();
+                    let is_glyph = label.as_str() == label::NODE;
+
+                    let style = match (self.has_focus, is_selected, is_glyph) {
+                        (true, true, false) => Style::default().fg(Color::White).bg(Color::Blue),
+                        (true, true, true) => Style::default().fg(Color::Blue),
+                        (true, false, false) => {
+                            Style::default().fg(Color::White).bg(Color::Indexed(236))
                         }
-                    } else {
-                        Style::default().fg(Color::White)
+                        (true, false, true) => Style::default().fg(Color::White),
+                        (false, _, false) => {
+                            Style::default().fg(Color::White).bg(Color::Indexed(236))
+                        }
+                        (false, _, true) => Style::default().fg(Color::White),
                     };
 
                     // Clip labels that are potentially in the window (horizontal)
@@ -931,7 +944,7 @@ fn inner_truncation(s: &str, target_length: u32) -> String {
     if input_length <= target_length {
         return s.to_string();
     } else if target_length < 5 {
-        return "●".to_string(); // ○ is U+25CB; ● is U+25CF
+        return label::NODE.to_string(); // ○ is U+25CB; ● is U+25CF
     }
     // length - 3 because we need space for the ellipsis
     let left_len = (target_length - 3) / 2 + ((target_length - 3) % 2);
