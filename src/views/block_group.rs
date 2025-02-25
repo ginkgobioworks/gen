@@ -5,7 +5,7 @@ use crate::views::collection::{CollectionExplorer, CollectionExplorerState};
 use rusqlite::{params, Connection};
 
 use crossterm::{
-    event::{self, KeyCode, KeyEventKind, KeyModifiers},
+    event::{self, KeyCode, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -302,36 +302,34 @@ pub fn view_block_group(
                     match key.code {
                         KeyCode::Char('q') => break,
                         KeyCode::Tab => {
-                            if key.modifiers == KeyModifiers::SHIFT {
-                                // Shift+Tab - cycle backwards
-                                focus_zone = match focus_zone {
-                                    "canvas" => "sidebar",
-                                    "sidebar" => {
-                                        if show_panel {
-                                            "panel"
-                                        } else {
-                                            "canvas"
-                                        }
+                            // Tab - cycle forwards
+                            focus_zone = match focus_zone {
+                                "canvas" => {
+                                    if show_panel {
+                                        "panel"
+                                    } else {
+                                        "sidebar"
                                     }
-                                    "panel" => "canvas",
-                                    _ => "canvas",
-                                };
-                            } else {
-                                // Tab - cycle forwards
-                                focus_zone = match focus_zone {
-                                    "canvas" => {
-                                        if show_panel {
-                                            "panel"
-                                        } else {
-                                            "sidebar"
-                                        }
-                                    }
-                                    "sidebar" => "canvas",
-                                    "panel" => "sidebar",
-                                    _ => "canvas",
-                                };
+                                }
+                                "sidebar" => "canvas",
+                                "panel" => "sidebar",
+                                _ => "canvas",
                             }
-                            continue;
+                        }
+                        KeyCode::BackTab => {
+                            // Shift+Tab - cycle backwards
+                            focus_zone = match focus_zone {
+                                "canvas" => "sidebar",
+                                "sidebar" => {
+                                    if show_panel {
+                                        "panel"
+                                    } else {
+                                        "canvas"
+                                    }
+                                }
+                                "panel" => "canvas",
+                                _ => "canvas",
+                            }
                         }
                         _ => {}
                     }
