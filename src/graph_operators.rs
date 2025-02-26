@@ -149,6 +149,10 @@ pub fn derive_chunks(
             })
             .collect::<HashMap<_, _>>();
 
+        // The block group method to derive a subgraph creates copies of the nodes from the parent
+        // block group, to make it easier to then stitch them together later.  So we need to use the
+        // map returned by derive_subgraph to find the edges in the child graph that correspond to
+        // path edges in the parent graph, and create a new path from the child edges.
         let mut new_path_edge_ids = vec![];
         let new_start_target_node_id = new_node_ids_by_old.get(&start_block.node_id).unwrap();
         let new_start_edge = child_block_group_edges
