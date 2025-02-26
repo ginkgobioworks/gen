@@ -14,7 +14,7 @@ use crate::models::sequence::{cached_sequence, Sequence};
 use crate::models::strand::Strand;
 use crate::models::traits::*;
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize, Ord, PartialOrd)]
 pub struct Edge {
     pub id: i64,
     pub source_node_id: i64,
@@ -25,7 +25,7 @@ pub struct Edge {
     pub target_strand: Strand,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct EdgeData {
     pub source_node_id: i64,
     pub source_coordinate: i64,
@@ -492,6 +492,14 @@ impl Edge {
             }
         }
         boundary_edges
+    }
+
+    pub fn is_start_edge(&self) -> bool {
+        self.source_node_id == PATH_START_NODE_ID
+    }
+
+    pub fn is_end_edge(&self) -> bool {
+        self.target_node_id == PATH_END_NODE_ID
     }
 }
 

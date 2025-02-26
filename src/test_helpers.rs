@@ -74,22 +74,38 @@ pub fn setup_block_group(conn: &Connection) -> (i64, Path) {
         .sequence_type("DNA")
         .sequence("AAAAAAAAAA")
         .save(conn);
-    let a_node_id = Node::create(conn, a_seq.hash.as_str(), None);
+    let a_node_id = Node::create(
+        conn,
+        a_seq.hash.as_str(),
+        format!("test-a-node.{}", a_seq.hash),
+    );
     let t_seq = Sequence::new()
         .sequence_type("DNA")
         .sequence("TTTTTTTTTT")
         .save(conn);
-    let t_node_id = Node::create(conn, t_seq.hash.as_str(), None);
+    let t_node_id = Node::create(
+        conn,
+        t_seq.hash.as_str(),
+        format!("test-t-node.{}", a_seq.hash),
+    );
     let c_seq = Sequence::new()
         .sequence_type("DNA")
         .sequence("CCCCCCCCCC")
         .save(conn);
-    let c_node_id = Node::create(conn, c_seq.hash.as_str(), None);
+    let c_node_id = Node::create(
+        conn,
+        c_seq.hash.as_str(),
+        format!("test-c-node.{}", a_seq.hash),
+    );
     let g_seq = Sequence::new()
         .sequence_type("DNA")
         .sequence("GGGGGGGGGG")
         .save(conn);
-    let g_node_id = Node::create(conn, g_seq.hash.as_str(), None);
+    let g_node_id = Node::create(
+        conn,
+        g_seq.hash.as_str(),
+        format!("test-g-node.{}", a_seq.hash),
+    );
     let _collection = Collection::create(conn, "test");
     let block_group = BlockGroup::create(conn, "test", None, "chr1");
     let edge0 = Edge::create(
