@@ -12,7 +12,27 @@ use ratatui::{
 };
 use rusqlite::{params, Connection};
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use tui_widget_list::{ListBuilder, ListState, ListView};
+
+/// Represents the different focus zones in the UI
+/// TODO: implement a proper cycler
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FocusZone {
+    Canvas,
+    Panel,
+    Sidebar,
+}
+// For debugging
+impl fmt::Display for FocusZone {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FocusZone::Canvas => write!(f, "canvas"),
+            FocusZone::Panel => write!(f, "panel"),
+            FocusZone::Sidebar => write!(f, "sidebar"),
+        }
+    }
+}
 
 /// Normalize a hierarchical collection name by removing trailing delimiters
 /// (except if the entire collection name is "/"). For example:
@@ -197,6 +217,8 @@ pub struct CollectionExplorerState {
     pub selected_block_group_id: Option<i64>,
     /// Tracks which samples are expanded/collapsed
     expanded_samples: HashSet<String>,
+    /// Indicates which focus zone should receive focus (if any)
+    pub focus_change_requested: Option<FocusZone>,
 }
 
 impl CollectionExplorerState {
@@ -211,6 +233,7 @@ impl CollectionExplorerState {
             has_focus: false,
             selected_block_group_id: block_group_id,
             expanded_samples: HashSet::new(),
+            focus_change_requested: None,
         }
     }
 
@@ -339,6 +362,7 @@ impl CollectionExplorer {
                     match &items[selected_idx] {
                         ExplorerItem::BlockGroup { id, .. } => {
                             state.selected_block_group_id = Some(*id);
+                            state.focus_change_requested = Some(FocusZone::Canvas);
                         }
                         ExplorerItem::Sample { .. } => {
                             self.toggle_sample_expansion(state);
@@ -544,91 +568,43 @@ impl StatefulWidget for &CollectionExplorer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusqlite::Connection;
+    use crate::models::block_group::BlockGroup;
+    use crate::models::metadata::get_db_uuid;
+    use crate::models::operations::setup_db;
+    use crate::models::sample::Sample;
+    use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
 
     /// For these tests we create an in-memory database, run minimal schema
     /// creation, and insert data to test gather_collection_explorer_data.
     #[test]
     fn test_gather_collection_explorer_data() {
-        // 1) Set up an in-memory database
-        let conn = Connection::open_in_memory().unwrap();
+        setup_gen_dir();
+        let conn = &mut get_connection(None);
+        let db_uuid = get_db_uuid(conn);
+        let operation_conn = &get_operation_connection(None);
+        setup_db(operation_conn, &db_uuid);
 
-        // Minimal schema for the required tables, adapted from migrations
-        conn.execute_batch(
-            r#"
-            CREATE TABLE collections (
-              name TEXT PRIMARY KEY NOT NULL
-            ) STRICT;
-            
-            CREATE TABLE block_groups (
-              id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-              collection_name TEXT NOT NULL,
-              sample_name TEXT,
-              name TEXT NOT NULL
-            ) STRICT;
-            CREATE TABLE samples (
-              name TEXT PRIMARY KEY NOT NULL
-            ) STRICT;
-        "#,
-        )
-        .unwrap();
+        // Create collections with hierarchical paths
+        Collection::create(conn, "/foo/bar");
+        Collection::create(conn, "/foo/bar/a");
+        Collection::create(conn, "/foo/bar/a/b");
+        Collection::create(conn, "/foo/bar2");
+        Collection::create(conn, "/foo/baz");
 
-        // 2) Insert data: one collection path + nested sub-collections
-        // We'll store e.g. "/foo/bar" as the main path
-        conn.execute(r#"INSERT INTO collections(name) VALUES (?1)"#, ["/foo/bar"])
-            .unwrap();
-        conn.execute(
-            r#"INSERT INTO collections(name) VALUES (?1)"#,
-            ["/foo/bar/a"],
-        )
-        .unwrap();
-        conn.execute(
-            r#"INSERT INTO collections(name) VALUES (?1)"#,
-            ["/foo/bar/a/b"],
-        )
-        .unwrap();
-        conn.execute(
-            r#"INSERT INTO collections(name) VALUES (?1)"#,
-            ["/foo/bar2"],
-        )
-        .unwrap();
-        conn.execute(r#"INSERT INTO collections(name) VALUES (?1)"#, ["/foo/baz"])
-            .unwrap();
+        // Create samples
+        let sample_alpha = Sample::get_or_create(conn, "SampleAlpha");
+        let sample_beta = Sample::get_or_create(conn, "SampleBeta");
 
-        // 3) Insert a couple of samples
-        conn.execute("INSERT INTO samples(name) VALUES (?1)", ["SampleAlpha"])
-            .unwrap();
-        conn.execute("INSERT INTO samples(name) VALUES (?1)", ["SampleBeta"])
-            .unwrap();
+        // Create block groups: some with sample = null (reference), some with a sample
+        BlockGroup::create(conn, "/foo/bar", None, "BG_ReferenceA");
+        BlockGroup::create(conn, "/foo/bar", None, "BG_ReferenceB");
+        BlockGroup::create(conn, "/foo/bar", Some(&sample_alpha.name), "BG_Alpha1");
+        BlockGroup::create(conn, "/foo/bar", Some(&sample_beta.name), "BG_Beta1");
 
-        // 4) Insert block groups: some with sample = null, some with a sample
-        // for the collection "/foo/bar"
-        conn.execute(
-            "INSERT INTO block_groups(collection_name, sample_name, name) VALUES(?1, NULL, ?2)",
-            ["/foo/bar", "BG_ReferenceA"],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO block_groups(collection_name, sample_name, name) VALUES(?1, NULL, ?2)",
-            ["/foo/bar", "BG_ReferenceB"],
-        )
-        .unwrap();
+        // Call the function under test—notice we pass the full path
+        let explorer_data = gather_collection_explorer_data(conn, "/foo/bar");
 
-        conn.execute(
-            "INSERT INTO block_groups(collection_name, sample_name, name) VALUES(?1, ?2, ?3)",
-            ["/foo/bar", "SampleAlpha", "BG_Alpha1"],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO block_groups(collection_name, sample_name, name) VALUES(?1, ?2, ?3)",
-            ["/foo/bar", "SampleBeta", "BG_Beta1"],
-        )
-        .unwrap();
-
-        // 5) Call the function under test—notice we pass the full path
-        let explorer_data = gather_collection_explorer_data(&conn, "/foo/bar");
-
-        // 6) Verify results
+        // Verify results
         // (A) The final path component is "bar"
         assert_eq!(explorer_data.current_collection, "bar");
 

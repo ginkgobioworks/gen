@@ -1,22 +1,24 @@
-use crate::models::{block_group::BlockGroup, node::Node, traits::Query};
+use crate::models::{block_group::BlockGroup, node::Node, path::Path, traits::Query};
 use crate::progress_bar::{get_handler, get_time_elapsed_bar};
 use crate::views::block_group_viewer::{PlotParameters, Viewer};
-use crate::views::collection::{CollectionExplorer, CollectionExplorerState};
-use rusqlite::{params, Connection};
-
+use crate::views::collection::{CollectionExplorer, CollectionExplorerState, FocusZone};
 use crossterm::{
     event::{self, KeyCode, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use log::warn;
 use ratatui::{
     layout::Constraint,
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Block, Clear, Padding, Paragraph, Wrap},
 };
+use rusqlite::{params, types::Value as SQLValue, Connection};
 use std::error::Error;
 use std::time::{Duration, Instant};
+
+const REFRESH_INTERVAL: u64 = 1; // seconds
 
 pub fn view_block_group(
     conn: &Connection,
@@ -70,11 +72,13 @@ pub fn view_block_group(
     let bar = progress_bar.add(get_time_elapsed_bar());
     let _ = progress_bar.println("Pre-computing layout in chunks");
     let mut block_graph = BlockGroup::get_graph(conn, block_group_id);
+
     let mut viewer = if let Some(origin) = origin {
         Viewer::with_origin(&block_graph, conn, PlotParameters::default(), origin)
     } else {
         Viewer::new(&block_graph, conn, PlotParameters::default())
     };
+
     bar.finish();
 
     // Setup terminal
@@ -91,7 +95,7 @@ pub fn view_block_group(
     let mut tui_layout_change = false;
 
     // Focus management
-    let mut focus_zone = "canvas";
+    let mut focus_zone = FocusZone::Canvas;
 
     // Create explorer and its state that persists across frames
     let mut explorer = CollectionExplorer::new(conn, collection_name);
@@ -104,12 +108,27 @@ pub fn view_block_group(
     // Track the last selected block group to detect changes
     let mut last_selected_block_group_id = Some(block_group_id);
     let mut is_loading = false;
-
+    let mut last_refresh = Instant::now();
     loop {
         // Refresh explorer data and force reload on change
-        // TODO: this doesn't work as expected, and I don't understand why
-        if explorer.refresh(conn, collection_name) {
-            explorer.force_reload(&mut explorer_state);
+        // I have to close and reopen the connection to clear the cache,
+        // otherwise I don't see new samples etc.
+        // I do this every REFRESH_INTERVAL seconds.
+        if last_refresh.elapsed() >= Duration::from_secs(REFRESH_INTERVAL) {
+            // Get the path to the database
+            let db_path = conn.path().unwrap();
+            // Close and reopen the connection
+            let new_conn = Connection::open(db_path).unwrap();
+
+            // The following PRAGMA were also suggested, but these didn't seem to help.
+            //info!("Clearing cache for {}", db_path);
+            //conn.execute("PRAGMA cache_size = 0", [])?;
+            //conn.execute("PRAGMA cache_size = 50000", [])?;  // 50k from src/migrations.rs
+
+            if explorer.refresh(&new_conn, collection_name) {
+                explorer.force_reload(&mut explorer_state);
+            }
+            last_refresh = Instant::now();
         }
 
         // Trigger reload if selection changed to a new block group
@@ -153,7 +172,7 @@ pub fn view_block_group(
             };
 
             // Sidebar
-            explorer_state.has_focus = focus_zone == "sidebar";
+            explorer_state.has_focus = focus_zone == FocusZone::Sidebar;
             if show_sidebar {
                 let sidebar_block = Block::default()
                     .padding(Padding::new(0, 0, 1, 1))
@@ -166,14 +185,14 @@ pub fn view_block_group(
 
             // Status bar
             let mut status_message = match focus_zone {
-                "canvas" => Viewer::get_status_line(),
-                "panel" => "esc: close panel".to_string(),
-                "sidebar" => CollectionExplorer::get_status_line(),
-                _ => "".to_string(),
+                FocusZone::Canvas => Viewer::get_status_line(),
+                FocusZone::Panel => "esc: close panel".to_string(),
+                FocusZone::Sidebar => CollectionExplorer::get_status_line(),
             };
 
-            // Add focus controls to status message
-            status_message.push_str(" | tab: cycle focus | q: quit");
+            // Paths may be too specific an application, so we don't include the controls in the Viewer widget itself
+            // Instead, we add them to the status bar along with the other controls
+            status_message.push_str(" | p: show current path | tab: cycle focus | q: quit");
 
             let status_bar_contents = format!(
                 "{status_message:^width$}",
@@ -213,7 +232,7 @@ pub fn view_block_group(
                 frame.render_widget(loading_para, loading_area);
             } else {
                 // Ask the viewer to paint the canvas
-                viewer.has_focus = focus_zone == "canvas";
+                viewer.has_focus = focus_zone == FocusZone::Canvas;
                 viewer.draw(frame, canvas_area);
             }
 
@@ -223,7 +242,7 @@ pub fn view_block_group(
                     .padding(Padding::new(2, 2, 1, 1))
                     .title("Details")
                     .style(Style::default().bg(Color::Indexed(233)))
-                    .border_style(if focus_zone == "panel" {
+                    .border_style(if focus_zone == FocusZone::Panel {
                         Style::default()
                             .fg(Color::Blue)
                             .add_modifier(Modifier::BOLD)
@@ -304,31 +323,29 @@ pub fn view_block_group(
                         KeyCode::Tab => {
                             // Tab - cycle forwards
                             focus_zone = match focus_zone {
-                                "canvas" => {
+                                FocusZone::Canvas => {
                                     if show_panel {
-                                        "panel"
+                                        FocusZone::Panel
                                     } else {
-                                        "sidebar"
+                                        FocusZone::Sidebar
                                     }
                                 }
-                                "sidebar" => "canvas",
-                                "panel" => "sidebar",
-                                _ => "canvas",
+                                FocusZone::Sidebar => FocusZone::Canvas,
+                                FocusZone::Panel => FocusZone::Sidebar,
                             }
                         }
                         KeyCode::BackTab => {
                             // Shift+Tab - cycle backwards
                             focus_zone = match focus_zone {
-                                "canvas" => "sidebar",
-                                "sidebar" => {
+                                FocusZone::Canvas => FocusZone::Sidebar,
+                                FocusZone::Sidebar => {
                                     if show_panel {
-                                        "panel"
+                                        FocusZone::Panel
                                     } else {
-                                        "canvas"
+                                        FocusZone::Canvas
                                     }
                                 }
-                                "panel" => "canvas",
-                                _ => "canvas",
+                                FocusZone::Panel => FocusZone::Canvas,
                             }
                         }
                         _ => {}
@@ -336,29 +353,63 @@ pub fn view_block_group(
 
                     // Focus-specific handlers
                     match focus_zone {
-                        "canvas" => match key.code {
+                        FocusZone::Canvas => match key.code {
                             KeyCode::Enter => {
                                 if viewer.state.selected_block.is_some() {
                                     show_panel = true;
-                                    focus_zone = "panel";
+                                    focus_zone = FocusZone::Panel;
                                     tui_layout_change = true;
+                                }
+                            }
+                            KeyCode::Char('p') => {
+                                // Toggle current path highlighting
+                                if viewer.has_highlight(Color::Red) {
+                                    viewer.clear_highlight(Color::Red);
+                                } else if let Some(bg_id) = explorer_state.selected_block_group_id {
+                                    // BlockGroup::get_current_path will panic if there's no path,
+                                    // so we roll our own query here. (todo: have get_current_path return an Option)
+                                    let current_path = <Path as Query>::get(
+                                        conn,
+                                        "SELECT * FROM paths WHERE block_group_id = ?1 ORDER BY id DESC LIMIT 1",
+                                        rusqlite::params!(SQLValue::from(bg_id)),
+                                    );
+                                    match current_path {
+                                        Ok(path) => {
+                                            if let Err(err) = viewer.show_path(&path, Color::Red) {
+                                                // todo: pop up a message in the panel
+                                                warn!("{}", err);
+                                            }
+                                        }
+                                        Err(err) => {
+                                            warn!(
+                                                "No path found for block group {}: {}",
+                                                bg_id, err
+                                            );
+                                        }
+                                    }
+                                } else {
+                                    warn!("No block group selected");
                                 }
                             }
                             _ => {
                                 viewer.handle_input(key);
                             }
                         },
-                        "panel" => {
+                        FocusZone::Panel => {
                             if key.code == KeyCode::Esc {
                                 show_panel = false;
-                                focus_zone = "canvas";
+                                focus_zone = FocusZone::Canvas;
                                 tui_layout_change = true;
                             }
                         }
-                        "sidebar" => {
+                        FocusZone::Sidebar => {
                             explorer.handle_input(&mut explorer_state, key);
+                            // Check if focus change was requested by the explorer
+                            if let Some(requested_zone) = explorer_state.focus_change_requested {
+                                focus_zone = requested_zone;
+                                explorer_state.focus_change_requested = None;
+                            }
                         }
-                        _ => {}
                     }
                 }
             }

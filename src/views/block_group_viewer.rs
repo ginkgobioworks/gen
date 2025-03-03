@@ -1,32 +1,31 @@
-use crate::graph::{GraphEdge, GraphNode};
-use crate::models::node;
+use crate::graph::{project_path, GraphEdge, GraphNode};
 use crate::models::node::Node;
+use crate::models::path::Path;
 use crate::models::sequence::Sequence;
 use crate::views::block_layout::{BaseLayout, ScaledLayout};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use log::info;
 use log::warn;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
 use ratatui::{
+    buffer::Buffer,
     layout::Rect,
     style::{Color, Style},
     text::Span,
-    widgets::canvas::{Canvas, Line},
-    widgets::Block,
+    widgets::canvas::{Canvas, Line, Points},
+    widgets::{Block, Widget},
 };
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
-
-// Show more visual information if DEBUG
-const DEBUG: bool = false;
 /// Labels used in the graph visualization (selected, not-selected)
 /// the trick is to get them to align with the braille characters
 /// we use to draw lines:
 /// ⣿●⣿*⣿∘⣿⦿⣿○⣿◉⣿⏣⣿⏸⣿⏹⣿⏺⣿⏼⣿⎔⣿
 pub mod label {
-    pub const START: &str = "Start > ";
-    pub const END: &str = " > End";
+    pub const START: &str = "Start >";
+    pub const END: &str = "> End";
     pub const NODE: &str = "⏺";
 }
 
@@ -39,6 +38,21 @@ pub enum NavDirection {
     Down,
 }
 
+/// Defines the discrete zoom levels available in the viewer
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ZoomLevel {
+    // Scale-based zoom levels for both extremes
+    ScaleOut(u32), // Scale-based zooming with smaller scale (zooming out)
+    // Label-based zoom levels from lowest to highest detail
+    Minimal, // label_width = 0 (no sequence shown)
+    Low,     // label_width = 5
+    Default, // label_width = 11 (default)
+    High,    // label_width = 100
+    Full,    // label_width = u32::MAX
+    // Scale-based zoom levels at the maximum label detail
+    ScaleIn(u32), // Scale-based zooming with larger scale (zooming in)
+}
+
 /// Holds parameters that don't change when you scroll.
 /// - `label_width` = how many characters to show at most in each block label. If 0, labels are not shown.
 /// - `scale` = data units per 1 terminal cell.  
@@ -46,19 +60,12 @@ pub enum NavDirection {
 ///   - If `scale` = 2.0, each cell is 2 data units (you see *more* data).  
 ///   - If `scale` = 0.5, each cell is 0.5 data units (you see *less* data, zoomed in).
 /// - `aspect_ratio` = width / height of a terminal cell in data units.
-/// - `line_offset_y` = how much to offset the lines vertically to align the braille characters with the labels
 /// - `edge_style` = draw the edges as straight lines or as splines.
 pub struct PlotParameters {
     pub label_width: u32,
     pub scale: u32,
     pub aspect_ratio: f32,
-    pub line_offset_y: f64,
     pub edge_style: EdgeStyle,
-}
-
-pub enum EdgeStyle {
-    Straight,
-    Spline,
 }
 
 impl Default for PlotParameters {
@@ -67,21 +74,161 @@ impl Default for PlotParameters {
             label_width: 11,
             scale: 4,
             aspect_ratio: 0.5,
-            line_offset_y: 0.125,
             edge_style: EdgeStyle::Straight,
         }
     }
 }
 
+impl PlotParameters {
+    /// Get the current zoom level based on label_width and scale settings
+    pub fn get_zoom_level(&self) -> ZoomLevel {
+        match self.label_width {
+            0 => {
+                if self.scale < PlotParameters::default().scale {
+                    ZoomLevel::ScaleOut(self.scale)
+                } else {
+                    ZoomLevel::Minimal
+                }
+            }
+            5 => ZoomLevel::Low,
+            w if w == PlotParameters::default().label_width => ZoomLevel::Default,
+            100 => ZoomLevel::High,
+            u32::MAX => {
+                if self.scale > PlotParameters::default().scale {
+                    ZoomLevel::ScaleIn(self.scale)
+                } else {
+                    ZoomLevel::Full
+                }
+            }
+            _ => ZoomLevel::Default, // Fallback
+        }
+    }
+
+    /// Set parameters according to the specified zoom level
+    pub fn set_zoom_level(&mut self, level: ZoomLevel) {
+        // Set label width and scale based on zoom level
+        match level {
+            ZoomLevel::ScaleOut(scale) => {
+                self.label_width = 0;
+                self.scale = scale;
+            }
+            ZoomLevel::Minimal => {
+                self.label_width = 0;
+                self.scale = PlotParameters::default().scale;
+            }
+            ZoomLevel::Low => {
+                self.label_width = 5;
+                self.scale = PlotParameters::default().scale;
+            }
+            ZoomLevel::Default => {
+                self.label_width = PlotParameters::default().label_width;
+                self.scale = PlotParameters::default().scale;
+            }
+            ZoomLevel::High => {
+                self.label_width = 100;
+                self.scale = PlotParameters::default().scale;
+            }
+            ZoomLevel::Full => {
+                self.label_width = u32::MAX;
+                self.scale = PlotParameters::default().scale;
+            }
+            ZoomLevel::ScaleIn(scale) => {
+                self.label_width = u32::MAX;
+                self.scale = scale;
+            }
+        }
+    }
+
+    /// Get the next zoom level when zooming in
+    pub fn zoom_in_level(&self) -> ZoomLevel {
+        match self.get_zoom_level() {
+            ZoomLevel::ScaleOut(scale) => {
+                if scale + 2 >= PlotParameters::default().scale {
+                    ZoomLevel::Minimal // Switch back to label-based zooming
+                } else {
+                    ZoomLevel::ScaleOut(scale + 2) // Continue scale-based zooming
+                }
+            }
+            ZoomLevel::Minimal => ZoomLevel::Low,
+            ZoomLevel::Low => ZoomLevel::Default,
+            ZoomLevel::Default => ZoomLevel::High,
+            ZoomLevel::High => ZoomLevel::Full,
+            ZoomLevel::Full => ZoomLevel::ScaleIn(PlotParameters::default().scale + 2),
+            ZoomLevel::ScaleIn(scale) => ZoomLevel::ScaleIn(scale + 2),
+        }
+    }
+
+    /// Get the next zoom level when zooming out
+    pub fn zoom_out_level(&self) -> ZoomLevel {
+        match self.get_zoom_level() {
+            ZoomLevel::ScaleOut(scale) => {
+                if scale <= 2 {
+                    ZoomLevel::ScaleOut(2) // Minimum scale
+                } else {
+                    ZoomLevel::ScaleOut(scale - 2)
+                }
+            }
+            ZoomLevel::Minimal => ZoomLevel::ScaleOut(PlotParameters::default().scale - 2),
+            ZoomLevel::Low => ZoomLevel::Minimal,
+            ZoomLevel::Default => ZoomLevel::Low,
+            ZoomLevel::High => ZoomLevel::Default,
+            ZoomLevel::Full => ZoomLevel::High,
+            ZoomLevel::ScaleIn(scale) => {
+                if scale - 2 <= PlotParameters::default().scale {
+                    ZoomLevel::Full // Switch back to label-based zooming
+                } else {
+                    ZoomLevel::ScaleIn(scale - 2) // Continue scale-based zooming
+                }
+            }
+        }
+    }
+}
+
+pub enum EdgeStyle {
+    Straight,
+    Spline,
+}
+
 /// Holds parameters that do change as the user scrolls through the graph.
-/// - `offset_x` and `offset_y` = coordinates of the top-left corner of the viewport (y-axis is upside down)
-/// - `selected_block` = the block that is currently selected by the user.
-// Remove Default derive since we have a manual impl
+/// This includes multiple coordinate systems for the window and the canvas,
+/// and we need to keep a 1:1 mapping between systems to avoid glitches.
+///
+/// From the terminal's perspective, the viewport is the inner area of the scrolling canvas area.
+/// Terminal coordinates are referenced from the top-left corner of the terminal, with the y-axis
+/// pointing downwards.
+///
+/// From the data's perspective, the viewport is a moving window defined by a width, height, and
+/// offset from the data origin. When offset_x = 0 and offset_y = 0, the bottom-left corner of the
+/// viewport has data coordinates (0,0) and the y-axis points upwards.
+///
+/// The edges are drawn using Unicode Braille characters, which are 2x4 pixels in size.
+/// Data coordinates (x,y) are converted to braille dot coordinates using the following formula:
+/// resolution_x = width * 2  
+/// resolution_y = height * 4
+///  x = ((x - left) * (resolution_x - 1.0) / (right - left));
+///  y = ((top - y) * (resolution_y - 1.0) / (top - bottom));
+///
+/// The braille characters are localized using their bottom-left corner, and the other dots have
+/// the following offsets to the bottom-left corner:
+///
+/// (0, 0.75)  (0.5, 0.75)
+/// (0, 0.5)   (0.5, 0.5)  
+/// (0, 0.25)  (0.5, 0.25)
+/// (0, 0)     (0.5, 0)   
+///
+/// The top right corner of the viewport is equal to (x_max, y_max), but this is offset from the
+/// top right terminal cell by (0.5,0.75) units. This is why we define the upper x and y bounds
+/// as offset_x + (viewport_width - 1) + 1.0/2.0 and offset_y + (viewport_height - 1) + 3.0/4.0.
+/// If you don't get this right you get visual glitches from rounding errors.
+///
+/// TODO: State is really overdue for a refactor where each coordinate system is a Rect-like struct.
+///  - The Ratatui Rect is too small (u16) for world coordinates.
 pub struct State {
     pub offset_x: i32,
     pub offset_y: i32,
     pub viewport: Rect,
     pub world: ((f64, f64), (f64, f64)), // (min_x, min_y), (max_x, max_y)
+    pub world_viewport: ((f64, f64), (f64, f64)), // (min_x, min_y), (max_x, max_y)
     pub selected_block: Option<GraphNode>,
     pub first_render: bool,
 }
@@ -92,6 +239,7 @@ impl Default for State {
             offset_y: 0,
             viewport: Rect::new(0, 0, 0, 0),
             world: ((0.0, 0.0), (0.0, 0.0)),
+            world_viewport: ((0.0, 0.0), (0.0, 0.0)),
             selected_block: None,
             first_render: true,
         }
@@ -109,6 +257,7 @@ pub struct Viewer<'a> {
     pub origin_block: Option<GraphNode>,
     view_block: Block<'a>,
     pub has_focus: bool,
+    highlights: Vec<(Color, DiGraphMap<GraphNode, ()>)>,
 }
 
 impl<'a> Viewer<'a> {
@@ -164,10 +313,58 @@ impl<'a> Viewer<'a> {
             node_sequences,
             state: State::default(),
             parameters: plot_parameters,
-            origin_block,
-            view_block: Block::default(),
+            origin_block,                 // Gen block
+            view_block: Block::default(), //Ratatui block (TODO: make Viewer a proper widget with nesting, or find a better name)
             has_focus: false,
+            highlights: Vec::new(),
         }
+    }
+
+    /// Highlight a specific path in the graph.
+    pub fn show_path(&mut self, path: &Path, color: Color) -> Result<(), String> {
+        let path_blocks = path.blocks(self.conn);
+
+        // Project the path blocks onto the graph to get GraphNodes and strands
+        let projected_path = project_path(self.block_graph, &path_blocks);
+
+        // Filter out the start/end nodes
+        let path_nodes: Vec<GraphNode> = projected_path
+            .iter()
+            .filter_map(|(node, _)| (!Node::is_terminal(node.node_id)).then_some(*node))
+            .collect();
+
+        // Build a linear subgraph
+        let mut highlight_graph = DiGraphMap::<GraphNode, ()>::new();
+        match path_nodes.len() {
+            0 => {
+                return Err(format!(
+                    "Path {name} is not translatable to current graph.",
+                    name = &path.name
+                ))
+            }
+            1 => {
+                _ = highlight_graph.add_node(path_nodes[0]);
+            }
+            _ => {
+                for i in 0..path_nodes.len() - 1 {
+                    let source = path_nodes[i];
+                    let target = path_nodes[i + 1];
+                    _ = highlight_graph.add_edge(source, target, ());
+                }
+            }
+        }
+        self.highlights.push((color, highlight_graph));
+        Ok(())
+    }
+
+    /// Check if we currently have highlights of a specific color.
+    pub fn has_highlight(&self, color: Color) -> bool {
+        self.highlights.iter().any(|(c, _)| *c == color)
+    }
+
+    /// Clear the highlight from the graph.
+    pub fn clear_highlight(&mut self, color: Color) {
+        self.highlights.retain(|(c, _)| *c != color);
     }
 
     /// Refresh based on changed parameters or layout.
@@ -177,6 +374,8 @@ impl<'a> Viewer<'a> {
         self.state.world = self.compute_bounding_box();
     }
 
+    /// Set the Ratatui Block in which to draw the graph.
+    /// This is useful for styling but the name is unfortunate.
     pub fn set_block(&mut self, block: Block<'a>) {
         self.view_block = block;
     }
@@ -230,20 +429,167 @@ impl<'a> Viewer<'a> {
         }
     }
 
+    fn draw_edge(
+        &self,
+        ctx: &mut ratatui::widgets::canvas::Context,
+        edge: &(GraphNode, GraphNode),
+        color: Color,
+    ) {
+        let ((x1, y1), (x2, y2)) = self.scaled_layout.lines[edge];
+
+        // Select the exact braille row to hit depending on whether the edge is going up or down
+        // Since there's no "middle" row, we choose between the 2nd and 3rd row of dots.
+        //       o o  ^
+        //   └-> o o -┘
+        //   ┌-> o o -┐
+        //       o o  v
+
+        let (y1, y2) = if (y2 - y1).abs() < f64::EPSILON {
+            (y1 + 1.0 / 4.0, y2 + 1.0 / 4.0)
+        } else if y2 > y1 {
+            (y1 + 2.0 / 4.0, y2 + 1.0 / 4.0)
+        } else {
+            (y1 + 1.0 / 4.0, y2 + 2.0 / 4.0)
+        };
+
+        // Leave one dot column of space between the edge and the block labels
+        let x1 = x1 - 1.0 / 2.0;
+        let x2 = x2 - 1.0;
+
+        // Bounds to clip lines to
+        let ((x_min, y_min), (x_max, y_max)) = self.state.world_viewport;
+        match self.parameters.edge_style {
+            EdgeStyle::Straight => {
+                if let Some(((x1c, y1c), (x2c, y2c))) =
+                    clip_line((x1, y1), (x2, y2), (x_min, y_min), (x_max, y_max))
+                {
+                    ctx.draw(&Line {
+                        x1: x1c,
+                        y1: y1c,
+                        x2: x2c,
+                        y2: y2c,
+                        color,
+                    });
+                }
+            }
+            EdgeStyle::Spline => {
+                // Bezier curves are always contained within the box defined by their endpoints,
+                // so we reject any curves that don't have a bounding box that intersects the viewport.
+                if !rectangles_intersect(
+                    (x1, y1),
+                    (x2, y2),
+                    (self.state.offset_x as f64, self.state.offset_y as f64),
+                    (
+                        (self.state.offset_x + (self.state.viewport.width - 1) as i32) as f64,
+                        (self.state.offset_y + (self.state.viewport.height - 1) as i32) as f64,
+                    ),
+                ) {
+                    return;
+                }
+                // The maximum resolution we can attain is 2 dots per character,
+                // and x positions are restricted to the braille grid (which simplifies the math).
+                // x1 = 0.0, x2 = 2.0
+                // [x.][..][x.] => (2.0 - 0.0) * 2 + 1 = 5 dots (ends included)
+                // x1 = 0.0, x2 = 2.5
+                // [x.][..][.x] => (2.5 - 0.0) * 2 + 1 = 6 dots
+                //
+                // We do want to cap the number of points at 64 for very long edges.
+
+                let num_points = u32::min(64, ((x2 - x1) * 2.0 + 1.0) as u32);
+                let curve_points = generate_cubic_bezier_curve((x1, y1), (x2, y2), num_points);
+
+                // Draw lines between consecutive points of the curve
+                for window in curve_points.windows(2) {
+                    if let Some(((x1c, y1c), (x2c, y2c))) =
+                        clip_line(window[0], window[1], (x_min, y_min), (x_max, y_max))
+                    {
+                        ctx.draw(&Line {
+                            x1: x1c,
+                            y1: y1c,
+                            x2: x2c,
+                            y2: y2c,
+                            color,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    /// Get a block's sequence and truncate it to fit within a given width.
+    fn make_label(&self, block: &GraphNode, max_width: u32) -> String {
+        // At label width 0, don't even attempt to show any sequence information
+        if self.parameters.label_width == 0 {
+            return label::NODE.to_string().to_string();
+        }
+
+        let label = if let Some(sequence) = self.node_sequences.get(&block.node_id) {
+            inner_truncation(
+                sequence
+                    .get_sequence(block.sequence_start, block.sequence_end)
+                    .as_str(),
+                max_width,
+            )
+        } else {
+            // If for some reason we weren't able to get the actual sequence,
+            // do show a placeholder of the correct length.
+            let seq_len = (block.sequence_end - block.sequence_start).unsigned_abs() as u32;
+            "?".repeat(max_width.min(seq_len) as usize)
+        };
+
+        label
+    }
+
+    /// Print a block label at the given position.
+    fn place_label(
+        &self,
+        ctx: &mut ratatui::widgets::canvas::Context,
+        label: &str,
+        pos: (f64, f64),
+        style: ratatui::style::Style,
+    ) {
+        // Show more visual information if we are in debug mode
+        let debug = std::env::var("RUST_LOG").is_ok_and(|v| v.contains("debug"));
+
+        let (x, y) = pos;
+
+        // Clip to the viewport
+        let clipped_label = clip_label(
+            label,
+            x as isize,
+            (self.state.offset_x + 1) as isize,
+            (self.state.viewport.width - 1) as usize,
+        );
+
+        if clipped_label.is_empty() {
+            return;
+        }
+
+        ctx.print(
+            f64::max(x, self.state.offset_x as f64),
+            y,
+            Span::styled(clipped_label, style),
+        );
+
+        if debug {
+            ctx.print(
+                x,
+                y + 1.0,
+                Span::styled(
+                    format!("↓({:.1},{:.1})", x, y),
+                    Style::default().fg(Color::Red),
+                ),
+            );
+        }
+    }
+
     /// Draw and render blocks and lines to a canvas through a scrollable window.
     /// TODO: turn this into the render function of a custom stateful widget
     pub fn draw(&mut self, frame: &mut ratatui::Frame, area: Rect) {
-        // Set up the coordinate systems for the window and the canvas,
-        // we need to keep a 1:1 mapping between coordinates to avoid glitches.
+        // Show more visual information if we are in debug mode
+        let debug = std::env::var("RUST_LOG").is_ok_and(|v| v.contains("debug"));
 
-        // From the terminal's perspective, the viewport is the inner area of the scrolling canvas area.
-        // Terminal coordinates are referenced from the top-left corner of the terminal, with the y-axis
-        // pointing downwards.
-        //
-        // From the data's perspective, the viewport is a moving window defined by a width, height, and
-        // offset from the data origin. When offset_x = 0 and offset_y = 0, the bottom-left corner of the
-        // viewport has data coordinates (0,0) and the y-axis points upwards.
-
+        // Define the viewport from the perspective of the terminal
         let canvas_block = self.view_block.clone();
         let viewport = canvas_block.inner(area);
 
@@ -258,6 +604,11 @@ impl<'a> Viewer<'a> {
             self.state.offset_x -= x_diff;
             // Accommodate inverted y-axis between terminal and data coordinates
             self.state.offset_y += y_diff - height_diff;
+
+            info!(
+                "viewport dimensions changed to {:?} (was {:?})",
+                viewport, self.state.viewport
+            );
             self.state.viewport = viewport;
         }
 
@@ -286,162 +637,59 @@ impl<'a> Viewer<'a> {
             }
         }
 
-        // Create the canvas
+        // Define the viewport from the world perspective
+        // TODO: make this a function implemented on the State struct
+        // to ensure consistency of the coordinate systems
+        let x_min = self.state.offset_x as f64;
+        let y_min = self.state.offset_y as f64;
+        let x_max = x_min + self.state.viewport.width as f64 - 1.0;
+        let y_max = y_min + self.state.viewport.height as f64 - 1.0;
+        // Add the 1/2 and 3/4 units to account for the braille cell size on the right and top
+        let x_max = x_max + 1.0 / 2.0;
+        let y_max = y_max + 3.0 / 4.0;
+
+        self.state.world_viewport = ((x_min, y_min), (x_max, y_max));
+
         let canvas = Canvas::default()
             .background_color(Color::Black)
             .block(canvas_block)
             // Adjust the x_bounds and y_bounds by the scroll offsets.
-            .x_bounds([
-                self.state.offset_x as f64,
-                (self.state.offset_x + self.state.viewport.width as i32) as f64,
-            ])
-            .y_bounds([
-                self.state.offset_y as f64,
-                (self.state.offset_y + self.state.viewport.height as i32) as f64,
-            ])
+            .x_bounds([x_min, x_max])
+            .y_bounds([y_min, y_max])
             .paint(|ctx| {
-                if DEBUG {
-                    // Show cartesian axes + coordinates of all nodes
-                    let ((x_min, y_min), (x_max, y_max)) = self.state.world;
-                    let viewport = (
-                        (self.state.offset_x as f64, self.state.offset_y as f64),
-                        (
-                            (self.state.offset_x + self.state.viewport.width as i32) as f64,
-                            (self.state.offset_y + self.state.viewport.height as i32) as f64,
-                        ),
-                    );
-                    if let Some(((x1c, y1c), (x2c, y2c))) =
-                        clip_line((x_min, 0.0), (x_max, 0.0), viewport.0, viewport.1)
-                    {
-                        ctx.draw(&Line {
-                            x1: x1c,
-                            y1: y1c,
-                            x2: x2c,
-                            y2: y2c,
-                            color: Color::Red,
-                        });
-                    }
-                    if let Some(((x1c, y1c), (x2c, y2c))) =
-                        clip_line((0.0, y_min), (0.0, y_max), viewport.0, viewport.1)
-                    {
-                        ctx.draw(&Line {
-                            x1: x1c,
-                            y1: y1c,
-                            x2: x2c,
-                            y2: y2c,
-                            color: Color::Red,
-                        });
-                    }
-                    ctx.print(
-                        self.state.offset_x as f64,
-                        self.state.offset_y as f64,
-                        Span::styled(
-                            format!("({},{})", self.state.offset_x, self.state.offset_y),
-                            Style::default().fg(Color::Red),
-                        ),
-                    );
+                if debug {
+                    self.draw_debug_background(ctx, (x_min, x_max), (y_min, y_max));
                 }
-                // Draw the lines described in the processed layout
-                for &((x1, y1), (x2, y2)) in self.scaled_layout.lines.iter() {
-                    match self.parameters.edge_style {
-                        EdgeStyle::Straight => {
-                            if let Some(((x1c, y1c), (x2c, y2c))) = clip_line(
-                                (x1, y1 + self.parameters.line_offset_y),
-                                (x2, y2 + self.parameters.line_offset_y),
-                                (self.state.offset_x as f64, self.state.offset_y as f64),
-                                (
-                                    (self.state.offset_x + self.state.viewport.width as i32) as f64,
-                                    (self.state.offset_y + self.state.viewport.height as i32)
-                                        as f64,
-                                ),
-                            ) {
-                                ctx.draw(&Line {
-                                    x1: x1c,
-                                    y1: y1c,
-                                    x2: x2c,
-                                    y2: y2c,
-                                    color: Color::DarkGray,
-                                });
-                            }
-                        }
-                        EdgeStyle::Spline => {
-                            // Bezier curves are always contained within the box defined by their endpoints,
-                            // so we reject any curves that don't have a bounding box that intersects the viewport.
-                            if !rectangles_intersect(
-                                (x1, y1 + self.parameters.line_offset_y),
-                                (x2, y2 + self.parameters.line_offset_y),
-                                (self.state.offset_x as f64, self.state.offset_y as f64),
-                                (
-                                    (self.state.offset_x + self.state.viewport.width as i32) as f64,
-                                    (self.state.offset_y + self.state.viewport.height as i32)
-                                        as f64,
-                                ),
-                            ) {
-                                continue;
-                            }
-                            let num_points = ((x2.round() - x1.round() + 1.0) as u32).min(16); // Don't go too crazy
-                            let curve_points = generate_cubic_bezier_curve(
-                                (x1, y1 + self.parameters.line_offset_y),
-                                (x2, y2 + self.parameters.line_offset_y),
-                                num_points,
-                            );
 
-                            // Draw lines between consecutive points of the curve
-                            for points in curve_points.windows(2) {
-                                if let Some(((x1c, y1c), (x2c, y2c))) = clip_line(
-                                    points[0],
-                                    points[1],
-                                    (self.state.offset_x as f64, self.state.offset_y as f64),
-                                    (
-                                        (self.state.offset_x + self.state.viewport.width as i32)
-                                            as f64,
-                                        (self.state.offset_y + self.state.viewport.height as i32)
-                                            as f64,
-                                    ),
-                                ) {
-                                    ctx.draw(&Line {
-                                        x1: x1c,
-                                        y1: y1c,
-                                        x2: x2c,
-                                        y2: y2c,
-                                        color: Color::DarkGray,
-                                    });
-                                }
-                            }
-                        }
-                    }
+                // Draw all edges (does not consider highlights)
+                for &(source, target) in self.scaled_layout.lines.keys() {
+                    self.draw_edge(ctx, &(source, target), Color::DarkGray);
                 }
+
                 // Print the labels
-                for (block, ((x, y), (x2, _y2))) in self.scaled_layout.labels.iter() {
-                    // Skip labels that are not in the visible area (vertical)
-                    if (*y as i32) < self.state.offset_y
-                        || (*y as i32) >= (self.state.offset_y + self.state.viewport.height as i32)
-                    {
-                        continue;
-                    }
-
-                    // Handle dummy nodes (start and end) differently than other nodes
+                for &block in self.scaled_layout.labels.keys() {
+                    // Skip the start and end dummy nodes, we draw those as "arrows" on the blocks
+                    // to which they are connected.
                     if Node::is_start_node(block.node_id) || Node::is_end_node(block.node_id) {
                         continue;
                     }
 
-                    let label = if let Some(sequence) = self.node_sequences.get(&block.node_id) {
-                        inner_truncation(
-                            sequence
-                                .get_sequence(block.sequence_start, block.sequence_end)
-                                .as_str(),
-                            (x2 - x) as u32,
-                        )
-                    } else {
-                        label::NODE.to_string()
-                    };
+                    // Skip blocks that are not in the visible area at all
+                    if !self.is_block_visible(block) {
+                        continue;
+                    }
 
-                    // The style of the label is determined by 3 factors:
+                    // Get the block position and available space
+                    let ((x, y), (x2, _y2)) = self.scaled_layout.labels[&block];
+
+                    // Get the label text
+                    let label = self.make_label(&block, (x2 - x) as u32);
+
+                    // The style of a label is determined by 3 factors:
                     // 1. Whether the viewer has focus
                     // 2. Whether the block is selected
                     // 3. Whether the label consists of text or a glyph (the dot for zoomed out views)
-
-                    let is_selected = Some(block) == self.state.selected_block.as_ref();
+                    let is_selected = Some(block) == self.state.selected_block;
                     let is_glyph = label.as_str() == label::NODE;
 
                     let style = match (self.has_focus, is_selected, is_glyph) {
@@ -457,98 +705,147 @@ impl<'a> Viewer<'a> {
                         (false, _, true) => Style::default().fg(Color::White),
                     };
 
-                    // Clip labels that are potentially in the window (horizontal)
-                    let clipped_label = clip_label(
-                        &label,
-                        *x as isize,
-                        (self.state.offset_x + 1) as isize,
-                        self.state.viewport.width as usize,
-                    );
-                    if !clipped_label.is_empty() {
-                        ctx.print(
-                            f64::max(*x, self.state.offset_x as f64),
-                            *y,
-                            Span::styled(clipped_label, style),
-                        );
-                    }
-                    if DEBUG {
-                        ctx.print(
-                            *x,
-                            *y + 1.0,
-                            Span::styled(
-                                format!("↓({},{})", *x, *y),
-                                Style::default().fg(Color::Red),
-                            ),
-                        );
-                    }
+                    self.place_label(ctx, &label, (x, y), style);
 
-                    // Indicate if the block is connected to the start node (not shown)
+                    // Place a start arrow meta-label if the block is connected to the start dummy node
                     if self
                         .base_layout
                         .layout_graph
-                        .neighbors_directed(*block, Direction::Incoming)
+                        .neighbors_directed(block, Direction::Incoming)
                         .any(|neighbor| Node::is_start_node(neighbor.node_id))
                     {
-                        let x_pos = *x as isize - (label::START.len() as isize);
-                        let arrow = clip_label(
+                        let x3 = x - 1.0 - (label::START.chars().count() as f64);
+                        self.place_label(
+                            ctx,
                             label::START,
-                            x_pos,
-                            (self.state.offset_x + 1) as isize,
-                            self.state.viewport.width as usize,
+                            (x3, y),
+                            Style::default().fg(Color::DarkGray),
                         );
-                        if !arrow.is_empty() {
-                            ctx.print(
-                                x_pos as f64,
-                                *y,
-                                Span::styled(arrow, Style::default().fg(Color::DarkGray)),
-                            );
-                        }
                     }
 
-                    // Indicate if the block is connected to the end node (not shown)
+                    // Draw an end arrow if the block is connected to the end dummy node
                     if self
                         .base_layout
                         .layout_graph
-                        .neighbors_directed(*block, Direction::Outgoing)
-                        .any(|neighbor| neighbor.node_id == node::PATH_END_NODE_ID)
+                        .neighbors_directed(block, Direction::Outgoing)
+                        .any(|neighbor| Node::is_end_node(neighbor.node_id))
                     {
-                        let x_pos = *x2 as isize + 1;
-                        let arrow = clip_label(
+                        let x3 = x2 + 1.0;
+                        self.place_label(
+                            ctx,
                             label::END,
-                            x_pos,
-                            (self.state.offset_x + 1) as isize,
-                            self.state.viewport.width as usize,
+                            (x3, y),
+                            Style::default().fg(Color::DarkGray),
                         );
-                        if !arrow.is_empty() {
-                            ctx.print(
-                                x_pos as f64,
-                                *y,
-                                Span::styled(arrow, Style::default().fg(Color::DarkGray)),
-                            );
-                        }
                     }
+                }
 
-                    // Draw a cursor if no block was selected or is visible
-                    if !self
-                        .state
-                        .selected_block
-                        .is_some_and(|selected| self.is_block_visible(selected))
-                    {
-                        // Determine the middle of the viewport
-                        let x_mid = self.state.offset_x + self.state.viewport.width as i32 / 2;
-                        let y_mid = self.state.offset_y + self.state.viewport.height as i32 / 2;
-                        ctx.print(
-                            x_mid as f64,
-                            y_mid as f64,
-                            Span::styled("█", Style::default()),
-                        );
-                    }
+                // Draw a cursor if no block is currently selected
+                // TODO: don't force the cursor to the center of the viewport,
+                // actually track its position in the state
+                if self.state.selected_block.is_none() {
+                    // Determine the middle of the viewport
+                    let x_mid = self.state.offset_x + (self.state.viewport.width - 1) as i32 / 2;
+                    let y_mid = self.state.offset_y + (self.state.viewport.height - 1) as i32 / 2;
+                    ctx.print(
+                        x_mid as f64,
+                        y_mid as f64,
+                        Span::styled("█", Style::default().fg(Color::Blue)),
+                    );
                 }
             });
         frame.render_widget(canvas, area);
 
+        // Create a buffer of the same size as the canvas to layer on top of the buffer in the frame
+        let mut highlights_buf = Buffer::empty(area);
+        let ((x_min, y_min), (x_max, y_max)) = self.state.world_viewport;
+        Canvas::default()
+            .x_bounds([x_min, x_max])
+            .y_bounds([y_min, y_max])
+            .paint(|ctx| {
+                for (color, highlight_graph) in &self.highlights {
+                    for (source, target, _) in highlight_graph.all_edges() {
+                        if self.scaled_layout.lines.contains_key(&(source, target)) {
+                            self.draw_edge(ctx, &(source, target), *color);
+                        }
+                    }
+                }
+            })
+            .render(area, &mut highlights_buf);
+
+        // Overlay the highlights buffer on top of the frame
+        for y in area.y..area.y + area.height {
+            for x in area.x..area.x + area.width {
+                let highlight_cell = highlights_buf[(x, y)].clone();
+                if highlight_cell.symbol() != " " {
+                    frame.buffer_mut()[(x, y)].set_symbol(highlight_cell.symbol());
+                    frame.buffer_mut()[(x, y)].set_style(highlight_cell.style());
+                }
+            }
+        }
+
         // Compute more of the base layout if we're getting close to the ends.
         self.auto_expand();
+    }
+
+    /// Draw debug overlay showing grid and boundaries
+    fn draw_debug_background(
+        &self,
+        ctx: &mut ratatui::widgets::canvas::Context,
+        (x_min, x_max): (f64, f64),
+        (y_min, y_max): (f64, f64),
+    ) {
+        // Draw a grid of braille dots to test alignment
+        for x in (x_min.floor() as i32)..=(x_max.ceil() as i32) {
+            if x % 10 != 0 {
+                continue;
+            }
+            for y in (y_min.floor() as i32)..=(y_max.ceil() as i32) {
+                if y % 5 != 0 {
+                    continue;
+                }
+                let color =
+                    if (x / 10 % 2 == 0 && y / 5 % 2 != 0) || (x / 10 % 2 != 0 && y / 5 % 2 == 0) {
+                        Color::Blue
+                    } else {
+                        Color::Red
+                    };
+                ctx.draw(&Points {
+                    coords: &[(x as f64 + 1.0 / 2.0, y as f64 + 3.0 / 4.0)],
+                    color,
+                });
+            }
+        }
+
+        // Paint bottom left and top right corners
+        ctx.draw(&Line {
+            x1: x_min,
+            y1: y_min,
+            x2: x_min + 3.0 / 2.0,
+            y2: y_min,
+            color: Color::Magenta,
+        });
+        ctx.draw(&Line {
+            x1: x_min,
+            y1: y_min,
+            x2: x_min,
+            y2: y_min + 3.0 / 4.0,
+            color: Color::Magenta,
+        });
+        ctx.draw(&Line {
+            x1: x_max,
+            y1: y_max,
+            x2: x_max - 3.0 / 2.0,
+            y2: y_max,
+            color: Color::Green,
+        });
+        ctx.draw(&Line {
+            x1: x_max,
+            y1: y_max,
+            x2: x_max,
+            y2: y_max - 3.0 / 4.0,
+            color: Color::Green,
+        });
     }
 
     /// Check the viewport bounds against the world bounds and trigger expansion if needed.
@@ -566,24 +863,15 @@ impl<'a> Viewer<'a> {
 
     /// Cycle through nodes in a specified direction.
     pub fn move_selection(&mut self, direction: NavDirection) {
-        // Determine the reference point from BaseLayout's node_positions,
-        // or use the center of the viewport if no block is selected.
-        let current_point = if let Some(selected) = self.state.selected_block {
-            self.base_layout
-                .node_positions
-                .get(&selected)
-                .cloned()
-                .unwrap_or_else(|| {
-                    (
-                        self.state.offset_x as f64 + self.state.viewport.width as f64 / 2.0,
-                        self.state.offset_y as f64 + self.state.viewport.height as f64 / 2.0,
-                    )
-                })
-        } else {
-            (
-                self.state.offset_x as f64 + self.state.viewport.width as f64 / 2.0,
-                self.state.offset_y as f64 + self.state.viewport.height as f64 / 2.0,
-            )
+        // Get the position of the currently selected block, or return early if none
+        let current_point = match self
+            .state
+            .selected_block
+            .as_ref()
+            .and_then(|selected| self.base_layout.node_positions.get(selected).cloned())
+        {
+            Some(position) => position,
+            None => return,
         };
 
         // Try to find a node in the specified direction closest to the current point.
@@ -596,8 +884,62 @@ impl<'a> Viewer<'a> {
         }
     }
 
-    // Helper function to find the closest node in the given direction, skipping
-    // the currently selected block and ignoring start/end dummy nodes.
+    /// Snap the cursor to the closest label in the given direction.
+    pub fn snap_cursor(&mut self, direction: NavDirection) {
+        // For now, assume the cursor is at the center of the viewport
+        // TODO: actually track the cursor position in the state
+        let current_point = (
+            self.state.offset_x as f64 + self.state.viewport.width as f64 / 2.0,
+            self.state.offset_y as f64 + self.state.viewport.height as f64 / 2.0,
+        );
+
+        let mut closest_candidate: Option<(GraphNode, f64)> = None;
+
+        for (block, ((x1, y), (x2, _))) in &self.scaled_layout.labels {
+            // Skip start and end nodes
+            if Node::is_start_node(block.node_id) || Node::is_end_node(block.node_id) {
+                continue;
+            }
+
+            // Calculate distances
+            let dx = current_point.0 - (*x1 + *x2) / 2.0;
+            let dy = current_point.1 - *y;
+
+            // Check if this label is a candidate based on direction
+            let is_candidate = match direction {
+                // Check if the label is in the appropriate quadrant based on direction
+                // Using the lines x=y and x=-y to divide the space into quadrants
+                NavDirection::Up => dy < 0.0 && dy.abs() > dx.abs(), // Upper quadrant: |y| > |x|
+                NavDirection::Down => dy > 0.0 && dy.abs() > dx.abs(), // Lower quadrant: |y| > |x|
+                NavDirection::Left => dx > 0.0 && dx.abs() > dy.abs(), // Left quadrant: |x| > |y|
+                NavDirection::Right => dx < 0.0 && dx.abs() > dy.abs(), // Right quadrant: |x| > |y|
+            };
+
+            if !is_candidate {
+                continue;
+            }
+
+            // Calculate Euclidean distance
+            let distance = (dx * dx + dy * dy).sqrt();
+
+            // Update closest candidate if this one is closer
+            if let Some((_, best_dist)) = closest_candidate {
+                if distance < best_dist {
+                    closest_candidate = Some((*block, distance));
+                }
+            } else {
+                closest_candidate = Some((*block, distance));
+            }
+        }
+
+        // If we found a candidate, update the selection and center on it
+        if let Some((new_selection, _)) = closest_candidate {
+            self.state.selected_block = Some(new_selection);
+        }
+    }
+
+    /// Helper function to find the closest node in the given direction
+    /// - This operates in base_layout coordinates, not scaled_layout!
     fn find_closest_block_in_direction(
         &self,
         current_point: (f64, f64),
@@ -621,8 +963,8 @@ impl<'a> Viewer<'a> {
             //   - Up/Down: only consider nodes that are vertically aligned
             //   - Left/Right: consider all nodes in the correct half of the screen
             if !match direction {
-                NavDirection::Up => node_pos.1 < current_point.1 && dx.abs() < f64::EPSILON,
-                NavDirection::Down => node_pos.1 > current_point.1 && dx.abs() < f64::EPSILON,
+                NavDirection::Up => node_pos.1 > current_point.1 && dx.abs() < f64::EPSILON,
+                NavDirection::Down => node_pos.1 < current_point.1 && dx.abs() < f64::EPSILON,
                 NavDirection::Left => dx < 0.0,
                 NavDirection::Right => dx > 0.0,
             } {
@@ -789,46 +1131,59 @@ impl<'a> Viewer<'a> {
     }
 
     pub fn handle_input(&mut self, key: KeyEvent) {
-        // Scrolling through the graph
+        // Clear selection when using SHIFT or ALT with arrow keys for panning
+        if matches!(
+            key.code,
+            KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down
+        ) && (key.modifiers.contains(KeyModifiers::SHIFT)
+            || key.modifiers.contains(KeyModifiers::ALT))
+        {
+            self.state.selected_block = None;
+        }
+
         match key.code {
             KeyCode::Left => {
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
                     self.state.offset_x -= self.state.viewport.width as i32 / 3;
-                    self.unselect_if_not_visible();
                 } else if key.modifiers.contains(KeyModifiers::ALT) {
                     self.state.offset_x -= 1;
-                } else {
+                } else if self.state.selected_block.is_some() {
                     self.move_selection(NavDirection::Left);
+                } else {
+                    self.snap_cursor(NavDirection::Left);
                 }
             }
             KeyCode::Right => {
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
                     self.state.offset_x += self.state.viewport.width as i32 / 3;
-                    self.unselect_if_not_visible();
                 } else if key.modifiers.contains(KeyModifiers::ALT) {
                     self.state.offset_x += 1;
-                } else {
+                } else if self.state.selected_block.is_some() {
                     self.move_selection(NavDirection::Right);
+                } else {
+                    self.snap_cursor(NavDirection::Right);
                 }
             }
             KeyCode::Up => {
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
                     self.state.offset_y += self.state.viewport.height as i32 / 3;
-                    self.unselect_if_not_visible();
                 } else if key.modifiers.contains(KeyModifiers::ALT) {
                     self.state.offset_y += 1;
+                } else if self.state.selected_block.is_some() {
+                    self.move_selection(NavDirection::Up);
                 } else {
-                    self.move_selection(NavDirection::Down);
+                    self.snap_cursor(NavDirection::Up);
                 }
             }
             KeyCode::Down => {
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
                     self.state.offset_y -= self.state.viewport.height as i32 / 3;
-                    self.unselect_if_not_visible();
                 } else if key.modifiers.contains(KeyModifiers::ALT) {
                     self.state.offset_y -= 1;
+                } else if self.state.selected_block.is_some() {
+                    self.move_selection(NavDirection::Down);
                 } else {
-                    self.move_selection(NavDirection::Up);
+                    self.snap_cursor(NavDirection::Down);
                 }
             }
             // Zooming in and out
@@ -840,16 +1195,8 @@ impl<'a> Viewer<'a> {
                     .and_then(|block| self.get_block_terminal_coords(block));
 
                 // Increase how much of the sequence is shown in each block label.
-                if self.parameters.label_width == u32::MAX {
-                    self.parameters.scale += 2; // Even increments look better
-                } else {
-                    self.parameters.label_width = match self.parameters.label_width {
-                        1 => 11,
-                        11 => 100,
-                        100 => u32::MAX,
-                        _ => u32::MAX,
-                    }
-                }
+                self.parameters
+                    .set_zoom_level(self.parameters.zoom_in_level());
 
                 // If no block is selected, try to select the center block
                 if self.state.selected_block.is_none() {
@@ -884,16 +1231,8 @@ impl<'a> Viewer<'a> {
                     .and_then(|block| self.get_block_terminal_coords(block));
 
                 // Decrease how much of the sequence is shown in each block label.
-                if self.parameters.scale > 2 {
-                    self.parameters.scale -= 2;
-                } else {
-                    self.parameters.label_width = match self.parameters.label_width {
-                        u32::MAX => 100,
-                        100 => 11,
-                        11 => 1,
-                        _ => 1,
-                    };
-                }
+                self.parameters
+                    .set_zoom_level(self.parameters.zoom_out_level());
 
                 if self.state.selected_block.is_none() {
                     self.select_center_block();
@@ -920,8 +1259,6 @@ impl<'a> Viewer<'a> {
             }
             KeyCode::Char('s') | KeyCode::Char('S') => {
                 // Toggle between straight lines and splines
-                // I ended up not liking them as much as I thought I would,
-                // so it's not the default and I'm not documenting it in the status bar.
                 self.parameters.edge_style = match self.parameters.edge_style {
                     EdgeStyle::Straight => EdgeStyle::Spline,
                     EdgeStyle::Spline => EdgeStyle::Straight,
@@ -934,7 +1271,7 @@ impl<'a> Viewer<'a> {
     }
 
     pub fn get_status_line() -> String {
-        "◀ ▼ ▲ ▶ select blocks (+shift/alt to scroll) | +/- zoom".to_string()
+        "◀ ▼ ▲ ▶ select blocks (+shift/alt to scroll) | +/- zoom | s: edge style".to_string()
     }
 }
 
@@ -1124,12 +1461,24 @@ pub fn generate_cubic_bezier_curve(
             + 3.0_f64 * one_minus_t.powi(2) * t * p1.1
             + 3.0_f64 * one_minus_t * t.powi(2) * p2.1
             + t.powi(3) * p3.1;
-        points.push((x, y));
+        points.push(round_to_braille_grid((x, y)));
+        // TODO: figure out why this doesn't work to make the curve look better
+        //points.push((x, y));
     }
 
     // Last point is exactly b
     points.push(b);
     points
+}
+
+/// Round a (f64, f64) to the nearest 1/2 and 1/4.
+pub fn round_to_braille_grid((x, y): (f64, f64)) -> (f64, f64) {
+    let (cell_x, x_offset) = (x.floor(), x.fract());
+    let (cell_y, y_offset) = (y.floor(), y.fract());
+
+    let x_rounded = cell_x + (x_offset * 2.0).round() / 2.0;
+    let y_rounded = cell_y + (y_offset * 4.0).round() / 4.0;
+    (x_rounded, y_rounded)
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 use crate::graph::{GraphEdge, GraphNode};
-use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
+use crate::models::node::Node;
 use crate::views::block_group_viewer::PlotParameters;
-use log::{info, warn};
+use log::{debug, info, warn};
 use petgraph::algo::toposort;
 use petgraph::graph::NodeIndex;
 use petgraph::graphmap::{DiGraphMap, GraphMap};
@@ -600,7 +600,6 @@ impl BaseLayout {
 /// Holds processed and scaled layout data, but not the actual sequences.
 /// - `lines` = pairs of coordinates for each edge.
 /// - `labels` = starting and ending coordinates for each label.
-/// - `highlight_[a|b]` = block ID or (block ID, coordinate) to highlight in color A or B.
 ///
 /// The raw layout from the Sugiyama algorithm is processed as follow:
 /// - The coordinates are rounded to the nearest integer and transposed to go from top-to-bottom to left-to-right.
@@ -610,19 +609,15 @@ impl BaseLayout {
 #[allow(clippy::type_complexity)]
 #[derive(Debug)]
 pub struct ScaledLayout {
-    pub lines: Vec<((f64, f64), (f64, f64))>, // List of (start_coord, end_coord) pairs for edges
+    pub lines: HashMap<(GraphNode, GraphNode), ((f64, f64), (f64, f64))>, // Edge -> (start_coord, end_coord)
     pub labels: HashMap<GraphNode, ((f64, f64), (f64, f64))>, // Node -> (start_coord, end_coord)
-    pub highlight_a: Option<(GraphNode, Option<(GraphNode, u32)>)>, // Block or (Block, position) to highlight in color A
-    pub highlight_b: Option<(GraphNode, Option<(GraphNode, u32)>)>, // Block or (Block, position) to highlight in color B
 }
 
 impl ScaledLayout {
     pub fn from_base_layout(base_layout: &BaseLayout, parameters: &PlotParameters) -> Self {
         let mut layout = ScaledLayout {
-            lines: Vec::new(),
+            lines: HashMap::new(),
             labels: HashMap::new(),
-            highlight_a: None,
-            highlight_b: None,
         };
         layout.refresh(base_layout, parameters);
         layout
@@ -647,90 +642,72 @@ impl ScaledLayout {
         // We don't need to stretch the layout if the requested label width is too small
         if parameters.label_width < 5 {
             warn!("Requested label width is too small to shrink the labels, falling back to view without sequences.");
-
-            let working_layout_hashmap: HashMap<GraphNode, (f64, f64)> = working_layout
+            self.labels = working_layout
                 .iter()
-                .map(|(node, (x, y))| (*node, (*x as f64, *y as f64)))
-                .collect();
-
-            self.lines = base_layout
-                .layout_graph
-                .all_edges()
-                .map(|(source, target, _)| {
-                    let source_coord = working_layout_hashmap
-                        .get(&source)
-                        .map(|&(x, y)| (x + 1.0, y + parameters.line_offset_y))
-                        .unwrap();
-                    let target_coord = working_layout_hashmap
-                        .get(&target)
-                        .map(|&(x, y)| (x - 1.5, y + parameters.line_offset_y))
-                        .unwrap();
-                    (source_coord, target_coord)
+                .map(|(node, (x, y))| {
+                    (
+                        *node,
+                        ((*x as f64, *y as f64), (*x as f64 + 1.0, *y as f64)),
+                    )
                 })
                 .collect();
+        } else {
+            // To stretch, we first sort the layout by x-coordinate so that we can group the blocks by rank
+            working_layout.sort_by(|a, b| a.1 .0.cmp(&b.1 .0));
 
-            self.labels = working_layout_hashmap
-                .iter()
-                .map(|(node, (x, y))| (*node, ((*x, *y), (*x, *y))))
-                .collect();
-            return;
-        }
+            // Loop over the sorted layout and group the blocks by rank by keeping track of the x-coordinate
+            let mut current_x = working_layout[0].1 .0;
+            let mut current_layer: Vec<(GraphNode, i64, i64)> = Vec::new(); // node, label_width, y-coordinate
 
-        // To stretch, we first sort the layout by x-coordinate so that we can group the blocks by rank
-        working_layout.sort_by(|a, b| a.1 .0.cmp(&b.1 .0));
+            // Initial values:
+            let mut layer_width = 1;
+            let mut cumulative_offset = 0;
 
-        // Loop over the sorted layout and group the blocks by rank by keeping track of the x-coordinate
-        let mut current_x = working_layout[0].1 .0;
-        let mut current_layer: Vec<(GraphNode, i64, i64)> = Vec::new(); // node, label_width, y-coordinate
+            for (node, (x, y)) in working_layout.iter() {
+                let label_width = std::cmp::min(
+                    node.sequence_end - node.sequence_start,
+                    parameters.label_width as i64,
+                );
 
-        // Initial values:
-        let mut layer_width = 1;
-        let mut cumulative_offset = 0;
+                if *x == current_x {
+                    // This means we are still in the same layer
+                    // Keep a tally of the maximum label width
+                    layer_width = std::cmp::max(layer_width, label_width);
 
-        for (node, (x, y)) in working_layout.iter() {
-            let label_width = std::cmp::min(
-                node.sequence_end - node.sequence_start,
-                parameters.label_width as i64,
-            );
+                    // Add the block to the current layer vector
+                    current_layer.push((*node, label_width, *y));
+                } else {
+                    // We switched to a new layer
+                    // Loop over the current layer (now previous) and:
+                    // - increment the x-coordinate by the cumulative offset so far
+                    // - horizontally center the block in its layer
+                    for (node, label_width, y) in current_layer {
+                        let centering_offset =
+                            ((layer_width - label_width) as f64 / 2.0).round() as i64;
+                        let x = current_x + centering_offset + cumulative_offset;
+                        self.labels.insert(
+                            node,
+                            ((x as f64, y as f64), ((x + label_width) as f64, y as f64)),
+                        );
+                    }
+                    // Increment the cumulative offset for the next layer by the width of the current layer
+                    cumulative_offset += layer_width;
 
-            if *x == current_x {
-                // This means we are still in the same layer
-                // Keep a tally of the maximum label width
-                layer_width = std::cmp::max(layer_width, label_width);
-
-                // Add the block to the current layer vector
-                current_layer.push((*node, label_width, *y));
-            } else {
-                // We switched to a new layer
-                // Loop over the current layer (now previous) and:
-                // - increment the x-coordinate by the cumulative offset so far
-                // - horizontally center the block in its layer
-                for (node, label_width, y) in current_layer {
-                    let centering_offset =
-                        ((layer_width - label_width) as f64 / 2.0).round() as i64;
-                    let x = current_x + centering_offset + cumulative_offset;
-                    self.labels.insert(
-                        node,
-                        ((x as f64, y as f64), ((x + label_width) as f64, y as f64)),
-                    );
+                    // Reset the layer width and the current layer
+                    layer_width = label_width;
+                    current_layer = vec![(*node, label_width, *y)];
+                    current_x = *x;
                 }
-                // Increment the cumulative offset for the next layer by the width of the current layer
-                cumulative_offset += layer_width;
-
-                // Reset the layer width and the current layer
-                layer_width = label_width;
-                current_layer = vec![(*node, label_width, *y)];
-                current_x = *x;
             }
-        }
-        // Loop over the last layer (wasn't processed yet)
-        for (node, label_width, y) in current_layer {
-            let centering_offset = ((layer_width - label_width) as f64 / 2.0).round() as i64;
-            let x = current_x + centering_offset + cumulative_offset;
-            self.labels.insert(
-                node,
-                ((x as f64, y as f64), ((x + label_width) as f64, y as f64)),
-            );
+            // Loop over the last layer (wasn't processed yet)
+            for (node, label_width, y) in current_layer {
+                let centering_offset = ((layer_width - label_width) as f64 / 2.0).round() as i64;
+                let x = current_x + centering_offset + cumulative_offset;
+                self.labels.insert(
+                    node,
+                    ((x as f64, y as f64), ((x + label_width) as f64, y as f64)),
+                );
+            }
         }
 
         // Recalculate all the edges so they meet labels on the sides instead of the center
@@ -738,22 +715,36 @@ impl ScaledLayout {
             .layout_graph
             .all_edges()
             .filter(|(source, target, _)| {
-                source.node_id != PATH_START_NODE_ID && target.node_id != PATH_END_NODE_ID
+                // Filter out edges that connect to start or end nodes
+                !Node::is_terminal(source.node_id) && !Node::is_terminal(target.node_id)
             })
             .map(|(source, target, _)| {
                 let source_coord = self
                     .labels
                     .get(&source)
-                    .map(|(_, (x2, y2))| (*x2, *y2 + parameters.line_offset_y))
+                    .map(|(_, (x2, y2))| (*x2, *y2))
                     .unwrap();
                 let target_coord = self
                     .labels
                     .get(&target)
-                    .map(|((x1, y1), _)| (*x1 - 1.5, *y1 + parameters.line_offset_y))
+                    .map(|((x1, y1), _)| (*x1 - 1.0, *y1))
                     .unwrap();
-                (source_coord, target_coord)
+                ((source, target), (source_coord, target_coord))
             })
             .collect();
+
+        // Pretty print the lines
+        for ((source, target), (source_coord, target_coord)) in self.lines.iter() {
+            debug!(
+                "Edge {}-{} from ({:.1},{:.1}) to ({:.1},{:.1})",
+                source.block_id,
+                target.block_id,
+                source_coord.0,
+                source_coord.1,
+                target_coord.0,
+                target_coord.1
+            );
+        }
     }
 }
 
@@ -985,7 +976,6 @@ mod tests {
             label_width: 5,
             scale: 1,
             aspect_ratio: 1.0,
-            line_offset_y: 0.5,
             ..Default::default()
         };
         let scaled_layout = ScaledLayout::from_base_layout(&base_layout, &parameters);
@@ -1030,7 +1020,6 @@ mod tests {
             label_width: 1,
             scale: 10,
             aspect_ratio: 1.0,
-            line_offset_y: 0.5,
             ..Default::default()
         };
         let scaled_layout = ScaledLayout::from_base_layout(&base_layout, &parameters);
@@ -1043,12 +1032,12 @@ mod tests {
             .collect::<Vec<_>>();
 
         let expected_layout = [
-            (0, ((0.0, 10.0), (0.0, 10.0))),
-            (1, ((20.0, 10.0), (20.0, 10.0))),
-            (2, ((40.0, 20.0), (40.0, 20.0))),
-            (3, ((40.0, 0.0), (40.0, 0.0))),
-            (4, ((60.0, 10.0), (60.0, 10.0))),
-            (5, ((80.0, 10.0), (80.0, 10.0))),
+            (0, ((0.0, 10.0), (1.0, 10.0))),
+            (1, ((20.0, 10.0), (21.0, 10.0))),
+            (2, ((40.0, 20.0), (41.0, 20.0))),
+            (3, ((40.0, 0.0), (41.0, 0.0))),
+            (4, ((60.0, 10.0), (61.0, 10.0))),
+            (5, ((80.0, 10.0), (81.0, 10.0))),
         ];
         assert_eq!(sorted_layout, expected_layout);
     }
@@ -1076,7 +1065,6 @@ mod tests {
             label_width: 15,
             scale: 1,
             aspect_ratio: 1.0,
-            line_offset_y: 0.5,
             ..Default::default()
         };
         let scaled_layout = ScaledLayout::from_base_layout(&base_layout, &parameters);
