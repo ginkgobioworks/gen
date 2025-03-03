@@ -1249,6 +1249,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "tui-textarea",
+ "tui-widget-list",
 ]
 
 [[package]]
@@ -4540,6 +4541,15 @@ dependencies = [
  "crossterm",
  "ratatui",
  "unicode-width 0.2.0",
+]
+
+[[package]]
+name = "tui-widget-list"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a417c8ac65119a0e5b8627d0ce492731b95affb29ec8602d9e72646bda5ecf6"
+dependencies = [
+ "ratatui",
 ]
 
 [[package]]
