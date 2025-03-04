@@ -18,7 +18,8 @@ use rusqlite::{params, types::Value as SQLValue, Connection};
 use std::error::Error;
 use std::time::{Duration, Instant};
 
-const REFRESH_INTERVAL: u64 = 1; // seconds
+// Frequency by which we check for external updates to the db
+const REFRESH_INTERVAL: u64 = 3; // seconds
 
 pub fn view_block_group(
     conn: &Connection,
@@ -30,9 +31,6 @@ pub fn view_block_group(
     let progress_bar = get_handler();
     let bar = progress_bar.add(get_time_elapsed_bar());
     let _ = progress_bar.println("Loading block group");
-
-    // We manage our own transactions here
-    conn.execute("BEGIN TRANSACTION", []).unwrap();
 
     // Get the block group for two cases: with and without a sample
     let block_group = if let Some(ref sample_name) = sample_name {
@@ -109,9 +107,6 @@ pub fn view_block_group(
         explorer_state.toggle_sample(s);
     }
 
-    // End the transaction ahead of starting the main loop
-    conn.execute("END TRANSACTION", []).unwrap();
-
     // Track the last selected block group to detect changes
     let mut last_selected_block_group_id = Some(block_group_id);
     // Track if we're loading a new block group
@@ -121,7 +116,6 @@ pub fn view_block_group(
         // Refresh explorer data and force reload on change
         // I do this every REFRESH_INTERVAL seconds.
         if last_refresh.elapsed() >= Duration::from_secs(REFRESH_INTERVAL) {
-            // refresh the transaction
             if explorer.refresh(conn, collection_name) {
                 explorer.force_reload(&mut explorer_state);
             }
@@ -298,14 +292,12 @@ pub fn view_block_group(
         // After drawing, update the viewer if needed
         if is_loading {
             if let Some(new_block_group_id) = explorer_state.selected_block_group_id {
-                conn.execute("BEGIN TRANSACTION", []).unwrap();
                 // Create a new graph for the selected block group
                 block_graph = BlockGroup::get_graph(conn, new_block_group_id);
                 // Update the viewer
                 viewer = Viewer::new(&block_graph, conn, PlotParameters::default());
                 viewer.state.selected_block = None;
                 is_loading = false;
-                conn.execute("END TRANSACTION", []).unwrap();
             }
         }
 
