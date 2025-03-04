@@ -589,11 +589,11 @@ fn main() {
             collection,
             position,
         }) => {
-            conn.execute("BEGIN TRANSACTION", []).unwrap();
             let collection_name = &collection
                 .clone()
                 .unwrap_or_else(|| get_default_collection(&operation_conn));
 
+            // view_block_group is a long-running operation that manages its own transactions
             view_block_group(
                 &conn,
                 graph,
@@ -601,7 +601,6 @@ fn main() {
                 collection_name,
                 position.clone(),
             );
-            conn.execute("END TRANSACTION", []).unwrap();
         }
         Some(Commands::Update {
             name,

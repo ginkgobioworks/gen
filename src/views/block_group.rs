@@ -18,7 +18,8 @@ use rusqlite::{params, types::Value as SQLValue, Connection};
 use std::error::Error;
 use std::time::{Duration, Instant};
 
-const REFRESH_INTERVAL: u64 = 1; // seconds
+// Frequency by which we check for external updates to the db
+const REFRESH_INTERVAL: u64 = 3; // seconds
 
 pub fn view_block_group(
     conn: &Connection,
@@ -30,6 +31,7 @@ pub fn view_block_group(
     let progress_bar = get_handler();
     let bar = progress_bar.add(get_time_elapsed_bar());
     let _ = progress_bar.println("Loading block group");
+
     // Get the block group for two cases: with and without a sample
     let block_group = if let Some(ref sample_name) = sample_name {
         BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name = ?2 AND name = ?3", 
@@ -107,25 +109,14 @@ pub fn view_block_group(
 
     // Track the last selected block group to detect changes
     let mut last_selected_block_group_id = Some(block_group_id);
+    // Track if we're loading a new block group
     let mut is_loading = false;
     let mut last_refresh = Instant::now();
     loop {
         // Refresh explorer data and force reload on change
-        // I have to close and reopen the connection to clear the cache,
-        // otherwise I don't see new samples etc.
         // I do this every REFRESH_INTERVAL seconds.
         if last_refresh.elapsed() >= Duration::from_secs(REFRESH_INTERVAL) {
-            // Get the path to the database
-            let db_path = conn.path().unwrap();
-            // Close and reopen the connection
-            let new_conn = Connection::open(db_path).unwrap();
-
-            // The following PRAGMA were also suggested, but these didn't seem to help.
-            //info!("Clearing cache for {}", db_path);
-            //conn.execute("PRAGMA cache_size = 0", [])?;
-            //conn.execute("PRAGMA cache_size = 50000", [])?;  // 50k from src/migrations.rs
-
-            if explorer.refresh(&new_conn, collection_name) {
+            if explorer.refresh(conn, collection_name) {
                 explorer.force_reload(&mut explorer_state);
             }
             last_refresh = Instant::now();
