@@ -8,8 +8,21 @@ homepage = "https://genhub.bio"
 license = "Apache-2.0"
 include = ["/src", "LICENSE", "migrations"]
 
+# Add this section for Python bindings
+[lib]
+name = "gen"
+crate-type = ["rlib", "cdylib"]
+
+[[bin]]
+name = "gen"
+path = "src/main.rs"
+
 [features]
-benchmark=[]
+benchmark = []
+# Add a new feature for Python bindings
+python-bindings = ["pyo3"]
+# Make default features not include python-bindings
+default = []
 
 [dependencies]
 cached = "0.54.0"
@@ -47,7 +60,10 @@ log = "0.4.25"
 env_logger = "0.11.6"
 tui-textarea = "0.7.0"
 tui-widget-list = "0.13.2"
+# Add PyO3 dependency for Python bindings, but make it optional
+pyo3 = { version = "0.20.2", features = ["extension-module", "abi3-py38", "auto-initialize", "multiple-pymethods"], optional = true }
 
 [dev-dependencies]
 cargo-llvm-cov = "0.6.14"
 cargo-deny = "0.16.4"
+maturin = "1.5.1"
