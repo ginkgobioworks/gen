@@ -10,7 +10,7 @@ use gen::exports::fasta::export_fasta;
 use gen::exports::genbank::export_genbank;
 use gen::exports::gfa::export_gfa;
 use gen::get_connection;
-use gen::graph_operators::{derive_chunks, get_path};
+use gen::graph_operators::{derive_chunks, get_path, make_stitch};
 use gen::imports::fasta::{import_fasta, FastaError};
 use gen::imports::genbank::import_genbank;
 use gen::imports::gfa::{import_gfa, GFAImportError};
@@ -419,6 +419,28 @@ enum Commands {
         /// The size of the chunks to derive
         #[arg(long)]
         chunk_size: Option<i64>,
+    },
+    #[command(
+        verbatim_doc_comment,
+        long_about = "Combine multiple sequence graphs into one. Example:
+    gen make-stitch --sample parent_sample --new-sample my_child_sample --regions chr1.2,chr1.3 --new-region spliced_chr1"
+    )]
+    MakeStitch {
+        /// The name of the collection to derive the subgraph from
+        #[arg(short, long)]
+        name: Option<String>,
+        /// The name of the parent sample
+        #[arg(short, long)]
+        sample: Option<String>,
+        /// The name of the new sample
+        #[arg(long)]
+        new_sample: String,
+        /// The names of the regions to combine
+        #[arg(long)]
+        regions: String,
+        /// The name of the new region
+        #[arg(long)]
+        new_region: String,
     },
 }
 
@@ -1222,6 +1244,38 @@ fn main() {
             ) {
                 Ok(_) => {}
                 Err(e) => panic!("Error deriving subgraph(s): {e}"),
+            }
+            conn.execute("END TRANSACTION", []).unwrap();
+            operation_conn.execute("END TRANSACTION", []).unwrap();
+        }
+        Some(Commands::MakeStitch {
+            name,
+            sample,
+            new_sample,
+            regions,
+            new_region,
+        }) => {
+            conn.execute("BEGIN TRANSACTION", []).unwrap();
+            operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
+            let name = &name
+                .clone()
+                .unwrap_or_else(|| get_default_collection(&operation_conn));
+            let sample_name = sample.clone();
+            let new_sample_name = new_sample.clone();
+
+            let region_names = regions.split(",").collect::<Vec<&str>>();
+
+            match make_stitch(
+                &conn,
+                &operation_conn,
+                name,
+                sample_name.as_deref(),
+                &new_sample_name,
+                &region_names,
+                new_region,
+            ) {
+                Ok(_) => {}
+                Err(e) => panic!("Error stitching subgraphs: {e}"),
             }
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
