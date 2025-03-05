@@ -12,7 +12,7 @@ pub fn export_fasta(
     collection_name: &str,
     sample_name: Option<&str>,
     filename: &PathBuf,
-    number_of_paths: Option<i64>,
+    all_paths: bool,
 ) {
     let block_groups = Sample::get_block_groups(conn, collection_name, sample_name);
 
@@ -20,23 +20,26 @@ pub fn export_fasta(
     let mut writer = fasta::io::Writer::new(file);
 
     for block_group in block_groups {
-        let sequences = if let Some(number_of_paths) = number_of_paths {
-            let all_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
-            all_sequences
-                .iter()
-                .take(number_of_paths as usize)
-                .cloned()
+        let sequences = if all_paths {
+            BlockGroup::get_all_sequences(conn, block_group.id, false)
+                .into_iter()
                 .collect()
         } else {
             let path = BlockGroup::get_current_path(conn, block_group.id);
             vec![path.sequence(conn)]
         };
 
+        let definitions = if all_paths {
+            (1..=sequences.len())
+                .map(|i| fasta::record::Definition::new(format!("{0}.{i}", block_group.name), None))
+                .collect()
+        } else {
+            vec![fasta::record::Definition::new(block_group.name, None)]
+        };
+
         for (i, sequence) in sequences.iter().enumerate() {
-            let definition =
-                fasta::record::Definition::new(format!("{0}.{i}", block_group.name), None);
             let fasta_sequence = fasta::record::Sequence::from(sequence.clone().into_bytes());
-            let record = fasta::Record::new(definition.clone(), fasta_sequence);
+            let record = fasta::Record::new(definitions[i].clone(), fasta_sequence);
 
             let _ = writer.write_record(&record);
         }
@@ -82,7 +85,7 @@ mod tests {
         .unwrap();
         let tmp_dir = tempfile::tempdir().unwrap().into_path();
         let filename = tmp_dir.join("out.fa");
-        export_fasta(conn, &collection, None, &filename, None);
+        export_fasta(conn, &collection, None, &filename, false);
 
         let mut fasta_reader = fasta::io::reader::Builder
             .build_from_path(filename)
@@ -144,7 +147,7 @@ mod tests {
 
         let tmp_dir = tempfile::tempdir().unwrap().into_path();
         let filename = tmp_dir.join("out.fa");
-        export_fasta(conn, &collection, Some("child sample"), &filename, None);
+        export_fasta(conn, &collection, Some("child sample"), &filename, false);
 
         let mut fasta_reader = fasta::io::reader::Builder
             .build_from_path(filename)
@@ -206,13 +209,7 @@ mod tests {
 
         let tmp_dir = tempfile::tempdir().unwrap().into_path();
         let filename = tmp_dir.join("out.fa");
-        export_fasta(
-            conn,
-            &collection,
-            Some("child sample"),
-            &filename,
-            Some(1000),
-        );
+        export_fasta(conn, &collection, Some("child sample"), &filename, true);
 
         let mut fasta_reader = fasta::io::reader::Builder
             .build_from_path(filename)
