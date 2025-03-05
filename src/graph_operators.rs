@@ -4,7 +4,7 @@ use crate::models::{
     block_group_edge::{BlockGroupEdge, BlockGroupEdgeData},
     edge::{Edge, EdgeData},
     file_types::FileTypes,
-    node::{PATH_END_NODE_ID, PATH_START_NODE_ID},
+    node::Node,
     operations::{Operation, OperationInfo},
     path::Path,
     path_edge::PathEdge,
@@ -164,7 +164,7 @@ pub fn derive_chunks(
         let new_start_edge = child_block_group_edges
             .iter()
             .find(|e| {
-                e.edge.source_node_id == PATH_START_NODE_ID
+                Node::is_start_node(e.edge.source_node_id)
                     && e.edge.target_node_id == *new_start_target_node_id
                     && e.edge.target_coordinate == start_node_coordinate
             })
@@ -196,7 +196,7 @@ pub fn derive_chunks(
         let new_end_edge = child_block_group_edges
             .iter()
             .find(|e| {
-                e.edge.target_node_id == PATH_END_NODE_ID
+                Node::is_end_node(e.edge.target_node_id)
                     && e.edge.source_node_id == *new_end_source_node_id
                     && e.edge.source_coordinate == end_node_coordinate
             })
@@ -405,8 +405,8 @@ pub fn make_stitch(
 
     let mut stitch_path_edge_ids = vec![];
     for (path_edge1, path_edge2) in concatenated_path_edges.iter().tuple_windows() {
-        if path_edge1.target_node_id == PATH_END_NODE_ID
-            && path_edge2.source_node_id == PATH_START_NODE_ID
+        if Node::is_end_node(path_edge1.target_node_id)
+            && Node::is_start_node(path_edge2.source_node_id)
         {
             stitch_path_edge_ids.push(
                 created_edges_by_node_info[&(
@@ -440,7 +440,7 @@ pub fn make_stitch(
     // Part 5: Create bg edges for the new edges
     let mut chromosome_index_counter = edges_to_reuse
         .iter()
-        .min_by(|x, y| x.chromosome_index.cmp(&y.chromosome_index))
+        .max_by(|x, y| x.chromosome_index.cmp(&y.chromosome_index))
         .unwrap()
         .chromosome_index
         + 1;

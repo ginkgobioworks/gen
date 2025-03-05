@@ -860,6 +860,10 @@ impl BlockGroup {
 
         // Instead of reusing the existing edges, we create copies of the nodes and edges.  This
         // makes it easier to recombine subgraphs later.
+        // TODO: Annotation support. We do not reuse node ids because nodes control the graph
+        // topology. If we duplicated nodes via these operations, it would leave to unintentional
+        // cycles. A node cannot exist in 2 places. This will be non-intuitive for annotation
+        // propagation and needs to be handled.
         let mut old_node_ids = HashSet::new();
         for source_edge in &source_edges {
             old_node_ids.insert(source_edge.source_node_id);
