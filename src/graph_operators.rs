@@ -81,8 +81,14 @@ pub fn derive_chunks(
     let current_intervaltree = current_path.intervaltree(conn);
     let current_path_edges = PathEdge::edges_for_path(conn, current_path.id);
 
+    let chunk_ranges_length = chunk_ranges.len();
     for (i, chunk_range) in chunk_ranges.clone().into_iter().enumerate() {
-        let child_block_group_name = format!("{}.{}", region_name, i + 1);
+        let child_block_group_name = if chunk_ranges_length > 1 {
+            format!("{}.{}", region_name, i + 1)
+        } else {
+            region_name.to_string()
+        };
+
         let child_block_group = BlockGroup::create(
             conn,
             collection_name,
@@ -487,12 +493,24 @@ pub fn make_stitch(
         },
         &summary_str,
         None,
-    )
-    .unwrap();
+    );
 
-    println!("Stitched chunks successfully.");
-
-    Ok(op)
+    match op {
+        Ok(op) => Ok(op),
+        Err(e) => match e {
+            OperationError::NoChanges => {
+                println!("Stitched graph already exists, nothing updated.");
+                Ok(Operation {
+                    hash: "".to_string(),
+                    db_uuid: "".to_string(),
+                    parent_hash: None,
+                    branch_id: 0,
+                    change_type: "".to_string(),
+                })
+            }
+            _ => Err(GraphOperationError::OperationError(e)),
+        },
+    }
 }
 
 #[cfg(test)]
@@ -598,7 +616,7 @@ mod tests {
         .unwrap();
 
         let block_groups = Sample::get_block_groups(conn, "test", Some("test"));
-        let block_group2 = block_groups.iter().find(|x| x.name == "chr1.1").unwrap();
+        let block_group2 = block_groups.iter().find(|x| x.name == "chr1").unwrap();
 
         let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id, false);
         assert_eq!(

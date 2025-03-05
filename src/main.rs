@@ -420,7 +420,11 @@ enum Commands {
         #[arg(long)]
         chunk_size: Option<i64>,
     },
-    /// Combine multiple sequence graphs into one
+    #[command(
+        verbatim_doc_comment,
+        long_about = "Combine multiple sequence graphs into one. Example:
+    gen make-stitch --sample parent_sample --new-sample my_child_sample --regions chr1.2,chr1.3 --new-region spliced_chr1"
+    )]
     MakeStitch {
         /// The name of the collection to derive the subgraph from
         #[arg(short, long)]
