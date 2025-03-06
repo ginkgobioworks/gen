@@ -1,5 +1,6 @@
 use crate::graph::{project_path, GraphNode};
 use crate::models::block_group::BlockGroup;
+use crate::models::node::Node;
 use crate::models::sample::Sample;
 use crate::models::strand::Strand;
 use interavl::IntervalTree;
@@ -43,15 +44,23 @@ where
                 let path = BlockGroup::get_current_path(conn, bg.id);
                 let graph = BlockGroup::get_graph(conn, bg.id);
                 let mut tree = IntervalTree::default();
-                // we use 1 indexing here just for ease with the GFF format
-                let mut position: i64 = 1;
+                let mut position: i64 = 0;
                 for (node, strand) in project_path(&graph, &path.blocks(conn)) {
-                    let end_position = position + node.length();
-                    tree.insert(position..end_position, (node, strand));
-                    position = end_position;
+                    if !Node::is_terminal(node.node_id) {
+                        // GFF indexing is one based, inclusive, so we subtract 1 from the end position.
+                        // Take a sequence that is 1-4 in our coordinates, this converts to:
+                        // 0123456
+                        // ATCGATC
+                        // 1234567
+                        // 1-4 in our zero-based half open interval would be 2-4 in GFF coordinates
+                        let end_position = position + node.length();
+                        tree.insert(position + 1..end_position, (node, strand));
+                        position = end_position;
+                    }
                 }
                 tree
             });
+            println!("t is {projection:?}");
             let range = start..end;
             for (overlap, (node, _overlap_strand)) in projection.iter_overlaps(&range) {
                 let overlap_start = max(start, overlap.start) as usize;
@@ -80,10 +89,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::imports::fasta::import_fasta;
     use crate::models::metadata;
     use crate::models::operations::setup_db;
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
+    use crate::translate::test_helpers::get_simple_sequence;
     use crate::updates::vcf::update_with_vcf;
     use std::fs::File;
     use std::io::BufReader;
@@ -97,20 +106,11 @@ mod tests {
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, &db_uuid);
 
-        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
         let vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.vcf");
         let gff_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/gffs/simple.gff3");
         let collection = "test".to_string();
 
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            &collection,
-            None,
-            false,
-            conn,
-            op_conn,
-        )
-        .unwrap();
+        get_simple_sequence(conn);
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
             &collection,
@@ -128,31 +128,35 @@ mod tests {
             "foo",
             BufReader::new(File::open(gff_path.clone()).unwrap()),
             &mut buffer,
-        );
+        )
+        .unwrap();
         let results = String::from_utf8(buffer).unwrap();
         assert_eq!(
             results,
             "\
-            3\tHAVANA\tgene\t1\t4\t.\t-\t.\tID=ENSG00000294541.1;gene_id=ENSG00000294541.1;gene_type=lncRNA;gene_name=ENSG00000294541;level=2\n\
-            3\tHAVANA\tgene\t4\t6\t.\t-\t.\tID=ENSG00000294541.1;gene_id=ENSG00000294541.1;gene_type=lncRNA;gene_name=ENSG00000294541;level=2\n\
-            3\tHAVANA\tgene\t6\t20\t.\t-\t.\tID=ENSG00000294541.1;gene_id=ENSG00000294541.1;gene_type=lncRNA;gene_name=ENSG00000294541;level=2\n\
-            3\tHAVANA\ttranscript\t1\t4\t.\t-\t.\tID=ENST00000724296.1;Parent=ENSG00000294541.1;gene_id=ENSG00000294541.1;transcript_id=ENST00000724296.1;gene_type=lncRNA;gene_name=ENSG00000294541;transcript_type=lncRNA;transcript_name=ENST00000724296;level=2;tag=basic,Ensembl_canonical,TAGENE\n\
-            3\tHAVANA\ttranscript\t4\t6\t.\t-\t.\tID=ENST00000724296.1;Parent=ENSG00000294541.1;gene_id=ENSG00000294541.1;transcript_id=ENST00000724296.1;gene_type=lncRNA;gene_name=ENSG00000294541;transcript_type=lncRNA;transcript_name=ENST00000724296;level=2;tag=basic,Ensembl_canonical,TAGENE\n\
-            3\tHAVANA\ttranscript\t6\t20\t.\t-\t.\tID=ENST00000724296.1;Parent=ENSG00000294541.1;gene_id=ENSG00000294541.1;transcript_id=ENST00000724296.1;gene_type=lncRNA;gene_name=ENSG00000294541;transcript_type=lncRNA;transcript_name=ENST00000724296;level=2;tag=basic,Ensembl_canonical,TAGENE\n\
-            3\tHAVANA\texon\t4\t6\t.\t-\t.\tID=exon:ENST00000724296.1:1;Parent=ENST00000724296.1;gene_id=ENSG00000294541.1;transcript_id=ENST00000724296.1;gene_type=lncRNA;gene_name=ENSG00000294541;transcript_type=lncRNA;transcript_name=ENST00000724296;exon_number=1;exon_id=ENSE00004046862.1;level=2;tag=basic,Ensembl_canonical,TAGENE\n\
-            3\tHAVANA\texon\t6\t8\t.\t-\t.\tID=exon:ENST00000724296.1:1;Parent=ENST00000724296.1;gene_id=ENSG00000294541.1;transcript_id=ENST00000724296.1;gene_type=lncRNA;gene_name=ENSG00000294541;transcript_type=lncRNA;transcript_name=ENST00000724296;exon_number=1;exon_id=ENSE00004046862.1;level=2;tag=basic,Ensembl_canonical,TAGENE\n\
-            3\tHAVANA\texon\t10\t14\t.\t-\t.\tID=exon:ENST00000724296.1:2;Parent=ENST00000724296.1;gene_id=ENSG00000294541.1;transcript_id=ENST00000724296.1;gene_type=lncRNA;gene_name=ENSG00000294541;transcript_type=lncRNA;transcript_name=ENST00000724296;exon_number=2;exon_id=ENSE00004046860.1;level=2;tag=basic,Ensembl_canonical,TAGENE\n\
-            3\tHAVANA\texon\t16\t19\t.\t-\t.\tID=exon:ENST00000724296.1:3;Parent=ENST00000724296.1;gene_id=ENSG00000294541.1;transcript_id=ENST00000724296.1;gene_type=lncRNA;gene_name=ENSG00000294541;transcript_type=lncRNA;transcript_name=ENST00000724296;exon_number=3;exon_id=ENSE00004046861.1;level=2;tag=basic,Ensembl_canonical,TAGENE\n\
-            3\tENSEMBL\tgene\t3\t4\t.\t-\t.\tID=ENSG00000277248.1;gene_id=ENSG00000277248.1;gene_type=snRNA;gene_name=U2;level=3\n3\tENSEMBL\tgene\t5\t6\t.\t-\t.\tID=ENSG00000277248.1;gene_id=ENSG00000277248.1;gene_type=snRNA;gene_name=U2;level=3\n3\tENSEMBL\tgene\t7\t15\t.\t-\t.\tID=ENSG00000277248.1;gene_id=ENSG00000277248.1;gene_type=snRNA;gene_name=U2;level=3\n\
-            3\tENSEMBL\ttranscript\t3\t4\t.\t-\t.\tID=ENST00000615943.1;Parent=ENSG00000277248.1;gene_id=ENSG00000277248.1;transcript_id=ENST00000615943.1;gene_type=snRNA;gene_name=U2;transcript_type=snRNA;transcript_name=U2.14-201;level=3;transcript_support_level=NA;tag=basic,Ensembl_canonical\n\
-            3\tENSEMBL\ttranscript\t4\t6\t.\t-\t.\tID=ENST00000615943.1;Parent=ENSG00000277248.1;gene_id=ENSG00000277248.1;transcript_id=ENST00000615943.1;gene_type=snRNA;gene_name=U2;transcript_type=snRNA;transcript_name=U2.14-201;level=3;transcript_support_level=NA;tag=basic,Ensembl_canonical\n\
-            3\tENSEMBL\ttranscript\t6\t15\t.\t-\t.\tID=ENST00000615943.1;Parent=ENSG00000277248.1;gene_id=ENSG00000277248.1;transcript_id=ENST00000615943.1;gene_type=snRNA;gene_name=U2;transcript_type=snRNA;transcript_name=U2.14-201;level=3;transcript_support_level=NA;tag=basic,Ensembl_canonical\n\
-            3\tENSEMBL\texon\t3\t4\t.\t-\t.\tID=exon:ENST00000615943.1:1;Parent=ENST00000615943.1;gene_id=ENSG00000277248.1;transcript_id=ENST00000615943.1;gene_type=snRNA;gene_name=U2;transcript_type=snRNA;transcript_name=U2.14-201;exon_number=1;exon_id=ENSE00003736336.1;level=3;transcript_support_level=NA;tag=basic,Ensembl_canonical\n\
-            3\tENSEMBL\texon\t4\t6\t.\t-\t.\tID=exon:ENST00000615943.1:1;Parent=ENST00000615943.1;gene_id=ENSG00000277248.1;transcript_id=ENST00000615943.1;gene_type=snRNA;gene_name=U2;transcript_type=snRNA;transcript_name=U2.14-201;exon_number=1;exon_id=ENSE00003736336.1;level=3;transcript_support_level=NA;tag=basic,Ensembl_canonical\n\
-            3\tENSEMBL\texon\t6\t15\t.\t-\t.\tID=exon:ENST00000615943.1:1;Parent=ENST00000615943.1;gene_id=ENSG00000277248.1;transcript_id=ENST00000615943.1;gene_type=snRNA;gene_name=U2;transcript_type=snRNA;transcript_name=U2.14-201;exon_number=1;exon_id=ENSE00003736336.1;level=3;transcript_support_level=NA;tag=basic,Ensembl_canonical\n"
+            3\tHAVANA\tgene\t1\t3\t.\t-\t.\tID=ENSG00000294541.1\n\
+            3\tHAVANA\tgene\t4\t5\t.\t-\t.\tID=ENSG00000294541.1\n\
+            3\tHAVANA\tgene\t6\t17\t.\t-\t.\tID=ENSG00000294541.1\n\
+            4\tHAVANA\tgene\t18\t20\t.\t-\t.\tID=ENSG00000294541.1\n\
+            3\tHAVANA\ttranscript\t1\t3\t.\t-\t.\tID=ENST00000724296.1;Parent=ENSG00000294541.1\n\
+            3\tHAVANA\ttranscript\t4\t5\t.\t-\t.\tID=ENST00000724296.1;Parent=ENSG00000294541.1\n\
+            3\tHAVANA\ttranscript\t6\t17\t.\t-\t.\tID=ENST00000724296.1;Parent=ENSG00000294541.1\n\
+            4\tHAVANA\ttranscript\t18\t20\t.\t-\t.\tID=ENST00000724296.1;Parent=ENSG00000294541.1\n\
+            3\tHAVANA\texon\t4\t5\t.\t-\t.\tID=exon:ENST00000724296.1:1;Parent=ENST00000724296.1\n\
+            3\tHAVANA\texon\t6\t8\t.\t-\t.\tID=exon:ENST00000724296.1:1;Parent=ENST00000724296.1\n\
+            3\tHAVANA\texon\t10\t14\t.\t-\t.\tID=exon:ENST00000724296.1:2;Parent=ENST00000724296.1\n\
+            3\tHAVANA\texon\t16\t17\t.\t-\t.\tID=exon:ENST00000724296.1:3;Parent=ENST00000724296.1\n\
+            4\tHAVANA\texon\t18\t19\t.\t-\t.\tID=exon:ENST00000724296.1:3;Parent=ENST00000724296.1\n\
+            3\tENSEMBL\tgene\t4\t5\t.\t-\t.\tID=ENSG00000277248.1\n\
+            3\tENSEMBL\tgene\t6\t15\t.\t-\t.\tID=ENSG00000277248.1\n\
+            3\tENSEMBL\ttranscript\t4\t5\t.\t-\t.\tID=ENST00000615943.1;Parent=ENSG00000277248.1\n\
+            3\tENSEMBL\ttranscript\t6\t15\t.\t-\t.\tID=ENST00000615943.1;Parent=ENSG00000277248.1\n\
+            3\tENSEMBL\texon\t4\t5\t.\t-\t.\tID=exon:ENST00000615943.1:1;Parent=ENST00000615943.1\n\
+            3\tENSEMBL\texon\t6\t15\t.\t-\t.\tID=exon:ENST00000615943.1:1;Parent=ENST00000615943.1\n\
+            "
         );
 
-        // The None sample is not split, so should be a simple mapping
+        // The None sample has no variants, so should be a simple mapping with the single split
         let mut buffer = Vec::new();
         translate_gff(
             conn,
@@ -160,18 +164,24 @@ mod tests {
             None,
             BufReader::new(File::open(gff_path.clone()).unwrap()),
             &mut buffer,
-        );
+        )
+        .unwrap();
         let results = String::from_utf8(buffer).unwrap();
         assert_eq!(
             results,
             "\
-            3\tHAVANA\tgene\t1\t20\t.\t-\t.\tID=ENSG00000294541.1;gene_id=ENSG00000294541.1;gene_type=lncRNA;gene_name=ENSG00000294541;level=2\n\
-            3\tHAVANA\ttranscript\t1\t20\t.\t-\t.\tID=ENST00000724296.1;Parent=ENSG00000294541.1;gene_id=ENSG00000294541.1;transcript_id=ENST00000724296.1;gene_type=lncRNA;gene_name=ENSG00000294541;transcript_type=lncRNA;transcript_name=ENST00000724296;level=2;tag=basic,Ensembl_canonical,TAGENE\n\
-            3\tHAVANA\texon\t4\t8\t.\t-\t.\tID=exon:ENST00000724296.1:1;Parent=ENST00000724296.1;gene_id=ENSG00000294541.1;transcript_id=ENST00000724296.1;gene_type=lncRNA;gene_name=ENSG00000294541;transcript_type=lncRNA;transcript_name=ENST00000724296;exon_number=1;exon_id=ENSE00004046862.1;level=2;tag=basic,Ensembl_canonical,TAGENE\n\
-            3\tHAVANA\texon\t10\t14\t.\t-\t.\tID=exon:ENST00000724296.1:2;Parent=ENST00000724296.1;gene_id=ENSG00000294541.1;transcript_id=ENST00000724296.1;gene_type=lncRNA;gene_name=ENSG00000294541;transcript_type=lncRNA;transcript_name=ENST00000724296;exon_number=2;exon_id=ENSE00004046860.1;level=2;tag=basic,Ensembl_canonical,TAGENE\n\
-            3\tHAVANA\texon\t16\t19\t.\t-\t.\tID=exon:ENST00000724296.1:3;Parent=ENST00000724296.1;gene_id=ENSG00000294541.1;transcript_id=ENST00000724296.1;gene_type=lncRNA;gene_name=ENSG00000294541;transcript_type=lncRNA;transcript_name=ENST00000724296;exon_number=3;exon_id=ENSE00004046861.1;level=2;tag=basic,Ensembl_canonical,TAGENE\n\
-            3\tENSEMBL\tgene\t3\t15\t.\t-\t.\tID=ENSG00000277248.1;gene_id=ENSG00000277248.1;gene_type=snRNA;gene_name=U2;level=3\n3\tENSEMBL\ttranscript\t4\t15\t.\t-\t.\tID=ENST00000615943.1;Parent=ENSG00000277248.1;gene_id=ENSG00000277248.1;transcript_id=ENST00000615943.1;gene_type=snRNA;gene_name=U2;transcript_type=snRNA;transcript_name=U2.14-201;level=3;transcript_support_level=NA;tag=basic,Ensembl_canonical\n\
-            3\tENSEMBL\texon\t3\t15\t.\t-\t.\tID=exon:ENST00000615943.1:1;Parent=ENST00000615943.1;gene_id=ENSG00000277248.1;transcript_id=ENST00000615943.1;gene_type=snRNA;gene_name=U2;transcript_type=snRNA;transcript_name=U2.14-201;exon_number=1;exon_id=ENSE00003736336.1;level=3;transcript_support_level=NA;tag=basic,Ensembl_canonical\n"
+            3\tHAVANA\tgene\t1\t17\t.\t-\t.\tID=ENSG00000294541.1\n\
+            4\tHAVANA\tgene\t18\t20\t.\t-\t.\tID=ENSG00000294541.1\n\
+            3\tHAVANA\ttranscript\t1\t17\t.\t-\t.\tID=ENST00000724296.1;Parent=ENSG00000294541.1\n\
+            4\tHAVANA\ttranscript\t18\t20\t.\t-\t.\tID=ENST00000724296.1;Parent=ENSG00000294541.1\n\
+            3\tHAVANA\texon\t4\t8\t.\t-\t.\tID=exon:ENST00000724296.1:1;Parent=ENST00000724296.1\n\
+            3\tHAVANA\texon\t10\t14\t.\t-\t.\tID=exon:ENST00000724296.1:2;Parent=ENST00000724296.1\n\
+            3\tHAVANA\texon\t16\t17\t.\t-\t.\tID=exon:ENST00000724296.1:3;Parent=ENST00000724296.1\n\
+            4\tHAVANA\texon\t18\t19\t.\t-\t.\tID=exon:ENST00000724296.1:3;Parent=ENST00000724296.1\n\
+            3\tENSEMBL\tgene\t3\t15\t.\t-\t.\tID=ENSG00000277248.1\n\
+            3\tENSEMBL\ttranscript\t3\t15\t.\t-\t.\tID=ENST00000615943.1;Parent=ENSG00000277248.1\n\
+            3\tENSEMBL\texon\t3\t15\t.\t-\t.\tID=exon:ENST00000615943.1:1;Parent=ENST00000615943.1\n\
+            "
         );
     }
 }

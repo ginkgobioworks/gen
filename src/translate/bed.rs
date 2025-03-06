@@ -1,5 +1,6 @@
 use crate::graph::{project_path, GraphNode};
 use crate::models::block_group::BlockGroup;
+use crate::models::node::Node;
 use crate::models::sample::Sample;
 use crate::models::strand::Strand;
 use interavl::IntervalTree;
@@ -47,9 +48,11 @@ where
                 let mut tree = IntervalTree::default();
                 let mut position: i64 = 0;
                 for (node, strand) in project_path(&graph, &path.blocks(conn)) {
-                    let end_position = position + node.length();
-                    tree.insert(position..end_position, (node, strand));
-                    position = end_position;
+                    if !Node::is_terminal(node.node_id) {
+                        let end_position = position + node.length();
+                        tree.insert(position..end_position, (node, strand));
+                        position = end_position;
+                    }
                 }
                 tree
             });
@@ -74,11 +77,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::imports::fasta::import_fasta;
     use crate::models::metadata;
     use crate::models::operations::setup_db;
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use crate::translate::bed::translate_bed;
+    use crate::translate::test_helpers::get_simple_sequence;
     use crate::updates::vcf::update_with_vcf;
     use std::fs::File;
     use std::path::PathBuf;
@@ -91,20 +94,12 @@ mod tests {
         let op_conn = &get_operation_connection(None);
         setup_db(op_conn, &db_uuid);
 
-        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
         let vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.vcf");
         let bed_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/beds/simple.bed");
         let collection = "test".to_string();
 
-        import_fasta(
-            &fasta_path.to_str().unwrap().to_string(),
-            &collection,
-            None,
-            false,
-            conn,
-            op_conn,
-        )
-        .unwrap();
+        get_simple_sequence(conn);
+
         update_with_vcf(
             &vcf_path.to_str().unwrap().to_string(),
             &collection,
@@ -122,7 +117,8 @@ mod tests {
             "foo",
             File::open(bed_path.clone()).unwrap(),
             &mut buffer,
-        );
+        )
+        .unwrap();
         let results = String::from_utf8(buffer).unwrap();
         assert_eq!(
             results,
@@ -132,10 +128,11 @@ mod tests {
         3\t5\t10\tabc123.1\t0\t-\t1\t10\t0,0,0\t3\t102,188,129,\t0,3508,4691,\n\
         3\t5\t8\txyz.1\t0\t-\t5\t8\t0,0,0\t1\t113,\t0,\n\
         3\t10\t16\txyz.2\t0\t+\t10\t16\t0,0,0\t2\t142,326,\t0,10710,\n\
-        3\t14\t23\tfoo.1\t0\t+\t14\t23\t0,0,0\t2\t142,326,\t0,10710,\n"
+        3\t14\t17\tfoo.1\t0\t+\t14\t23\t0,0,0\t2\t142,326,\t0,10710,\n\
+        4\t17\t23\tfoo.1\t0\t+\t14\t23\t0,0,0\t2\t142,326,\t0,10710,\n"
         );
 
-        // The None sample is not split, so should be a simple mapping
+        // The None sample has no variants, so should be a simple mapping and covers the split node
         let mut buffer = Vec::new();
         translate_bed(
             conn,
@@ -143,7 +140,8 @@ mod tests {
             None,
             File::open(bed_path).unwrap(),
             &mut buffer,
-        );
+        )
+        .unwrap();
         let results = String::from_utf8(buffer).unwrap();
         assert_eq!(
             results,
@@ -151,7 +149,8 @@ mod tests {
         3\t1\t10\tabc123.1\t0\t-\t1\t10\t0,0,0\t3\t102,188,129,\t0,3508,4691,\n\
         3\t5\t8\txyz.1\t0\t-\t5\t8\t0,0,0\t1\t113,\t0,\n\
         3\t10\t16\txyz.2\t0\t+\t10\t16\t0,0,0\t2\t142,326,\t0,10710,\n\
-        3\t14\t23\tfoo.1\t0\t+\t14\t23\t0,0,0\t2\t142,326,\t0,10710,\n"
+        3\t14\t17\tfoo.1\t0\t+\t14\t23\t0,0,0\t2\t142,326,\t0,10710,\n\
+        4\t17\t23\tfoo.1\t0\t+\t14\t23\t0,0,0\t2\t142,326,\t0,10710,\n"
         );
     }
 }
