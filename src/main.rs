@@ -78,10 +78,10 @@ enum Commands {
     Translate {
         /// Transform coordinates of a BED to graph nodes
         #[arg(long)]
-        translate_bed: Option<String>,
+        bed: Option<String>,
         /// Transform coordinates of a GFF to graph nodes
         #[arg(long)]
-        translate_gff: Option<String>,
+        gff: Option<String>,
         /// The name of the collection to map sequences against
         #[arg(short, long)]
         collection: Option<String>,
@@ -720,38 +720,46 @@ fn main() {
             operation_conn.execute("END TRANSACTION", []).unwrap();
         }
         Some(Commands::Translate {
-            translate_bed,
-            translate_gff,
+            bed,
+            gff,
             collection,
             sample,
         }) => {
             let collection = &collection
                 .clone()
                 .unwrap_or_else(|| get_default_collection(&operation_conn));
-            if let Some(bed) = translate_bed {
+            if let Some(bed) = bed {
                 let stdout = io::stdout();
                 let mut handle = stdout.lock();
                 let mut bed_file = File::open(bed).unwrap();
-                translate::bed::translate_bed(
+                match translate::bed::translate_bed(
                     &conn,
                     collection,
                     sample.as_deref(),
                     &mut bed_file,
                     &mut handle,
-                )
-                .unwrap();
-            } else if let Some(gff) = translate_gff {
+                ) {
+                    Ok(_) => {}
+                    Err(err) => {
+                        panic!("Error Translating Bed. {err}");
+                    }
+                }
+            } else if let Some(gff) = gff {
                 let stdout = io::stdout();
                 let mut handle = stdout.lock();
                 let mut gff_file = BufReader::new(File::open(gff).unwrap());
-                translate::gff::translate_gff(
+                match translate::gff::translate_gff(
                     &conn,
                     collection,
                     sample.as_deref(),
                     &mut gff_file,
                     &mut handle,
-                )
-                .unwrap();
+                ) {
+                    Ok(_) => {}
+                    Err(err) => {
+                        panic!("Error Translating GFF. {err}");
+                    }
+                }
             }
         }
         Some(Commands::Operations {
