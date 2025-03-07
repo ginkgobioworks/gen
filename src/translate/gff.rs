@@ -47,7 +47,7 @@ where
                 let mut position: i64 = 0;
                 for (node, strand) in project_path(&graph, &path.blocks(conn)) {
                     if !Node::is_terminal(node.node_id) {
-                        // GFF indexing is one based, inclusive, so we subtract 1 from the end position.
+                        // GFF indexing is one based, inclusive, so we add 1 to the start.
                         // Take a sequence that is 1-4 in our coordinates, this converts to:
                         // 0123456
                         // ATCGATC
@@ -60,7 +60,6 @@ where
                 }
                 tree
             });
-            println!("t is {projection:?}");
             let range = start..end;
             for (overlap, (node, _overlap_strand)) in projection.iter_overlaps(&range) {
                 let overlap_start = max(start, overlap.start) as usize;
