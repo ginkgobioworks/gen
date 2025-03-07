@@ -6,13 +6,13 @@ __version__ = "0.1.0"
 
 try:
     # Through Python
-    from .helpers import GraphLayout
+    from .helpers import Repository, Graph, GraphLayout
 
     # Directly from Rust
-    from .gen import Database, Accession, BaseLayout, ScaledLayout, connect, get_accessions
+    from .gen import connect, get_gen_db_path, get_gen_dir
     
     # Make those classes and functions available at the package level
-    __all__ = ["Database", "Accession", "BaseLayout", "ScaledLayout", "connect", "get_accessions"]
+    __all__ = ["Repository", "Graph", "GraphLayout", "connect", "get_gen_db_path", "get_gen_dir"]
     
 except ImportError as e:
     import sys

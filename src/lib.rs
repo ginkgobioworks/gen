@@ -2,7 +2,6 @@ use std::fs::File;
 use std::io::BufRead;
 use std::path::Path;
 use std::{io, str};
-
 pub mod annotations;
 pub mod config;
 pub mod diffs;
@@ -217,12 +216,16 @@ mod tests {
 mod python_bindings {
     use pyo3::prelude::*;
     use pyo3::types::PyDict;
+    use rusqlite::Connection;
+    use std::collections::HashMap;
     use std::path::Path;
 
     use crate::models::block_group::BlockGroup;
+
+    use crate::graph::GraphNode;
+    use crate::models::traits::Query;
     use crate::views::block_group_viewer::PlotParameters;
     use crate::views::block_layout::{BaseLayout, ScaledLayout};
-    use rusqlite::Connection;
 
     /// Function to convert SQLite errors to Python exceptions
     fn sqlite_err_to_pyerr(err: rusqlite::Error) -> PyErr {
@@ -231,24 +234,22 @@ mod python_bindings {
 
     #[pymodule]
     fn gen(_py: Python, m: &PyModule) -> PyResult<()> {
-        // You can added functions directly to the module
+        // You can add functions directly to the module
         m.add_function(wrap_pyfunction!(connect, m)?)?;
-        m.add_function(wrap_pyfunction!(get_accessions, m)?)?;
+        m.add_function(wrap_pyfunction!(get_gen_dir, m)?)?;
+        m.add_function(wrap_pyfunction!(get_gen_db_path, m)?)?;
         // TODO: more useful functions
         //m.add_function(wrap_pyfunction!(derive_chunks, m)?)?;
 
-        // Add the classes to the module
+        // Now add the classes to the module
         m.add_class::<PyConnection>()?;
-        m.add_class::<PyAccession>()?;
+        m.add_class::<PyBlockGroup>()?;
         m.add_class::<PyBaseLayout>()?;
-        m.add_class::<PyScaledLayout>()?;
 
         // Rename classes to match what goes in __init__.py
         m.add("Database", m.getattr("PyConnection")?)?;
-        m.add("Accession", m.getattr("PyAccession")?)?;
+        m.add("Graph", m.getattr("PyBlockGroup")?)?;
         m.add("BaseLayout", m.getattr("PyBaseLayout")?)?;
-        m.add("ScaledLayout", m.getattr("PyScaledLayout")?)?;
-
         Ok(())
     }
 
@@ -323,59 +324,246 @@ mod python_bindings {
     }
 
     #[pyclass]
-    struct PyAccession {
+    struct PyBlockGroup {
         #[pyo3(get)]
         id: i64,
         #[pyo3(get)]
+        collection_name: String,
+        #[pyo3(get)]
+        sample_name: Option<String>,
+        #[pyo3(get)]
         name: String,
-        #[pyo3(get)]
-        path_id: i64,
-        #[pyo3(get)]
-        parent_accession_id: Option<i64>,
     }
 
     #[pymethods]
-    impl PyAccession {
+    impl PyBlockGroup {
         #[new]
-        fn new(id: i64, name: String, path_id: i64, parent_accession_id: Option<i64>) -> Self {
-            PyAccession {
-                id,
-                name,
-                path_id,
-                parent_accession_id,
-            }
+        fn new(
+            conn: &PyConnection,
+            name: String,
+            collection_name: String,
+            sample_name: Option<String>,
+        ) -> PyResult<Self> {
+            let block_group = BlockGroup::create(
+                &conn.conn,
+                &collection_name,
+                sample_name.as_deref(), // Converts Option<String> to Option<&str>
+                &name,
+            );
+            Ok(PyBlockGroup {
+                id: block_group.id,
+                collection_name: block_group.collection_name,
+                sample_name: block_group.sample_name,
+                name: block_group.name,
+            })
         }
 
         fn __repr__(&self) -> PyResult<String> {
             Ok(format!(
-                "Accession({}, {}, {}, {:?})",
-                self.id, self.name, self.path_id, self.parent_accession_id
+                "BlockGroup({}, {}, {:?}, {})",
+                self.id, self.collection_name, self.sample_name, self.name
             ))
         }
+
+        #[staticmethod]
+        fn get_by_id(conn: &PyConnection, id: i64) -> PyResult<Self> {
+            let block_group = BlockGroup::get_by_id(&conn.conn, id);
+            Ok(PyBlockGroup {
+                id: block_group.id,
+                collection_name: block_group.collection_name,
+                sample_name: block_group.sample_name,
+                name: block_group.name,
+            })
+        }
+
+        #[staticmethod]
+        fn get_by_collection(conn: &PyConnection, collection_name: &str) -> PyResult<Vec<Self>> {
+            let block_groups = BlockGroup::query(
+                &conn.conn,
+                "SELECT * FROM block_groups WHERE collection_name = ?1",
+                rusqlite::params![collection_name],
+            );
+
+            let result = block_groups
+                .into_iter()
+                .map(|bg| PyBlockGroup {
+                    id: bg.id,
+                    collection_name: bg.collection_name,
+                    sample_name: bg.sample_name,
+                    name: bg.name,
+                })
+                .collect();
+
+            Ok(result)
+        }
+
+        fn as_dict(&self, conn: &PyConnection) -> PyResult<PyObject> {
+            let graph = BlockGroup::get_graph(&conn.conn, self.id);
+
+            // Convert the graph to a Python dictionary
+            Python::with_gil(|py| {
+                let dict = PyDict::new(py);
+
+                // Add nodes to the dictionary
+                let nodes = PyDict::new(py);
+                for node in graph.nodes() {
+                    let node_dict = PyDict::new(py);
+                    node_dict.set_item("block_id", node.block_id)?;
+                    node_dict.set_item("node_id", node.node_id)?;
+                    node_dict.set_item("sequence_start", node.sequence_start)?;
+                    node_dict.set_item("sequence_end", node.sequence_end)?;
+
+                    // Use a tuple of the node's fields as the key
+                    let key = (
+                        node.block_id,
+                        node.node_id,
+                        node.sequence_start,
+                        node.sequence_end,
+                    );
+                    nodes.set_item(key, node_dict)?;
+                }
+                dict.set_item("nodes", nodes)?;
+
+                // Add edges to the dictionary
+                let edges = PyDict::new(py);
+                for (src, dst, edge) in graph.all_edges() {
+                    let edge_dict = PyDict::new(py);
+                    edge_dict.set_item("edge_id", edge.edge_id)?;
+                    edge_dict.set_item("source_strand", edge.source_strand.to_string())?;
+                    edge_dict.set_item("target_strand", edge.target_strand.to_string())?;
+                    edge_dict.set_item("chromosome_index", edge.chromosome_index)?;
+                    edge_dict.set_item("phased", edge.phased)?;
+
+                    // Use a tuple of the source and target nodes as the key
+                    let src_key = (
+                        src.block_id,
+                        src.node_id,
+                        src.sequence_start,
+                        src.sequence_end,
+                    );
+                    let dst_key = (
+                        dst.block_id,
+                        dst.node_id,
+                        dst.sequence_start,
+                        dst.sequence_end,
+                    );
+                    edges.set_item((src_key, dst_key), edge_dict)?;
+                }
+                dict.set_item("edges", edges)?;
+
+                Ok(dict.into())
+            })
+        }
+
+        fn as_graph(&self, conn: &PyConnection) -> PyResult<PyObject> {
+            let graph = BlockGroup::get_graph(&conn.conn, self.id);
+
+            Python::with_gil(|py| {
+                // Import rustworkx module
+                let rustworkx = PyModule::import(py, "rustworkx")?;
+
+                // Create a new PyDiGraph
+                let py_digraph = rustworkx.getattr("PyDiGraph")?.call0()?;
+
+                // Create a mapping from our GraphNode to rustworkx node indices
+                let mut node_map: HashMap<GraphNode, usize> = HashMap::new();
+
+                // Add nodes to the rustworkx graph
+                for node in graph.nodes() {
+                    // Create a Python dictionary to store node data
+                    let node_data = PyDict::new(py);
+                    node_data.set_item("block_id", node.block_id)?;
+                    node_data.set_item("node_id", node.node_id)?;
+                    node_data.set_item("sequence_start", node.sequence_start)?;
+                    node_data.set_item("sequence_end", node.sequence_end)?;
+
+                    // Add the node to the rustworkx graph and store its index
+                    let index: usize = py_digraph
+                        .call_method1("add_node", (node_data,))?
+                        .extract()?;
+                    node_map.insert(node, index);
+                }
+
+                // Add edges to the rustworkx graph
+                for (src, dst, edge) in graph.all_edges() {
+                    // Get the rustworkx node indices
+                    let src_idx = *node_map.get(&src).unwrap();
+                    let dst_idx = *node_map.get(&dst).unwrap();
+
+                    // Create a Python dictionary to store edge data
+                    let edge_data = PyDict::new(py);
+                    edge_data.set_item("edge_id", edge.edge_id)?;
+                    edge_data.set_item("source_strand", edge.source_strand.to_string())?;
+                    edge_data.set_item("target_strand", edge.target_strand.to_string())?;
+                    edge_data.set_item("chromosome_index", edge.chromosome_index)?;
+                    edge_data.set_item("phased", edge.phased)?;
+
+                    // Add the edge to the rustworkx graph
+                    py_digraph.call_method1("add_edge", (src_idx, dst_idx, edge_data))?;
+                }
+
+                Ok(py_digraph.into())
+            })
+        }
+
+        /*  NOT DONE YET
+        /// Convert a rustworkx PyDiGraph back to a petgraph DiGraphMap and update the database
+        /// by creating a new sample
+        #[staticmethod]
+        fn from_graph(conn: &PyConnection, operation_conn: &PyConnection, block_group_id: i64, new_sample_name: &str, py_graph: &PyAny) -> PyResult<Self> {
+            // Start an operation session to track changes
+            let mut session = operation_management::start_operation(&conn.conn);
+
+            // Process the graph and get the new block group ID
+            let result = Python::with_gil(|py| {
+                // Check if the input is a rustworkx PyDiGraph
+                let rustworkx = PyModule::import(py, "rustworkx")?;
+                let py_digraph_type = rustworkx.getattr("PyDiGraph")?;
+
+                if !py_graph.is_instance(py_digraph_type)? {
+                    return Err(PyTypeError::new_err("Expected a rustworkx.PyDiGraph object"));
+                }
+
+                // Begin transaction inside of the closure so we don't have borrow issues
+                conn.execute("BEGIN TRANSACTION")?;
+
+                // Use a result to track success/failure for proper transaction handling
+                let result = (|| {
+                    ...
+
+                })();
+
+                // Handle transaction based on result
+                match result {
+                    Ok((new_block_group_id, _)) => {
+                        conn.execute("COMMIT")?;
+                        // Return the new block group
+                        Self::get_by_id(conn, new_block_group_id)
+                    },
+                    Err(e) => {
+                        // Rollback transaction on error
+                        let _ = conn.execute("ROLLBACK");
+                        Err(e)
+                    }
+                }
+            })?;
+        } */
+    }
+
+    // Expose configuration functions to Python
+    #[pyfunction]
+    fn get_gen_db_path() -> PyResult<String> {
+        crate::config::get_gen_db_path()
+            .to_str()
+            .ok_or_else(|| {
+                pyo3::exceptions::PyOSError::new_err("Failed to convert database path to string")
+            })
+            .map(|s| s.to_string())
     }
 
     #[pyfunction]
-    fn get_accessions(conn: &PyConnection) -> PyResult<Vec<PyAccession>> {
-        let query = "SELECT id, name, path_id, parent_accession_id FROM accessions";
-        let mut stmt = conn.conn.prepare(query).map_err(sqlite_err_to_pyerr)?;
-
-        let rows = stmt
-            .query_map([], |row| {
-                Ok(PyAccession {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    path_id: row.get(2)?,
-                    parent_accession_id: row.get(3)?,
-                })
-            })
-            .map_err(sqlite_err_to_pyerr)?;
-
-        let mut results = Vec::new();
-        for row in rows {
-            results.push(row.map_err(sqlite_err_to_pyerr)?);
-        }
-
-        Ok(results)
+    fn get_gen_dir() -> PyResult<String> {
+        Ok(crate::config::get_gen_dir())
     }
 
     // BaseLayout class for visualization
@@ -451,59 +639,47 @@ mod python_bindings {
             Ok(())
         }
 
-        // TODO: return a proper object or dict (if we keep this for fancy figures in jupyter notebooks)
-        fn get_node_positions(
-            &self,
-        ) -> PyResult<Vec<((i64, i64, i64, i64), ((f64, f64), (f64, f64)))>> {
-            let mut results = Vec::new();
+        fn get_node_positions(&self, py: Python) -> PyResult<PyObject> {
+            let mut result_dict = PyDict::new(py);
 
             for (node, pos) in self.layout.labels.iter() {
-                results.push((
-                    (
-                        node.block_id,
-                        node.node_id,
-                        node.sequence_start,
-                        node.sequence_end,
-                    ),
-                    *pos,
-                ));
+                let node_key = (
+                    node.block_id,
+                    node.node_id,
+                    node.sequence_start,
+                    node.sequence_end,
+                );
+
+                let position_value = (pos.0, pos.1);
+                result_dict.set_item(node_key, position_value)?;
             }
 
-            Ok(results)
+            Ok(result_dict.into())
         }
-
-        // TODO: see get_node_positions
-        fn get_edge_positions(
-            &self,
-        ) -> PyResult<
-            Vec<(
-                ((i64, i64, i64, i64), (i64, i64, i64, i64)),
-                ((f64, f64), (f64, f64)),
-            )>,
-        > {
-            let mut results = Vec::new();
+        fn get_edge_positions(&self, py: Python) -> PyResult<PyObject> {
+            let mut result_dict = PyDict::new(py);
 
             for ((src, dst), pos) in self.layout.lines.iter() {
-                results.push((
+                let edge_key = (
                     (
-                        (
-                            src.block_id,
-                            src.node_id,
-                            src.sequence_start,
-                            src.sequence_end,
-                        ),
-                        (
-                            dst.block_id,
-                            dst.node_id,
-                            dst.sequence_start,
-                            dst.sequence_end,
-                        ),
+                        src.block_id,
+                        src.node_id,
+                        src.sequence_start,
+                        src.sequence_end,
                     ),
-                    *pos,
-                ));
+                    (
+                        dst.block_id,
+                        dst.node_id,
+                        dst.sequence_start,
+                        dst.sequence_end,
+                    ),
+                );
+
+                let position_value = *pos;
+                result_dict.set_item(edge_key, position_value)?;
             }
 
-            Ok(results)
+            Ok(result_dict.into())
         }
 
         fn set_scale(&mut self, scale: u32) -> PyResult<()> {

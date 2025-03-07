@@ -19,7 +19,6 @@ path = "src/main.rs"
 
 [features]
 benchmark = []
-# Add a new feature for Python bindings
 python-bindings = ["pyo3"]
 # Make default features not include python-bindings
 default = []
@@ -62,6 +61,7 @@ tui-textarea = "0.7.0"
 tui-widget-list = "0.13.2"
 # Add PyO3 dependency for Python bindings, but make it optional
 pyo3 = { version = "0.20.2", features = ["extension-module", "abi3-py38", "auto-initialize", "multiple-pymethods"], optional = true }
+rustworkx-core = "0.16.0"
 
 [dev-dependencies]
 cargo-llvm-cov = "0.6.14"
