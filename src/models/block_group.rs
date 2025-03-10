@@ -13,6 +13,7 @@ use crate::models::path::{Path, PathBlock, PathData};
 use crate::models::path_edge::PathEdge;
 use crate::models::strand::Strand;
 use crate::models::traits::*;
+use crate::models::QueryError;
 use intervaltree::IntervalTree;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
@@ -194,14 +195,14 @@ impl BlockGroup {
         )
     }
 
-    pub fn clone(conn: &Connection, source_block_group_id: i64, target_block_group_id: i64) {
+    pub fn clone_into(&self, conn: &Connection, target_block_group_id: i64) {
         let existing_paths = Path::query(
             conn,
             "SELECT * from paths where block_group_id = ?1 ORDER BY id ASC;",
-            rusqlite::params!(SQLValue::from(source_block_group_id)),
+            rusqlite::params!(SQLValue::from(self.id)),
         );
 
-        let augmented_edges = BlockGroupEdge::edges_for_block_group(conn, source_block_group_id);
+        let augmented_edges = BlockGroupEdge::edges_for_block_group(conn, self.id);
         let edge_ids = augmented_edges
             .iter()
             .map(|edge| edge.edge.id)
@@ -266,61 +267,57 @@ impl BlockGroup {
         sample_name: &str,
         group_name: &str,
         parent_sample: Option<&str>,
-    ) -> Result<i64, &'static str> {
-        let mut bg_id : i64 = match conn.query_row(
-            "select id from block_groups where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
-            (collection_name, sample_name, group_name),
-            |row| row.get(0),
-        ) {
-            Ok(res) => res,
-            Err(rusqlite::Error::QueryReturnedNoRows) => 0,
-            Err(_e) => {
-                panic!("Error querying the database: {_e}");
-            }
-        };
-        if bg_id != 0 {
-            return Ok(bg_id);
-        } else {
+    ) -> Result<i64, QueryError> {
+        let binding = BlockGroup::query(
+	    conn,
+            "select * from block_groups where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
+            rusqlite::params!(SQLValue::from(collection_name.to_string()), SQLValue::from(sample_name.to_string()), SQLValue::from(group_name.to_string()))
+	);
+        let initial_query_result = binding.first();
+
+        if let Some(block_group) = initial_query_result {
+            return Ok(block_group.id);
+        }
+
+        let binding;
+        if let Some(parent_sample_name) = parent_sample {
             // use the base reference group if it exists
-            if let Some(parent_sample_name) = parent_sample {
-                bg_id = match conn.query_row(
-            "select id from block_groups where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
-            (collection_name, parent_sample_name, group_name),
-            |row| row.get(0),
-            ) {
-                Ok(res) => res,
-                Err(rusqlite::Error::QueryReturnedNoRows) => 0,
-                Err(_e) => {
-                    panic!("something bad happened querying the database")
-                }
-            }
+            binding = BlockGroup::query(
+		conn,
+		"select * from block_groups where collection_name = ?1 AND sample_name = ?2 AND name = ?3",
+		rusqlite::params!(SQLValue::from(collection_name.to_string()), SQLValue::from(parent_sample_name.to_string()), SQLValue::from(group_name.to_string()))
+	    );
+        } else {
+            binding = BlockGroup::query(
+		conn,
+                "select * from block_groups where collection_name = ?1 AND sample_name IS null AND name = ?2",
+                rusqlite::params!(collection_name.to_string(), group_name.to_string()),
+	    );
+        }
+
+        let query_result = binding.first();
+        if let Some(parent_block_group) = query_result {
+            let new_block_group =
+                BlockGroup::create(conn, collection_name, Some(sample_name), group_name);
+
+            // clone parent blocks/edges/path
+            parent_block_group.clone_into(conn, new_block_group.id);
+
+            Ok(new_block_group.id)
+        } else {
+            let error_message = if let Some(parent_sample_name) = parent_sample {
+                format!(
+                    "Block group not found for either new sample ({}) or parent sample ({})",
+                    sample_name, parent_sample_name
+                )
             } else {
-                bg_id = match conn.query_row(
-                    "select id from block_groups where collection_name = ?1 AND sample_name IS null AND name = ?2",
-                    (collection_name, group_name),
-                    |row| row.get(0),
-                ) {
-                    Ok(res) => res,
-                    Err(rusqlite::Error::QueryReturnedNoRows) => 0,
-                    Err(_e) => {
-                        panic!("something bad happened querying the database")
-                    }
-                }
-            }
+                format!(
+                    "Block group not found for new sample ({}) and default parent sample",
+                    sample_name
+                )
+            };
+            Err(QueryError::ResultsNotFound(error_message))
         }
-        if bg_id == 0 {
-            let error_string = format!(
-                "No base path exists for sample {} and graph name {}",
-                sample_name, group_name
-            );
-            return Err(Box::leak(error_string.into_boxed_str()));
-        }
-        let new_bg_id = BlockGroup::create(conn, collection_name, Some(sample_name), group_name);
-
-        // clone parent blocks/edges/path
-        BlockGroup::clone(conn, bg_id, new_bg_id.id);
-
-        Ok(new_bg_id.id)
     }
 
     pub fn get_id(

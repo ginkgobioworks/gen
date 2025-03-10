@@ -2,7 +2,7 @@ use crate::graph::{all_simple_paths, GraphEdge, GraphNode, OperationGraph};
 use crate::models::file_types::FileTypes;
 use crate::models::traits::*;
 use crate::operation_management::{
-    load_changeset, load_changeset_dependencies, load_changeset_models,
+    load_changeset, load_changeset_dependencies, load_changeset_models, OperationError,
 };
 use crate::views::patch::get_change_graph;
 use petgraph::graphmap::{DiGraphMap, UnGraphMap};
@@ -10,13 +10,11 @@ use petgraph::visit::{Dfs, Reversed};
 use petgraph::Direction;
 use rusqlite::session::ChangesetIter;
 use rusqlite::types::Value;
-use rusqlite::Error as SQLError;
 use rusqlite::{params, params_from_iter, Connection, Result as SQLResult, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::string::ToString;
-use thiserror::Error;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Operation {
@@ -25,12 +23,6 @@ pub struct Operation {
     pub parent_hash: Option<String>,
     pub branch_id: i64,
     pub change_type: String,
-}
-
-#[derive(Debug, Error, PartialEq)]
-pub enum OperationError {
-    #[error("SQLite Error: {0}")]
-    SqliteError(#[from] SQLError),
 }
 
 impl Operation {

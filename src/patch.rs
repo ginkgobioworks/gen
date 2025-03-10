@@ -112,6 +112,9 @@ pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[Operati
                 OperationError::SQLError(details) => {
                     println!("An error occurred executing SQL: {details}")
                 }
+                OperationError::SqliteError(details) => {
+                    println!("An error occurred executing SQL: {details}")
+                }
             },
         }
     }

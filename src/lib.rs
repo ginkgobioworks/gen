@@ -7,6 +7,7 @@ pub mod annotations;
 pub mod config;
 pub mod diffs;
 pub mod exports;
+pub mod fasta;
 pub mod genbank;
 pub mod gfa;
 pub mod gfa_reader;
