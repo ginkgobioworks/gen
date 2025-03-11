@@ -25,6 +25,7 @@ use gen::models::sample::Sample;
 use gen::operation_management;
 use gen::operation_management::{parse_patch_operations, OperationError};
 use gen::patch;
+use gen::translate;
 use gen::updates::fasta::update_with_fasta;
 use gen::updates::gaf::{transform_csv_to_fasta, update_with_gaf};
 use gen::updates::genbank::update_with_genbank;
@@ -37,11 +38,10 @@ use gen::views::patch::view_patches;
 
 use itertools::Itertools;
 use noodles::core::Region;
-use noodles::gff::directive::name;
 use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
 use std::fs::File;
-use std::io::Write;
+use std::io::{BufReader, Write};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::{io, str};
@@ -73,6 +73,22 @@ enum Commands {
         /// For update-gaf, this transforms the csv to a fasta for use in alignments
         #[arg(long)]
         format_csv_for_gaf: Option<String>,
+    },
+    /// Translate coordinates of standard bioinformatic file formats.
+    #[command(arg_required_else_help(true))]
+    Translate {
+        /// Transform coordinates of a BED to graph nodes
+        #[arg(long)]
+        bed: Option<String>,
+        /// Transform coordinates of a GFF to graph nodes
+        #[arg(long)]
+        gff: Option<String>,
+        /// The name of the collection to map sequences against
+        #[arg(short, long)]
+        collection: Option<String>,
+        /// The sample name whose graph coordinates are mapped against
+        #[arg(short, long)]
+        sample: Option<String>,
     },
     /// Import a new sequence collection.
     #[command(arg_required_else_help(true))]
@@ -751,6 +767,49 @@ fn main() {
             );
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
+        }
+        Some(Commands::Translate {
+            bed,
+            gff,
+            collection,
+            sample,
+        }) => {
+            let collection = &collection
+                .clone()
+                .unwrap_or_else(|| get_default_collection(&operation_conn));
+            if let Some(bed) = bed {
+                let stdout = io::stdout();
+                let mut handle = stdout.lock();
+                let mut bed_file = File::open(bed).unwrap();
+                match translate::bed::translate_bed(
+                    &conn,
+                    collection,
+                    sample.as_deref(),
+                    &mut bed_file,
+                    &mut handle,
+                ) {
+                    Ok(_) => {}
+                    Err(err) => {
+                        panic!("Error Translating Bed. {err}");
+                    }
+                }
+            } else if let Some(gff) = gff {
+                let stdout = io::stdout();
+                let mut handle = stdout.lock();
+                let mut gff_file = BufReader::new(File::open(gff).unwrap());
+                match translate::gff::translate_gff(
+                    &conn,
+                    collection,
+                    sample.as_deref(),
+                    &mut gff_file,
+                    &mut handle,
+                ) {
+                    Ok(_) => {}
+                    Err(err) => {
+                        panic!("Error Translating GFF. {err}");
+                    }
+                }
+            }
         }
         Some(Commands::Operations {
             interactive,

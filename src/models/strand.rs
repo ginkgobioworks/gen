@@ -1,3 +1,4 @@
+use noodles::gff::record::Strand as GFFStrand;
 use rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, Value, ValueRef};
 use rusqlite::ToSql;
 use serde::{Deserialize, Serialize};
@@ -9,6 +10,17 @@ pub enum Strand {
     Reverse,
     Unknown,
     ImportantButUnknown,
+}
+
+impl Strand {
+    pub fn is_ambiguous(a: Strand) -> bool {
+        a == Strand::ImportantButUnknown || a == Strand::Unknown
+    }
+    pub fn is_compatible(a: Strand, b: Strand) -> bool {
+        let a_ambig = Strand::is_ambiguous(a);
+        let b_ambig = Strand::is_ambiguous(b);
+        (a_ambig || b_ambig) || a == b
+    }
 }
 
 // example https://docs.rs/rusqlite/latest/rusqlite/types/index.html
@@ -33,6 +45,28 @@ impl From<Strand> for Value {
             Strand::ImportantButUnknown => "?",
         };
         Value::Text(result.to_string())
+    }
+}
+
+impl From<GFFStrand> for Strand {
+    fn from(value: GFFStrand) -> Strand {
+        match value {
+            GFFStrand::Forward => Strand::Forward,
+            GFFStrand::Unknown => Strand::Unknown,
+            GFFStrand::Reverse => Strand::Reverse,
+            GFFStrand::None => Strand::Unknown,
+        }
+    }
+}
+
+impl From<Strand> for GFFStrand {
+    fn from(value: Strand) -> GFFStrand {
+        match value {
+            Strand::Forward => GFFStrand::Forward,
+            Strand::Unknown => GFFStrand::Unknown,
+            Strand::Reverse => GFFStrand::Reverse,
+            Strand::ImportantButUnknown => GFFStrand::None,
+        }
     }
 }
 
