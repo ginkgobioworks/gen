@@ -121,6 +121,7 @@ mod tests {
         )
         .unwrap();
         let mut buffer = Vec::new();
+        // "foo" is a sample from simple.vcf
         translate_gff(
             conn,
             &collection,
