@@ -195,7 +195,7 @@ impl BlockGroup {
         )
     }
 
-    pub fn clone_into(&self, conn: &Connection, target_block_group_id: i64) {
+    pub fn clone(&self, conn: &Connection, target_block_group_id: i64) {
         let existing_paths = Path::query(
             conn,
             "SELECT * from paths where block_group_id = ?1 ORDER BY id ASC;",
@@ -301,7 +301,7 @@ impl BlockGroup {
                 BlockGroup::create(conn, collection_name, Some(sample_name), group_name);
 
             // clone parent blocks/edges/path
-            parent_block_group.clone_into(conn, new_block_group.id);
+            parent_block_group.clone(conn, new_block_group.id);
 
             Ok(new_block_group.id)
         } else {

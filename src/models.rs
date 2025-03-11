@@ -16,7 +16,7 @@ pub mod sequence;
 pub mod strand;
 pub mod traits;
 
-#[derive(Clone, Debug, Error, PartialEq)]
+#[derive(Clone, Debug, Eq, Error, Hash, PartialEq)]
 pub enum QueryError {
     #[error("Results not found: {0}")]
     ResultsNotFound(String),
