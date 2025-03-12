@@ -62,6 +62,7 @@ tui-widget-list = "0.13.2"
 # Add PyO3 dependency for Python bindings, but make it optional
 pyo3 = { version = "0.20.2", features = ["extension-module", "abi3-py38", "auto-initialize", "multiple-pymethods"], optional = true }
 rustworkx-core = "0.16.0"
+pyo3-macros = "0.24.0"
 
 [dev-dependencies]
 cargo-llvm-cov = "0.6.14"

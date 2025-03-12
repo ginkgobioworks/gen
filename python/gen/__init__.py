@@ -5,14 +5,14 @@ __version__ = "0.1.0"
 # Bindings can come through a Python intermediate layer (helpers.py) or the compiled Rust library itself
 
 try:
-    # Through Python
-    from .helpers import Repository, Graph, GraphLayout
-
     # Directly from Rust
-    from .gen import connect, get_gen_db_path, get_gen_dir
-    
+    from .gen import Repository, PyBlockGroup, PyBaseLayout, PyScaledLayout, get_gen_dir
+
+    # Through Python (helpers.py), currently not used
+    # from .helpers import ...
+
     # Make those classes and functions available at the package level
-    __all__ = ["Repository", "Graph", "GraphLayout", "connect", "get_gen_db_path", "get_gen_dir"]
+    __all__ = ["Repository", "get_gen_dir", "PyBlockGroup", "PyBaseLayout", "PyScaledLayout"]
     
 except ImportError as e:
     import sys

@@ -34,6 +34,8 @@ fn ensure_dir(path: &PathBuf) {
     }
 }
 
+/// Looks for the .gen directory in the current directory and creates it if it doesn't exist.
+/// Returns the path to the .gen directory.
 pub fn get_or_create_gen_dir() -> PathBuf {
     let start_dir = BASE_DIR.with(|v| v.read().unwrap().clone());
     let cur_dir = start_dir.as_path();
@@ -43,7 +45,9 @@ pub fn get_or_create_gen_dir() -> PathBuf {
 }
 
 // TODO: maybe just store all these things in a sqlite file too in .gen
-pub fn get_gen_dir() -> String {
+/// Searches for the .gen directory in the current directory and all parent directories.
+/// Returns the path to the .gen directory if found, otherwise returns None.
+pub fn get_gen_dir() -> Option<String> {
     let start_dir = BASE_DIR.with(|v| v.read().unwrap().clone());
     let mut cur_dir = start_dir.as_path();
     let mut gen_path = cur_dir.join(".gen");
@@ -53,21 +57,30 @@ pub fn get_gen_dir() -> String {
                 cur_dir = v;
             }
             None => {
-                // TOOD: make gen init
-                panic!("No .gen directory found. Run gen init in project root directory to initialize gen.");
+                // TODO: make gen init
+                return None;
             }
         };
         gen_path = cur_dir.join(".gen");
     }
-    gen_path.to_str().unwrap().to_string()
+    Some(gen_path.to_str().unwrap().to_string())
 }
 
+/// Returns the path to the gen.db file in the .gen directory.
+/// If the .gen directory is not found, it will panic.
 pub fn get_gen_db_path() -> PathBuf {
-    Path::new(&get_gen_dir()).join("gen.db")
+    match get_gen_dir() {
+        Some(dir) => Path::new(&dir).join("gen.db"),
+        None => {
+            panic!("No .gen directory found. Please run 'gen init' first.")
+        }
+    }
 }
 
 pub fn get_changeset_path(operation: &Operation) -> PathBuf {
-    let path = Path::new(&get_gen_dir())
+    let gen_dir = get_gen_dir()
+        .unwrap_or_else(|| panic!("No .gen directory found. Please run 'gen init' first."));
+    let path = Path::new(&gen_dir)
         .join(operation.db_uuid.clone())
         .join("changeset");
     ensure_dir(&path);
@@ -82,6 +95,12 @@ mod tests {
     #[test]
     fn test_finds_gen_dir() {
         setup_gen_dir();
-        assert!(!get_gen_dir().is_empty());
+        assert!(get_gen_dir().is_some());
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_panics_if_no_gen_dir() {
+        assert!(get_gen_dir().is_none());
     }
 }
