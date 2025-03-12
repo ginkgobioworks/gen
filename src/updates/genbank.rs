@@ -250,7 +250,7 @@ mod tests {
                 }
             ),
             Err(GenBankError::ParseError(
-                "Failed to parse Syntax error: Error Tag while parsing [this is not valid]"
+                "Failed to parse Syntax error: Error MapRes while parsing [this is not valid]"
                     .to_string()
             ))
         )
