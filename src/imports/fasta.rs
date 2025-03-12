@@ -1,4 +1,5 @@
 use crate::calculate_hash;
+use crate::fasta::FastaError;
 use crate::models::file_types::FileTypes;
 use crate::models::operations::{OperationFile, OperationInfo};
 use crate::models::sample::Sample;
@@ -13,20 +14,13 @@ use crate::models::{
     sequence::Sequence,
     strand::Strand,
 };
-use crate::operation_management::{end_operation, start_operation, OperationError};
+use crate::operation_management::{end_operation, start_operation};
 use crate::progress_bar::{add_saving_operation_bar, get_handler, get_progress_bar};
 use noodles::fasta;
 use rusqlite;
 use rusqlite::Connection;
 use std::collections::HashMap;
 use std::str;
-use thiserror::Error;
-
-#[derive(Debug, Error, PartialEq)]
-pub enum FastaError {
-    #[error("Operation Error: {0}")]
-    OperationError(#[from] OperationError),
-}
 
 pub fn import_fasta<'a>(
     fasta: &String,
@@ -159,6 +153,7 @@ mod tests {
     use crate::models::metadata;
     use crate::models::operations::setup_db;
     use crate::models::traits::*;
+    use crate::operation_management::OperationError;
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use std::collections::HashSet;
     use std::path::PathBuf;
@@ -285,16 +280,20 @@ mod tests {
             Node::query(conn, "select * from nodes;", rusqlite::params!()).len(),
             3
         );
-        assert_eq!(
-            import_fasta(
-                &fasta_path.to_str().unwrap().to_string(),
-                &collection,
-                None,
-                false,
-                conn,
-                op_conn,
-            ),
-            Err(FastaError::OperationError(OperationError::NoChanges))
-        );
+
+        let result_error = import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            None,
+            false,
+            conn,
+            op_conn,
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            result_error,
+            FastaError::OperationError(OperationError::NoChanges)
+        ));
     }
 }

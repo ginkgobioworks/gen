@@ -21,6 +21,7 @@ use petgraph::Direction;
 use rusqlite;
 use rusqlite::session::{ChangesetItem, ChangesetIter};
 use rusqlite::types::{FromSql, Value};
+use rusqlite::Error as SQLError;
 use rusqlite::{session, Connection};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -36,7 +37,7 @@ groups will always appear before block group edges, etc.
 
  */
 
-#[derive(Debug, PartialEq, Eq, Error)]
+#[derive(Debug, PartialEq, Error)]
 pub enum OperationError {
     #[error("No Changes")]
     NoChanges,
@@ -44,6 +45,8 @@ pub enum OperationError {
     OperationExists,
     #[error("SQL Error: {0}")]
     SQLError(String),
+    #[error("SQLite Error: {0}")]
+    SqliteError(#[from] SQLError),
 }
 
 pub enum FileMode {

@@ -9,6 +9,7 @@ use crate::models::{
     sequence::Sequence,
     strand::Strand,
     traits::*,
+    QueryError,
 };
 use crate::operation_management::{end_operation, start_operation, OperationError};
 use crate::progress_bar::{add_saving_operation_bar, get_handler, get_progress_bar};
@@ -49,7 +50,7 @@ impl<'a> BlockGroupCache<'_> {
         sample_name: &'a str,
         name: String,
         parent_sample: Option<&'a str>,
-    ) -> Result<i64, &'static str> {
+    ) -> Result<i64, QueryError> {
         let block_group_key = BlockGroupData {
             collection_name,
             sample_name: Some(sample_name),
@@ -69,7 +70,7 @@ impl<'a> BlockGroupCache<'_> {
 
             block_group_cache
                 .cache
-                .insert(block_group_key, new_block_group_id?);
+                .insert(block_group_key, new_block_group_id.clone()?);
             new_block_group_id
         }
     }

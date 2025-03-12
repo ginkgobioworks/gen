@@ -3,12 +3,14 @@ use rusqlite;
 use rusqlite::{types::Value as SQLValue, Connection};
 use std::{io, str};
 
+use crate::fasta::FastaError;
 use crate::models::operations::{OperationFile, OperationInfo};
 use crate::models::{
     block_group::{BlockGroup, PathChange},
     edge::Edge,
     file_types::FileTypes,
     node::Node,
+    operations::Operation,
     path::PathBlock,
     sample::Sample,
     sequence::Sequence,
@@ -28,7 +30,7 @@ pub fn update_with_fasta(
     start_coordinate: i64,
     end_coordinate: i64,
     fasta_file_path: &str,
-) -> io::Result<()> {
+) -> Result<Operation, FastaError> {
     let mut session = operation_management::start_operation(conn);
 
     let mut fasta_reader = fasta::io::reader::Builder.build_from_path(fasta_file_path)?;
@@ -44,8 +46,8 @@ pub fn update_with_fasta(
             new_sample_name,
             &block_group.name,
             parent_sample_name,
-        )
-        .unwrap();
+        )?;
+
         if block_group.name == region_name {
             new_block_group_id = new_bg_id;
         }
@@ -127,7 +129,7 @@ pub fn update_with_fasta(
     );
 
     let summary_str = format!(" {}: 1 change", new_path.name);
-    operation_management::end_operation(
+    let op = operation_management::end_operation(
         conn,
         operation_conn,
         &mut session,
@@ -145,7 +147,7 @@ pub fn update_with_fasta(
 
     println!("Updated with fasta file: {}", fasta_file_path);
 
-    Ok(())
+    Ok(op)
 }
 
 #[cfg(test)]
