@@ -281,16 +281,16 @@ mod tests {
             3
         );
 
-        let result = import_fasta(
+        let result_error = import_fasta(
             &fasta_path.to_str().unwrap().to_string(),
             &collection,
             None,
             false,
             conn,
             op_conn,
-        );
-        assert!(result.is_err());
-        let result_error = result.unwrap_err();
+        )
+        .unwrap_err();
+
         assert!(matches!(
             result_error,
             FastaError::OperationError(OperationError::NoChanges)
