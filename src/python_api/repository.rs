@@ -49,6 +49,7 @@ impl PyRepository {
 #[pymethods]
 impl PyRepository {
     #[new]
+    #[pyo3(signature = (path = Option::<String>::None))]
     fn new(_py: Python, path: Option<String>) -> PyResult<Self> {
         // PathBuf instead of Path to avoid borrowing issues
         let gen_dir: PathBuf = match path {

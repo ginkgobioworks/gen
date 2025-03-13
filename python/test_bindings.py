@@ -15,26 +15,26 @@ def check_module_path(module_name):
         
         # Check the module's file path
         if hasattr(module, '__file__'):
-            print(f"  📂 Module file: {module.__file__}")
+            print(f"    Module file: {module.__file__}")
         else:
             print(f"  ❌ Module {module_name} has no __file__ attribute")
             
         # Print module attributes and documentation
         print(f"  📝 Module attributes: {sorted([attr for attr in dir(module) if not attr.startswith('_')])}")
         if module.__doc__:
-            print(f"  📚 Module docstring: {module.__doc__.strip()}")
+            print(f"    Module docstring: {module.__doc__.strip()}")
         
         return module
     except ImportError as e:
         print(f"❌ Failed to import {module_name}: {e}")
-        return None
+        sys.exit(1)
     except Exception as e:
         print(f"❌ Error importing {module_name}: {type(e).__name__}: {e}")
-        return None
+        sys.exit(1)
 
 def check_site_packages():
     """Check site-packages directories for gen files."""
-    print("\n📦 Checking site-packages directories:")
+    print("\n  Checking site-packages directories:")
     for path in sys.path:
         if 'site-packages' in path and os.path.isdir(path):
             gen_dir = os.path.join(path, 'gen')
@@ -56,7 +56,7 @@ def check_package_metadata():
         from importlib.metadata import distribution, PackageNotFoundError
         try:
             dist = distribution('gen')
-            print(f"\n📦 Package metadata for gen:")
+            print(f"\n Package metadata for gen:")
             print(f"  Version: {dist.version}")
             print(f"  Files: {sorted([f for f in dist.files if 'gen' in str(f)])}")
             print(f"  Entry points: {dist.entry_points}")
@@ -85,8 +85,8 @@ def main():
             print("\n🔍 Found Repository class in gen module")
             try:
                 repo_class = gen_mod.Repository
-                print(f"  📝 Repository class attributes: {dir(repo_class)}")
-                print(f"  📚 Repository class docstring: {repo_class.__doc__}")
+                print(f"     Repository class attributes: {dir(repo_class)}")
+                print(f"     Repository class docstring: {repo_class.__doc__}")
             except Exception as e:
                 print(f"  ❌ Error examining Repository class: {e}")
     
