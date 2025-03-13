@@ -93,38 +93,8 @@ if [ "$BUILD_WHEEL" = true ]; then
   pip list
   echo
 
-  echo "Attempting to import gen:"
-  python -c '
-  import sys
-  try:
-      import gen
-      print(f"  Successfully imported gen {gen.__version__}")
-      print(f"  Available attributes: {dir(gen)}")
-      try:
-          import gen.gen
-          print(f"  Successfully imported gen.gen")
-          print(f"  Available attributes: {dir(gen.gen)}")
-      except ImportError as e:
-          print(f"  Failed to import gen.gen: {e}")
-          import os
-          package_dir = os.path.dirname(gen.__file__)
-          print(f"  Looking for .so files in {package_dir}:")
-          print(f"    Files found: {os.listdir(package_dir)}")
-  except ImportError as e:
-      print(f"Failed to import gen: {e}")
-  '
-
-  echo "Done! The package is now installed and ready to use."
-  echo "Example usage:"
-  echo 'python -c "
-  try:
-      import gen
-      print(\"Connection example:\")
-      db = gen.Database(\"your_database.db\")
-      print(\"Database connected successfully\")
-  except Exception as e:
-      print(f\"Error: {e}\")
-  "'
+  echo "Testing bindings..."
+  python python/test_bindings.py
 else
   echo "Skipping wheel build for distribution. Use --deploy or --with-wheel to build the wheel."
 fi 
