@@ -1,6 +1,4 @@
-#[cfg(feature = "python-bindings")]
 use pyo3::prelude::*;
-#[cfg(feature = "python-bindings")]
 use pyo3::types::PyModule;
 use rusqlite::Connection;
 use std::path::PathBuf;
@@ -12,20 +10,15 @@ use crate::models::block_group::BlockGroup;
 use crate::models::traits::Query;
 use crate::views::block_layout::BaseLayout;
 
-#[cfg(feature = "python-bindings")]
 use super::block_group::PyBlockGroup;
-#[cfg(feature = "python-bindings")]
 use super::factory::Factory;
-#[cfg(feature = "python-bindings")]
 use super::layouts::PyBaseLayout;
-#[cfg(feature = "python-bindings")]
 use super::utils::{path_to_py_path, py_query, sqlite_err_to_pyerr};
 
 /// The main entry point for the gen Python module.
 ///
 /// This class manages the database connection and provides methods for
 /// querying and manipulating the database.
-#[cfg(feature = "python-bindings")]
 #[pyclass(name = "Repository")]
 pub struct PyRepository {
     // We use custom getters, hence no #[pyo3(get)]
@@ -36,7 +29,6 @@ pub struct PyRepository {
 }
 
 // Regular Rust implementation outside of PyO3 exposure
-#[cfg(feature = "python-bindings")]
 impl PyRepository {
     // Private helper method that provides a connection to a closure
     // This pattern avoids exposing Rust-specific types like MutexGuard to Python
@@ -54,7 +46,6 @@ impl PyRepository {
     }
 }
 
-#[cfg(feature = "python-bindings")]
 #[pymethods]
 impl PyRepository {
     #[new]
