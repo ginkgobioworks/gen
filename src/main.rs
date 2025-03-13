@@ -316,6 +316,9 @@ enum Commands {
         /// The name of the GenBank file to export to
         #[arg(long)]
         gb: Option<String>,
+        /// Optionally for fasta, the number of paths to export
+        #[arg(long, num_args = 0)]
+        all_paths: bool,
     },
     /// Configure default options
     #[command(arg_required_else_help(true))]
@@ -989,6 +992,7 @@ fn main() {
             gfa,
             sample,
             fasta,
+            all_paths,
         }) => {
             let name = &name
                 .clone()
@@ -1003,6 +1007,7 @@ fn main() {
                     name,
                     sample.clone().as_deref(),
                     &PathBuf::from(fasta_path),
+                    *all_paths,
                 );
             } else if let Some(gb_path) = gb {
                 export_genbank(

@@ -12,6 +12,7 @@ pub fn export_fasta(
     collection_name: &str,
     sample_name: Option<&str>,
     filename: &PathBuf,
+    all_paths: bool,
 ) {
     let block_groups = Sample::get_block_groups(conn, collection_name, sample_name);
 
@@ -19,13 +20,29 @@ pub fn export_fasta(
     let mut writer = fasta::io::Writer::new(file);
 
     for block_group in block_groups {
-        let path = BlockGroup::get_current_path(conn, block_group.id);
+        let sequences = if all_paths {
+            BlockGroup::get_all_sequences(conn, block_group.id, false)
+                .into_iter()
+                .collect()
+        } else {
+            let path = BlockGroup::get_current_path(conn, block_group.id);
+            vec![path.sequence(conn)]
+        };
 
-        let definition = fasta::record::Definition::new(block_group.name, None);
-        let sequence = fasta::record::Sequence::from(path.sequence(conn).into_bytes());
-        let record = fasta::Record::new(definition, sequence);
+        let definitions = if all_paths {
+            (1..=sequences.len())
+                .map(|i| fasta::record::Definition::new(format!("{0}.{i}", block_group.name), None))
+                .collect()
+        } else {
+            vec![fasta::record::Definition::new(block_group.name, None)]
+        };
 
-        let _ = writer.write_record(&record);
+        for (i, sequence) in sequences.iter().enumerate() {
+            let fasta_sequence = fasta::record::Sequence::from(sequence.clone().into_bytes());
+            let record = fasta::Record::new(definitions[i].clone(), fasta_sequence);
+
+            let _ = writer.write_record(&record);
+        }
     }
 
     println!("Exported to file {}", filename.display());
@@ -40,6 +57,7 @@ mod tests {
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
     use crate::updates::fasta::update_with_fasta;
     use noodles::fasta;
+    use std::collections::HashSet;
     use std::path::PathBuf;
     use std::{io, str};
     use tempfile;
@@ -67,7 +85,7 @@ mod tests {
         .unwrap();
         let tmp_dir = tempfile::tempdir().unwrap().into_path();
         let filename = tmp_dir.join("out.fa");
-        export_fasta(conn, &collection, None, &filename);
+        export_fasta(conn, &collection, None, &filename, false);
 
         let mut fasta_reader = fasta::io::reader::Builder
             .build_from_path(filename)
@@ -129,7 +147,7 @@ mod tests {
 
         let tmp_dir = tempfile::tempdir().unwrap().into_path();
         let filename = tmp_dir.join("out.fa");
-        export_fasta(conn, &collection, Some("child sample"), &filename);
+        export_fasta(conn, &collection, Some("child sample"), &filename, false);
 
         let mut fasta_reader = fasta::io::reader::Builder
             .build_from_path(filename)
@@ -147,5 +165,87 @@ mod tests {
             .unwrap()
             .to_string();
         assert_eq!(sequence, "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA");
+    }
+
+    #[test]
+    fn test_import_fasta_update_with_fasta_export_both_paths() {
+        /*
+        Graph after fasta update:
+        AT ----> CGA ------> TCGATCGATCGATCGGGAACACACAGAGA
+           \-> AAAAAAAA --/
+        */
+        setup_gen_dir();
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+        let mut fasta_update_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_update_path.push("fixtures/aaaaaaaa.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            None,
+            false,
+            conn,
+            op_conn,
+        )
+        .unwrap();
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            &collection,
+            None,
+            "child sample",
+            "m123",
+            2,
+            5,
+            fasta_update_path.to_str().unwrap(),
+        );
+
+        let tmp_dir = tempfile::tempdir().unwrap().into_path();
+        let filename = tmp_dir.join("out.fa");
+        export_fasta(conn, &collection, Some("child sample"), &filename, true);
+
+        let mut fasta_reader = fasta::io::reader::Builder
+            .build_from_path(filename)
+            .unwrap();
+        let record1 = fasta_reader
+            .records()
+            .next()
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "No records found in fasta file")
+            })
+            .unwrap()
+            .unwrap();
+        let record2 = fasta_reader
+            .records()
+            .next()
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "No records found in fasta file")
+            })
+            .unwrap()
+            .unwrap();
+
+        let sequence1 = str::from_utf8(record1.sequence().as_ref())
+            .unwrap()
+            .to_string();
+        let sequence2 = str::from_utf8(record2.sequence().as_ref())
+            .unwrap()
+            .to_string();
+        let expected_sequences = vec![
+            "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+        ]
+        .into_iter()
+        .collect::<HashSet<String>>();
+        let actual_sequences = vec![sequence1, sequence2]
+            .into_iter()
+            .collect::<HashSet<String>>();
+        assert_eq!(actual_sequences, expected_sequences);
     }
 }
