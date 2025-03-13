@@ -47,7 +47,7 @@ pub fn propagate_gff(
         .map(|(name, path)| (name.clone(), path.sequence(conn).len() as i64))
         .collect::<HashMap<String, i64>>();
 
-    for result in reader.records() {
+    for result in reader.record_bufs() {
         let record = result?;
         let path_name = record.reference_sequence_name().to_string();
         let annotation = Annotation {
@@ -62,29 +62,32 @@ pub fn propagate_gff(
 
         let score = record.score();
         let phase = record.phase();
-        let mut updated_record_builder = gff::Record::builder()
+
+        let start_pos = Position::new(propagated_annotation.start.try_into().unwrap())
+            .expect("Could not convert start to usize for propagation");
+        let end_pos = Position::new(propagated_annotation.end.try_into().unwrap())
+            .expect("Could not convert end to usize for propagation");
+
+        let mut builder = gff::RecordBuf::builder()
             .set_reference_sequence_name(path_name)
             .set_source(record.source().to_string())
             .set_type(record.ty().to_string())
-            .set_start(
-                Position::new(propagated_annotation.start.try_into().unwrap())
-                    .expect("Could not convert start ({start}) to usize for propagation"),
-            )
-            .set_end(
-                Position::new(propagated_annotation.end.try_into().unwrap())
-                    .expect("Could not convert end ({end}) to usize for propagation"),
-            )
-            .set_strand(record.strand())
-            .set_attributes(record.attributes().clone());
+            .set_start(start_pos)
+            .set_end(end_pos)
+            .set_strand(record.strand());
 
-        if let Some(score) = score {
-            updated_record_builder = updated_record_builder.set_score(score);
-        }
-        if let Some(phase) = phase {
-            updated_record_builder = updated_record_builder.set_phase(phase);
+        if let Some(s) = score {
+            builder = builder.set_score(s);
         }
 
-        writer.write_record(&updated_record_builder.build())?;
+        if let Some(p) = phase {
+            builder = builder.set_phase(p);
+        }
+
+        builder = builder.set_attributes(record.attributes().clone());
+
+        let record_buf = builder.build();
+        writer.write_record(&record_buf)?;
     }
 
     Ok(())
@@ -156,7 +159,7 @@ mod tests {
 
         for (i, result) in reader
             .expect("Could not read output file!")
-            .records()
+            .record_bufs()
             .enumerate()
         {
             let record = result.unwrap();

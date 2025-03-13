@@ -1,8 +1,6 @@
-#[cfg(feature = "python-bindings")]
 use pyo3::prelude::*;
 
 /// Exposes a BlockGroup to Python.
-#[cfg(feature = "python-bindings")]
 #[pyclass]
 pub struct PyBlockGroup {
     #[pyo3(get)]
@@ -15,7 +13,6 @@ pub struct PyBlockGroup {
     pub name: String,
 }
 
-#[cfg(feature = "python-bindings")]
 #[pymethods]
 impl PyBlockGroup {
     #[new]

@@ -16,7 +16,7 @@ pub struct PyBaseLayout {
 #[pymethods]
 impl PyBaseLayout {
     #[new]
-    fn new(_py_graph: &PyDict) -> PyResult<Self> {
+    fn new(_py_graph: Bound<'_, PyDict>) -> PyResult<Self> {
         // In our main code, we build a BaseLayout from a graph object, not a blockgroup ID
         Err(pyo3::exceptions::PyNotImplementedError::new_err(
             "Direct instantiation from dictionary not yet implemented",
@@ -85,7 +85,7 @@ impl PyScaledLayout {
             result_dict.set_item(node_key, position_value)?;
         }
 
-        Ok(result_dict.into())
+        Ok(result_dict.into_pyobject(py)?.into())
     }
 
     fn get_edge_positions(&self, py: Python) -> PyResult<PyObject> {
@@ -111,7 +111,7 @@ impl PyScaledLayout {
             result_dict.set_item(edge_key, position_value)?;
         }
 
-        Ok(result_dict.into())
+        Ok(result_dict.into_pyobject(py)?.into())
     }
 
     fn set_scale(&mut self, scale: u32) -> PyResult<()> {
@@ -169,7 +169,7 @@ impl PyScaledLayout {
             }
             result.set_item("edges", edges)?;
 
-            Ok(result.to_object(py))
+            Ok(result.into_pyobject(py)?.into())
         })
     }
 }

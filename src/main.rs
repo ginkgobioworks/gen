@@ -37,7 +37,7 @@ use gen::views::patch::view_patches;
 
 use itertools::Itertools;
 use noodles::core::Region;
-use noodles::gff::directive::name;
+
 use rusqlite::{types::Value, Connection};
 use std::fmt::Debug;
 use std::fs::File;

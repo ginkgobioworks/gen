@@ -1,29 +1,24 @@
 use crate::config::get_gen_dir;
-#[cfg(feature = "python-bindings")]
 use pyo3::prelude::*;
-#[cfg(feature = "python-bindings")]
 use pyo3::types::{PyBytes, PyModule};
 use rusqlite::types::ValueRef;
 use rusqlite::Connection;
 use std::path::Path;
 
 /// Helper function to convert SQLite errors to Python exceptions
-#[cfg(feature = "python-bindings")]
 pub fn sqlite_err_to_pyerr(err: rusqlite::Error) -> PyErr {
     pyo3::exceptions::PyRuntimeError::new_err(format!("SQLite error: {}", err))
 }
 
 /// Helper function to convert a Rust path to a Python pathlib.Path object
-#[cfg(feature = "python-bindings")]
 pub fn path_to_py_path(py: Python, path: &Path) -> PyResult<PyObject> {
     let pathlib = PyModule::import(py, "pathlib")?;
     let path_class = pathlib.getattr("Path")?;
     let py_path = path_class.call1((path.to_str().unwrap(),))?;
-    Ok(py_path.to_object(py))
+    Ok(py_path.into_pyobject(py)?.into())
 }
 
 /// Helper function return sqlite query results as a list of lists of Python objects
-#[cfg(feature = "python-bindings")]
 pub fn py_query(conn: &Connection, query: &str) -> PyResult<Vec<Vec<PyObject>>> {
     let mut stmt = conn.prepare(query).map_err(sqlite_err_to_pyerr)?;
     let column_count = stmt.column_count();
@@ -36,14 +31,15 @@ pub fn py_query(conn: &Connection, query: &str) -> PyResult<Vec<Vec<PyObject>>> 
             for i in 0..column_count {
                 let value: PyObject = match row.get_ref(i).map_err(sqlite_err_to_pyerr)? {
                     ValueRef::Null => py.None(),
-                    ValueRef::Integer(i) => i.to_object(py),
-                    ValueRef::Real(f) => f.to_object(py),
+                    ValueRef::Integer(i) => i.into_pyobject(py)?.into(),
+                    ValueRef::Real(f) => f.into_pyobject(py)?.into(),
                     ValueRef::Text(s) => std::str::from_utf8(s)
                         .map_err(|e| {
                             PyErr::new::<pyo3::exceptions::PyUnicodeDecodeError, _>(e.to_string())
                         })?
-                        .to_object(py),
-                    ValueRef::Blob(b) => PyBytes::new(py, b).to_object(py),
+                        .into_pyobject(py)?
+                        .into(),
+                    ValueRef::Blob(b) => PyBytes::new(py, b).into_pyobject(py)?.into(),
                 };
                 row_data.push(value);
             }
@@ -56,7 +52,6 @@ pub fn py_query(conn: &Connection, query: &str) -> PyResult<Vec<Vec<PyObject>>> 
 }
 
 /// Returns the path to the .gen directory as a Python pathlib.Path object.
-#[cfg(feature = "python-bindings")]
 #[pyfunction(name = "get_gen_dir")]
 pub fn get_gen_dir_py(py: Python) -> PyResult<PyObject> {
     match get_gen_dir() {

@@ -58,7 +58,7 @@ impl PyRepository {
 #[pymethods]
 impl PyRepository {
     #[new]
-    fn new(_py: Python, path: Option<&str>) -> PyResult<Self> {
+    fn new(_py: Python, path: Option<String>) -> PyResult<Self> {
         // PathBuf instead of Path to avoid borrowing issues
         let gen_dir: PathBuf = match path {
             Some(path_str) => PathBuf::from(path_str),

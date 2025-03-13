@@ -8,7 +8,6 @@ homepage = "https://genhub.bio"
 license = "Apache-2.0"
 include = ["/src", "LICENSE", "migrations"]
 
-# Add this section for Python bindings
 [lib]
 name = "gen"
 crate-type = ["rlib", "cdylib"]
@@ -19,52 +18,51 @@ path = "src/main.rs"
 
 [features]
 benchmark = []
-python-bindings = ["pyo3"]
-# Make default features not include python-bindings
+python-bindings = ["dep:pyo3", "dep:pyo3-macros", "dep:rustworkx-core", "dep:maturin"]
 default = []
 
 [dependencies]
-cached = "0.54.0"
-chrono = "0.4.38"
-clap = { version = "4.5.8", features = ["derive"] }
-convert_case = "0.6.0"
-csv = "1.3.0"
+cached = "0.55.1"
+chrono = "0.4.40"
+clap = { version = "4.5.32", features = ["derive"] }
+convert_case = "0.8.0"
+csv = "1.3.1"
 fallible-streaming-iterator = "0.1.9"
 include_dir = "0.7.4"
 intervaltree = "0.2.7"
-itertools = "0.13.0"
-lexical-core = "1.0.2"
-noodles = { version = "0.85.0", features = ["async", "bgzf", "core", "fasta", "gff", "vcf"] }
+itertools = "0.14.0"
+lexical-core = "1.0.5"
+noodles = { version = "0.94.0", features = ["async", "bed", "bgzf", "core", "fasta", "gff", "gtf", "vcf"] }
 petgraph = "0.6.5"
 remove_dir_all = "1.0.0"
 rusqlite = { version = "0.32.1", features = ["bundled", "array", "session"] }
 rusqlite_migration = { version = "1.3.1" , features = ["from-directory"]}
-ruzstd = "0.7.3"
-serde = {  version = "1.0.210", features = ["derive"] }
-serde_json = "1.0.128"
+ruzstd = "0.8.0"
+serde = {  version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
 sha2 = "0.10.8"
-tempfile = "3.14.0"
-interavl = "0.2.0"
+tempfile = "3.18.0"
+interavl = "0.3.0"
 regex = "1.11.1"
-flate2 = "1.0.35"
-gb-io = "0.7.1"
-thiserror = "1.0.69"
-indicatif = "0.17.9"
+flate2 = "1.1.0"
+gb-io = "0.8.0"
+thiserror = "2.0.12"
+indicatif = "0.17.11"
 html-escape = "0.2.13"
 rust-sugiyama = {git = "https://github.com/paddison/rust-sugiyama", rev = "4d15b35124adac1de3a3b2cc42af8d68290935f2" }
 ratatui = "0.29.0"
 color-eyre = "0.6.3"
 crossterm = "0.28.1"
-log = "0.4.25"
-env_logger = "0.11.6"
+log = "0.4.26"
+env_logger = "0.11.7"
 tui-textarea = "0.7.0"
 tui-widget-list = "0.13.2"
-# Add PyO3 dependency for Python bindings, but make it optional
-pyo3 = { version = "0.20.2", features = ["extension-module", "abi3-py38", "auto-initialize", "multiple-pymethods"], optional = true }
-rustworkx-core = "0.16.0"
-pyo3-macros = "0.24.0"
+paste = "1.0.15"
+pyo3 = { version = "0.24.0", features = ["extension-module", "abi3-py38", "auto-initialize", "multiple-pymethods"], optional = true }
+pyo3-macros = { version = "0.24.0", optional = true }
+rustworkx-core = { version = "0.16.0", optional = true }
+maturin = { version = "1.8.2", optional = true }
 
 [dev-dependencies]
-cargo-llvm-cov = "0.6.14"
-cargo-deny = "0.16.4"
-maturin = "1.5.1"
+cargo-llvm-cov = "0.6.16"
+cargo-deny = "0.18.2"

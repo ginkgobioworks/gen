@@ -1,20 +1,18 @@
 use crate::graph::GraphNode;
 use crate::models::block_group::BlockGroup;
-#[cfg(feature = "python-bindings")]
 use pyo3::prelude::*;
-#[cfg(feature = "python-bindings")]
 use pyo3::types::PyDict;
 use rusqlite::Connection;
 use std::collections::HashMap;
 
 // Private factory struct for BlockGroup transformations
 // Not exposed to Python, only used internally by the Repository
+#[derive(Default)]
 pub struct Factory {}
 
-#[cfg(feature = "python-bindings")]
 impl Factory {
     pub fn new() -> Self {
-        Factory {}
+        Self::default()
     }
 
     // Convert a BlockGroup to a dictionary representation
@@ -72,7 +70,7 @@ impl Factory {
             }
             dict.set_item("edges", edges)?;
 
-            Ok(dict.into())
+            Ok(dict.into_pyobject(py)?.into())
         })
     }
 
@@ -124,7 +122,7 @@ impl Factory {
                 py_digraph.call_method1("add_edge", (src_idx, dst_idx, edge_data))?;
             }
 
-            Ok(py_digraph.into())
+            Ok(py_digraph.into_pyobject(py)?.into())
         })
     }
 
@@ -162,7 +160,7 @@ impl Factory {
                 // We need to pass the attributes as a named parameter
                 let kwargs = PyDict::new(py);
                 kwargs.set_item("attr_dict", node_data)?;
-                nx_digraph.call_method("add_node", (node_key,), Some(kwargs))?;
+                nx_digraph.call_method("add_node", (node_key,), Some(&kwargs))?;
             }
 
             // Add edges to the networkx graph
@@ -192,10 +190,10 @@ impl Factory {
                 // Add the edge to the NetworkX graph with its attributes
                 let kwargs = PyDict::new(py);
                 kwargs.set_item("attr_dict", edge_data)?;
-                nx_digraph.call_method("add_edge", (src_key, dst_key), Some(kwargs))?;
+                nx_digraph.call_method("add_edge", (src_key, dst_key), Some(&kwargs))?;
             }
 
-            Ok(nx_digraph.into())
+            Ok(nx_digraph.into_pyobject(py)?.into())
         })
     }
 }
