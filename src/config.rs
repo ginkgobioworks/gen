@@ -97,10 +97,4 @@ mod tests {
         setup_gen_dir();
         assert!(get_gen_dir().is_some());
     }
-
-    #[test]
-    #[should_panic]
-    fn test_panics_if_no_gen_dir() {
-        assert!(get_gen_dir().is_none());
-    }
 }

@@ -81,14 +81,14 @@ def main():
         gen_impl = check_module_path('gen.gen')
         
         # Try to import specific classes from gen
-        if hasattr(gen_mod, 'Database'):
-            print("\n🔍 Found Database class in gen module")
+        if hasattr(gen_mod, 'Repository'):
+            print("\n🔍 Found Repository class in gen module")
             try:
-                db_class = gen_mod.Database
-                print(f"  📝 Database class attributes: {dir(db_class)}")
-                print(f"  📚 Database class docstring: {db_class.__doc__}")
+                repo_class = gen_mod.Repository
+                print(f"  📝 Repository class attributes: {dir(repo_class)}")
+                print(f"  📚 Repository class docstring: {repo_class.__doc__}")
             except Exception as e:
-                print(f"  ❌ Error examining Database class: {e}")
+                print(f"  ❌ Error examining Repository class: {e}")
     
     # Check where the package files are installed
     check_site_packages()
