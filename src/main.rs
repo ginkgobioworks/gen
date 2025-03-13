@@ -514,13 +514,15 @@ fn main() {
             .prepare("select db_name from defaults where id = 1;")
             .unwrap();
         let row: Option<String> = stmt.query_row((), |row| row.get(0)).unwrap();
-        row.unwrap_or_else(|| {
-            let gen_dir = get_gen_dir();
-            PathBuf::from(gen_dir)
+        row.unwrap_or_else(|| match get_gen_dir() {
+            Some(dir) => PathBuf::from(dir)
                 .join("default.db")
                 .to_str()
                 .unwrap()
-                .to_string()
+                .to_string(),
+            None => {
+                panic!("No .gen directory found. Please run 'gen init' first.")
+            }
         })
     });
     let db = binding.as_str();
