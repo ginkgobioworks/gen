@@ -1,18 +1,14 @@
 use crate::views::block_group_viewer::PlotParameters;
 use crate::views::block_layout::{BaseLayout, ScaledLayout};
-#[cfg(feature = "python-bindings")]
 use pyo3::prelude::*;
-#[cfg(feature = "python-bindings")]
 use pyo3::types::PyDict;
 
 // BaseLayout class for visualization
-#[cfg(feature = "python-bindings")]
 #[pyclass]
 pub struct PyBaseLayout {
     pub layout: BaseLayout,
 }
 
-#[cfg(feature = "python-bindings")]
 #[pymethods]
 impl PyBaseLayout {
     #[new]
@@ -55,14 +51,12 @@ impl PyBaseLayout {
 }
 
 // ScaledLayout class for visualization
-#[cfg(feature = "python-bindings")]
 #[pyclass]
 pub struct PyScaledLayout {
     pub layout: ScaledLayout,
     pub parameters: PlotParameters,
 }
 
-#[cfg(feature = "python-bindings")]
 #[pymethods]
 impl PyScaledLayout {
     fn refresh(&mut self, base_layout: &PyBaseLayout) -> PyResult<()> {
