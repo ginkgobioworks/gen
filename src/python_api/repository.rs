@@ -276,7 +276,7 @@ mod python_tests {
         setup_gen_dir();
 
         // Activate the virtual environment and set up the Python interpreter
-        if let Err(e) = crate::test_helpers::activate_venv() {
+        if let Err(e) = crate::test_helpers::python::activate_venv() {
             eprintln!(
                 "Warning: Virtual environment activation failed. Test may not work correctly: {}",
                 e
@@ -284,7 +284,7 @@ mod python_tests {
         }
         pyo3::prepare_freethreaded_python();
 
-        // Run python code, pass in the repository class
+        // Run python code, with the repository class passed in from Rust
         Python::with_gil(|py| {
             let repository = py.get_type::<PyRepository>();
             py_run!(
