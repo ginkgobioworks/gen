@@ -93,8 +93,6 @@ if [ "$BUILD_WHEEL" = true ]; then
   pip list
   echo
 
-  echo "Testing bindings..."
-  python ./python/test_bindings.py
 else
   echo "Skipping wheel build for distribution. Use --deploy or --with-wheel to build the wheel."
 fi 

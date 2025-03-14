@@ -34,7 +34,8 @@ fn ensure_dir(path: &PathBuf) {
     }
 }
 
-/// Looks for the .gen directory in the current directory and creates it if it doesn't exist.
+/// Looks for the .gen directory in the current directory, or in a temporary directory if setup_gen_dir()
+/// was called first.  If it doesn't exist, it will be created.
 /// Returns the path to the .gen directory.
 pub fn get_or_create_gen_dir() -> PathBuf {
     let start_dir = BASE_DIR.with(|v| v.read().unwrap().clone());
@@ -45,7 +46,8 @@ pub fn get_or_create_gen_dir() -> PathBuf {
 }
 
 // TODO: maybe just store all these things in a sqlite file too in .gen
-/// Searches for the .gen directory in the current directory and all parent directories.
+/// Searches for the .gen directory in the current directory and all parent directories,
+/// or in a temporary directory if setup_gen_dir() was called first.
 /// Returns the path to the .gen directory if found, otherwise returns None.
 pub fn get_gen_dir() -> Option<String> {
     let start_dir = BASE_DIR.with(|v| v.read().unwrap().clone());

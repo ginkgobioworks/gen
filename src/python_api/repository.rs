@@ -263,3 +263,42 @@ impl PyRepository {
         })
     }
 }
+
+#[cfg(test)]
+mod python_tests {
+    use crate::python_api::repository::PyRepository;
+    use crate::test_helpers::setup_gen_dir;
+    use pyo3::prelude::*;
+    use pyo3::py_run;
+
+    #[test]
+    fn test_repository_creation() {
+        setup_gen_dir();
+
+        // Activate the virtual environment and set up the Python interpreter
+        if let Err(e) = crate::test_helpers::activate_venv() {
+            eprintln!(
+                "Warning: Virtual environment activation failed. Test may not work correctly: {}",
+                e
+            );
+        }
+        pyo3::prepare_freethreaded_python();
+
+        // Run python code, pass in the repository class
+        Python::with_gil(|py| {
+            let repository = py.get_type::<PyRepository>();
+            py_run!(
+                py,
+                repository,
+                r#"
+                # Create a repository in the present working directory
+                repo = repository()
+                
+                # Test that the repository was created successfully
+                assert hasattr(repo, "gen_dir")
+                assert hasattr(repo, "db_path")
+            "#
+            );
+        });
+    }
+}
