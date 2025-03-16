@@ -4,7 +4,6 @@ use pyo3::Bound;
 
 // Define modules for Python API components
 pub mod block_group;
-pub mod converters;
 pub mod factory;
 pub mod layouts;
 pub mod repository;

@@ -22,9 +22,4 @@ readme = "README.md"
 features = ["python-bindings"]
 python-source = "python"
 module-name = "gen.gen" # TODO: pick a name available on pypi
-crate-type = ["cdylib"]  # Specify the crate-type for Python bindings
-
-# Add this section to better handle mixed Rust targets
-# Instead of specifying platform-specific settings, use more generic ones
-[tool.maturin.target.'cfg(unix)']
-rustc-link-lib = ["python3.8"] 
+crate-type = ["cdylib"]  
