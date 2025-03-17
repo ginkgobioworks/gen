@@ -348,7 +348,7 @@ enum Commands {
     },
     /// List all samples in the current collection
     ListSamples {},
-    #[command(arg_required_else_help(true))]
+    #[command()]
     /// List all regions/contigs in the current collection and given sample
     ListGraphs {
         /// The name of the collection to list graphs for

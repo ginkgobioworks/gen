@@ -47,6 +47,8 @@ pub fn import_gfa<'a>(
     let sample_name = sample_name.into();
     if let Some(sample_name) = sample_name {
         Sample::get_or_create(conn, sample_name);
+    } else {
+        Sample::get_or_create(conn, "");
     }
     let block_group = BlockGroup::create(conn, collection_name, sample_name, "");
     let bar = progress_bar.add(get_time_elapsed_bar());
