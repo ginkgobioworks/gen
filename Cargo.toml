@@ -19,6 +19,7 @@ path = "src/main.rs"
 [features]
 benchmark = []
 python-bindings = ["dep:pyo3", "dep:pyo3-macros", "dep:rustworkx-core", "dep:maturin"]
+extension-module = ["pyo3/extension-module"]
 default = []
 
 [dependencies]
