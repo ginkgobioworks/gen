@@ -1111,6 +1111,8 @@ fn main() {
         }
         Some(Commands::ListSamples {}) => {
             let sample_names = Sample::get_all_names(&conn);
+            // Null sample
+            println!();
             for sample_name in sample_names {
                 println!("{}", sample_name);
             }
