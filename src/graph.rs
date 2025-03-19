@@ -11,13 +11,14 @@ use petgraph::visit::{
     Reversed,
 };
 use petgraph::Direction;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::{self, Debug};
 use std::hash::Hash;
 use std::iter::from_fn;
 use std::rc::Rc;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Deserialize, Serialize)]
 pub struct GraphNode {
     pub block_id: i64,
     pub node_id: i64,
@@ -41,7 +42,7 @@ impl GraphNode {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Deserialize, Serialize)]
 pub struct GraphEdge {
     pub edge_id: i64,
     pub source_strand: Strand,
