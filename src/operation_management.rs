@@ -67,6 +67,8 @@ pub struct DependencyModels {
 
 #[derive(Debug)]
 pub struct ChangesetModels {
+    pub collections: Vec<Collection>,
+    pub samples: Vec<Sample>,
     pub sequences: Vec<Sequence>,
     pub block_groups: Vec<BlockGroup>,
     pub nodes: Vec<Node>,
@@ -342,6 +344,8 @@ pub fn load_changeset_models(changeset: &mut ChangesetIter) -> ChangesetModels {
     let mut created_nodes = vec![];
     let mut created_sequences = vec![];
     let mut created_bg_edges = vec![];
+    let mut created_samples = vec![];
+    let mut created_collections = vec![];
 
     while let Some(item) = changeset.next().unwrap() {
         let op = item.op().unwrap();
@@ -396,6 +400,12 @@ pub fn load_changeset_models(changeset: &mut ChangesetIter) -> ChangesetModels {
                     chromosome_index: parse_number(item, 3),
                     phased: parse_number(item, 4),
                 }),
+                "samples" => created_samples.push(Sample {
+                    name: parse_string(item, pk_column),
+                }),
+                "collections" => created_collections.push(Collection {
+                    name: parse_string(item, pk_column),
+                }),
                 _ => {}
             }
         }
@@ -406,6 +416,8 @@ pub fn load_changeset_models(changeset: &mut ChangesetIter) -> ChangesetModels {
         nodes: created_nodes,
         edges: created_edges,
         block_group_edges: created_bg_edges,
+        samples: created_samples,
+        collections: created_collections,
     }
 }
 
