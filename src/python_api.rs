@@ -6,12 +6,14 @@ use pyo3::Bound;
 pub mod block_group;
 pub mod factory;
 pub mod layouts;
+pub mod node_key;
 pub mod repository;
 pub mod utils;
 
 // Re-export components for use in the main module
 use crate::python_api::block_group::PyBlockGroup;
 use crate::python_api::layouts::{PyBaseLayout, PyScaledLayout};
+use crate::python_api::node_key::PyNodeKey;
 use crate::python_api::repository::PyRepository;
 use crate::python_api::utils::get_gen_dir_py;
 
@@ -26,6 +28,7 @@ pub fn gen(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBlockGroup>()?;
     m.add_class::<PyBaseLayout>()?;
     m.add_class::<PyScaledLayout>()?;
+    m.add_class::<PyNodeKey>()?;
 
     Ok(())
 }

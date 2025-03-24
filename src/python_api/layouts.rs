@@ -3,6 +3,8 @@ use crate::views::block_layout::{BaseLayout, ScaledLayout};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
+use super::node_key::PyNodeKey;
+
 // BaseLayout class for visualization
 #[pyclass]
 pub struct PyBaseLayout {
@@ -27,6 +29,28 @@ impl PyBaseLayout {
     fn expand_left(&mut self) -> PyResult<()> {
         self.layout.expand_left();
         Ok(())
+    }
+    
+    /// Get all layer positions (x-coordinates of each rank)
+    fn get_layers(&self) -> PyResult<Vec<f64>> {
+        Ok(self.layout.partition.parts.iter().map(|part| part.layer_widths.clone()).collect())
+    }
+    
+    /// Get a mapping from nodes to their layer indices
+    fn get_node_layers(&self, py: Python) -> PyResult<PyObject> {
+        let result_dict = PyDict::new(py);
+        
+        for (node, layer_idx) in &self.layout.node_layers {
+            let node_key = PyNodeKey::new(
+                node.node_id,
+                node.sequence_start,
+                node.sequence_end,
+            );
+            
+            result_dict.set_item(node_key, layer_idx)?;
+        }
+        
+        Ok(result_dict.into_pyobject(py)?.into_any().unbind())
     }
 
     fn get_size(&self) -> PyResult<(f64, f64)> {
@@ -68,8 +92,8 @@ impl PyScaledLayout {
         let result_dict = PyDict::new(py);
 
         for (node, pos) in self.layout.labels.iter() {
-            let node_key = (
-                node.block_id,
+            // Use PyNodeKey without block_id
+            let node_key = PyNodeKey::new(
                 node.node_id,
                 node.sequence_start,
                 node.sequence_end,
@@ -79,33 +103,32 @@ impl PyScaledLayout {
             result_dict.set_item(node_key, position_value)?;
         }
 
-        Ok(result_dict.into_pyobject(py)?.into())
+        Ok(result_dict.into_pyobject(py)?.into_any().unbind())
     }
 
     fn get_edge_positions(&self, py: Python) -> PyResult<PyObject> {
         let result_dict = PyDict::new(py);
 
         for ((src, dst), pos) in self.layout.lines.iter() {
-            let edge_key = (
-                (
-                    src.block_id,
-                    src.node_id,
-                    src.sequence_start,
-                    src.sequence_end,
-                ),
-                (
-                    dst.block_id,
-                    dst.node_id,
-                    dst.sequence_start,
-                    dst.sequence_end,
-                ),
+            // Use PyNodeKey without block_id for source and destination
+            let src_key = PyNodeKey::new(
+                src.node_id,
+                src.sequence_start,
+                src.sequence_end,
+            );
+            
+            let dst_key = PyNodeKey::new(
+                dst.node_id,
+                dst.sequence_start,
+                dst.sequence_end,
             );
 
+            let edge_key = (src_key, dst_key);
             let position_value = *pos;
             result_dict.set_item(edge_key, position_value)?;
         }
 
-        Ok(result_dict.into_pyobject(py)?.into())
+        Ok(result_dict.into_pyobject(py)?.into_any().unbind())
     }
 
     fn set_scale(&mut self, scale: u32) -> PyResult<()> {
@@ -135,35 +158,17 @@ impl PyScaledLayout {
             // Add node positions
             let nodes = PyDict::new(py);
             for (node, pos) in self.layout.labels.iter() {
+                // Use a string representation instead of tuples for serialization
                 let node_key = format!(
-                    "{}:{}:{}:{}",
-                    node.block_id, node.node_id, node.sequence_start, node.sequence_end
+                    "{}:{}:{}",
+                    node.node_id, node.sequence_start, node.sequence_end
                 );
                 let pos_value = (pos.0, pos.1); // ((x1, y1), (x2, y2))
                 nodes.set_item(node_key, pos_value)?;
             }
             result.set_item("nodes", nodes)?;
 
-            // Add edge positions
-            let edges = PyDict::new(py);
-            for ((src, dst), pos) in self.layout.lines.iter() {
-                let edge_key = format!(
-                    "{}:{}:{}:{}_{}:{}:{}:{}",
-                    src.block_id,
-                    src.node_id,
-                    src.sequence_start,
-                    src.sequence_end,
-                    dst.block_id,
-                    dst.node_id,
-                    dst.sequence_start,
-                    dst.sequence_end
-                );
-                let pos_value = (pos.0, pos.1); // ((x1, y1), (x2, y2))
-                edges.set_item(edge_key, pos_value)?;
-            }
-            result.set_item("edges", edges)?;
-
-            Ok(result.into_pyobject(py)?.into())
+            Ok(result.into_pyobject(py)?.into_any().unbind())
         })
     }
 }

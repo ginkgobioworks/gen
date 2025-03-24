@@ -5,6 +5,8 @@ use pyo3::types::PyDict;
 use rusqlite::Connection;
 use std::collections::HashMap;
 
+use super::node_key::PyNodeKey;
+
 // Private factory struct for BlockGroup transformations
 // Not exposed to Python, only used internally by the Repository
 #[derive(Default)]
@@ -32,14 +34,13 @@ impl Factory {
                 node_dict.set_item("sequence_start", node.sequence_start)?;
                 node_dict.set_item("sequence_end", node.sequence_end)?;
 
-                // Use a tuple of the node's fields as the key
-                let key = (
-                    node.block_id,
+                let node_key = PyNodeKey::new(
                     node.node_id,
                     node.sequence_start,
                     node.sequence_end,
                 );
-                nodes.set_item(key, node_dict)?;
+                
+                nodes.set_item(node_key, node_dict)?;
             }
             dict.set_item("nodes", nodes)?;
 
@@ -53,24 +54,26 @@ impl Factory {
                 edge_dict.set_item("chromosome_index", edge.chromosome_index)?;
                 edge_dict.set_item("phased", edge.phased)?;
 
-                // Use a tuple of the source and target nodes as the key
-                let src_key = (
-                    src.block_id,
+                // Use PyNodeKey without block_id - #[pyclass] objects are automatically converted
+                let src_key = PyNodeKey::new(
                     src.node_id,
                     src.sequence_start,
                     src.sequence_end,
                 );
-                let dst_key = (
-                    dst.block_id,
+                
+                let dst_key = PyNodeKey::new(
                     dst.node_id,
                     dst.sequence_start,
                     dst.sequence_end,
                 );
-                edges.set_item((src_key, dst_key), edge_dict)?;
+                
+                let edge_key = (src_key, dst_key);
+                edges.set_item(edge_key, edge_dict)?;
             }
             dict.set_item("edges", edges)?;
 
-            Ok(dict.into_pyobject(py)?.into())
+            // Convert the final dictionary to a PyObject
+            Ok(dict.into_pyobject(py)?.into_any().unbind())
         })
     }
 
@@ -96,6 +99,14 @@ impl Factory {
                 node_data.set_item("node_id", node.node_id)?;
                 node_data.set_item("sequence_start", node.sequence_start)?;
                 node_data.set_item("sequence_end", node.sequence_end)?;
+                
+                // Add PyNodeKey to node data for easier reference
+                let node_key = PyNodeKey::new(
+                    node.node_id,
+                    node.sequence_start,
+                    node.sequence_end,
+                );
+                node_data.set_item("key", node_key)?;
 
                 // Add the node to the rustworkx graph and store its index
                 let index: usize = py_digraph
@@ -122,7 +133,8 @@ impl Factory {
                 py_digraph.call_method1("add_edge", (src_idx, dst_idx, edge_data))?;
             }
 
-            Ok(py_digraph.into_pyobject(py)?.into())
+            // Convert the final graph to a PyObject
+            Ok(py_digraph.into_pyobject(py)?.into_any().unbind())
         })
     }
 
@@ -137,7 +149,6 @@ impl Factory {
             // Create a new DiGraph
             let nx_digraph = networkx.getattr("DiGraph")?.call0()?;
 
-            // NetworkX uses node objects directly as keys, so we don't need a separate mapping
             // Add nodes to the networkx graph
             for node in graph.nodes() {
                 // Create a Python dictionary to store node data
@@ -147,17 +158,14 @@ impl Factory {
                 node_data.set_item("sequence_start", node.sequence_start)?;
                 node_data.set_item("sequence_end", node.sequence_end)?;
 
-                // Create a tuple key for the node
-                let node_key = (
-                    node.block_id,
+                // Create a PyNodeKey for the node (without block_id)
+                let node_key = PyNodeKey::new(
                     node.node_id,
                     node.sequence_start,
                     node.sequence_end,
                 );
 
                 // Add the node to the NetworkX graph with its attributes
-                // NetworkX add_node expects the node key as the first argument and attributes as a keyword argument
-                // We need to pass the attributes as a named parameter
                 let kwargs = PyDict::new(py);
                 kwargs.set_item("attr_dict", node_data)?;
                 nx_digraph.call_method("add_node", (node_key,), Some(&kwargs))?;
@@ -165,21 +173,18 @@ impl Factory {
 
             // Add edges to the networkx graph
             for (src, dst, edge) in graph.all_edges() {
-                // Create tuple keys for source and target nodes
-                let src_key = (
-                    src.block_id,
+                let src_key = PyNodeKey::new(
                     src.node_id,
                     src.sequence_start,
                     src.sequence_end,
                 );
-                let dst_key = (
-                    dst.block_id,
+                
+                let dst_key = PyNodeKey::new(
                     dst.node_id,
                     dst.sequence_start,
                     dst.sequence_end,
                 );
 
-                // Create a Python dictionary to store edge data
                 let edge_data = PyDict::new(py);
                 edge_data.set_item("edge_id", edge.edge_id)?;
                 edge_data.set_item("source_strand", edge.source_strand.to_string())?;
@@ -187,13 +192,13 @@ impl Factory {
                 edge_data.set_item("chromosome_index", edge.chromosome_index)?;
                 edge_data.set_item("phased", edge.phased)?;
 
-                // Add the edge to the NetworkX graph with its attributes
                 let kwargs = PyDict::new(py);
                 kwargs.set_item("attr_dict", edge_data)?;
                 nx_digraph.call_method("add_edge", (src_key, dst_key), Some(&kwargs))?;
             }
 
-            Ok(nx_digraph.into_pyobject(py)?.into())
+            // Convert the final graph to a PyObject
+            Ok(nx_digraph.into_pyobject(py)?.into_any().unbind())
         })
     }
 }
