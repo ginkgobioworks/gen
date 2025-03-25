@@ -24,7 +24,7 @@ use gen::models::operations::{
 };
 use gen::models::sample::Sample;
 use gen::operation_management;
-use gen::operation_management::{parse_patch_operations, OperationError};
+use gen::operation_management::{parse_patch_operations, push, OperationError};
 use gen::patch;
 use gen::translate;
 use gen::updates::fasta::update_with_fasta;
@@ -327,6 +327,18 @@ enum Commands {
         #[arg(short, long)]
         collection: Option<String>,
     },
+    /// Set the remote URL for this repo
+    #[command(arg_required_else_help(true))]
+    SetRemote {
+        /// The remote URL to set
+        #[arg(short, long)]
+        remote: String,
+    },
+    /// Push the local repo to the remote
+    #[command()]
+    Push {},
+    #[command()]
+    Pull {},
     /// Convert annotation coordinates between two samples
     #[command(arg_required_else_help(true))]
     PropagateAnnotations {
@@ -495,6 +507,13 @@ fn main() {
                 .unwrap();
             println!("Default collection set to {name}");
         }
+        return;
+    }
+    if let Some(Commands::SetRemote { remote }) = &cli.command {
+        operation_conn
+            .execute("update defaults set remote_url=?1 where id = 1", (remote,))
+            .unwrap();
+        println!("Remote URL set to {remote}");
         return;
     }
 
@@ -1083,6 +1102,7 @@ fn main() {
             database,
             collection,
         }) => {}
+        Some(Commands::SetRemote { remote }) => {}
         Some(Commands::Transform { format_csv_for_gaf }) => {}
         Some(Commands::PropagateAnnotations {
             name,
@@ -1342,5 +1362,14 @@ fn main() {
             conn.execute("END TRANSACTION", []).unwrap();
             operation_conn.execute("END TRANSACTION", []).unwrap();
         }
+        Some(Commands::Push {}) => match push(&operation_conn, &db_uuid) {
+            Ok(_) => {
+                println!("Push succeeded.");
+            }
+            Err(e) => {
+                println!("Push failed: {e}");
+            }
+        },
+        Some(Commands::Pull {}) => {}
     }
 }

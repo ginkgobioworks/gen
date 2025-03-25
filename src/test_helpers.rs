@@ -7,6 +7,7 @@ use std::fs;
 use std::hash::Hash;
 use std::io::Write;
 use std::ops::Add;
+use std::path::PathBuf;
 use tempfile::tempdir;
 
 use crate::config::{get_or_create_gen_dir, BASE_DIR};
@@ -58,7 +59,7 @@ pub fn get_operation_connection<'a>(db_path: impl Into<Option<&'a str>>) -> Conn
     conn
 }
 
-pub fn setup_gen_dir() {
+pub fn setup_gen_dir() -> PathBuf {
     let tmp_dir = tempdir().unwrap().into_path();
     {
         BASE_DIR.with(|v| {
@@ -66,7 +67,7 @@ pub fn setup_gen_dir() {
             *writer = tmp_dir;
         });
     }
-    get_or_create_gen_dir();
+    get_or_create_gen_dir()
 }
 
 pub fn setup_block_group(conn: &Connection) -> (i64, Path) {

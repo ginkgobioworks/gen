@@ -1,7 +1,8 @@
 CREATE TABLE defaults (
   id INTEGER PRIMARY KEY NOT NULL,
   db_name TEXT,
-  collection_name TEXT
+  collection_name TEXT,
+  remote_url TEXT
 ) STRICT;
 
 CREATE TABLE operation_state (
@@ -63,4 +64,4 @@ CREATE TABLE branch_masked_operations (
 ) STRICT;
 CREATE UNIQUE INDEX branch_mask_op_uidx ON branch_masked_operations(branch_id, operation_hash);
 
-INSERT INTO defaults values (1, NULL, NULL);
+INSERT INTO defaults values (1, NULL, NULL, NULL);
