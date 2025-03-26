@@ -353,6 +353,7 @@ pub fn view_block_group(
                                 }
                             }
                             KeyCode::Char('p') => {
+                                // TODO: make current path highlighted by default, and boundary edges indicated as dashed lines
                                 // Toggle current path highlighting
                                 if viewer.has_highlight(Color::Red) {
                                     viewer.clear_highlight(Color::Red);

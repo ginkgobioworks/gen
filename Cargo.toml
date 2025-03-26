@@ -8,8 +8,19 @@ homepage = "https://genhub.bio"
 license = "Apache-2.0"
 include = ["/src", "LICENSE", "migrations"]
 
+[lib]
+name = "gen"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "gen"
+path = "src/main.rs"
+
 [features]
-benchmark=[]
+benchmark = []
+python-bindings = ["dep:pyo3", "dep:pyo3-macros", "dep:rustworkx-core", "dep:maturin"]
+extension-module = ["pyo3/extension-module"]
+default = []
 
 [dependencies]
 cached = "0.55.1"
@@ -48,6 +59,10 @@ env_logger = "0.11.7"
 tui-textarea = "0.7.0"
 tui-widget-list = "0.13.2"
 paste = "1.0.15"
+pyo3 = { version = "0.24.0", features = ["abi3-py38"], optional = true }
+pyo3-macros = { version = "0.24.0", optional = true }
+rustworkx-core = { version = "0.16.0", optional = true }
+maturin = { version = "1.8.2", optional = true }
 
 [dev-dependencies]
 cargo-llvm-cov = "0.6.16"

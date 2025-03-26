@@ -453,6 +453,90 @@ pub fn project_path(
     final_path
 }
 
+/// Find the articulation points of a directed graph using a non-recursive approach
+/// This is a modified version of the algorithm found here:
+/// https://en.wikipedia.org/wiki/Biconnected_component#Articulation_points
+pub fn find_articulation_points(graph: &DiGraphMap<GraphNode, GraphEdge>) -> Vec<GraphNode> {
+    let mut articulation_points: Vec<GraphNode> = Vec::new();
+    let mut discovery_time: HashMap<GraphNode, usize> = HashMap::new();
+    let mut low: HashMap<GraphNode, usize> = HashMap::new();
+    let mut parent: HashMap<GraphNode, Option<GraphNode>> = HashMap::new();
+    let mut time = 0;
+
+    for node in graph.nodes() {
+        if !discovery_time.contains_key(&node) {
+            let mut stack = vec![(node, None, true)];
+            while let Some((u, p, is_first_time)) = stack.pop() {
+                if is_first_time {
+                    // Initialize discovery time and low value
+                    discovery_time.insert(u, time);
+                    low.insert(u, time);
+                    time += 1;
+                    parent.insert(u, p);
+
+                    // Push the node back with is_first_time = false to process after its neighbors
+                    stack.push((u, p, false));
+
+                    // Consider both incoming and outgoing edges as undirected
+                    let neighbors: Vec<_> = graph
+                        .neighbors_directed(u, Direction::Outgoing)
+                        .chain(graph.neighbors_directed(u, Direction::Incoming))
+                        .collect();
+
+                    for v in neighbors {
+                        if !discovery_time.contains_key(&v) {
+                            stack.push((v, Some(u), true));
+                        } else if Some(v) != p {
+                            // Update low[u] if v is not parent
+                            let current_low = low.get(&u).cloned().unwrap_or(usize::MAX);
+                            let v_disc = discovery_time.get(&v).cloned().unwrap_or(usize::MAX);
+                            low.insert(u, current_low.min(v_disc));
+                        }
+                    }
+                } else {
+                    // Post-processing after visiting all neighbors
+                    let mut is_articulation = false;
+                    let mut child_count = 0;
+
+                    let neighbors: Vec<_> = graph
+                        .neighbors_directed(u, Direction::Outgoing)
+                        .chain(graph.neighbors_directed(u, Direction::Incoming))
+                        .collect();
+
+                    for v in neighbors {
+                        if parent.get(&v).cloned() == Some(Some(u)) {
+                            child_count += 1;
+                            let v_low = low.get(&v).cloned().unwrap_or(usize::MAX);
+                            let u_disc = discovery_time.get(&u).cloned().unwrap_or(usize::MAX);
+                            if v_low >= u_disc {
+                                is_articulation = true;
+                            }
+                            let current_low = low.get(&u).cloned().unwrap_or(usize::MAX);
+                            let v_low = low.get(&v).cloned().unwrap_or(usize::MAX);
+                            low.insert(u, current_low.min(v_low));
+                        } else if Some(v) != parent.get(&u).cloned().unwrap_or(None) {
+                            let v_disc = discovery_time.get(&v).cloned().unwrap_or(usize::MAX);
+                            let current_low = low.get(&u).cloned().unwrap_or(usize::MAX);
+                            low.insert(u, current_low.min(v_disc));
+                        }
+                    }
+
+                    let u_parent = parent.get(&u).cloned().unwrap_or(None);
+                    if (u_parent.is_some() && is_articulation)
+                        || (u_parent.is_none() && child_count > 1)
+                    {
+                        articulation_points.push(u);
+                    }
+                }
+            }
+        }
+    }
+
+    articulation_points.sort();
+    articulation_points.dedup();
+    articulation_points
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -19,7 +19,6 @@ fixtures/*.ipynb
 **/.ipynb_checkpoints/
 .venv/
 
-
 # Mac droppings
 .DS_Store
 
@@ -29,6 +28,11 @@ fixtures/*.ipynb
 # IDE
 .vscode/*
 flamegraph.svg
+rust-analyzer.json
 
 # Terminal recording via VHS
 *.tape
+
+# Python bindings
+**/__pycache__/
+python/gen/*.so
