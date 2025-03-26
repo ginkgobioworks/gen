@@ -329,6 +329,19 @@ pub struct Branch {
     pub current_operation_hash: Option<String>,
 }
 
+impl Query for Branch {
+    type Model = Branch;
+    fn process_row(row: &Row) -> Self::Model {
+        Branch {
+            id: row.get(0).unwrap(),
+            db_uuid: row.get(1).unwrap(),
+            name: row.get(2).unwrap(),
+            start_operation_hash: row.get(3).unwrap(),
+            current_operation_hash: row.get(4).unwrap(),
+        }
+    }
+}
+
 impl Branch {
     pub fn create(conn: &Connection, db_uuid: &str, branch_name: &str) -> Branch {
         let current_operation_hash = OperationState::get_operation(conn, db_uuid);
@@ -381,32 +394,12 @@ impl Branch {
         }
     }
 
-    pub fn query(conn: &Connection, query: &str, placeholders: Vec<Value>) -> Vec<Branch> {
-        let mut stmt = conn.prepare(query).unwrap();
-        let rows = stmt
-            .query_map(params_from_iter(placeholders), |row| {
-                Ok(Branch {
-                    id: row.get(0)?,
-                    db_uuid: row.get(1)?,
-                    name: row.get(2)?,
-                    start_operation_hash: row.get(3)?,
-                    current_operation_hash: row.get(4)?,
-                })
-            })
-            .unwrap();
-        let mut objs = vec![];
-        for row in rows {
-            objs.push(row.unwrap());
-        }
-        objs
-    }
-
     pub fn get_by_name(conn: &Connection, db_uuid: &str, branch_name: &str) -> Option<Branch> {
         let mut branch: Option<Branch> = None;
         for result in Branch::query(
             conn,
             "select * from branch where db_uuid = ?1 and name = ?2",
-            vec![
+            params![
                 Value::from(db_uuid.to_string()),
                 Value::from(branch_name.to_string()),
             ],
@@ -423,7 +416,7 @@ impl Branch {
         for result in Branch::query(
             conn,
             "select * from branch where id = ?1",
-            vec![Value::from(branch_id)],
+            params![Value::from(branch_id)],
         )
         .iter()
         {
@@ -609,7 +602,7 @@ pub fn setup_db(conn: &Connection, db_uuid: &str) {
     if Branch::query(
         conn,
         "select * from branch where db_uuid = ?1",
-        vec![Value::from(db_uuid.to_string())],
+        params![Value::from(db_uuid.to_string())],
     )
     .is_empty()
     {

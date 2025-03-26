@@ -273,20 +273,28 @@ pub fn update_with_vcf<'a>(
                     let mut ref_start = (record.variant_start().unwrap().unwrap().get() - 1) as i64;
                     if gt.allele != 0 {
                         let mut alt_seq = alt_alleles[chromosome_index - 1].to_string();
+                        let mut is_cnv = false;
                         if alt_seq.starts_with("<") {
                             if let Some(cap) = cnv_re.captures(&alt_seq) {
                                 let count: usize =
                                     cap["count"].parse().expect("Invalid CN specification");
                                 alt_seq = ref_seq.to_string().repeat(count);
+                                is_cnv = true;
                             } else {
                                 continue;
                             };
                         }
-                        // If the alt sequence is a deletion, we want to remove the base in common in the VCF spec.
-                        // So if VCF says ATC -> A, we don't want to include the `A` in the alt_seq.
-                        if !alt_seq.is_empty() && alt_seq != "*" && alt_seq.len() < ref_seq.len() {
-                            ref_start += 1;
-                            alt_seq = alt_seq[1..].to_string();
+                        // If the alt sequence is a deletion or insertion, we want to remove the base in common in the VCF spec.
+                        // So if VCF says ATC -> A or A -> ATTC, we don't want to include the `A` in the alt_seq.
+                        if !alt_seq.is_empty() && alt_seq != "*" && alt_seq.len() != ref_seq.len() {
+                            if is_cnv {
+                                // move past the common regions
+                                ref_start += ref_seq.len() as i64;
+                                alt_seq = alt_seq[ref_seq.len()..].to_string();
+                            } else {
+                                ref_start += 1;
+                                alt_seq = alt_seq[1..].to_string();
+                            }
                         }
                         let phased = match gt.phasing {
                             Phasing::Phased => 1,
@@ -363,11 +371,13 @@ pub fn update_with_vcf<'a>(
                                         .filter(|_| allele as i32 == accession_allele);
                                     if allele != 0 {
                                         let mut alt_seq = alt_alleles[allele - 1].to_string();
+                                        let mut is_cnv = false;
                                         if alt_seq.starts_with("<") {
                                             if let Some(cap) = cnv_re.captures(&alt_seq) {
                                                 let count: usize = cap["count"]
                                                     .parse()
                                                     .expect("Invalid CN specification");
+                                                is_cnv = true;
                                                 // our ref sequence will be something like "ATC" and our new alt
                                                 // sequence will be (ATC)*count. The position provided will be
                                                 // the left most base, so the A here.
@@ -378,10 +388,15 @@ pub fn update_with_vcf<'a>(
                                         }
                                         if !alt_seq.is_empty()
                                             && alt_seq != "*"
-                                            && alt_seq.len() < ref_seq.len()
+                                            && alt_seq.len() != ref_seq.len()
                                         {
-                                            ref_start += 1;
-                                            alt_seq = alt_seq[1..].to_string();
+                                            if is_cnv {
+                                                ref_start += ref_seq.len() as i64;
+                                                alt_seq = alt_seq[ref_seq.len()..].to_string();
+                                            } else {
+                                                ref_start += 1;
+                                                alt_seq = alt_seq[1..].to_string();
+                                            }
                                         }
                                         let sample_path = PathCache::lookup(
                                             &mut path_cache,

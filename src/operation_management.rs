@@ -231,7 +231,8 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
                     if !created_nodes.contains(&source_node_id) {
                         previous_sequences.insert(nodes[0].sequence_hash.clone());
                     }
-                    if !created_nodes.contains(&target_node_id) {
+                    if source_node_id != target_node_id && !created_nodes.contains(&target_node_id)
+                    {
                         previous_sequences.insert(nodes[1].sequence_hash.clone());
                     }
                 }
