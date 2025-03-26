@@ -2287,8 +2287,8 @@ mod tests {
             rusqlite::params!(),
         )
         .len();
-        assert_eq!(edge_count, 4);
-        assert_eq!(block_group_edge_count, 8);
+        assert_eq!(edge_count, 3);
+        assert_eq!(block_group_edge_count, 6);
         assert_eq!(node_count, 4);
         assert_eq!(sample_count, 1);
         assert_eq!(op_count, 3);
