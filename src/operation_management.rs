@@ -1651,19 +1651,19 @@ mod tests {
         // NOTE: The edge count is 6 because of the following:
         // * 1 edge from the source node to the node created by the fasta import
         // * 1 edge from the node created by the fasta import to the sink node
-        // * 2 edges to and from the node representing the first alt sequence
+        // * 1 edge representing the deletion
         // * 2 edges to and from the node representing the second alt sequence
-        assert_eq!(edge_count, 6);
+        assert_eq!(edge_count, 5);
         // NOTE: The block group edge count is 20 because of the following:
         // * 4 edges (one per block group) from the virtual source node
         // * 4 edges (one per block group) to the virtual sink node
-        // * 4 block group edges for the G1 sample (2 edges to and from the node representing the first alt sequence, with both the 0 and 1 chromosome indices for those edges, 2 * 2 = 4)
-        // * 8 block group edges for the foo sample (2 edges to and from the node representing the
-        // first alt sequence, with both the 0 and 1 chromosome indices for those edges, 2 * 2 = 4;
+        // * 2 block group edges for the G1 sample (1 edge for the first alt sequence, a deletion, with both the 0 and 1 chromosome indices for those edges, 1 * 2 = 2)
+        // * 6 block group edges for the foo sample (1 edge to and from the node representing the
+        // first alt sequence, with both the 0 and 1 chromosome indices for those edges, 1 * 2 = 2;
         // 2 edges to and from the node representing the second alt sequence, with both the 0 and 1
         // chromosome indices for those edges, 2 * 2 = 4)
-        // 4 + 4 + 4 + 8 = 20
-        assert_eq!(block_group_edge_count, 20);
+        // 4 + 4 + 2 + 6 = 16
+        assert_eq!(block_group_edge_count, 16);
         // NOTE: The node count is 6:
         // * 2 source and sink nodes
         // * 1 node created by the initial fasta import
@@ -1729,8 +1729,8 @@ mod tests {
         )
         .len();
         assert_eq!(block_group_count, 4);
-        assert_eq!(edge_count, 6);
-        assert_eq!(block_group_edge_count, 20);
+        assert_eq!(edge_count, 5);
+        assert_eq!(block_group_edge_count, 16);
         assert_eq!(node_count, 5);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
@@ -1822,7 +1822,7 @@ mod tests {
         let foo_bg_id = BlockGroup::get_id(conn, &collection, Some("foo"), "m123");
         let patch_2_seqs = HashSet::from_iter(vec![
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
-            "ATCGATCGATCGACGATCGGGAACACACAGAGA".to_string(),
+            "ATCGATCGATCGAGATCGGGAACACACAGAGA".to_string(),
         ]);
         assert_eq!(
             BlockGroup::get_all_sequences(conn, foo_bg_id, false),
@@ -1843,8 +1843,8 @@ mod tests {
         let foo_bg_id = BlockGroup::get_id(conn, &collection, Some("foo"), "m123");
         let patch_2_seqs = HashSet::from_iter(vec![
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
-            "ATCGATCGATCGACGATCGGGAACACACAGAGA".to_string(),
-            "ATCATCGATCGACGATCGGGAACACACAGAGA".to_string(),
+            "ATCGATCGATCGAGATCGGGAACACACAGAGA".to_string(),
+            "ATCATCGATCGAGATCGGGAACACACAGAGA".to_string(),
             "ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
         ]);
         assert_eq!(
@@ -1867,9 +1867,9 @@ mod tests {
         let unknown_bg_id = BlockGroup::get_id(conn, &collection, Some("unknown"), "m123");
         let unknown_seqs = HashSet::from_iter(vec![
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
-            "ATCGATCGATAGAGATCGATCGGGAACACACAGAGA".to_string(),
             "ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
-            "ATCATCGATAGAGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATCGATCGATAGACGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATCATCGATAGACGATCGATCGGGAACACACAGAGA".to_string(),
         ]);
         assert_eq!(
             BlockGroup::get_all_sequences(conn, unknown_bg_id, false),
@@ -1884,7 +1884,7 @@ mod tests {
         let fasta_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
         let vcf_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.vcf");
         let vcf2_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple2.vcf");
-        let conn = &mut get_connection(None);
+        let conn = &mut get_connection("t2.db");
         let db_uuid = metadata::get_db_uuid(conn);
         let operation_conn = &get_operation_connection(None);
         setup_db(operation_conn, &db_uuid);
@@ -1948,8 +1948,8 @@ mod tests {
             rusqlite::params!(),
         )
         .len();
-        assert_eq!(edge_count, 6);
-        assert_eq!(block_group_edge_count, 20);
+        assert_eq!(edge_count, 5);
+        assert_eq!(block_group_edge_count, 16);
         assert_eq!(node_count, 5);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
@@ -2041,8 +2041,8 @@ mod tests {
             rusqlite::params!(),
         )
         .len();
-        assert_eq!(edge_count, 6);
-        assert_eq!(block_group_edge_count, 20);
+        assert_eq!(edge_count, 5);
+        assert_eq!(block_group_edge_count, 16);
         assert_eq!(node_count, 5);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 3);

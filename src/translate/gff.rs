@@ -135,24 +135,23 @@ mod tests {
             results,
             "\
             3\tHAVANA\tgene\t1\t3\t.\t-\t.\tID=ENSG00000294541.1\n\
-            3\tHAVANA\tgene\t4\t5\t.\t-\t.\tID=ENSG00000294541.1\n\
-            3\tHAVANA\tgene\t6\t17\t.\t-\t.\tID=ENSG00000294541.1\n\
+            3\tHAVANA\tgene\t4\t4\t.\t-\t.\tID=ENSG00000294541.1\n\
+            3\tHAVANA\tgene\t5\t17\t.\t-\t.\tID=ENSG00000294541.1\n\
             4\tHAVANA\tgene\t18\t20\t.\t-\t.\tID=ENSG00000294541.1\n\
             3\tHAVANA\ttranscript\t1\t3\t.\t-\t.\tID=ENST00000724296.1;Parent=ENSG00000294541.1\n\
-            3\tHAVANA\ttranscript\t4\t5\t.\t-\t.\tID=ENST00000724296.1;Parent=ENSG00000294541.1\n\
-            3\tHAVANA\ttranscript\t6\t17\t.\t-\t.\tID=ENST00000724296.1;Parent=ENSG00000294541.1\n\
+            3\tHAVANA\ttranscript\t4\t4\t.\t-\t.\tID=ENST00000724296.1;Parent=ENSG00000294541.1\n\
+            3\tHAVANA\ttranscript\t5\t17\t.\t-\t.\tID=ENST00000724296.1;Parent=ENSG00000294541.1\n\
             4\tHAVANA\ttranscript\t18\t20\t.\t-\t.\tID=ENST00000724296.1;Parent=ENSG00000294541.1\n\
-            3\tHAVANA\texon\t4\t5\t.\t-\t.\tID=exon:ENST00000724296.1:1;Parent=ENST00000724296.1\n\
-            3\tHAVANA\texon\t6\t8\t.\t-\t.\tID=exon:ENST00000724296.1:1;Parent=ENST00000724296.1\n\
+            3\tHAVANA\texon\t5\t8\t.\t-\t.\tID=exon:ENST00000724296.1:1;Parent=ENST00000724296.1\n\
             3\tHAVANA\texon\t10\t14\t.\t-\t.\tID=exon:ENST00000724296.1:2;Parent=ENST00000724296.1\n\
             3\tHAVANA\texon\t16\t17\t.\t-\t.\tID=exon:ENST00000724296.1:3;Parent=ENST00000724296.1\n\
             4\tHAVANA\texon\t18\t19\t.\t-\t.\tID=exon:ENST00000724296.1:3;Parent=ENST00000724296.1\n\
-            3\tENSEMBL\tgene\t4\t5\t.\t-\t.\tID=ENSG00000277248.1\n\
-            3\tENSEMBL\tgene\t6\t15\t.\t-\t.\tID=ENSG00000277248.1\n\
-            3\tENSEMBL\ttranscript\t4\t5\t.\t-\t.\tID=ENST00000615943.1;Parent=ENSG00000277248.1\n\
-            3\tENSEMBL\ttranscript\t6\t15\t.\t-\t.\tID=ENST00000615943.1;Parent=ENSG00000277248.1\n\
-            3\tENSEMBL\texon\t4\t5\t.\t-\t.\tID=exon:ENST00000615943.1:1;Parent=ENST00000615943.1\n\
-            3\tENSEMBL\texon\t6\t15\t.\t-\t.\tID=exon:ENST00000615943.1:1;Parent=ENST00000615943.1\n\
+            3\tENSEMBL\tgene\t4\t4\t.\t-\t.\tID=ENSG00000277248.1\n\
+            3\tENSEMBL\tgene\t5\t15\t.\t-\t.\tID=ENSG00000277248.1\n\
+            3\tENSEMBL\ttranscript\t4\t4\t.\t-\t.\tID=ENST00000615943.1;Parent=ENSG00000277248.1\n\
+            3\tENSEMBL\ttranscript\t5\t15\t.\t-\t.\tID=ENST00000615943.1;Parent=ENSG00000277248.1\n\
+            3\tENSEMBL\texon\t4\t4\t.\t-\t.\tID=exon:ENST00000615943.1:1;Parent=ENST00000615943.1\n\
+            3\tENSEMBL\texon\t5\t15\t.\t-\t.\tID=exon:ENST00000615943.1:1;Parent=ENST00000615943.1\n\
             "
         );
 
