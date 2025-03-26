@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use core::ops::Range;
 use gen::config;
 use gen::config::{get_gen_dir, get_operation_connection};
+use rusqlite::params;
 
 use gen::annotations::gff::propagate_gff;
 use gen::diffs::gfa::gfa_sample_diff;
@@ -23,6 +24,7 @@ use gen::models::operations::{
     setup_db, Branch, Operation, OperationFile, OperationInfo, OperationState,
 };
 use gen::models::sample::Sample;
+use gen::models::traits::Query;
 use gen::operation_management;
 use gen::operation_management::{parse_patch_operations, OperationError};
 use gen::patch;
@@ -906,7 +908,7 @@ fn main() {
                 for branch in Branch::query(
                     &operation_conn,
                     "select * from branch where db_uuid = ?1",
-                    vec![Value::from(db_uuid.to_string())],
+                    params![Value::from(db_uuid.to_string())],
                 )
                 .iter()
                 {
