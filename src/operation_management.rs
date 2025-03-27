@@ -1444,6 +1444,10 @@ pub fn push(operation_conn: &Connection, db_uuid: &str) -> Result<(), RemoteOper
         };
         let local_branch_operations = Branch::get_operations(operation_conn, current_branch_id);
 
+        println!("here1");
+        println!("local branch op count: {}", local_branch_operations.len());
+        println!("remote branch op count: {}", remote_branch_operations.len());
+
         let remote_op_hashes = remote_branch_operations
             .iter()
             .map(|op| op.hash.clone())
@@ -2665,6 +2669,8 @@ mod tests {
         remote_db_path.push(".gen");
         remote_db_path.push("default.db");
 
+        // Need to use get_real_connection here because get_connection resets the database if it
+        // exists
         let remote_conn = &mut get_real_connection(remote_db_path.to_str().unwrap());
 
         let all_local_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
@@ -2682,6 +2688,9 @@ mod tests {
         let mut remote_op_db_path = remote_path.clone();
         remote_op_db_path.push(".gen");
         remote_op_db_path.push("gen.db");
+
+        // Need to use get_real_connection here because get_operation_connection resets the database
+        // if it exists
         let remote_operation_conn = &mut get_real_connection(remote_op_db_path.to_str().unwrap());
 
         let local_operation_hashes: HashSet<String> = HashSet::from_iter(
@@ -2707,5 +2716,225 @@ mod tests {
         );
 
         assert_eq!(remote_operation_hashes, local_operation_hashes);
+    }
+
+    #[test]
+    fn test_push_with_operation_files() {
+        let gen_path = setup_gen_dir();
+        let mut db_path = gen_path.clone();
+        db_path.push("default.db");
+        let mut op_db_path = gen_path.clone();
+        op_db_path.push("gen.db");
+
+        let main_repo_path = gen_path.parent().unwrap().to_path_buf();
+        let fixtures_path = main_repo_path.clone().join("fixtures");
+        fs::create_dir(fixtures_path.clone()).unwrap();
+
+        let mut original_vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let vcf_relative_path = "fixtures/simple.vcf";
+        original_vcf_path.push(vcf_relative_path);
+        let vcf_path = fixtures_path.clone().join("simple.vcf");
+        fs::copy(original_vcf_path, &vcf_path).unwrap();
+
+        let mut original_fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let fasta_relative_path = "fixtures/simple.fa";
+        original_fasta_path.push(fasta_relative_path);
+        let fasta_path = fixtures_path.clone().join("simple.fa");
+        fs::copy(original_fasta_path, &fasta_path).unwrap();
+
+        let conn = &mut get_connection(db_path.to_str());
+        let db_uuid = metadata::get_db_uuid(conn);
+        let operation_conn = &get_operation_connection(op_db_path.to_str());
+        setup_db(operation_conn, &db_uuid);
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_relative_path.to_string(),
+            &collection,
+            None,
+            false,
+            conn,
+            operation_conn,
+        )
+        .unwrap();
+
+        update_with_vcf(
+            &vcf_relative_path.to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+            None,
+        )
+        .unwrap();
+
+        let binding = BlockGroup::query(
+            conn,
+            "SELECT * FROM block_groups ORDER BY id DESC;",
+            rusqlite::params!(),
+        );
+        let block_group = binding.first().unwrap();
+
+        let remote_path = tempdir().unwrap().into_path();
+        let remote_dir = remote_path.to_str().unwrap().to_string();
+        let formatted_remote_dir = format!("file://{}", remote_dir);
+        operation_conn
+            .execute(
+                "update defaults set remote_url=?1 where id = 1",
+                (formatted_remote_dir,),
+            )
+            .unwrap();
+
+        // Force sync everything in the db to disk before pushing the repo.  TRUNCATE is the most
+        // aggressive option (full sync, then truncate the WAL file that had any unsynced changes,
+        // to indicate nothing is left to sync).
+        operation_conn
+            .pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .unwrap();
+        conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .unwrap();
+
+        let result = push(operation_conn, &db_uuid);
+        assert!(result.is_ok());
+
+        let mut remote_db_path = remote_path.clone();
+        remote_db_path.push(".gen");
+        remote_db_path.push("default.db");
+
+        // Need to use get_real_connection here because get_connection resets the database if it
+        // exists
+        let remote_conn = &mut get_real_connection(remote_db_path.to_str().unwrap());
+
+        let all_local_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
+        let binding = BlockGroup::query(
+            remote_conn,
+            "SELECT * FROM block_groups ORDER BY id DESC;",
+            rusqlite::params!(),
+        );
+        let block_group2 = binding.first().unwrap();
+        assert_eq!(block_group2.id, block_group.id);
+        let all_remote_sequences =
+            BlockGroup::get_all_sequences(remote_conn, block_group.id, false);
+        assert_eq!(all_remote_sequences, all_local_sequences);
+
+        let remote_path = remote_path.clone().join("fixtures");
+        let remote_fasta_path = remote_path
+            .clone()
+            .join("simple.fa")
+            .to_str()
+            .unwrap()
+            .to_string();
+        let remote_vcf_path = remote_path
+            .clone()
+            .join("simple.vcf")
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert!(fs::exists(remote_fasta_path).unwrap());
+        assert!(fs::exists(remote_vcf_path).unwrap());
+    }
+
+    #[test]
+    fn test_push_with_remote_repo_ahead() {
+        let gen_path = setup_gen_dir();
+        let mut db_path = gen_path.clone();
+        db_path.push("default.db");
+        let mut op_db_path = gen_path.clone();
+        op_db_path.push("gen.db");
+
+        let main_repo_path = gen_path.parent().unwrap().to_path_buf();
+        let fixtures_path = main_repo_path.clone().join("fixtures");
+        fs::create_dir(fixtures_path.clone()).unwrap();
+
+        let mut original_fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let fasta_relative_path = "fixtures/simple.fa";
+        original_fasta_path.push(fasta_relative_path);
+        let fasta_path = fixtures_path.clone().join("simple.fa");
+        fs::copy(original_fasta_path, &fasta_path).unwrap();
+
+        let conn = &mut get_connection(db_path.to_str());
+        let db_uuid = metadata::get_db_uuid(conn);
+        let operation_conn = &get_operation_connection(op_db_path.to_str());
+        setup_db(operation_conn, &db_uuid);
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_relative_path.to_string(),
+            &collection,
+            None,
+            false,
+            conn,
+            operation_conn,
+        )
+        .unwrap();
+
+        let remote_path = tempdir().unwrap().into_path();
+        let remote_dir = remote_path.to_str().unwrap().to_string();
+        let formatted_remote_dir = format!("file://{}", remote_dir);
+        operation_conn
+            .execute(
+                "update defaults set remote_url=?1 where id = 1",
+                (formatted_remote_dir,),
+            )
+            .unwrap();
+
+        // Force sync everything in the db to disk before pushing the repo.  TRUNCATE is the most
+        // aggressive option (full sync, then truncate the WAL file that had any unsynced changes,
+        // to indicate nothing is left to sync).
+        operation_conn
+            .pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .unwrap();
+        conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .unwrap();
+
+        let result = push(operation_conn, &db_uuid);
+        assert!(result.is_ok());
+
+        let mut remote_db_path = remote_path.clone();
+        remote_db_path.push(".gen");
+        remote_db_path.push("default.db");
+
+        // Need to use get_real_connection here because get_connection resets the database if it
+        // exists
+        let remote_conn = &mut get_real_connection(remote_db_path.to_str().unwrap());
+
+        let mut remote_op_db_path = remote_path.clone();
+        remote_op_db_path.push(".gen");
+        remote_op_db_path.push("gen.db");
+
+        // Need to use get_real_connection here because get_operation_connection resets the database
+        // if it exists
+        let remote_operation_conn = &mut get_real_connection(remote_op_db_path.to_str().unwrap());
+
+        let mut original_vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let vcf_relative_path = "fixtures/simple.vcf";
+        original_vcf_path.push(vcf_relative_path);
+        let vcf_path = fixtures_path.clone().join("simple.vcf");
+        fs::copy(original_vcf_path, &vcf_path).unwrap();
+
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            remote_conn,
+            remote_operation_conn,
+            None,
+        )
+        .unwrap();
+
+        // Force sync everything in the db to disk before pushing the repo.  TRUNCATE is the most
+        // aggressive option (full sync, then truncate the WAL file that had any unsynced changes,
+        // to indicate nothing is left to sync).
+        remote_operation_conn
+            .pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .unwrap();
+        remote_conn
+            .pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .unwrap();
+
+        let result = push(operation_conn, &db_uuid).unwrap_err();
+        assert!(matches!(result, RemoteOperationError::RemoteBranchAhead));
     }
 }
