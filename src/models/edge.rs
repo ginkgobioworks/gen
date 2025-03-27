@@ -434,6 +434,7 @@ impl Edge {
 
             if let Some(source_id_value) = source_id {
                 if let Some(target_id_value) = target_id {
+                    // TODO: Make parallel edges possible
                     graph.add_edge(
                         GraphNode {
                             block_id: *source_id_value,
