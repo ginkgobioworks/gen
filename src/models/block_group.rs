@@ -14,6 +14,7 @@ use crate::models::path_edge::PathEdge;
 use crate::models::strand::Strand;
 use crate::models::traits::*;
 use crate::models::QueryError;
+use crate::test_helpers::save_graph;
 use intervaltree::IntervalTree;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
@@ -46,6 +47,7 @@ pub struct PathChange {
     pub block: PathBlock,
     pub chromosome_index: i64,
     pub phased: i64,
+    pub preserve_edge: bool,
 }
 
 pub struct PathCache<'a> {
@@ -352,7 +354,7 @@ impl BlockGroup {
     pub fn get_graph(conn: &Connection, block_group_id: i64) -> DiGraphMap<GraphNode, GraphEdge> {
         let mut edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
         let blocks = Edge::blocks_from_edges(conn, &edges);
-        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
+        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks, &edges);
         edges.extend(boundary_edges.clone());
         let (graph, _) = Edge::build_graph(&edges, &blocks);
         graph
@@ -411,16 +413,20 @@ impl BlockGroup {
         block_group_id: i64,
         prune: bool,
     ) -> HashSet<String> {
-        let mut edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
+        let edges = BlockGroupEdge::edges_for_block_group(conn, block_group_id);
+        println!("{block_group_id} my edges {edges:?}");
         let blocks = Edge::blocks_from_edges(conn, &edges);
-        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
-        edges.extend(boundary_edges.clone());
+        println!("{block_group_id} my blocks {blocks:?}");
+        // let boundary_edges = Edge::boundary_edges_from_sequences(&blocks, &edges);
+        // edges.extend(boundary_edges.clone());
 
         let (mut graph, _) = Edge::build_graph(&edges, &blocks);
+        save_graph(&graph, "g2.dot");
 
         if prune {
             Self::prune_graph(&mut graph);
         }
+        save_graph(&graph, "gp.dot");
 
         let mut start_nodes = vec![];
         let mut end_nodes = vec![];
@@ -664,6 +670,7 @@ impl BlockGroup {
         change: &PathChange,
         tree: &IntervalTree<i64, NodeIntervalBlock>,
     ) -> Result<Vec<AugmentedEdgeData>, ChangeError> {
+        println!("change is {change:?} t is {tree:?}");
         let start_blocks: Vec<&NodeIntervalBlock> =
             tree.query_point(change.start).map(|x| &x.value).collect();
         assert_eq!(start_blocks.len(), 1);
@@ -705,12 +712,14 @@ impl BlockGroup {
 
         if change.block.sequence_start == change.block.sequence_end {
             // Deletion
+            let source_coordinate = change.start - start_block.start + start_block.sequence_start;
+            let target_coordinate = change.end - end_block.start + end_block.sequence_start;
             let new_edge = EdgeData {
                 source_node_id: start_block.node_id,
-                source_coordinate: change.start - start_block.start + start_block.sequence_start,
+                source_coordinate,
                 source_strand: Strand::Forward,
                 target_node_id: end_block.node_id,
-                target_coordinate: change.end - end_block.start + end_block.sequence_start,
+                target_coordinate,
                 target_strand: Strand::Forward,
             };
             let new_augmented_edge = AugmentedEdgeData {
@@ -744,9 +753,11 @@ impl BlockGroup {
         // doesn't affect sequence readouts, so it may not be worth it.
         } else {
             // Insertion/replacement
+            let insertion_start_coordinate =
+                change.start - start_block.start + start_block.sequence_start;
             let new_start_edge = EdgeData {
                 source_node_id: start_block.node_id,
-                source_coordinate: change.start - start_block.start + start_block.sequence_start,
+                source_coordinate: insertion_start_coordinate,
                 source_strand: Strand::Forward,
                 target_node_id: change.block.node_id,
                 target_coordinate: change.block.sequence_start,
@@ -757,12 +768,13 @@ impl BlockGroup {
                 chromosome_index: change.chromosome_index,
                 phased: change.phased,
             };
+            let insertion_end_coordinate = change.end - end_block.start + end_block.sequence_start;
             let new_end_edge = EdgeData {
                 source_node_id: change.block.node_id,
                 source_coordinate: change.block.sequence_end,
                 source_strand: Strand::Forward,
                 target_node_id: end_block.node_id,
-                target_coordinate: change.end - end_block.start + end_block.sequence_start,
+                target_coordinate: insertion_end_coordinate,
                 target_strand: Strand::Forward,
             };
             let new_augmented_end_edge = AugmentedEdgeData {
@@ -770,6 +782,33 @@ impl BlockGroup {
                 chromosome_index: change.chromosome_index,
                 phased: change.phased,
             };
+            if change.preserve_edge {
+                new_edges.push(AugmentedEdgeData {
+                    edge_data: EdgeData {
+                        source_node_id: start_block.node_id,
+                        source_coordinate: insertion_start_coordinate,
+                        source_strand: Strand::Forward,
+                        target_node_id: start_block.node_id,
+                        target_coordinate: insertion_start_coordinate,
+                        target_strand: Strand::Forward,
+                    },
+                    chromosome_index: 0,
+                    phased: 0,
+                });
+                new_edges.push(AugmentedEdgeData {
+                    edge_data: EdgeData {
+                        source_node_id: end_block.node_id,
+                        source_coordinate: insertion_end_coordinate,
+                        source_strand: Strand::Forward,
+                        target_node_id: end_block.node_id,
+                        target_coordinate: insertion_end_coordinate,
+                        target_strand: Strand::Forward,
+                    },
+                    chromosome_index: 0,
+                    phased: 0,
+                });
+                println!("ne {new_edges:?}");
+            }
             new_edges.push(new_augmented_start_edge);
             new_edges.push(new_augmented_end_edge);
         }
@@ -1150,6 +1189,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -1188,6 +1228,7 @@ mod tests {
             block: deletion,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         // take out an entire block.
         let tree = path.intervaltree(&conn);
@@ -1232,6 +1273,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -1274,6 +1316,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -1316,6 +1359,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -1358,6 +1402,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -1400,6 +1445,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -1442,6 +1488,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -1484,6 +1531,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -1526,6 +1574,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -1569,6 +1618,7 @@ mod tests {
             block: deletion,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
 
         // take out an entire block.
@@ -1612,6 +1662,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -1666,6 +1717,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -1709,6 +1761,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -1751,6 +1804,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -1793,6 +1847,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -1835,6 +1890,7 @@ mod tests {
             block: deletion,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -1877,6 +1933,7 @@ mod tests {
             block: deletion,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -1919,6 +1976,7 @@ mod tests {
             block: deletion.clone(),
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let before_start_change = PathChange {
             block_group_id,
@@ -1929,6 +1987,7 @@ mod tests {
             block: deletion,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         let res = BlockGroup::insert_change(&conn, &after_end_change, &tree);
@@ -1965,6 +2024,7 @@ mod tests {
             block: deletion,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -2007,6 +2067,7 @@ mod tests {
             block: deletion,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
@@ -2058,6 +2119,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(conn);
         BlockGroup::insert_change(conn, &change, &tree).unwrap();
@@ -2236,6 +2298,7 @@ mod tests {
             block: insert,
             chromosome_index: 0,
             phased: 0,
+            preserve_edge: true,
         };
         // note we are making our change against the new blockgroup, and not the parent blockgroup
         let tree = BlockGroup::intervaltree_for(conn, new_bg_id, true);
@@ -2281,6 +2344,7 @@ mod tests {
             block: insert,
             chromosome_index: 0,
             phased: 0,
+            preserve_edge: true,
         };
         // take out an entire block.
         let tree = BlockGroup::intervaltree_for(conn, gc_bg_id, true);
@@ -2331,6 +2395,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         // note we are making our change against the new blockgroup, and not the parent blockgroup
         let tree = BlockGroup::intervaltree_for(conn, new_bg_id, true);
@@ -2386,6 +2451,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         // take out an entire block.
         let tree = BlockGroup::intervaltree_for(conn, gc_bg_id, true);
@@ -2443,6 +2509,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         // note we are making our change against the new blockgroup, and not the parent blockgroup
         let tree = BlockGroup::intervaltree_for(conn, new_bg_id, true);
@@ -2498,6 +2565,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         // take out an entire block.
         let tree = BlockGroup::intervaltree_for(conn, gc_bg_id, true);

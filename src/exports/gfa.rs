@@ -46,7 +46,7 @@ pub fn export_gfa(
 
     let mut blocks = Edge::blocks_from_edges(conn, &edges);
     blocks.sort_by(|a, b| a.node_id.cmp(&b.node_id));
-    let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
+    let boundary_edges = Edge::boundary_edges_from_sequences(&blocks, &edges);
     edges.extend(boundary_edges.clone());
 
     let (mut graph, _edges_by_node_pair) = Edge::build_graph(&edges, &blocks);
@@ -466,6 +466,7 @@ mod tests {
             block: insert,
             chromosome_index: 1,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(conn);
         BlockGroup::insert_change(conn, &change, &tree).unwrap();

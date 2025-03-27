@@ -459,11 +459,17 @@ impl Edge {
                 }
             }
         }
+        println!("e is {edges:?}", edges = graph.all_edges());
 
         (graph, edges_by_node_pair)
     }
 
-    pub fn boundary_edges_from_sequences(blocks: &[GroupBlock]) -> Vec<AugmentedEdge> {
+    pub fn boundary_edges_from_sequences(
+        blocks: &[GroupBlock],
+        edges: &[AugmentedEdge],
+    ) -> Vec<AugmentedEdge> {
+        // Boundary edges serves to link together sequences within a node that are split by edges, but do not
+        // have an explicit edge between the split sites.
         let node_blocks_by_id: HashMap<i64, Vec<&GroupBlock>> =
             blocks.iter().fold(HashMap::new(), |mut acc, block| {
                 acc.entry(block.node_id)
@@ -472,8 +478,16 @@ impl Edge {
                 acc
             });
         let mut boundary_edges = vec![];
+        // This identifies all nodes that have an edge leading to it, which we do not have to create
+        // a new fake edge for connectivity. If we didn't do this, we would introduce paths in the
+        // graph that don't exist.
+        // let nodes_with_incoming : HashSet<(i64, i64)> = HashSet::from_iter(edges.iter().map(|edge| (edge.edge.target_node_id, edge.edge.target_coordinate)).collect::<Vec<_>>());
+        // let nodes_with_outgoing : HashSet<(i64, i64)> = HashSet::from_iter(edges.iter().map(|edge| (edge.edge.source_node_id, edge.edge.source_coordinate)).collect::<Vec<_>>());
+        // println!("{nodes_with_incoming:?} {nodes_with_outgoing:?}");
+
         for node_blocks in node_blocks_by_id.values() {
             for (previous_block, next_block) in node_blocks.iter().tuple_windows() {
+                // if !nodes_with_outgoing.contains(&(previous_block.node_id, previous_block.end)) || !nodes_with_incoming.contains(&(next_block.node_id, next_block.start)) {
                 // NOTE: Most of this data is bogus, the Edge struct is just a convenient wrapper
                 // for the data we need to set up boundary edges in the block group graph
                 boundary_edges.push(AugmentedEdge {
@@ -490,6 +504,7 @@ impl Edge {
                     phased: 0,
                 });
             }
+            // }
         }
         boundary_edges
     }
@@ -736,7 +751,7 @@ mod tests {
 
         let edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
         let blocks = Edge::blocks_from_edges(&conn, &edges);
-        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
+        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks, &edges);
 
         // 4 actual sequences: 10-length ones of all A, all T, all C, all G
         // 2 terminal node blocks (start/end)
@@ -768,13 +783,14 @@ mod tests {
             block: insert,
             chromosome_index: 0,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
         let mut edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
 
         let blocks = Edge::blocks_from_edges(&conn, &edges);
-        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
+        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks, &edges);
 
         // 2 10-length sequences of all C, all G
         // 1 inserted NNNN sequence
@@ -787,7 +803,7 @@ mod tests {
         // Confirm that ordering doesn't matter
         edges.reverse();
         let blocks = Edge::blocks_from_edges(&conn, &edges);
-        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
+        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks, &edges);
 
         // 2 10-length sequences of all C, all G
         // 1 inserted NNNN sequence

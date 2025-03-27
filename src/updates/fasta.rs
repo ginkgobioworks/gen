@@ -103,6 +103,7 @@ pub fn update_with_fasta(
         block: path_block,
         chromosome_index: 0,
         phased: 0,
+        preserve_edge: true,
     };
 
     let interval_tree = path.intervaltree(conn);
