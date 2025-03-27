@@ -2640,7 +2640,6 @@ mod tests {
         let block_group = binding.first().unwrap();
 
         let remote_path = tempdir().unwrap().into_path();
-
         let remote_dir = remote_path.to_str().unwrap().to_string();
         let formatted_remote_dir = format!("file://{}", remote_dir);
         operation_conn
@@ -2649,11 +2648,23 @@ mod tests {
                 (formatted_remote_dir,),
             )
             .unwrap();
+
+        // Force sync everything in the db to disk before pushing the repo.  TRUNCATE is the most
+        // aggressive option (full sync, then truncate the WAL file that had any unsynced changes,
+        // to indicate nothing is left to sync).
+        operation_conn
+            .pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .unwrap();
+        conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .unwrap();
+
         let result = push(operation_conn, &db_uuid);
         assert!(result.is_ok());
 
         let mut remote_db_path = remote_path.clone();
+        remote_db_path.push(".gen");
         remote_db_path.push("default.db");
+
         let remote_conn = &mut get_real_connection(remote_db_path.to_str().unwrap());
 
         let all_local_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
@@ -2669,7 +2680,32 @@ mod tests {
         assert_eq!(all_remote_sequences, all_local_sequences);
 
         let mut remote_op_db_path = remote_path.clone();
+        remote_op_db_path.push(".gen");
         remote_op_db_path.push("gen.db");
-        let remote_operation_conn = &get_operation_connection(remote_op_db_path.to_str());
+        let remote_operation_conn = &mut get_real_connection(remote_op_db_path.to_str().unwrap());
+
+        let local_operation_hashes: HashSet<String> = HashSet::from_iter(
+            Operation::query(
+                operation_conn,
+                "SELECT * FROM operation;",
+                rusqlite::params!(),
+            )
+            .iter()
+            .map(|op| op.hash.clone())
+            .collect::<Vec<String>>(),
+        );
+
+        let remote_operation_hashes: HashSet<String> = HashSet::from_iter(
+            Operation::query(
+                remote_operation_conn,
+                "SELECT * FROM operation;",
+                rusqlite::params!(),
+            )
+            .iter()
+            .map(|op| op.hash.clone())
+            .collect::<Vec<String>>(),
+        );
+
+        assert_eq!(remote_operation_hashes, local_operation_hashes);
     }
 }
