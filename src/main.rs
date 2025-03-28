@@ -360,7 +360,7 @@ enum Commands {
     },
     /// List all samples in the current collection
     ListSamples {},
-    #[command(arg_required_else_help(true))]
+    #[command()]
     /// List all regions/contigs in the current collection and given sample
     ListGraphs {
         /// The name of the collection to list graphs for
@@ -1133,6 +1133,8 @@ fn main() {
         }
         Some(Commands::ListSamples {}) => {
             let sample_names = Sample::get_all_names(&conn);
+            // Null sample
+            println!();
             for sample_name in sample_names {
                 println!("{}", sample_name);
             }
