@@ -1,4 +1,4 @@
-use crate::config::get_changeset_path;
+use crate::config::{get_changeset_path, get_gen_dir, get_operation_connection};
 use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group::BlockGroup;
 use crate::models::block_group_edge::{BlockGroupEdge, BlockGroupEdgeData};
@@ -27,8 +27,11 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
-use std::{fs, path::PathBuf, str};
+use std::{fs, path::Path as FilePath, path::PathBuf, str};
+use tempfile::tempdir;
 use thiserror::Error;
+use url_parse::core::Parser;
+
 /* General information
 
 Changesets from sqlite will be created in the order that operations are applied in the database,
@@ -47,6 +50,24 @@ pub enum OperationError {
     SQLError(String),
     #[error("SQLite Error: {0}")]
     SqliteError(#[from] SQLError),
+}
+
+#[derive(Debug, Error)]
+pub enum RemoteOperationError {
+    #[error("Failed to transfer {0} from {1} to {2}")]
+    FileTransferError(String, String, String),
+    #[error("Remote url is not valid: {0}")]
+    InvalidRemoteUrl(String),
+    #[error("Gen does not support the scheme {0} in the remote url {1}")]
+    UnsupportedRemoteScheme(String, String),
+    #[error("Remote url not set, please set it using set-remote before pushing or pulling")]
+    RemoteUrlNotSet,
+    #[error(
+        "Remote repo has changes that are not in the local repo, please pull them before pushing."
+    )]
+    RemoteBranchAhead,
+    #[error("IO Error: {0}")]
+    IOError(#[from] std::io::Error),
 }
 
 pub enum FileMode {
@@ -1212,9 +1233,265 @@ pub fn parse_patch_operations(
     results
 }
 
+// The url-parse crate doesn't know about file-based urls, so we need to provide it with a
+// custom set of port mappings
+fn port_mappings() -> HashMap<&'static str, (u32, &'static str)> {
+    HashMap::from([
+        ("file", (0, "file")),
+        ("https", (443, "Hypertext Transfer Protocol Secure")),
+        ("s3", (443, "Amazon S3 File Transfer Protocol")),
+    ])
+}
+
+fn file_exists(file_path: &str, filename: &str) -> Result<bool, RemoteOperationError> {
+    match Parser::new(Some(port_mappings())).parse(file_path) {
+        Ok(result) => {
+            if let Some(scheme) = result.scheme {
+                if scheme == "file" {
+                    let path_parts = result.path.unwrap();
+                    let mut path = PathBuf::from("/");
+                    for part in path_parts {
+                        path.push(part);
+                    }
+
+                    let file_parts = FilePath::new(&filename);
+                    for part in file_parts {
+                        path.push(part);
+                    }
+                    Ok(path.exists())
+                } else {
+                    Err(RemoteOperationError::UnsupportedRemoteScheme(
+                        scheme,
+                        file_path.to_string(),
+                    ))
+                }
+            } else {
+                Err(RemoteOperationError::InvalidRemoteUrl(
+                    file_path.to_string(),
+                ))
+            }
+        }
+        Err(_) => Err(RemoteOperationError::InvalidRemoteUrl(
+            file_path.to_string(),
+        )),
+    }
+}
+
+fn transfer_file(
+    local_file_path: &str,
+    remote_url: &str,
+    filename: &str,
+    push: bool,
+) -> Result<(), RemoteOperationError> {
+    match Parser::new(Some(port_mappings())).parse(remote_url) {
+        Ok(result) => {
+            if let Some(scheme) = result.scheme {
+                if scheme == "file" {
+                    // copy
+                    if let Some(path_parts) = result.path {
+                        let mut remote_path = path_parts
+                            .iter()
+                            .map(|p| p.to_string())
+                            .collect::<PathBuf>();
+                        let file_relative_path = FilePath::new(&filename);
+                        let source_filename =
+                            file_relative_path.file_name().unwrap().to_str().unwrap();
+
+                        if push {
+                            // Ensure that the directory we're copying to exists--the filename may
+                            // actually be a relative path
+                            if let Some(file_prefix) = file_relative_path.parent() {
+                                for part in file_prefix {
+                                    remote_path.push(part);
+                                }
+                            }
+                            let remote_directory = format!("/{}", &remote_path.to_str().unwrap());
+                            fs::create_dir_all(&remote_directory)?;
+
+                            let remote_filename =
+                                format!("{}/{}", remote_directory, source_filename);
+                            let local_filename = format!("{}/{}", local_file_path, filename);
+
+                            fs::copy(&local_filename, &remote_filename).map_err(|_| {
+                                RemoteOperationError::FileTransferError(
+                                    filename.to_string(),
+                                    local_filename,
+                                    remote_filename,
+                                )
+                            })?;
+                        } else {
+                            // Ensure that the directory we're copying to exists--the filename may
+                            // actually be a relative path
+                            let mut local_path = PathBuf::from(local_file_path);
+                            if let Some(file_prefix) = file_relative_path.parent() {
+                                for part in file_prefix {
+                                    local_path.push(part);
+                                }
+                            }
+                            fs::create_dir_all(&local_path)?;
+
+                            let remote_path_filename =
+                                format!("/{}/{}", remote_path.to_str().unwrap(), filename);
+                            let local_filename =
+                                format!("{}/{}", local_path.to_str().unwrap(), source_filename);
+                            fs::copy(&remote_path_filename, &local_filename).map_err(|_| {
+                                RemoteOperationError::FileTransferError(
+                                    filename.to_string(),
+                                    remote_path_filename,
+                                    local_filename,
+                                )
+                            })?;
+                        }
+                        Ok(())
+                    } else {
+                        Err(RemoteOperationError::InvalidRemoteUrl(
+                            remote_url.to_string(),
+                        ))
+                    }
+                } else {
+                    Err(RemoteOperationError::UnsupportedRemoteScheme(
+                        scheme,
+                        remote_url.to_string(),
+                    ))
+                }
+            } else {
+                Err(RemoteOperationError::InvalidRemoteUrl(
+                    remote_url.to_string(),
+                ))
+            }
+        }
+        Err(_) => Err(RemoteOperationError::InvalidRemoteUrl(
+            remote_url.to_string(),
+        )),
+    }
+}
+
+fn generate_file_manifest(
+    local_op_conn: &Connection,
+    remote_op_conn: Option<&Connection>,
+    db_name: String,
+) -> Result<Vec<String>, RemoteOperationError> {
+    let mut remote_filenames = HashSet::new();
+    if let Some(remote_op_conn) = remote_op_conn {
+        let remote_ops = Operation::query(
+            remote_op_conn,
+            "select * from operation;",
+            rusqlite::params![],
+        );
+        for remote_op in remote_ops {
+            let op_file_additions =
+                FileAddition::get_files_for_operation(remote_op_conn, &remote_op.hash);
+            for op_file_addition in op_file_additions {
+                remote_filenames.insert(op_file_addition.file_path);
+            }
+        }
+    }
+
+    let local_ops = Operation::query(
+        local_op_conn,
+        "select * from operation;",
+        rusqlite::params![],
+    );
+    let mut local_filenames = HashSet::new();
+    for local_op in local_ops {
+        let op_file_additions =
+            FileAddition::get_files_for_operation(local_op_conn, &local_op.hash);
+        for op_file_addition in op_file_additions {
+            local_filenames.insert(op_file_addition.file_path);
+        }
+    }
+
+    let mut filenames_to_push = local_filenames
+        .difference(&remote_filenames)
+        .collect::<Vec<&String>>();
+    let binding = ".gen/gen.db".to_string();
+    filenames_to_push.push(&binding);
+    let db_filename = format!(".gen/{}.db", db_name);
+    filenames_to_push.push(&db_filename);
+
+    Ok(filenames_to_push.iter().map(|f| f.to_string()).collect())
+}
+
+// Pushes the current state of the local repo and branch to the corresponding remote repo and branch
+pub fn push(operation_conn: &Connection, db_uuid: &str) -> Result<(), RemoteOperationError> {
+    let mut stmt = operation_conn
+        .prepare("select remote_url from defaults where id = 1;")
+        .unwrap();
+    let row: Option<String> = stmt.query_row((), |row| row.get(0)).unwrap();
+    if let Some(remote_url) = row {
+        let mut remote_op_db_path = tempdir().unwrap().into_path();
+        let remote_op_db_dir = remote_op_db_path.to_str().unwrap().to_string();
+        let remote_op_conn = if file_exists(&remote_url, ".gen/gen.db")? {
+            transfer_file(&remote_op_db_dir, &remote_url, ".gen/gen.db", false)?;
+
+            remote_op_db_path.push(".gen");
+            remote_op_db_path.push("gen.db");
+            Some(get_operation_connection(Some(remote_op_db_path)))
+        } else {
+            None
+        };
+
+        let current_branch_id =
+            OperationState::get_current_branch(operation_conn, db_uuid).unwrap();
+        let remote_branch_operations = if let Some(ref remote_op_conn) = remote_op_conn {
+            let branch = Branch::get_by_id(remote_op_conn, current_branch_id);
+            if let Some(_branch) = branch {
+                Branch::get_operations(remote_op_conn, current_branch_id)
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        };
+        let local_branch_operations = Branch::get_operations(operation_conn, current_branch_id);
+
+        let remote_op_hashes = remote_branch_operations
+            .iter()
+            .map(|op| op.hash.clone())
+            .collect::<HashSet<String>>();
+        let local_op_hashes = local_branch_operations
+            .iter()
+            .map(|op| op.hash.clone())
+            .collect::<HashSet<String>>();
+        let leading_remote_ops = remote_op_hashes
+            .difference(&local_op_hashes)
+            .collect::<Vec<&String>>();
+        if !leading_remote_ops.is_empty() {
+            return Err(RemoteOperationError::RemoteBranchAhead);
+        }
+
+        let mut stmt = operation_conn
+            .prepare("select db_name from defaults where id = 1;")
+            .unwrap();
+        let row: Option<String> = stmt.query_row((), |row| row.get(0)).unwrap();
+        let db_name = if let Some(row) = row {
+            row
+        } else {
+            "default".to_string()
+        };
+
+        let gen_dir = get_gen_dir().unwrap();
+        let parent_dir = FilePath::new(&gen_dir).parent().unwrap();
+        let parent_dir_str = parent_dir.to_str().unwrap().to_string();
+
+        let filenames = generate_file_manifest(operation_conn, remote_op_conn.as_ref(), db_name)?;
+        for filename in filenames {
+            if filename.starts_with("/") {
+                println!("Skipping since it is an absolute path: {}", filename);
+            } else {
+                transfer_file(&parent_dir_str, &remote_url, &filename, true)?;
+            }
+        }
+        Ok(())
+    } else {
+        Err(RemoteOperationError::RemoteUrlNotSet)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::get_connection as get_real_connection;
     use crate::imports::fasta::import_fasta;
     use crate::models::file_types::FileTypes;
     use crate::models::operations::{setup_db, Branch, Operation, OperationState};
@@ -2315,5 +2592,346 @@ mod tests {
                 op_9.hash.clone()
             ]
         );
+    }
+
+    #[test]
+    fn test_push_to_empty_repo() {
+        let gen_path = setup_gen_dir();
+        let mut db_path = gen_path.clone();
+        db_path.push("default.db");
+        let mut op_db_path = gen_path.clone();
+        op_db_path.push("gen.db");
+        let mut vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        vcf_path.push("fixtures/simple.vcf");
+        let mut fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fasta_path.push("fixtures/simple.fa");
+
+        let conn = &mut get_connection(db_path.to_str());
+        let db_uuid = metadata::get_db_uuid(conn);
+        let operation_conn = &get_operation_connection(op_db_path.to_str());
+        setup_db(operation_conn, &db_uuid);
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            None,
+            false,
+            conn,
+            operation_conn,
+        )
+        .unwrap();
+
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+            None,
+        )
+        .unwrap();
+
+        let binding = BlockGroup::query(
+            conn,
+            "SELECT * FROM block_groups ORDER BY id DESC;",
+            rusqlite::params!(),
+        );
+        let block_group = binding.first().unwrap();
+
+        let remote_path = tempdir().unwrap().into_path();
+        let remote_dir = remote_path.to_str().unwrap().to_string();
+        let formatted_remote_dir = format!("file://{}", remote_dir);
+        operation_conn
+            .execute(
+                "update defaults set remote_url=?1 where id = 1",
+                (formatted_remote_dir,),
+            )
+            .unwrap();
+
+        // Force sync everything in the db to disk before pushing the repo.  TRUNCATE is the most
+        // aggressive option (full sync, then truncate the WAL file that had any unsynced changes,
+        // to indicate nothing is left to sync).
+        operation_conn
+            .pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .unwrap();
+        conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .unwrap();
+
+        let result = push(operation_conn, &db_uuid);
+        assert!(result.is_ok());
+
+        let mut remote_db_path = remote_path.clone();
+        remote_db_path.push(".gen");
+        remote_db_path.push("default.db");
+
+        // Need to use get_real_connection here because get_connection is a test method and resets
+        // the database if it exists
+        let remote_conn = &mut get_real_connection(remote_db_path.to_str().unwrap());
+
+        let all_local_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
+        let binding = BlockGroup::query(
+            remote_conn,
+            "SELECT * FROM block_groups ORDER BY id DESC;",
+            rusqlite::params!(),
+        );
+        let block_group2 = binding.first().unwrap();
+        assert_eq!(block_group2.id, block_group.id);
+        let all_remote_sequences =
+            BlockGroup::get_all_sequences(remote_conn, block_group.id, false);
+        assert_eq!(all_remote_sequences, all_local_sequences);
+
+        let mut remote_op_db_path = remote_path.clone();
+        remote_op_db_path.push(".gen");
+        remote_op_db_path.push("gen.db");
+
+        // Need to use get_real_connection here because get_operation_connection is a test method
+        // and resets the database if it exists
+        let remote_operation_conn = &mut get_real_connection(remote_op_db_path.to_str().unwrap());
+
+        let local_operation_hashes: HashSet<String> = HashSet::from_iter(
+            Operation::query(
+                operation_conn,
+                "SELECT * FROM operation;",
+                rusqlite::params!(),
+            )
+            .iter()
+            .map(|op| op.hash.clone())
+            .collect::<Vec<String>>(),
+        );
+
+        let remote_operation_hashes: HashSet<String> = HashSet::from_iter(
+            Operation::query(
+                remote_operation_conn,
+                "SELECT * FROM operation;",
+                rusqlite::params!(),
+            )
+            .iter()
+            .map(|op| op.hash.clone())
+            .collect::<Vec<String>>(),
+        );
+
+        assert_eq!(remote_operation_hashes, local_operation_hashes);
+    }
+
+    #[test]
+    fn test_push_with_operation_files() {
+        let gen_path = setup_gen_dir();
+        let mut db_path = gen_path.clone();
+        db_path.push("default.db");
+        let mut op_db_path = gen_path.clone();
+        op_db_path.push("gen.db");
+
+        let main_repo_path = gen_path.parent().unwrap().to_path_buf();
+        let fixtures_path = main_repo_path.clone().join("fixtures");
+        fs::create_dir(fixtures_path.clone()).unwrap();
+
+        let mut original_vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let vcf_relative_path = "fixtures/simple.vcf";
+        original_vcf_path.push(vcf_relative_path);
+        let vcf_path = fixtures_path.clone().join("simple.vcf");
+        fs::copy(original_vcf_path, &vcf_path).unwrap();
+
+        let mut original_fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let fasta_relative_path = "fixtures/simple.fa";
+        original_fasta_path.push(fasta_relative_path);
+        let fasta_path = fixtures_path.clone().join("simple.fa");
+        fs::copy(original_fasta_path, &fasta_path).unwrap();
+
+        let conn = &mut get_connection(db_path.to_str());
+        let db_uuid = metadata::get_db_uuid(conn);
+        let operation_conn = &get_operation_connection(op_db_path.to_str());
+        setup_db(operation_conn, &db_uuid);
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_relative_path.to_string(),
+            &collection,
+            None,
+            false,
+            conn,
+            operation_conn,
+        )
+        .unwrap();
+
+        update_with_vcf(
+            &vcf_relative_path.to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            operation_conn,
+            None,
+        )
+        .unwrap();
+
+        let binding = BlockGroup::query(
+            conn,
+            "SELECT * FROM block_groups ORDER BY id DESC;",
+            rusqlite::params!(),
+        );
+        let block_group = binding.first().unwrap();
+
+        let remote_path = tempdir().unwrap().into_path();
+        let remote_dir = remote_path.to_str().unwrap().to_string();
+        let formatted_remote_dir = format!("file://{}", remote_dir);
+        operation_conn
+            .execute(
+                "update defaults set remote_url=?1 where id = 1",
+                (formatted_remote_dir,),
+            )
+            .unwrap();
+
+        // Force sync everything in the db to disk before pushing the repo.  TRUNCATE is the most
+        // aggressive option (full sync, then truncate the WAL file that had any unsynced changes,
+        // to indicate nothing is left to sync).
+        operation_conn
+            .pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .unwrap();
+        conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .unwrap();
+
+        let result = push(operation_conn, &db_uuid);
+        assert!(result.is_ok());
+
+        let mut remote_db_path = remote_path.clone();
+        remote_db_path.push(".gen");
+        remote_db_path.push("default.db");
+
+        // Need to use get_real_connection here because get_connection is a test method and resets
+        // the database if it exists
+        let remote_conn = &mut get_real_connection(remote_db_path.to_str().unwrap());
+
+        let all_local_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
+        let binding = BlockGroup::query(
+            remote_conn,
+            "SELECT * FROM block_groups ORDER BY id DESC;",
+            rusqlite::params!(),
+        );
+        let block_group2 = binding.first().unwrap();
+        assert_eq!(block_group2.id, block_group.id);
+        let all_remote_sequences =
+            BlockGroup::get_all_sequences(remote_conn, block_group.id, false);
+        assert_eq!(all_remote_sequences, all_local_sequences);
+
+        let remote_path = remote_path.clone().join("fixtures");
+        let remote_fasta_path = remote_path
+            .clone()
+            .join("simple.fa")
+            .to_str()
+            .unwrap()
+            .to_string();
+        let remote_vcf_path = remote_path
+            .clone()
+            .join("simple.vcf")
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert!(fs::exists(remote_fasta_path).unwrap());
+        assert!(fs::exists(remote_vcf_path).unwrap());
+    }
+
+    #[test]
+    fn test_push_with_remote_repo_ahead() {
+        let gen_path = setup_gen_dir();
+        let mut db_path = gen_path.clone();
+        db_path.push("default.db");
+        let mut op_db_path = gen_path.clone();
+        op_db_path.push("gen.db");
+
+        let main_repo_path = gen_path.parent().unwrap().to_path_buf();
+        let fixtures_path = main_repo_path.clone().join("fixtures");
+        fs::create_dir(fixtures_path.clone()).unwrap();
+
+        let mut original_fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let fasta_relative_path = "fixtures/simple.fa";
+        original_fasta_path.push(fasta_relative_path);
+        let fasta_path = fixtures_path.clone().join("simple.fa");
+        fs::copy(original_fasta_path, &fasta_path).unwrap();
+
+        let conn = &mut get_connection(db_path.to_str());
+        let db_uuid = metadata::get_db_uuid(conn);
+        let operation_conn = &get_operation_connection(op_db_path.to_str());
+        setup_db(operation_conn, &db_uuid);
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_relative_path.to_string(),
+            &collection,
+            None,
+            false,
+            conn,
+            operation_conn,
+        )
+        .unwrap();
+
+        let remote_path = tempdir().unwrap().into_path();
+        let remote_dir = remote_path.to_str().unwrap().to_string();
+        let formatted_remote_dir = format!("file://{}", remote_dir);
+        operation_conn
+            .execute(
+                "update defaults set remote_url=?1 where id = 1",
+                (formatted_remote_dir,),
+            )
+            .unwrap();
+
+        // Force sync everything in the db to disk before pushing the repo.  TRUNCATE is the most
+        // aggressive option (full sync, then truncate the WAL file that had any unsynced changes,
+        // to indicate nothing is left to sync).
+        operation_conn
+            .pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .unwrap();
+        conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .unwrap();
+
+        let result = push(operation_conn, &db_uuid);
+        assert!(result.is_ok());
+
+        let mut remote_db_path = remote_path.clone();
+        remote_db_path.push(".gen");
+        remote_db_path.push("default.db");
+
+        // Need to use get_real_connection here because get_connection is a test method and resets
+        // the database if it exists
+        let remote_conn = &mut get_real_connection(remote_db_path.to_str().unwrap());
+
+        let mut remote_op_db_path = remote_path.clone();
+        remote_op_db_path.push(".gen");
+        remote_op_db_path.push("gen.db");
+
+        // Need to use get_real_connection here because get_operation_connection is a test method
+        // and resets the database if it exists
+        let remote_operation_conn = &mut get_real_connection(remote_op_db_path.to_str().unwrap());
+
+        let mut original_vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let vcf_relative_path = "fixtures/simple.vcf";
+        original_vcf_path.push(vcf_relative_path);
+        let vcf_path = remote_path.clone().join("fixtures/simple.vcf");
+        fs::copy(original_vcf_path, &vcf_path).unwrap();
+
+        update_with_vcf(
+            &vcf_relative_path.to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            remote_conn,
+            remote_operation_conn,
+            None,
+        )
+        .unwrap();
+
+        // Force sync everything in the db to disk before pushing the repo.  TRUNCATE is the most
+        // aggressive option (full sync, then truncate the WAL file that had any unsynced changes,
+        // to indicate nothing is left to sync).
+        remote_operation_conn
+            .pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .unwrap();
+        remote_conn
+            .pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .unwrap();
+
+        let result = push(operation_conn, &db_uuid).unwrap_err();
+        assert!(matches!(result, RemoteOperationError::RemoteBranchAhead));
     }
 }
