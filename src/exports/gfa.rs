@@ -4,7 +4,6 @@ use crate::models::{
     block_group::BlockGroup, block_group_edge::BlockGroupEdge, collection::Collection, edge::Edge,
     node::Node, path::Path, sample::Sample, strand::Strand,
 };
-use petgraph::graphmap::DiGraphMap;
 use rusqlite::Connection;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::File;

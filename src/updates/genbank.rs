@@ -1,6 +1,5 @@
 use crate::calculate_hash;
 use crate::genbank::{process_sequence, EditType, GenBankError};
-use crate::graph::GenGraph;
 use crate::models::block_group::{BlockGroup, PathChange};
 use crate::models::block_group_edge::{BlockGroupEdge, BlockGroupEdgeData};
 use crate::models::collection::Collection;

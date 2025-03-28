@@ -1,11 +1,11 @@
-use crate::graph::{all_simple_paths, GenGraph, GraphEdge, GraphNode, OperationGraph};
+use crate::graph::{all_simple_paths, GenGraph, OperationGraph};
 use crate::models::file_types::FileTypes;
 use crate::models::traits::*;
 use crate::operation_management::{
     load_changeset, load_changeset_dependencies, load_changeset_models, OperationError,
 };
 use crate::views::patch::get_change_graph;
-use petgraph::graphmap::{DiGraphMap, UnGraphMap};
+use petgraph::graphmap::UnGraphMap;
 use petgraph::visit::{Dfs, Reversed};
 use petgraph::Direction;
 use rusqlite::session::ChangesetIter;

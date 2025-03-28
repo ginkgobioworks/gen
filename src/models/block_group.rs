@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use crate::graph::{
     all_intermediate_edges, all_reachable_nodes, all_simple_paths, flatten_to_interval_tree,
-    GenGraph, GraphEdge, GraphNode,
+    GenGraph, GraphNode,
 };
 use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
 use crate::models::block_group_edge::{AugmentedEdgeData, BlockGroupEdge, BlockGroupEdgeData};
@@ -16,7 +16,6 @@ use crate::models::traits::*;
 use crate::models::QueryError;
 use crate::test_helpers::save_graph;
 use intervaltree::IntervalTree;
-use petgraph::graphmap::DiGraphMap;
 use rusqlite::{params, params_from_iter, types::Value as SQLValue, Connection, Row};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

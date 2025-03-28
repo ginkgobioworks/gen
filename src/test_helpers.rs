@@ -1,5 +1,4 @@
 use intervaltree::IntervalTree;
-use petgraph::graphmap::DiGraphMap;
 use rusqlite::Connection;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -11,7 +10,7 @@ use std::path::PathBuf;
 use tempfile::tempdir;
 
 use crate::config::{get_or_create_gen_dir, BASE_DIR};
-use crate::graph::{GenGraph, GraphEdge, GraphNode};
+use crate::graph::GenGraph;
 use crate::migrations::{run_migrations, run_operation_migrations};
 use crate::models::block_group::BlockGroup;
 use crate::models::block_group_edge::{BlockGroupEdge, BlockGroupEdgeData};

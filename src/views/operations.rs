@@ -1,4 +1,4 @@
-use crate::graph::{GenGraph, GraphEdge, GraphNode};
+use crate::graph::{GenGraph, GraphNode};
 use crate::models::block_group::BlockGroup;
 use crate::models::operations::{Operation, OperationSummary};
 use crate::models::traits::Query;

@@ -1,4 +1,4 @@
-use crate::graph::{GenGraph, GraphEdge, GraphNode};
+use crate::graph::GenGraph;
 use crate::models::block_group::BlockGroup;
 use crate::models::traits::*;
 use petgraph::prelude::DiGraphMap;

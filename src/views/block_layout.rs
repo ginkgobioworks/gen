@@ -5,7 +5,7 @@ use crate::views::block_group_viewer::PlotParameters;
 use log::{debug, info, warn};
 use petgraph::algo::toposort;
 use petgraph::graph::NodeIndex;
-use petgraph::graphmap::{DiGraphMap, GraphMap};
+use petgraph::graphmap::GraphMap;
 use petgraph::stable_graph::StableDiGraph;
 use rust_sugiyama::configure::Config;
 use std::collections::HashMap;

@@ -1,4 +1,4 @@
-use crate::graph::{project_path, GenGraph, GraphEdge, GraphNode};
+use crate::graph::{project_path, GenGraph, GraphNode};
 use crate::models::node::Node;
 use crate::models::path::Path;
 use crate::models::sequence::Sequence;
