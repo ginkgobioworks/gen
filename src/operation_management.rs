@@ -1249,7 +1249,7 @@ fn file_exists(file_path: &str, filename: &str) -> Result<bool, RemoteOperationE
             if let Some(scheme) = result.scheme {
                 if scheme == "file" {
                     let path_parts = result.path.unwrap();
-                    let mut path = PathBuf::new();
+                    let mut path = PathBuf::from("/");
                     for part in path_parts {
                         path.push(part);
                     }
@@ -1424,6 +1424,7 @@ pub fn push(operation_conn: &Connection, db_uuid: &str) -> Result<(), RemoteOper
         let remote_op_conn = if file_exists(&remote_url, ".gen/gen.db")? {
             transfer_file(&remote_op_db_dir, &remote_url, ".gen/gen.db", false)?;
 
+            remote_op_db_path.push(".gen");
             remote_op_db_path.push("gen.db");
             Some(get_operation_connection(Some(remote_op_db_path)))
         } else {
@@ -1443,10 +1444,6 @@ pub fn push(operation_conn: &Connection, db_uuid: &str) -> Result<(), RemoteOper
             vec![]
         };
         let local_branch_operations = Branch::get_operations(operation_conn, current_branch_id);
-
-        println!("here1");
-        println!("local branch op count: {}", local_branch_operations.len());
-        println!("remote branch op count: {}", remote_branch_operations.len());
 
         let remote_op_hashes = remote_branch_operations
             .iter()
@@ -2669,8 +2666,8 @@ mod tests {
         remote_db_path.push(".gen");
         remote_db_path.push("default.db");
 
-        // Need to use get_real_connection here because get_connection resets the database if it
-        // exists
+        // Need to use get_real_connection here because get_connection is a test method and resets
+        // the database if it exists
         let remote_conn = &mut get_real_connection(remote_db_path.to_str().unwrap());
 
         let all_local_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
@@ -2689,8 +2686,8 @@ mod tests {
         remote_op_db_path.push(".gen");
         remote_op_db_path.push("gen.db");
 
-        // Need to use get_real_connection here because get_operation_connection resets the database
-        // if it exists
+        // Need to use get_real_connection here because get_operation_connection is a test method
+        // and resets the database if it exists
         let remote_operation_conn = &mut get_real_connection(remote_op_db_path.to_str().unwrap());
 
         let local_operation_hashes: HashSet<String> = HashSet::from_iter(
@@ -2802,8 +2799,8 @@ mod tests {
         remote_db_path.push(".gen");
         remote_db_path.push("default.db");
 
-        // Need to use get_real_connection here because get_connection resets the database if it
-        // exists
+        // Need to use get_real_connection here because get_connection is a test method and resets
+        // the database if it exists
         let remote_conn = &mut get_real_connection(remote_db_path.to_str().unwrap());
 
         let all_local_sequences = BlockGroup::get_all_sequences(conn, block_group.id, false);
@@ -2895,26 +2892,26 @@ mod tests {
         remote_db_path.push(".gen");
         remote_db_path.push("default.db");
 
-        // Need to use get_real_connection here because get_connection resets the database if it
-        // exists
+        // Need to use get_real_connection here because get_connection is a test method and resets
+        // the database if it exists
         let remote_conn = &mut get_real_connection(remote_db_path.to_str().unwrap());
 
         let mut remote_op_db_path = remote_path.clone();
         remote_op_db_path.push(".gen");
         remote_op_db_path.push("gen.db");
 
-        // Need to use get_real_connection here because get_operation_connection resets the database
-        // if it exists
+        // Need to use get_real_connection here because get_operation_connection is a test method
+        // and resets the database if it exists
         let remote_operation_conn = &mut get_real_connection(remote_op_db_path.to_str().unwrap());
 
         let mut original_vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let vcf_relative_path = "fixtures/simple.vcf";
         original_vcf_path.push(vcf_relative_path);
-        let vcf_path = fixtures_path.clone().join("simple.vcf");
+        let vcf_path = remote_path.clone().join("fixtures/simple.vcf");
         fs::copy(original_vcf_path, &vcf_path).unwrap();
 
         update_with_vcf(
-            &vcf_path.to_str().unwrap().to_string(),
+            &vcf_relative_path.to_string(),
             &collection,
             "".to_string(),
             "".to_string(),
