@@ -1470,7 +1470,7 @@ pub fn push(operation_conn: &Connection, db_uuid: &str) -> Result<(), RemoteOper
             "default".to_string()
         };
 
-        let gen_dir = get_gen_dir();
+        let gen_dir = get_gen_dir().unwrap();
         let parent_dir = FilePath::new(&gen_dir).parent().unwrap();
         let parent_dir_str = parent_dir.to_str().unwrap().to_string();
 
