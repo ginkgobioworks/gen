@@ -724,7 +724,7 @@ pub fn apply_changeset(
         conn,
         &sorted_edge_ids
             .iter()
-            .map(|id| updated_edge_map[id].clone())
+            .map(|id| updated_edge_map[id])
             .collect::<Vec<EdgeData>>(),
     );
     let mut edge_id_map: HashMap<i64, i64> = HashMap::new();
@@ -1925,12 +1925,16 @@ mod tests {
         .len();
         // NOTE: 3 block groups get created with the update from vcf, corresponding to the unknown, G1, and foo samples
         assert_eq!(block_group_count, 4);
-        // NOTE: The edge count is 6 because of the following:
+        // NOTE: The edge count is 8 because of the following:
         // * 1 edge from the source node to the node created by the fasta import
         // * 1 edge from the node created by the fasta import to the sink node
         // * 1 edge representing the deletion
+        // * 1 edge healing the deletion
         // * 2 edges to and from the node representing the second alt sequence
-        assert_eq!(edge_count, 5);
+        // * 1 edge healing the start of the second alt sequence
+        // * 1 edge healing the end of the second alt sequence
+        // * for healing sequence, if a node is split, there will be 2 edges, one on each side of the split
+        assert_eq!(edge_count, 8);
         // NOTE: The block group edge count is 20 because of the following:
         // * 4 edges (one per block group) from the virtual source node
         // * 4 edges (one per block group) to the virtual sink node
@@ -1939,8 +1943,9 @@ mod tests {
         // first alt sequence, with both the 0 and 1 chromosome indices for those edges, 1 * 2 = 2;
         // 2 edges to and from the node representing the second alt sequence, with both the 0 and 1
         // chromosome indices for those edges, 2 * 2 = 4)
-        // 4 + 4 + 2 + 6 = 16
-        assert_eq!(block_group_edge_count, 16);
+        // * 5 edges for healing
+        // 4 + 4 + 2 + 6 + 5 = 21
+        assert_eq!(block_group_edge_count, 21);
         // NOTE: The node count is 6:
         // * 2 source and sink nodes
         // * 1 node created by the initial fasta import
@@ -2006,8 +2011,8 @@ mod tests {
         )
         .len();
         assert_eq!(block_group_count, 4);
-        assert_eq!(edge_count, 5);
-        assert_eq!(block_group_edge_count, 16);
+        assert_eq!(edge_count, 8);
+        assert_eq!(block_group_edge_count, 21);
         assert_eq!(node_count, 5);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
@@ -2225,8 +2230,8 @@ mod tests {
             rusqlite::params!(),
         )
         .len();
-        assert_eq!(edge_count, 5);
-        assert_eq!(block_group_edge_count, 16);
+        assert_eq!(edge_count, 8);
+        assert_eq!(block_group_edge_count, 21);
         assert_eq!(node_count, 5);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
@@ -2287,8 +2292,8 @@ mod tests {
             rusqlite::params!(),
         )
         .len();
-        assert_eq!(edge_count, 3);
-        assert_eq!(block_group_edge_count, 6);
+        assert_eq!(edge_count, 5);
+        assert_eq!(block_group_edge_count, 8);
         assert_eq!(node_count, 4);
         assert_eq!(sample_count, 1);
         assert_eq!(op_count, 3);
@@ -2318,8 +2323,8 @@ mod tests {
             rusqlite::params!(),
         )
         .len();
-        assert_eq!(edge_count, 5);
-        assert_eq!(block_group_edge_count, 16);
+        assert_eq!(edge_count, 8);
+        assert_eq!(block_group_edge_count, 21);
         assert_eq!(node_count, 5);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 3);

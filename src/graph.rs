@@ -1,5 +1,5 @@
 use crate::models::block_group::NodeIntervalBlock;
-use crate::models::node::PATH_START_NODE_ID;
+use crate::models::node::{Node, PATH_START_NODE_ID};
 use crate::models::path::PathBlock;
 use crate::models::strand::Strand;
 use interavl::IntervalTree as IT2;
@@ -41,6 +41,8 @@ impl GraphNode {
         self.sequence_end - self.sequence_start
     }
 }
+
+pub type GenGraph = DiGraphMap<GraphNode, Vec<GraphEdge>>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Deserialize, Serialize)]
 pub struct GraphEdge {
@@ -257,7 +259,7 @@ where
 }
 
 pub fn flatten_to_interval_tree(
-    graph: &DiGraphMap<GraphNode, GraphEdge>,
+    graph: &GenGraph,
     remove_ambiguous_positions: bool,
 ) -> IntervalTree<i64, NodeIntervalBlock> {
     #[derive(Clone, Debug, Ord, PartialOrd, Eq, Hash, PartialEq)]
@@ -271,12 +273,10 @@ pub fn flatten_to_interval_tree(
     let mut start_nodes = vec![];
     let mut end_nodes = vec![];
     for node in graph.nodes() {
-        let has_incoming = graph.neighbors_directed(node, Direction::Incoming).next();
-        let has_outgoing = graph.neighbors_directed(node, Direction::Outgoing).next();
-        if has_incoming.is_none() {
+        if Node::is_start_node(node.node_id) {
             start_nodes.push(node);
         }
-        if has_outgoing.is_none() {
+        if Node::is_end_node(node.node_id) {
             end_nodes.push(node);
         }
     }
@@ -287,10 +287,12 @@ pub fn flatten_to_interval_tree(
         for end_node in end_nodes.iter() {
             for path in all_simple_paths_by_edge(&graph, *start, *end_node) {
                 let mut offset = 0;
-                for (source_node, target_node, edge) in path.iter() {
+                for (source_node, target_node, edges) in path.iter() {
                     let block_len = source_node.length();
                     let node_start = offset;
                     let node_end = offset + block_len;
+                    // Use the first edge in the vector for strand information
+                    let edge = &edges[0];
                     spans.insert(NodeIntervalBlock {
                         block_id: source_node.block_id,
                         node_id: source_node.node_id,
@@ -369,10 +371,7 @@ pub fn flatten_to_interval_tree(
     tree
 }
 
-pub fn project_path(
-    graph: &DiGraphMap<GraphNode, GraphEdge>,
-    path_blocks: &[PathBlock],
-) -> Vec<(GraphNode, Strand)> {
+pub fn project_path(graph: &GenGraph, path_blocks: &[PathBlock]) -> Vec<(GraphNode, Strand)> {
     // When a path is created, it will refer to node positions in the graph as it exists then.
     // If the graph is then updated, the path nodes may be split and the graph no longer contains
     // the corresponding nodes in the initial path. This takes the initial path and identifies the
@@ -437,13 +436,16 @@ pub fn project_path(
             current_pos = current.0.sequence_end;
         }
 
-        for (_src, neighbor, edge) in graph.edges(current.0) {
+        for (_src, neighbor, edges) in graph.edges(current.0) {
+            // Use the first edge in the vector for strand information
             if neighbor.node_id == current_block.node_id
                 && neighbor.sequence_start == current_pos
-                && current_block.strand == edge.target_strand
+                && edges
+                    .iter()
+                    .any(|edge| current_block.strand == edge.target_strand)
             {
                 stack.push_back(Rc::new(PathNode {
-                    node: (neighbor, edge.target_strand),
+                    node: (neighbor, current_block.strand),
                     path_index,
                     prev: Some(Rc::clone(&current_node)),
                 }));
@@ -919,7 +921,7 @@ mod tests {
             //           /-> 4.3.5 -> 5.0.3 ---\
             //  s -> 3.0.5 -------------------> 3.5.15 -> e
             //  initial path is defined as 3.0.0 to 3.0.15
-            let mut graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
+            let mut graph: GenGraph = DiGraphMap::new();
             graph.add_edge(
                 GraphNode {
                     block_id: -1,
@@ -933,13 +935,13 @@ mod tests {
                     sequence_start: 0,
                     sequence_end: 5,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
             graph.add_edge(
                 GraphNode {
@@ -954,13 +956,13 @@ mod tests {
                     sequence_start: 3,
                     sequence_end: 5,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
             graph.add_edge(
                 GraphNode {
@@ -975,13 +977,13 @@ mod tests {
                     sequence_start: 0,
                     sequence_end: 3,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
             graph.add_edge(
                 GraphNode {
@@ -996,13 +998,13 @@ mod tests {
                     sequence_start: 5,
                     sequence_end: 15,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
             graph.add_edge(
                 GraphNode {
@@ -1017,13 +1019,13 @@ mod tests {
                     sequence_start: 5,
                     sequence_end: 15,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
             graph.add_edge(
                 GraphNode {
@@ -1038,13 +1040,13 @@ mod tests {
                     sequence_start: 0,
                     sequence_end: 0,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
             let path_blocks = vec![
                 PathBlock {
@@ -1129,7 +1131,7 @@ mod tests {
             //           /-> 4.3.5 -> 5.0.3 ---\     /-> 6.0.3----------->6.3.7 -\
             //  s -> 3.0.5 -------------------> 3.5.10 ------------------------> 3.10.15 -> e
             //  initial path is defined as 3.0.0 -> 3.5.10 -> 6.0.7 -> 3.10.15
-            let mut graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
+            let mut graph: GenGraph = DiGraphMap::new();
             graph.add_edge(
                 GraphNode {
                     block_id: -1,
@@ -1143,13 +1145,13 @@ mod tests {
                     sequence_start: 0,
                     sequence_end: 5,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
             graph.add_edge(
                 GraphNode {
@@ -1164,13 +1166,13 @@ mod tests {
                     sequence_start: 3,
                     sequence_end: 5,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
             graph.add_edge(
                 GraphNode {
@@ -1185,13 +1187,13 @@ mod tests {
                     sequence_start: 0,
                     sequence_end: 3,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
             graph.add_edge(
                 GraphNode {
@@ -1206,13 +1208,13 @@ mod tests {
                     sequence_start: 5,
                     sequence_end: 10,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
             graph.add_edge(
                 GraphNode {
@@ -1227,13 +1229,13 @@ mod tests {
                     sequence_start: 5,
                     sequence_end: 10,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
 
             graph.add_edge(
@@ -1249,13 +1251,13 @@ mod tests {
                     sequence_start: 10,
                     sequence_end: 15,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
 
             graph.add_edge(
@@ -1271,13 +1273,13 @@ mod tests {
                     sequence_start: 0,
                     sequence_end: 3,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
 
             graph.add_edge(
@@ -1293,13 +1295,13 @@ mod tests {
                     sequence_start: 3,
                     sequence_end: 7,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
 
             graph.add_edge(
@@ -1315,13 +1317,13 @@ mod tests {
                     sequence_start: 0,
                     sequence_end: 2,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
             graph.add_edge(
                 GraphNode {
@@ -1336,13 +1338,13 @@ mod tests {
                     sequence_start: 3,
                     sequence_end: 7,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
 
             graph.add_edge(
@@ -1358,13 +1360,13 @@ mod tests {
                     sequence_start: 10,
                     sequence_end: 15,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
 
             graph.add_edge(
@@ -1380,13 +1382,13 @@ mod tests {
                     sequence_start: 0,
                     sequence_end: 0,
                 },
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             );
             let path_blocks = vec![
                 PathBlock {

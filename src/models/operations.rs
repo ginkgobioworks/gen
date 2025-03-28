@@ -1,4 +1,4 @@
-use crate::graph::{all_simple_paths, GraphEdge, GraphNode, OperationGraph};
+use crate::graph::{all_simple_paths, GenGraph, GraphEdge, GraphNode, OperationGraph};
 use crate::models::file_types::FileTypes;
 use crate::models::traits::*;
 use crate::operation_management::{
@@ -115,7 +115,7 @@ impl Operation {
     pub fn get_change_graph(
         conn: &Connection,
         hash: &str,
-    ) -> Result<HashMap<i64, DiGraphMap<GraphNode, GraphEdge>>, OperationError> {
+    ) -> Result<HashMap<i64, GenGraph>, OperationError> {
         let operation = Operation::get_by_hash(conn, hash)?;
 
         let changeset = load_changeset(&operation);

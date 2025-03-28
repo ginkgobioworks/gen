@@ -1,5 +1,6 @@
 use crate::calculate_hash;
 use crate::genbank::{process_sequence, EditType, GenBankError};
+use crate::graph::GenGraph;
 use crate::models::block_group::{BlockGroup, PathChange};
 use crate::models::block_group_edge::{BlockGroupEdge, BlockGroupEdgeData};
 use crate::models::collection::Collection;
@@ -155,7 +156,7 @@ where
                                     path_end: end + change_seq.length,
                                     strand: Strand::Forward,
                                 },
-                                chromosome_index: 0,
+                                chromosome_index: 1,
                                 phased: 0,
                                 preserve_edge: true,
                             }
@@ -176,7 +177,7 @@ where
                                 path_end: end,
                                 strand: Strand::Forward,
                             },
-                            chromosome_index: 0,
+                            chromosome_index: 1,
                             phased: 0,
                             preserve_edge: true,
                         },

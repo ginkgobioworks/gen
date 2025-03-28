@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, RandomState};
 use std::rc::Rc;
 
-use crate::graph::{GraphEdge, GraphNode};
+use crate::graph::{GenGraph, GraphEdge, GraphNode};
 use crate::models::block_group_edge::AugmentedEdge;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::sequence::{cached_sequence, Sequence};
@@ -25,7 +25,7 @@ pub struct Edge {
     pub target_strand: Strand,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct EdgeData {
     pub source_node_id: i64,
     pub source_coordinate: i64,
@@ -376,7 +376,7 @@ impl Edge {
     pub fn build_graph(
         edges: &Vec<AugmentedEdge>,
         blocks: &Vec<GroupBlock>,
-    ) -> (DiGraphMap<GraphNode, GraphEdge>, HashMap<(i64, i64), Edge>) {
+    ) -> (GenGraph, HashMap<(i64, i64), Edge>) {
         let blocks_by_start = blocks
             .clone()
             .into_iter()
@@ -409,7 +409,7 @@ impl Edge {
             .map(|block| (block.id, (block.start, block.end)))
             .collect::<HashMap<i64, (i64, i64)>>();
 
-        let mut graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
+        let mut graph: GenGraph = DiGraphMap::new();
         let mut edges_by_node_pair = HashMap::new();
         for block in blocks {
             graph.add_node(GraphNode {
@@ -434,40 +434,41 @@ impl Edge {
 
             if let Some(source_id_value) = source_id {
                 if let Some(target_id_value) = target_id {
-                    // TODO: Make parallel edges possible
-                    graph.add_edge(
-                        GraphNode {
-                            block_id: *source_id_value,
-                            node_id: edge.source_node_id,
-                            sequence_start: block_coordinates[source_id_value].0,
-                            sequence_end: block_coordinates[source_id_value].1,
-                        },
-                        GraphNode {
-                            block_id: *target_id_value,
-                            node_id: edge.target_node_id,
-                            sequence_start: block_coordinates[target_id_value].0,
-                            sequence_end: block_coordinates[target_id_value].1,
-                        },
-                        GraphEdge {
-                            edge_id: edge.id,
-                            source_strand: edge.source_strand,
-                            target_strand: edge.target_strand,
-                            chromosome_index: augmented_edge.chromosome_index,
-                            phased: augmented_edge.phased,
-                        },
-                    );
+                    let source_node = GraphNode {
+                        block_id: *source_id_value,
+                        node_id: edge.source_node_id,
+                        sequence_start: block_coordinates[source_id_value].0,
+                        sequence_end: block_coordinates[source_id_value].1,
+                    };
+                    let target_node = GraphNode {
+                        block_id: *target_id_value,
+                        node_id: edge.target_node_id,
+                        sequence_start: block_coordinates[target_id_value].0,
+                        sequence_end: block_coordinates[target_id_value].1,
+                    };
+                    let graph_edge = GraphEdge {
+                        edge_id: edge.id,
+                        source_strand: edge.source_strand,
+                        target_strand: edge.target_strand,
+                        chromosome_index: augmented_edge.chromosome_index,
+                        phased: augmented_edge.phased,
+                    };
+                    if let Some(existing_edges) = graph.edge_weight_mut(source_node, target_node) {
+                        existing_edges.push(graph_edge);
+                    } else {
+                        graph.add_edge(source_node, target_node, vec![graph_edge]);
+                    }
                     edges_by_node_pair.insert((*source_id_value, *target_id_value), edge.clone());
                 }
             }
         }
-        println!("e is {edges:?}", edges = graph.all_edges());
 
         (graph, edges_by_node_pair)
     }
 
     pub fn boundary_edges_from_sequences(
         blocks: &[GroupBlock],
-        edges: &[AugmentedEdge],
+        _edges: &[AugmentedEdge],
     ) -> Vec<AugmentedEdge> {
         // Boundary edges serves to link together sequences within a node that are split by edges, but do not
         // have an explicit edge between the split sites.
@@ -634,7 +635,7 @@ mod tests {
             target_strand: Strand::Forward,
         };
 
-        let edges = vec![edge2.clone(), edge3.clone()];
+        let edges = vec![edge2, edge3];
         let edge_ids1 = Edge::bulk_create(conn, &edges);
         assert_eq!(edge_ids1.len(), 2);
         for (index, id) in edge_ids1.iter().enumerate() {
@@ -647,7 +648,7 @@ mod tests {
             assert_eq!(EdgeData::from(edge), edges[index]);
         }
 
-        let edges = vec![edge1.clone(), edge2.clone(), edge3.clone()];
+        let edges = vec![edge1, edge2, edge3];
         let edge_ids2 = Edge::bulk_create(conn, &edges);
         assert_eq!(edge_ids2[1], edge_ids1[0]);
         assert_eq!(edge_ids2[2], edge_ids1[1]);

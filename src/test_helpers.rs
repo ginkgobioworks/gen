@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use tempfile::tempdir;
 
 use crate::config::{get_or_create_gen_dir, BASE_DIR};
-use crate::graph::{GraphEdge, GraphNode};
+use crate::graph::{GenGraph, GraphEdge, GraphNode};
 use crate::migrations::{run_migrations, run_operation_migrations};
 use crate::models::block_group::BlockGroup;
 use crate::models::block_group_edge::{BlockGroupEdge, BlockGroupEdgeData};
@@ -198,7 +198,7 @@ pub fn setup_block_group(conn: &Connection) -> (i64, Path) {
     (block_group.id, path)
 }
 
-pub fn save_graph(graph: &DiGraphMap<GraphNode, GraphEdge>, path: &str) {
+pub fn save_graph(graph: &GenGraph, path: &str) {
     use petgraph::dot::{Config, Dot};
     use std::fs::File;
     let mut file = File::create(path).unwrap();
@@ -208,12 +208,19 @@ pub fn save_graph(graph: &DiGraphMap<GraphNode, GraphEdge>, path: &str) {
             dot = Dot::with_attr_getters(
                 &graph,
                 &[Config::NodeNoLabel, Config::EdgeNoLabel],
-                &|_, (_, _, edge_weight)| format!("label = \"{}\"", edge_weight.chromosome_index),
+                &|_, (_, _, edge_weights)| format!(
+                    "label = \"{}\"",
+                    edge_weights
+                        .iter()
+                        .map(|ew| ew.chromosome_index.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                ),
                 &|_, (node, _weight)| format!(
                     "label = \"{}[{}-{}]\"",
                     node.node_id, node.sequence_start, node.sequence_end
                 ),
-            )
+            ),
         )
         .as_bytes(),
     );

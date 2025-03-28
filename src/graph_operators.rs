@@ -522,7 +522,7 @@ mod tests {
         node::Node, operations::setup_db, sequence::Sequence, strand::Strand,
     };
     use crate::test_helpers::{
-        get_connection, get_operation_connection, setup_block_group, setup_gen_dir,
+        get_connection, get_operation_connection, save_graph, setup_block_group, setup_gen_dir,
     };
     use crate::updates::fasta::update_with_fasta;
     use std::path::PathBuf;
@@ -574,18 +574,44 @@ mod tests {
             4,
             Strand::Forward,
         );
+        let ref_heal_1 = Edge::create(
+            conn,
+            insert_start_node_id,
+            6,
+            Strand::Forward,
+            insert_start_node_id,
+            6,
+            Strand::Forward,
+        );
+        let ref_heal_2 = Edge::create(
+            conn,
+            insert_end_node_id,
+            4,
+            Strand::Forward,
+            insert_end_node_id,
+            4,
+            Strand::Forward,
+        );
 
-        let edge_ids = [edge_into_insert.id, edge_out_of_insert.id];
+        let edge_ids = [
+            edge_into_insert.id,
+            edge_out_of_insert.id,
+            ref_heal_1.id,
+            ref_heal_2.id,
+        ];
         let block_group_edges = edge_ids
             .iter()
-            .map(|edge_id| BlockGroupEdgeData {
+            .enumerate()
+            .map(|(i, edge_id)| BlockGroupEdgeData {
                 block_group_id: block_group1_id,
                 edge_id: *edge_id,
-                chromosome_index: 0,
+                chromosome_index: if i < 2 { 1 } else { 0 },
                 phased: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
         BlockGroupEdge::bulk_create(conn, &block_group_edges);
+        let g = BlockGroup::get_graph(conn, block_group1_id);
+        save_graph(&g, "test_derive_chunks_one_insertion.dot");
 
         let insert_path =
             original_path.new_path_with(conn, 16, 24, &edge_into_insert, &edge_out_of_insert);

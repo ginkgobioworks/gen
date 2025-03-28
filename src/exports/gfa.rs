@@ -1,5 +1,5 @@
 use crate::gfa::{path_line, write_links, write_segments, Link, Path as GFAPath, Segment};
-use crate::graph::{project_path, GraphEdge, GraphNode};
+use crate::graph::{project_path, GenGraph};
 use crate::models::{
     block_group::BlockGroup, block_group_edge::BlockGroupEdge, collection::Collection, edge::Edge,
     node::Node, path::Path, sample::Sample, strand::Strand,
@@ -42,16 +42,16 @@ pub fn export_gfa(
         }
     }
 
-    let mut edges = edge_set.into_iter().collect::<Vec<_>>();
+    let edges = edge_set.into_iter().collect::<Vec<_>>();
 
     let mut blocks = Edge::blocks_from_edges(conn, &edges);
     blocks.sort_by(|a, b| a.node_id.cmp(&b.node_id));
-    let boundary_edges = Edge::boundary_edges_from_sequences(&blocks, &edges);
-    edges.extend(boundary_edges.clone());
+    // let boundary_edges = Edge::boundary_edges_from_sequences(&blocks, &edges);
+    // edges.extend(boundary_edges.clone());
 
-    let (mut graph, _edges_by_node_pair) = Edge::build_graph(&edges, &blocks);
+    let (graph, _edges_by_node_pair) = Edge::build_graph(&edges, &blocks);
 
-    BlockGroup::prune_graph(&mut graph);
+    // BlockGroup::prune_graph(&mut graph);
 
     let file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(file);
@@ -79,21 +79,21 @@ pub fn export_gfa(
                 node_id: source.node_id,
                 sequence_start: source.sequence_start,
                 sequence_end: source.sequence_end,
-                strand: edge_info.source_strand,
+                strand: edge_info[0].source_strand,
             };
             let target_segment = Segment {
                 sequence: "".to_string(),
                 node_id: target.node_id,
                 sequence_start: target.sequence_start,
                 sequence_end: target.sequence_end,
-                strand: edge_info.target_strand,
+                strand: edge_info[0].target_strand,
             };
 
             links.insert(Link {
                 source_segment_id: source_segment.segment_id(),
-                source_strand: edge_info.source_strand,
+                source_strand: edge_info[0].source_strand,
                 target_segment_id: target_segment.segment_id(),
-                target_strand: edge_info.target_strand,
+                target_strand: edge_info[0].target_strand,
             });
         }
     }
@@ -107,7 +107,7 @@ fn get_paths(
     conn: &Connection,
     collection_name: &str,
     sample_name: Option<String>,
-    graph: &DiGraphMap<GraphNode, GraphEdge>,
+    graph: &GenGraph,
 ) -> HashMap<String, Vec<(String, Strand)>> {
     let paths = Path::query_for_collection_and_sample(conn, collection_name, sample_name);
 
@@ -195,7 +195,7 @@ mod tests {
 
     use crate::models::operations::setup_db;
     use crate::test_helpers::{
-        get_connection, get_operation_connection, setup_block_group, setup_gen_dir,
+        get_connection, get_operation_connection, save_graph, setup_block_group, setup_gen_dir,
     };
     use tempfile::tempdir;
 
@@ -491,8 +491,9 @@ mod tests {
         assert_eq!(node_ids.len(), 5);
         // 3 edges from A sequence -> T sequence, T sequence -> C sequence, C sequence -> G sequence
         // 2 edges to and from NNNN
-        // 5 total
-        assert_eq!(edge_ids.len(), 5);
+        // 2 edges healing the reference
+        // 7 total
+        assert_eq!(edge_ids.len(), 7);
 
         let nodes = Node::get_nodes(conn, &node_ids.into_iter().collect::<Vec<i64>>());
         let mut node_hashes = HashSet::new();
@@ -530,13 +531,15 @@ mod tests {
                 edge_ids2.insert(edge.id);
             }
         }
+        let g = BlockGroup::get_graph(conn, block_group2.id);
+        save_graph(&g, "test_sequence_is_split_into_multiple_segments.dot");
 
         // The 10-length A and T sequences have now been split in two (showing up as different
         // segments in the exported GFA), so expect two more nodes
         assert_eq!(node_ids2.len(), 7);
         // 3 edges from A sequence -> T sequence, T sequence -> C sequence, C sequence -> G sequence
-        // 2 boundary edges (exported as real links) in A sequence and T sequence
         // 2 edges to and from NNNN
+        // 2 edges healing the reference in NNNN
         // 7 total
         assert_eq!(edge_ids2.len(), 7);
 

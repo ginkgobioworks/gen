@@ -161,33 +161,57 @@ pub fn update_with_library(
     let node_end_coordinate = end_coordinate - end_block.start + end_block.sequence_start;
 
     let mut new_edges = HashSet::new();
+    let mut healing_edges = HashSet::new();
     let start_parts = parts_list.first().unwrap();
-    for start_part in *start_parts {
-        let edge = EdgeData {
-            source_node_id: start_block.node_id,
-            source_coordinate: node_start_coordinate,
-            source_strand: Strand::Forward,
-            target_node_id: *start_part,
-            target_coordinate: 0,
-            target_strand: Strand::Forward,
-        };
-        new_edges.insert(edge);
+    if !start_parts.is_empty() {
+        for start_part in *start_parts {
+            let edge = EdgeData {
+                source_node_id: start_block.node_id,
+                source_coordinate: node_start_coordinate,
+                source_strand: Strand::Forward,
+                target_node_id: *start_part,
+                target_coordinate: 0,
+                target_strand: Strand::Forward,
+            };
+            new_edges.insert(edge);
+        }
+        if !Node::is_terminal(start_block.node_id) {
+            healing_edges.insert(EdgeData {
+                source_node_id: start_block.node_id,
+                source_coordinate: node_start_coordinate,
+                source_strand: Strand::Forward,
+                target_node_id: start_block.node_id,
+                target_coordinate: node_start_coordinate,
+                target_strand: Strand::Forward,
+            });
+        }
     }
 
     let end_parts = parts_list.last().unwrap();
-    for end_part in *end_parts {
-        let end_part_source_coordinate = sequence_lengths_by_node_id.get(end_part).unwrap();
-        let edge = EdgeData {
-            source_node_id: *end_part,
-            source_coordinate: *end_part_source_coordinate,
-            source_strand: Strand::Forward,
-            target_node_id: end_block.node_id,
-            target_coordinate: node_end_coordinate,
-            target_strand: Strand::Forward,
-        };
-        new_edges.insert(edge);
+    if !end_parts.is_empty() {
+        for end_part in *end_parts {
+            let end_part_source_coordinate = sequence_lengths_by_node_id.get(end_part).unwrap();
+            let edge = EdgeData {
+                source_node_id: *end_part,
+                source_coordinate: *end_part_source_coordinate,
+                source_strand: Strand::Forward,
+                target_node_id: end_block.node_id,
+                target_coordinate: node_end_coordinate,
+                target_strand: Strand::Forward,
+            };
+            new_edges.insert(edge);
+        }
+        if !Node::is_terminal(end_block.node_id) {
+            healing_edges.insert(EdgeData {
+                source_node_id: end_block.node_id,
+                source_coordinate: node_end_coordinate,
+                source_strand: Strand::Forward,
+                target_node_id: end_block.node_id,
+                target_coordinate: node_end_coordinate,
+                target_strand: Strand::Forward,
+            });
+        }
     }
-
     let mut path_changes_count = 1;
     for (parts1, parts2) in parts_list.iter().tuple_windows() {
         path_changes_count *= parts1.len();
@@ -210,7 +234,7 @@ pub fn update_with_library(
     path_changes_count *= end_parts.len();
 
     let new_edge_ids = Edge::bulk_create(conn, &new_edges.iter().cloned().collect());
-    let new_block_group_edges = new_edge_ids
+    let mut new_block_group_edges = new_edge_ids
         .iter()
         .map(|edge_id| BlockGroupEdgeData {
             block_group_id: path.block_group_id,
@@ -219,6 +243,18 @@ pub fn update_with_library(
             phased: 0,
         })
         .collect::<Vec<_>>();
+    let new_edge_ids = Edge::bulk_create(conn, &healing_edges.iter().cloned().collect());
+    new_block_group_edges.extend(
+        new_edge_ids
+            .iter()
+            .map(|edge_id| BlockGroupEdgeData {
+                block_group_id: path.block_group_id,
+                edge_id: *edge_id,
+                chromosome_index: 0, // TODO: This is a hack, clean it up with phase layers
+                phased: 0,
+            })
+            .collect::<Vec<_>>(),
+    );
     BlockGroupEdge::bulk_create(conn, &new_block_group_edges);
 
     let summary_str = format!("{region_name}: {path_changes_count} changes.\n");

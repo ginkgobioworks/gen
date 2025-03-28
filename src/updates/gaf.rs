@@ -482,8 +482,9 @@ mod tests {
         // Here we should be making an edge from our left node -> insert, and an edge from insert -> right node. .edges gives us outgoing edges
         // only so that is why we use the insert_node for the right_edge lookup.
 
-        let left_edges: Vec<(GraphNode, GraphNode, &GraphEdge)> = graph.edges(*left_node).collect();
-        let right_edges: Vec<(GraphNode, GraphNode, &GraphEdge)> =
+        let left_edges: Vec<(GraphNode, GraphNode, &Vec<GraphEdge>)> =
+            graph.edges(*left_node).collect();
+        let right_edges: Vec<(GraphNode, GraphNode, &Vec<GraphEdge>)> =
             graph.edges(*insert_node).collect();
         assert!(
             left_edges
@@ -531,7 +532,7 @@ mod tests {
             .filter(|node| node.node_id == 3)
             .collect::<Vec<GraphNode>>();
 
-        let incoming_edges: Vec<(GraphNode, GraphNode, &GraphEdge)> = graph
+        let incoming_edges: Vec<(GraphNode, GraphNode, &Vec<GraphEdge>)> = graph
             .edges_directed(start_node_id[0], Direction::Incoming)
             .collect();
 
@@ -545,7 +546,7 @@ mod tests {
             .filter(|node| node.node_id == 1001)
             .collect::<Vec<GraphNode>>();
 
-        let edges: Vec<(GraphNode, GraphNode, &GraphEdge)> = graph
+        let edges: Vec<(GraphNode, GraphNode, &Vec<GraphEdge>)> = graph
             .edges_directed(end_node_id[0], Direction::Outgoing)
             .collect();
 

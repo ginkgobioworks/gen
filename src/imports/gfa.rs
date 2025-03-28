@@ -335,8 +335,8 @@ pub fn import_gfa<'a>(
     for node in graph.nodes() {
         undirected_graph.add_node(node);
     }
-    for (src, dst, weight) in graph.all_edges() {
-        undirected_graph.add_edge(src, dst, *weight);
+    for (src, dst, weights) in graph.all_edges() {
+        undirected_graph.add_edge(src, dst, weights[0]);
     }
     let connected_components = kosaraju_scc(&undirected_graph);
     let mut new_edges = vec![];

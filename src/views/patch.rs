@@ -1,4 +1,4 @@
-use crate::graph::{GraphEdge, GraphNode};
+use crate::graph::{GenGraph, GraphEdge, GraphNode};
 use crate::models::block_group_edge::BlockGroupEdge;
 use crate::models::edge::Edge;
 use crate::models::node::Node;
@@ -21,7 +21,7 @@ use std::io::Read;
 pub fn get_change_graph(
     changes: &ChangesetModels,
     dependencies: &DependencyModels,
-) -> HashMap<i64, DiGraphMap<GraphNode, GraphEdge>> {
+) -> HashMap<i64, GenGraph> {
     let start_node = Node::get_start_node();
     let end_node = Node::get_end_node();
     let mut bges_by_bg: HashMap<i64, Vec<&BlockGroupEdge>> = HashMap::new();
@@ -30,7 +30,7 @@ pub fn get_change_graph(
     nodes_by_id.insert(start_node.id, &start_node);
     nodes_by_id.insert(end_node.id, &end_node);
     let mut sequences_by_hash: HashMap<&String, &Sequence> = HashMap::new();
-    let mut block_graphs: HashMap<i64, DiGraphMap<GraphNode, GraphEdge>> = HashMap::new();
+    let mut block_graphs: HashMap<i64, GenGraph> = HashMap::new();
 
     for bge in changes.block_group_edges.iter() {
         bges_by_bg
@@ -57,7 +57,7 @@ pub fn get_change_graph(
         // and edges. This graph is then used to make our second graph representing the spans
         // of each node (blocks).
         let mut graph: DiGraphMap<i64, (i64, i64)> = DiGraphMap::new();
-        let mut block_graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
+        let mut block_graph: GenGraph = DiGraphMap::new();
         block_graph.add_node(GraphNode {
             block_id: -1,
             node_id: start_node.id,
@@ -132,13 +132,13 @@ pub fn get_change_graph(
                 block_graph.add_edge(
                     *i,
                     *j,
-                    GraphEdge {
+                    vec![GraphEdge {
                         edge_id: -1,
                         source_strand: Strand::Forward,
                         target_strand: Forward,
                         chromosome_index: 0,
                         phased: 0,
-                    },
+                    }],
                 );
             }
         }
@@ -156,13 +156,13 @@ pub fn get_change_graph(
                 block_graph.add_edge(
                     source_block,
                     dest_block,
-                    GraphEdge {
+                    vec![GraphEdge {
                         edge_id: -1,
                         source_strand: Strand::Forward,
                         target_strand: Forward,
                         chromosome_index: 0,
                         phased: 0,
-                    },
+                    }],
                 );
             }
         }

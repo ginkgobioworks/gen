@@ -8,7 +8,6 @@ pub mod diffs;
 pub mod exports;
 pub mod fasta;
 pub mod genbank;
-pub mod gengraph;
 pub mod gfa;
 pub mod gfa_reader;
 pub mod graph;
