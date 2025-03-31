@@ -452,7 +452,6 @@ pub fn project_path(graph: &GenGraph, path_blocks: &[PathBlock]) -> Vec<(GraphNo
             }
         }
     }
-    println!("final_path: {:?}", final_path);
     final_path
 }
 
@@ -1581,6 +1580,125 @@ mod tests {
                     )
                 ]
             )
+        }
+    }
+
+    #[cfg(test)]
+    mod test_connect_all_boundary_edges {
+        use crate::models::node::PATH_END_NODE_ID;
+
+        use super::super::*;
+
+        #[test]
+        fn test_connect_all_boundary_edges() {
+            let mut graph = GenGraph::new();
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: PATH_START_NODE_ID,
+                    sequence_start: 0,
+                    sequence_end: 0,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 10,
+                    sequence_start: 0,
+                    sequence_end: 10,
+                },
+                vec![GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                }],
+            );
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 10,
+                    sequence_start: 0,
+                    sequence_end: 10,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 20,
+                    sequence_start: 0,
+                    sequence_end: 20,
+                },
+                vec![GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                }],
+            );
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 20,
+                    sequence_start: 0,
+                    sequence_end: 20,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: 10,
+                    sequence_start: 20,
+                    sequence_end: 30,
+                },
+                vec![GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                }],
+            );
+            let orphan_node = graph.add_node(GraphNode {
+                block_id: -1,
+                node_id: 10,
+                sequence_start: 10,
+                sequence_end: 20,
+            });
+            graph.add_edge(
+                GraphNode {
+                    block_id: -1,
+                    node_id: 10,
+                    sequence_start: 20,
+                    sequence_end: 30,
+                },
+                GraphNode {
+                    block_id: -1,
+                    node_id: PATH_END_NODE_ID,
+                    sequence_start: 0,
+                    sequence_end: 00,
+                },
+                vec![GraphEdge {
+                    edge_id: 0,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: 0,
+                    phased: 0,
+                }],
+            );
+            let incoming_edges: Vec<_> = graph
+                .edges_directed(orphan_node, Direction::Incoming)
+                .collect();
+            let outgoing_edges: Vec<_> = graph
+                .edges_directed(orphan_node, Direction::Outgoing)
+                .collect();
+            assert!(incoming_edges.is_empty());
+            assert!(outgoing_edges.is_empty());
+            connect_all_boundary_edges(&mut graph);
+            let incoming_edges: Vec<_> = graph
+                .edges_directed(orphan_node, Direction::Incoming)
+                .collect();
+            let outgoing_edges: Vec<_> = graph
+                .edges_directed(orphan_node, Direction::Outgoing)
+                .collect();
+            assert!(!incoming_edges.is_empty());
+            assert!(!outgoing_edges.is_empty());
         }
     }
 }
