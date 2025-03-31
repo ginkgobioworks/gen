@@ -72,23 +72,11 @@ pub fn get_change_graph(
         });
         for bg_edge in bg_edges {
             let edge = *edges_by_id.get(&bg_edge.edge_id).unwrap();
-            // Because our model is an edge graph, the coordinate where an edge occurs is
-            // actually offset from the block. So we need to adjust coordinates when going
-            // to blocks. This isn't true for our start node though, which has a source
-            // coordinate of 0.
-            if Node::is_start_node(edge.source_node_id) {
-                graph.add_edge(
-                    edge.source_node_id,
-                    edge.target_node_id,
-                    (edge.source_coordinate, edge.target_coordinate),
-                );
-            } else {
-                graph.add_edge(
-                    edge.source_node_id,
-                    edge.target_node_id,
-                    (edge.source_coordinate - 1, edge.target_coordinate),
-                );
-            }
+            graph.add_edge(
+                edge.source_node_id,
+                edge.target_node_id,
+                (edge.source_coordinate, edge.target_coordinate),
+            );
         }
 
         for node in graph.nodes() {
@@ -114,14 +102,14 @@ pub fn get_change_graph(
             block_starts.insert(0);
             for x in out_ports.iter() {
                 if *x < s_len - 1 {
-                    block_starts.insert(x + 1);
+                    block_starts.insert(*x);
                 }
             }
             let mut block_ends: HashSet<i64> = HashSet::from_iter(out_ports.iter().copied());
             block_ends.insert(s_len);
             for x in in_ports.iter() {
                 if *x > 0 {
-                    block_ends.insert(x - 1);
+                    block_ends.insert(*x);
                 }
             }
 
