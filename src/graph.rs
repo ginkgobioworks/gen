@@ -455,11 +455,10 @@ pub fn project_path(graph: &GenGraph, path_blocks: &[PathBlock]) -> Vec<(GraphNo
     final_path
 }
 
-<<<<<<< HEAD
 /// Find the articulation points of a directed graph using a non-recursive approach
 /// This is a modified version of the algorithm found here:
 /// https://en.wikipedia.org/wiki/Biconnected_component#Articulation_points
-pub fn find_articulation_points(graph: &DiGraphMap<GraphNode, GraphEdge>) -> Vec<GraphNode> {
+pub fn find_articulation_points(graph: &GenGraph) -> Vec<GraphNode> {
     let mut articulation_points: Vec<GraphNode> = Vec::new();
     let mut discovery_time: HashMap<GraphNode, usize> = HashMap::new();
     let mut low: HashMap<GraphNode, usize> = HashMap::new();
@@ -538,7 +537,8 @@ pub fn find_articulation_points(graph: &DiGraphMap<GraphNode, GraphEdge>) -> Vec
     articulation_points.sort();
     articulation_points.dedup();
     articulation_points
-=======
+}
+
 pub fn connect_all_boundary_edges(graph: &mut GenGraph) {
     let mut nodes_without_incoming: Vec<GraphNode> = vec![];
     let mut nodes_without_outgoing: Vec<GraphNode> = vec![];
@@ -595,7 +595,6 @@ pub fn connect_all_boundary_edges(graph: &mut GenGraph) {
             );
         }
     }
->>>>>>> eed630a (All tests working)
 }
 
 #[cfg(test)]

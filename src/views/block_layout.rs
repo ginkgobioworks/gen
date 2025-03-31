@@ -28,7 +28,6 @@ pub type PartitionEdge = (GraphNode, GraphNode, Vec<GraphEdge>);
 /// Type alias for partial layout data
 pub type PartialLayout = (Vec<(GraphNode, (f64, f64))>, f64, f64);
 
-
 /// The result of partitioning a graph into mutually exclusive subgraphs, intended for use in layout algorithms.
 /// - `parts` is vector of StableDiGraphs that make up the partition.
 ///     - Node weights are GraphNode, edge weights are Vec<GraphEdge>.
