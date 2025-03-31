@@ -101,8 +101,8 @@ pub fn update_with_fasta(
         start: start_coordinate,
         end: end_coordinate,
         block: path_block,
-        chromosome_index: 0,
-        phased: 0,
+        chromosome_index: -1,
+        phased: -1,
         preserve_edge: true,
     };
 

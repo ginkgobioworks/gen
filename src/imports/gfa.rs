@@ -247,15 +247,15 @@ pub fn import_gfa<'a>(
                 .map(|id| BlockGroupEdgeData {
                     block_group_id: block_group.id,
                     edge_id: *id,
-                    chromosome_index: 0,
-                    phased: 0,
+                    chromosome_index: -1,
+                    phased: -1,
                 })
                 .collect::<Vec<BlockGroupEdgeData>>(),
         );
         Path::create(conn, path_name, block_group.id, &path_edge_ids);
     }
 
-    for (walk_index, input_walk) in (1..).zip(&gfa.walk) {
+    for input_walk in &gfa.walk {
         let path_name = &input_walk.sample_id;
         let mut source_node_id = PATH_START_NODE_ID;
         let mut source_coordinate = 0;
@@ -296,15 +296,14 @@ pub fn import_gfa<'a>(
                 .map(|id| BlockGroupEdgeData {
                     block_group_id: block_group.id,
                     edge_id: *id,
-                    chromosome_index: walk_index,
-                    phased: 0,
+                    chromosome_index: -1,
+                    phased: -1,
                 })
                 .collect::<Vec<BlockGroupEdgeData>>(),
         );
         Path::create(conn, path_name, block_group.id, &path_edge_ids);
     }
 
-    let mut chromosome_index = gfa.paths.len() + gfa.walk.len();
     // make any block group edges not in paths or walks
     BlockGroupEdge::bulk_create(
         conn,
@@ -312,12 +311,11 @@ pub fn import_gfa<'a>(
             .iter()
             .filter_map(|id| {
                 if !created_blockgroup_edges.contains(id) {
-                    chromosome_index += 1;
                     Some(BlockGroupEdgeData {
                         block_group_id: block_group.id,
                         edge_id: *id,
-                        chromosome_index: chromosome_index as i64,
-                        phased: 0,
+                        chromosome_index: -1,
+                        phased: -1,
                     })
                 } else {
                     None
@@ -407,7 +405,7 @@ pub fn import_gfa<'a>(
             .map(|id| BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id: *id,
-                chromosome_index: 0,
+                chromosome_index: -1,
                 phased: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>(),

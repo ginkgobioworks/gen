@@ -14,7 +14,6 @@ use crate::models::path_edge::PathEdge;
 use crate::models::strand::Strand;
 use crate::models::traits::*;
 use crate::models::QueryError;
-use crate::test_helpers::save_graph;
 use intervaltree::IntervalTree;
 use rusqlite::{params, params_from_iter, types::Value as SQLValue, Connection, Row};
 use serde::{Deserialize, Serialize};
@@ -373,6 +372,9 @@ impl BlockGroup {
             let mut edges_by_ci: HashMap<i64, (i64, GraphNode, GraphNode)> = HashMap::new();
             for (source_node, target_node, edge_weights) in graph.edges(node) {
                 for edge_weight in edge_weights {
+                    if edge_weight.chromosome_index == -1 {
+                        continue;
+                    }
                     edges_by_ci
                         .entry(edge_weight.chromosome_index)
                         .and_modify(|(edge_id, source, target)| {
@@ -415,9 +417,7 @@ impl BlockGroup {
         let blocks = Edge::blocks_from_edges(conn, &edges);
 
         let (mut graph, _) = Edge::build_graph(&edges, &blocks);
-        save_graph(&graph, "gas_pp.dot");
         BlockGroup::prune_graph(&mut graph);
-        save_graph(&graph, "gas.dot");
 
         let mut start_nodes = vec![];
         let mut end_nodes = vec![];
@@ -556,7 +556,6 @@ impl BlockGroup {
                 PathCache::get_intervaltree(cache, &change.path).unwrap()
             };
             let new_augmented_edges = BlockGroup::set_up_new_edges(change, tree)?;
-            println!("new_augmented_edges: {:?}", new_augmented_edges);
             new_augmented_edges_by_block_group
                 .entry(change.block_group_id)
                 .and_modify(|new_edge_data| new_edge_data.extend(new_augmented_edges.clone()))
@@ -652,7 +651,6 @@ impl BlockGroup {
         change: &PathChange,
         tree: &IntervalTree<i64, NodeIntervalBlock>,
     ) -> Result<Vec<AugmentedEdgeData>, ChangeError> {
-        println!("change is {change:?} t is {tree:?}");
         let start_blocks: Vec<&NodeIntervalBlock> =
             tree.query_point(change.start).map(|x| &x.value).collect();
         assert_eq!(start_blocks.len(), 1);
@@ -696,6 +694,7 @@ impl BlockGroup {
             // Deletion
             let source_coordinate = change.start - start_block.start + start_block.sequence_start;
             let target_coordinate = change.end - end_block.start + end_block.sequence_start;
+            let mut aug_edges = vec![];
             let new_edge = EdgeData {
                 source_node_id: start_block.node_id,
                 source_coordinate,
@@ -704,12 +703,11 @@ impl BlockGroup {
                 target_coordinate,
                 target_strand: Strand::Forward,
             };
-            let new_augmented_edge = AugmentedEdgeData {
+            aug_edges.push(AugmentedEdgeData {
                 edge_data: new_edge,
                 chromosome_index: change.chromosome_index,
                 phased: change.phased,
-            };
-            new_edges.push(new_augmented_edge);
+            });
 
             // NOTE: If the deletion is happening at the very beginning of a path, we need to add
             // an edge from the dedicated start node to the end of the deletion, to indicate it's
@@ -724,11 +722,11 @@ impl BlockGroup {
                     target_coordinate,
                     target_strand: Strand::Forward,
                 };
-                let new_augmented_edge = AugmentedEdgeData {
+                aug_edges.push(AugmentedEdgeData {
                     edge_data: new_beginning_edge,
                     chromosome_index: change.chromosome_index,
                     phased: change.phased,
-                };
+                });
                 if change.preserve_edge && !Node::is_terminal(end_block.node_id) {
                     new_edges.push(AugmentedEdgeData {
                         edge_data: EdgeData {
@@ -743,7 +741,6 @@ impl BlockGroup {
                         phased: 0,
                     });
                 }
-                new_edges.push(new_augmented_edge);
             } else if change.preserve_edge {
                 if !Node::is_terminal(start_block.node_id) {
                     new_edges.push(AugmentedEdgeData {
@@ -774,6 +771,7 @@ impl BlockGroup {
                     });
                 }
             }
+            new_edges.extend(aug_edges);
         // NOTE: If the deletion is happening at the very end of a path, we might add an edge
         // from the beginning of the deletion to the dedicated end node, but in practice it
         // doesn't affect sequence readouts, so it may not be worth it.
@@ -809,21 +807,22 @@ impl BlockGroup {
                 phased: change.phased,
             };
 
+            if change.start == 0 {
+                new_edges.push(AugmentedEdgeData {
+                    edge_data: EdgeData {
+                        source_node_id: PATH_START_NODE_ID,
+                        source_coordinate: 0,
+                        source_strand: Strand::Forward,
+                        target_node_id: change.block.node_id,
+                        target_coordinate: change.block.sequence_start,
+                        target_strand: Strand::Forward,
+                    },
+                    chromosome_index: change.chromosome_index,
+                    phased: 0,
+                });
+            }
+
             if change.preserve_edge {
-                if change.start == 0 {
-                    new_edges.push(AugmentedEdgeData {
-                        edge_data: EdgeData {
-                            source_node_id: PATH_START_NODE_ID,
-                            source_coordinate: 0,
-                            source_strand: Strand::Forward,
-                            target_node_id: change.block.node_id,
-                            target_coordinate: change.block.sequence_start,
-                            target_strand: Strand::Forward,
-                        },
-                        chromosome_index: 0,
-                        phased: 0,
-                    });
-                }
                 if !Node::is_terminal(start_block.node_id) {
                     new_edges.push(AugmentedEdgeData {
                         edge_data: EdgeData {
@@ -852,7 +851,6 @@ impl BlockGroup {
                         phased: 0,
                     });
                 }
-                println!("new_edges: {new_edges:?}");
             }
             new_edges.push(new_augmented_start_edge);
             new_edges.push(new_augmented_end_edge);
@@ -868,9 +866,7 @@ impl BlockGroup {
     ) -> IntervalTree<i64, NodeIntervalBlock> {
         // make a tree where every node has a span in the graph.
         let mut graph = BlockGroup::get_graph(conn, block_group_id);
-        save_graph(&graph, &format!("itf_{}.dot", block_group_id));
         BlockGroup::prune_graph(&mut graph);
-        save_graph(&graph, &format!("itf_{}_pruned.dot", block_group_id));
         flatten_to_interval_tree(&graph, remove_ambiguous_positions)
     }
 
@@ -1780,6 +1776,49 @@ mod tests {
     }
 
     #[test]
+
+    fn homozygous_insert_at_beginning_of_path() {
+        let conn = get_connection(None);
+        let (block_group_id, path) = setup_block_group(&conn);
+        let insert_sequence = Sequence::new()
+            .sequence_type("DNA")
+            .sequence("NNNN")
+            .save(&conn);
+        let insert_node_id = Node::create(&conn, insert_sequence.hash.as_str(), None);
+        let insert = PathBlock {
+            id: 0,
+            node_id: insert_node_id,
+            block_sequence: insert_sequence.get_sequence(0, 4).to_string(),
+            sequence_start: 0,
+            sequence_end: 4,
+            path_start: 0,
+            path_end: 0,
+            strand: Strand::Forward,
+        };
+        let change = PathChange {
+            block_group_id,
+            path: path.clone(),
+            path_accession: None,
+            start: 0,
+            end: 0,
+            block: insert,
+            chromosome_index: 0,
+            phased: 0,
+            preserve_edge: true,
+        };
+        let tree = path.intervaltree(&conn);
+        BlockGroup::insert_change(&conn, &change, &tree).unwrap();
+
+        let all_sequences = BlockGroup::get_all_sequences(&conn, block_group_id, false);
+        assert_eq!(
+            all_sequences,
+            HashSet::from_iter(vec![
+                "NNNNAAAAAAAAAATTTTTTTTTTCCCCCCCCCCGGGGGGGGGG".to_string(),
+            ])
+        );
+    }
+
+    #[test]
     fn insert_at_end_of_path() {
         let conn = get_connection(None);
         let (block_group_id, path) = setup_block_group(&conn);
@@ -2366,8 +2405,6 @@ mod tests {
             Some("child"),
         )
         .unwrap();
-        let g = BlockGroup::get_graph(conn, gc_bg_id);
-        save_graph(&g, "gc_bg_id.dot");
         let new_path = Path::query(
             conn,
             "select * from paths where block_group_id = ?1",
@@ -3029,11 +3066,10 @@ mod tests {
             ];
             let block_group_edges = edge_ids
                 .iter()
-                .enumerate()
-                .map(|(i, edge_id)| BlockGroupEdgeData {
+                .map(|edge_id| BlockGroupEdgeData {
                     block_group_id: block_group1_id,
                     edge_id: *edge_id,
-                    chromosome_index: if i < 2 { 1 } else { 0 },
+                    chromosome_index: -1,
                     phased: 0,
                 })
                 .collect::<Vec<BlockGroupEdgeData>>();
@@ -3103,11 +3139,10 @@ mod tests {
             ];
             let block_group_edges = edge_ids
                 .iter()
-                .enumerate()
-                .map(|(i, edge_id)| BlockGroupEdgeData {
+                .map(|edge_id| BlockGroupEdgeData {
                     block_group_id: block_group1_id,
                     edge_id: *edge_id,
-                    chromosome_index: if i < 2 { 1 } else { 0 },
+                    chromosome_index: -1,
                     phased: 0,
                 })
                 .collect::<Vec<BlockGroupEdgeData>>();
@@ -3152,19 +3187,19 @@ mod tests {
                 BlockGroupEdgeData {
                     block_group_id: block_group1_id,
                     edge_id: deletion_edge.id,
-                    chromosome_index: 1,
+                    chromosome_index: -1,
                     phased: 0,
                 },
                 BlockGroupEdgeData {
                     block_group_id: block_group1_id,
                     edge_id: ref_heal_1.id,
-                    chromosome_index: 0,
+                    chromosome_index: -1,
                     phased: 0,
                 },
                 BlockGroupEdgeData {
                     block_group_id: block_group1_id,
                     edge_id: ref_heal_2.id,
-                    chromosome_index: 0,
+                    chromosome_index: -1,
                     phased: 0,
                 },
             ];

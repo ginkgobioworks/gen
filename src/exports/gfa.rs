@@ -194,7 +194,7 @@ mod tests {
 
     use crate::models::operations::setup_db;
     use crate::test_helpers::{
-        get_connection, get_operation_connection, save_graph, setup_block_group, setup_gen_dir,
+        get_connection, get_operation_connection, setup_block_group, setup_gen_dir,
     };
     use tempfile::tempdir;
 
@@ -530,8 +530,6 @@ mod tests {
                 edge_ids2.insert(edge.id);
             }
         }
-        let g = BlockGroup::get_graph(conn, block_group2.id);
-        save_graph(&g, "test_sequence_is_split_into_multiple_segments.dot");
 
         // The 10-length A and T sequences have now been split in two (showing up as different
         // segments in the exported GFA), so expect two more nodes

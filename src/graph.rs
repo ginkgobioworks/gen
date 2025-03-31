@@ -452,9 +452,11 @@ pub fn project_path(graph: &GenGraph, path_blocks: &[PathBlock]) -> Vec<(GraphNo
             }
         }
     }
+    println!("final_path: {:?}", final_path);
     final_path
 }
 
+<<<<<<< HEAD
 /// Find the articulation points of a directed graph using a non-recursive approach
 /// This is a modified version of the algorithm found here:
 /// https://en.wikipedia.org/wiki/Biconnected_component#Articulation_points
@@ -537,6 +539,64 @@ pub fn find_articulation_points(graph: &DiGraphMap<GraphNode, GraphEdge>) -> Vec
     articulation_points.sort();
     articulation_points.dedup();
     articulation_points
+=======
+pub fn connect_all_boundary_edges(graph: &mut GenGraph) {
+    let mut nodes_without_incoming: Vec<GraphNode> = vec![];
+    let mut nodes_without_outgoing: Vec<GraphNode> = vec![];
+    for node in graph.nodes() {
+        if !Node::is_terminal(node.node_id)
+            && graph
+                .edges_directed(node, Direction::Incoming)
+                .next()
+                .is_none()
+        {
+            nodes_without_incoming.push(node);
+        }
+        if !Node::is_terminal(node.node_id)
+            && graph
+                .edges_directed(node, Direction::Outgoing)
+                .next()
+                .is_none()
+        {
+            nodes_without_outgoing.push(node);
+        }
+    }
+
+    for node in nodes_without_incoming {
+        if let Some(upstream_node) = graph.nodes().find(|other_node| {
+            other_node.node_id == node.node_id && other_node.sequence_end == node.sequence_start
+        }) {
+            graph.add_edge(
+                upstream_node,
+                node,
+                vec![GraphEdge {
+                    edge_id: -1,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: -1,
+                    phased: 0,
+                }],
+            );
+        }
+    }
+    for node in nodes_without_outgoing {
+        if let Some(downstream_node) = graph.nodes().find(|other_node| {
+            other_node.node_id == node.node_id && other_node.sequence_start == node.sequence_end
+        }) {
+            graph.add_edge(
+                node,
+                downstream_node,
+                vec![GraphEdge {
+                    edge_id: -1,
+                    source_strand: Strand::Forward,
+                    target_strand: Strand::Forward,
+                    chromosome_index: -1,
+                    phased: 0,
+                }],
+            );
+        }
+    }
+>>>>>>> eed630a (All tests working)
 }
 
 #[cfg(test)]

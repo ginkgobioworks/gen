@@ -1929,12 +1929,8 @@ mod tests {
         // * 1 edge from the source node to the node created by the fasta import
         // * 1 edge from the node created by the fasta import to the sink node
         // * 1 edge representing the deletion
-        // * 1 edge healing the deletion
         // * 2 edges to and from the node representing the second alt sequence
-        // * 1 edge healing the start of the second alt sequence
-        // * 1 edge healing the end of the second alt sequence
-        // * for healing sequence, if a node is split, there will be 2 edges, one on each side of the split
-        assert_eq!(edge_count, 8);
+        assert_eq!(edge_count, 5);
         // NOTE: The block group edge count is 20 because of the following:
         // * 4 edges (one per block group) from the virtual source node
         // * 4 edges (one per block group) to the virtual sink node
@@ -1943,9 +1939,8 @@ mod tests {
         // first alt sequence, with both the 0 and 1 chromosome indices for those edges, 1 * 2 = 2;
         // 2 edges to and from the node representing the second alt sequence, with both the 0 and 1
         // chromosome indices for those edges, 2 * 2 = 4)
-        // * 5 edges for healing
-        // 4 + 4 + 2 + 6 + 5 = 21
-        assert_eq!(block_group_edge_count, 21);
+        // 4 + 4 + 2 + 6 = 16
+        assert_eq!(block_group_edge_count, 16);
         // NOTE: The node count is 6:
         // * 2 source and sink nodes
         // * 1 node created by the initial fasta import
@@ -2011,8 +2006,8 @@ mod tests {
         )
         .len();
         assert_eq!(block_group_count, 4);
-        assert_eq!(edge_count, 8);
-        assert_eq!(block_group_edge_count, 21);
+        assert_eq!(edge_count, 5);
+        assert_eq!(block_group_edge_count, 16);
         assert_eq!(node_count, 5);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
@@ -2062,10 +2057,8 @@ mod tests {
         .unwrap();
 
         let foo_bg_id = BlockGroup::get_id(conn, &collection, Some("foo"), "m123");
-        let patch_1_seqs = HashSet::from_iter(vec![
-            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
-            "ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
-        ]);
+        let patch_1_seqs =
+            HashSet::from_iter(vec!["ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string()]);
 
         assert_eq!(
             BlockGroup::get_all_sequences(conn, foo_bg_id, false),
@@ -2102,10 +2095,7 @@ mod tests {
         );
 
         let foo_bg_id = BlockGroup::get_id(conn, &collection, Some("foo"), "m123");
-        let patch_2_seqs = HashSet::from_iter(vec![
-            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
-            "ATCGATCGATCGAGATCGGGAACACACAGAGA".to_string(),
-        ]);
+        let patch_2_seqs = HashSet::from_iter(vec!["ATCGATCGATCGAGATCGGGAACACACAGAGA".to_string()]);
         assert_eq!(
             BlockGroup::get_all_sequences(conn, foo_bg_id, false),
             patch_2_seqs
@@ -2123,12 +2113,7 @@ mod tests {
         apply(conn, operation_conn, &op_2.hash, None);
 
         let foo_bg_id = BlockGroup::get_id(conn, &collection, Some("foo"), "m123");
-        let patch_2_seqs = HashSet::from_iter(vec![
-            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
-            "ATCGATCGATCGAGATCGGGAACACACAGAGA".to_string(),
-            "ATCATCGATCGAGATCGGGAACACACAGAGA".to_string(),
-            "ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
-        ]);
+        let patch_2_seqs = HashSet::from_iter(vec!["ATCATCGATCGAGATCGGGAACACACAGAGA".to_string()]);
         assert_eq!(
             BlockGroup::get_all_sequences(conn, foo_bg_id, false),
             patch_2_seqs
@@ -2147,12 +2132,8 @@ mod tests {
         );
 
         let unknown_bg_id = BlockGroup::get_id(conn, &collection, Some("unknown"), "m123");
-        let unknown_seqs = HashSet::from_iter(vec![
-            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
-            "ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
-            "ATCGATCGATAGACGATCGATCGGGAACACACAGAGA".to_string(),
-            "ATCATCGATAGACGATCGATCGGGAACACACAGAGA".to_string(),
-        ]);
+        let unknown_seqs =
+            HashSet::from_iter(vec!["ATCATCGATAGACGATCGATCGGGAACACACAGAGA".to_string()]);
         assert_eq!(
             BlockGroup::get_all_sequences(conn, unknown_bg_id, false),
             unknown_seqs
@@ -2230,8 +2211,8 @@ mod tests {
             rusqlite::params!(),
         )
         .len();
-        assert_eq!(edge_count, 8);
-        assert_eq!(block_group_edge_count, 21);
+        assert_eq!(edge_count, 5);
+        assert_eq!(block_group_edge_count, 16);
         assert_eq!(node_count, 5);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 2);
@@ -2292,8 +2273,8 @@ mod tests {
             rusqlite::params!(),
         )
         .len();
-        assert_eq!(edge_count, 5);
-        assert_eq!(block_group_edge_count, 8);
+        assert_eq!(edge_count, 3);
+        assert_eq!(block_group_edge_count, 6);
         assert_eq!(node_count, 4);
         assert_eq!(sample_count, 1);
         assert_eq!(op_count, 3);
@@ -2323,8 +2304,8 @@ mod tests {
             rusqlite::params!(),
         )
         .len();
-        assert_eq!(edge_count, 8);
-        assert_eq!(block_group_edge_count, 21);
+        assert_eq!(edge_count, 5);
+        assert_eq!(block_group_edge_count, 16);
         assert_eq!(node_count, 5);
         assert_eq!(sample_count, 3);
         assert_eq!(op_count, 3);

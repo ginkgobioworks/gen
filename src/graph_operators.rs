@@ -522,7 +522,7 @@ mod tests {
         node::Node, operations::setup_db, sequence::Sequence, strand::Strand,
     };
     use crate::test_helpers::{
-        get_connection, get_operation_connection, save_graph, setup_block_group, setup_gen_dir,
+        get_connection, get_operation_connection, setup_block_group, setup_gen_dir,
     };
     use crate::updates::fasta::update_with_fasta;
     use std::path::PathBuf;
@@ -610,8 +610,6 @@ mod tests {
             })
             .collect::<Vec<BlockGroupEdgeData>>();
         BlockGroupEdge::bulk_create(conn, &block_group_edges);
-        let g = BlockGroup::get_graph(conn, block_group1_id);
-        save_graph(&g, "test_derive_chunks_one_insertion.dot");
 
         let insert_path =
             original_path.new_path_with(conn, 16, 24, &edge_into_insert, &edge_out_of_insert);

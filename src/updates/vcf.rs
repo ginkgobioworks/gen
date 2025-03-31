@@ -1198,8 +1198,6 @@ mod tests {
         )
         .unwrap();
 
-        let g = BlockGroup::get_graph(conn, get_sample_bg(conn, &collection, "f3").id);
-
         assert_eq!(
             BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, None).id, true),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])

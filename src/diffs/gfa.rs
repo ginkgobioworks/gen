@@ -316,7 +316,7 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id,
-                chromosome_index: 0,
+                chromosome_index: -1,
                 phased: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
@@ -358,8 +358,8 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: child_block_group.id,
                 edge_id,
-                chromosome_index: 0,
-                phased: 0,
+                chromosome_index: -1,
+                phased: -1,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
         BlockGroupEdge::bulk_create(conn, &child_block_group_edges);
@@ -423,8 +423,8 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: grandchild_block_group.id,
                 edge_id,
-                chromosome_index: 0,
-                phased: 0,
+                chromosome_index: -1,
+                phased: -1,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
         BlockGroupEdge::bulk_create(conn, &grandchild_block_group_edges);
@@ -546,8 +546,8 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id,
-                chromosome_index: 0,
-                phased: 0,
+                chromosome_index: -1,
+                phased: -1,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
         BlockGroupEdge::bulk_create(conn, &block_group_edges);
@@ -637,8 +637,8 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id,
-                chromosome_index: 0,
-                phased: 0,
+                chromosome_index: -1,
+                phased: -1,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
         BlockGroupEdge::bulk_create(conn, &block_group_edges);
@@ -730,8 +730,8 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id,
-                chromosome_index: 0,
-                phased: 0,
+                chromosome_index: -1,
+                phased: -1,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
         BlockGroupEdge::bulk_create(conn, &block_group_edges);
@@ -786,8 +786,8 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: block_group2.id,
                 edge_id,
-                chromosome_index: 0,
-                phased: 0,
+                chromosome_index: -1,
+                phased: -1,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
         BlockGroupEdge::bulk_create(conn, &block_group_edges);
@@ -880,8 +880,8 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id,
-                chromosome_index: 0,
-                phased: 0,
+                chromosome_index: -1,
+                phased: -1,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
         BlockGroupEdge::bulk_create(conn, &block_group_edges);
@@ -936,8 +936,8 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: block_group2.id,
                 edge_id,
-                chromosome_index: 0,
-                phased: 0,
+                chromosome_index: -1,
+                phased: -1,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
         BlockGroupEdge::bulk_create(conn, &block_group_edges);
