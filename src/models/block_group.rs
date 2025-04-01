@@ -6,7 +6,9 @@ use crate::graph::{
     GenGraph, GraphNode,
 };
 use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
-use crate::models::block_group_edge::{AugmentedEdgeData, BlockGroupEdge, BlockGroupEdgeData};
+use crate::models::block_group_edge::{
+    AugmentedEdgeData, BlockGroupEdge, BlockGroupEdgeData, NO_CHROMOSOME_INDEX,
+};
 use crate::models::edge::{Edge, EdgeData, GroupBlock};
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::path::{Path, PathBlock, PathData};
@@ -1776,7 +1778,6 @@ mod tests {
     }
 
     #[test]
-
     fn homozygous_insert_at_beginning_of_path() {
         let conn = get_connection(None);
         let (block_group_id, path) = setup_block_group(&conn);
@@ -3069,7 +3070,7 @@ mod tests {
                 .map(|edge_id| BlockGroupEdgeData {
                     block_group_id: block_group1_id,
                     edge_id: *edge_id,
-                    chromosome_index: -1,
+                    chromosome_index: NO_CHROMOSOME_INDEX,
                     phased: 0,
                 })
                 .collect::<Vec<BlockGroupEdgeData>>();
@@ -3142,7 +3143,7 @@ mod tests {
                 .map(|edge_id| BlockGroupEdgeData {
                     block_group_id: block_group1_id,
                     edge_id: *edge_id,
-                    chromosome_index: -1,
+                    chromosome_index: NO_CHROMOSOME_INDEX,
                     phased: 0,
                 })
                 .collect::<Vec<BlockGroupEdgeData>>();
@@ -3187,19 +3188,19 @@ mod tests {
                 BlockGroupEdgeData {
                     block_group_id: block_group1_id,
                     edge_id: deletion_edge.id,
-                    chromosome_index: -1,
+                    chromosome_index: NO_CHROMOSOME_INDEX,
                     phased: 0,
                 },
                 BlockGroupEdgeData {
                     block_group_id: block_group1_id,
                     edge_id: ref_heal_1.id,
-                    chromosome_index: -1,
+                    chromosome_index: NO_CHROMOSOME_INDEX,
                     phased: 0,
                 },
                 BlockGroupEdgeData {
                     block_group_id: block_group1_id,
                     edge_id: ref_heal_2.id,
-                    chromosome_index: -1,
+                    chromosome_index: NO_CHROMOSOME_INDEX,
                     phased: 0,
                 },
             ];

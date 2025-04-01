@@ -6,6 +6,8 @@ use rusqlite::{Connection, Row};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+pub static NO_CHROMOSOME_INDEX: i64 = -1;
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct BlockGroupEdge {
     pub id: i64,

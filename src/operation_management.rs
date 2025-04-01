@@ -1925,13 +1925,13 @@ mod tests {
         .len();
         // NOTE: 3 block groups get created with the update from vcf, corresponding to the unknown, G1, and foo samples
         assert_eq!(block_group_count, 4);
-        // NOTE: The edge count is 8 because of the following:
+        // NOTE: The edge count is 5 because of the following:
         // * 1 edge from the source node to the node created by the fasta import
         // * 1 edge from the node created by the fasta import to the sink node
         // * 1 edge representing the deletion
         // * 2 edges to and from the node representing the second alt sequence
         assert_eq!(edge_count, 5);
-        // NOTE: The block group edge count is 20 because of the following:
+        // NOTE: The block group edge count is 16 because of the following:
         // * 4 edges (one per block group) from the virtual source node
         // * 4 edges (one per block group) to the virtual sink node
         // * 2 block group edges for the G1 sample (1 edge for the first alt sequence, a deletion, with both the 0 and 1 chromosome indices for those edges, 1 * 2 = 2)
@@ -1941,7 +1941,7 @@ mod tests {
         // chromosome indices for those edges, 2 * 2 = 4)
         // 4 + 4 + 2 + 6 = 16
         assert_eq!(block_group_edge_count, 16);
-        // NOTE: The node count is 6:
+        // NOTE: The node count is 5:
         // * 2 source and sink nodes
         // * 1 node created by the initial fasta import
         // * 2 nodes created by the VCF update.  See above explanation of edge count for more details.

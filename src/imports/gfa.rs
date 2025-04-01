@@ -6,7 +6,7 @@ use crate::models::operations::{OperationFile, OperationInfo};
 use crate::models::sample::Sample;
 use crate::models::{
     block_group::BlockGroup,
-    block_group_edge::{BlockGroupEdge, BlockGroupEdgeData},
+    block_group_edge::{BlockGroupEdge, BlockGroupEdgeData, NO_CHROMOSOME_INDEX},
     collection::Collection,
     edge::{Edge, EdgeData},
     node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
@@ -247,8 +247,8 @@ pub fn import_gfa<'a>(
                 .map(|id| BlockGroupEdgeData {
                     block_group_id: block_group.id,
                     edge_id: *id,
-                    chromosome_index: -1,
-                    phased: -1,
+                    chromosome_index: NO_CHROMOSOME_INDEX,
+                    phased: 0,
                 })
                 .collect::<Vec<BlockGroupEdgeData>>(),
         );
@@ -296,8 +296,8 @@ pub fn import_gfa<'a>(
                 .map(|id| BlockGroupEdgeData {
                     block_group_id: block_group.id,
                     edge_id: *id,
-                    chromosome_index: -1,
-                    phased: -1,
+                    chromosome_index: NO_CHROMOSOME_INDEX,
+                    phased: 0,
                 })
                 .collect::<Vec<BlockGroupEdgeData>>(),
         );
@@ -314,8 +314,8 @@ pub fn import_gfa<'a>(
                     Some(BlockGroupEdgeData {
                         block_group_id: block_group.id,
                         edge_id: *id,
-                        chromosome_index: -1,
-                        phased: -1,
+                        chromosome_index: NO_CHROMOSOME_INDEX,
+                        phased: 0,
                     })
                 } else {
                     None
@@ -405,7 +405,7 @@ pub fn import_gfa<'a>(
             .map(|id| BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id: *id,
-                chromosome_index: -1,
+                chromosome_index: NO_CHROMOSOME_INDEX,
                 phased: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>(),

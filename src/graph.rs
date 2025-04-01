@@ -1,4 +1,5 @@
 use crate::models::block_group::NodeIntervalBlock;
+use crate::models::block_group_edge::NO_CHROMOSOME_INDEX;
 use crate::models::node::{Node, PATH_START_NODE_ID};
 use crate::models::path::PathBlock;
 use crate::models::strand::Strand;
@@ -572,7 +573,7 @@ pub fn connect_all_boundary_edges(graph: &mut GenGraph) {
                     edge_id: -1,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
-                    chromosome_index: -1,
+                    chromosome_index: NO_CHROMOSOME_INDEX,
                     phased: 0,
                 }],
             );
@@ -589,7 +590,7 @@ pub fn connect_all_boundary_edges(graph: &mut GenGraph) {
                     edge_id: -1,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
-                    chromosome_index: -1,
+                    chromosome_index: NO_CHROMOSOME_INDEX,
                     phased: 0,
                 }],
             );
@@ -1710,7 +1711,7 @@ mod tests {
                         edge_id: -1,
                         source_strand: Strand::Forward,
                         target_strand: Strand::Forward,
-                        chromosome_index: -1,
+                        chromosome_index: NO_CHROMOSOME_INDEX,
                         phased: 0
                     }]
                 )]
@@ -1729,7 +1730,7 @@ mod tests {
                         edge_id: -1,
                         source_strand: Strand::Forward,
                         target_strand: Strand::Forward,
-                        chromosome_index: -1,
+                        chromosome_index: NO_CHROMOSOME_INDEX,
                         phased: 0
                     }]
                 )]
