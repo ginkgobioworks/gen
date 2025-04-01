@@ -1,4 +1,4 @@
-use crate::graph::{GraphEdge, GraphNode};
+use crate::graph::{GenGraph, GraphNode};
 use crate::models::block_group::BlockGroup;
 use crate::models::operations::{Operation, OperationSummary};
 use crate::models::traits::Query;
@@ -89,8 +89,8 @@ pub fn view_operations(
     let mut terminal = Terminal::new(backend)?;
 
     let mut textarea = TextArea::default();
-    let mut empty_graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
-    let mut blockgroup_graphs: Vec<(i64, String, DiGraphMap<GraphNode, GraphEdge>)> = vec![];
+    let mut empty_graph: GenGraph = DiGraphMap::new();
+    let mut blockgroup_graphs: Vec<(i64, String, GenGraph)> = vec![];
     let mut selected_blockgroup_graph: usize = 0;
     empty_graph.add_node(GraphNode {
         node_id: 1,

@@ -1,11 +1,11 @@
-use crate::graph::{all_simple_paths, GraphEdge, GraphNode, OperationGraph};
+use crate::graph::{all_simple_paths, GenGraph, OperationGraph};
 use crate::models::file_types::FileTypes;
 use crate::models::traits::*;
 use crate::operation_management::{
     load_changeset, load_changeset_dependencies, load_changeset_models, OperationError,
 };
 use crate::views::patch::get_change_graph;
-use petgraph::graphmap::{DiGraphMap, UnGraphMap};
+use petgraph::graphmap::UnGraphMap;
 use petgraph::visit::{Dfs, Reversed};
 use petgraph::Direction;
 use rusqlite::session::ChangesetIter;
@@ -115,7 +115,7 @@ impl Operation {
     pub fn get_change_graph(
         conn: &Connection,
         hash: &str,
-    ) -> Result<HashMap<i64, DiGraphMap<GraphNode, GraphEdge>>, OperationError> {
+    ) -> Result<HashMap<i64, GenGraph>, OperationError> {
         let operation = Operation::get_by_hash(conn, hash)?;
 
         let changeset = load_changeset(&operation);

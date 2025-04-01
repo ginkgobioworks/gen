@@ -1,4 +1,4 @@
-use crate::graph::{project_path, GraphNode};
+use crate::graph::{connect_all_boundary_edges, project_path, GraphNode};
 use crate::models::block_group::BlockGroup;
 use crate::models::node::Node;
 use crate::models::sample::Sample;
@@ -44,7 +44,8 @@ where
         if let Some(bg) = sample_bgs.get(&ref_name) {
             let projection = paths.entry(bg.id).or_insert_with(|| {
                 let path = BlockGroup::get_current_path(conn, bg.id);
-                let graph = BlockGroup::get_graph(conn, bg.id);
+                let mut graph = BlockGroup::get_graph(conn, bg.id);
+                connect_all_boundary_edges(&mut graph);
                 let mut tree = IntervalTree::default();
                 let mut position: i64 = 0;
                 for (node, strand) in project_path(&graph, &path.blocks(conn)) {
@@ -77,6 +78,7 @@ where
 
 #[cfg(test)]
 mod tests {
+
     use crate::models::metadata;
     use crate::models::operations::setup_db;
     use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};

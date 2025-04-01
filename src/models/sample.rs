@@ -1,4 +1,4 @@
-use crate::graph::{GraphEdge, GraphNode};
+use crate::graph::GenGraph;
 use crate::models::block_group::BlockGroup;
 use crate::models::traits::*;
 use petgraph::prelude::DiGraphMap;
@@ -49,17 +49,21 @@ impl Sample {
         conn: &Connection,
         collection: &str,
         name: impl Into<Option<&'a str>>,
-    ) -> DiGraphMap<GraphNode, GraphEdge> {
+    ) -> GenGraph {
         let name = name.into();
         let block_groups = Sample::get_block_groups(conn, collection, name);
-        let mut sample_graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
+        let mut sample_graph: GenGraph = DiGraphMap::new();
         for bg in block_groups {
             let graph = BlockGroup::get_graph(conn, bg.id);
             for node in graph.nodes() {
                 sample_graph.add_node(node);
             }
-            for (source, dest, weight) in graph.all_edges() {
-                sample_graph.add_edge(source, dest, *weight);
+            for (source, dest, edges) in graph.all_edges() {
+                if let Some(existing_edges) = sample_graph.edge_weight_mut(source, dest) {
+                    existing_edges.extend(edges.clone());
+                } else {
+                    sample_graph.add_edge(source, dest, edges.clone());
+                }
             }
         }
         sample_graph

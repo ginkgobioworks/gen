@@ -1,5 +1,5 @@
 #![allow(warnings)]
-use crate::graph::{all_simple_paths, GraphEdge, GraphNode};
+use crate::graph::{all_simple_paths, GenGraph, GraphEdge, GraphNode};
 use crate::models::block_group::BlockGroup;
 use crate::models::node::Node;
 use crate::models::path::PathBlock;
@@ -37,10 +37,7 @@ fn merge_nodes(nodes: &[GraphNode]) -> Vec<GraphNode> {
     merged
 }
 
-fn get_path_nodes(
-    graph: &DiGraphMap<GraphNode, GraphEdge>,
-    path_blocks: &[PathBlock],
-) -> Vec<GraphNode> {
+fn get_path_nodes(graph: &GenGraph, path_blocks: &[PathBlock]) -> Vec<GraphNode> {
     // From a graph, return graph nodes that traverse a given path. The approach here
     // is to create a reduced graph containing only nodes present in the path. These nodes
     // may not be the ones we want, however, as nodes can be reused in a graph. So we traverse
@@ -60,18 +57,18 @@ fn get_path_nodes(
         }
     }
 
-    let mut path_graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
+    let mut path_graph: GenGraph = DiGraphMap::new();
     for node in graph.nodes() {
         if path_nodes.contains(&node.node_id) {
             path_graph.add_node(node);
-            for (_src_node, target_node, weight) in graph.edges(node) {
+            for (_src_node, target_node, edges) in graph.edges(node) {
                 // we include self-node connections because nodes are often split in the graph creation, so this ensures
                 // connections like node_1 -> node_1 are kept since they will not be path edges.
                 if (node.node_id == target_node.node_id
                     && node.sequence_end == target_node.sequence_start)
                     || (path_edges.contains(&(node.node_id, target_node.node_id)))
                 {
-                    path_graph.add_edge(node, target_node, *weight);
+                    path_graph.add_edge(node, target_node, edges.clone());
                 }
             }
         }
@@ -175,7 +172,7 @@ pub fn export_genbank(
 
             // we evaluate all edges from our node, and if the connection point is not the expected
             // next node of the path, it's a bubble and a change we incorporate.
-            for (_source_node, target_node, _edge_weight) in graph.edges(*current_node) {
+            for (_source_node, target_node, _edges) in graph.edges(*current_node) {
                 if let Some(next_node) = node_it.peek() {
                     if &&target_node != next_node {
                         // To trace out the bubble, we do a simple DFS until we are back in our path,
@@ -488,13 +485,13 @@ mod tests {
                 sequence_start: 10,
                 sequence_end: 20,
             },
-            GraphEdge {
+            vec![GraphEdge {
                 edge_id: 1,
                 chromosome_index: 0,
                 phased: 0,
                 source_strand: Forward,
                 target_strand: Forward,
-            },
+            }],
         );
         // second starting point for the graph, this also represents a node that is part of the path, but part of the sequence we don't want to use in our path
         graph.add_edge(
@@ -510,13 +507,13 @@ mod tests {
                 sequence_start: 10,
                 sequence_end: 20,
             },
-            GraphEdge {
+            vec![GraphEdge {
                 edge_id: 1,
                 chromosome_index: 0,
                 phased: 0,
                 source_strand: Forward,
                 target_strand: Forward,
-            },
+            }],
         );
         // represent node_id being split into 3 pieces
         graph.add_edge(
@@ -532,13 +529,13 @@ mod tests {
                 sequence_start: 20,
                 sequence_end: 30,
             },
-            GraphEdge {
+            vec![GraphEdge {
                 edge_id: 1,
                 chromosome_index: 0,
                 phased: 0,
                 source_strand: Forward,
                 target_strand: Forward,
-            },
+            }],
         );
         // put the same node_id 1 somewhere random in the graph on an edge we don't want to follow
         graph.add_edge(
@@ -554,13 +551,13 @@ mod tests {
                 sequence_start: 0,
                 sequence_end: 10,
             },
-            GraphEdge {
+            vec![GraphEdge {
                 edge_id: 1,
                 chromosome_index: 0,
                 phased: 0,
                 source_strand: Forward,
                 target_strand: Forward,
-            },
+            }],
         );
         graph.add_edge(
             GraphNode {
@@ -575,13 +572,13 @@ mod tests {
                 sequence_start: 10,
                 sequence_end: 20,
             },
-            GraphEdge {
+            vec![GraphEdge {
                 edge_id: 1,
                 chromosome_index: 0,
                 phased: 0,
                 source_strand: Forward,
                 target_strand: Forward,
-            },
+            }],
         );
         graph.add_edge(
             GraphNode {
@@ -596,13 +593,13 @@ mod tests {
                 sequence_start: 20,
                 sequence_end: 30,
             },
-            GraphEdge {
+            vec![GraphEdge {
                 edge_id: 1,
                 chromosome_index: 0,
                 phased: 0,
                 source_strand: Forward,
                 target_strand: Forward,
-            },
+            }],
         );
         // final part of path block
         graph.add_edge(
@@ -618,13 +615,13 @@ mod tests {
                 sequence_start: 30,
                 sequence_end: 40,
             },
-            GraphEdge {
+            vec![GraphEdge {
                 edge_id: 1,
                 chromosome_index: 0,
                 phased: 0,
                 source_strand: Forward,
                 target_strand: Forward,
-            },
+            }],
         );
         graph.add_edge(
             GraphNode {
@@ -639,13 +636,13 @@ mod tests {
                 sequence_start: 40,
                 sequence_end: 60,
             },
-            GraphEdge {
+            vec![GraphEdge {
                 edge_id: 1,
                 chromosome_index: 0,
                 phased: 0,
                 source_strand: Forward,
                 target_strand: Forward,
-            },
+            }],
         );
         graph.add_edge(
             GraphNode {
@@ -660,13 +657,13 @@ mod tests {
                 sequence_start: 40,
                 sequence_end: 60,
             },
-            GraphEdge {
+            vec![GraphEdge {
                 edge_id: 1,
                 chromosome_index: 0,
                 phased: 0,
                 source_strand: Forward,
                 target_strand: Forward,
-            },
+            }],
         );
         let path_blocks = vec![
             PathBlock {
@@ -743,13 +740,13 @@ mod tests {
                 sequence_start: 2220,
                 sequence_end: 8302,
             },
-            GraphEdge {
+            vec![GraphEdge {
                 edge_id: 1,
                 chromosome_index: 0,
                 phased: 0,
                 source_strand: Forward,
                 target_strand: Forward,
-            },
+            }],
         );
         graph.add_edge(
             GraphNode {
@@ -764,13 +761,13 @@ mod tests {
                 sequence_start: 1425,
                 sequence_end: 2220,
             },
-            GraphEdge {
+            vec![GraphEdge {
                 edge_id: 1,
                 chromosome_index: 0,
                 phased: 0,
                 source_strand: Forward,
                 target_strand: Forward,
-            },
+            }],
         );
         graph.add_edge(
             GraphNode {
@@ -785,13 +782,13 @@ mod tests {
                 sequence_start: 2220,
                 sequence_end: 8302,
             },
-            GraphEdge {
+            vec![GraphEdge {
                 edge_id: 1,
                 chromosome_index: 0,
                 phased: 0,
                 source_strand: Forward,
                 target_strand: Forward,
-            },
+            }],
         );
         let path_blocks = vec![PathBlock {
             id: 0,

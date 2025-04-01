@@ -1,6 +1,7 @@
 use crate::calculate_hash;
 use crate::gfa::bool_to_strand;
 use crate::gfa_reader::{Gfa, Segment};
+use crate::models::block_group_edge::AugmentedEdgeData;
 use crate::models::operations::{OperationFile, OperationInfo};
 use crate::models::{
     block_group::BlockGroup,
@@ -264,6 +265,7 @@ fn create_new_path_from_existing(
     let mut previous_node_coordinate = -1;
     let mut previous_node_strand = Strand::Forward;
     let mut new_path_edges = vec![];
+    let mut healing_edges = vec![];
     for (i, segment_id) in unmatched_path_segment_ids.iter().enumerate() {
         if let Some((start, end)) = existing_path_ranges_by_segment_id.get(segment_id) {
             // Current segment matches something in the existing path.  Maybe add an edge from the
@@ -280,14 +282,48 @@ fn create_new_path_from_existing(
             // NOTE: We're assuming that if the previous segment was on the same node ID as the
             // block with the start coordinate, they are contiguous, so no new edge is needed
             if previous_node_id != block_with_start.node_id {
-                new_path_edges.push(EdgeData {
-                    source_node_id: previous_node_id,
-                    source_coordinate: previous_node_coordinate,
-                    source_strand: previous_node_strand,
-                    target_node_id: block_with_start.node_id,
-                    target_coordinate,
-                    target_strand: block_with_start.strand,
+                new_path_edges.push(AugmentedEdgeData {
+                    edge_data: EdgeData {
+                        source_node_id: previous_node_id,
+                        source_coordinate: previous_node_coordinate,
+                        source_strand: previous_node_strand,
+                        target_node_id: block_with_start.node_id,
+                        target_coordinate,
+                        target_strand: block_with_start.strand,
+                    },
+                    chromosome_index: 1,
+                    phased: 0,
                 });
+
+                // Create the boundary edges that will be interrupted by the new path
+                if !Node::is_terminal(block_with_start.node_id) && *start > 0 {
+                    healing_edges.push(AugmentedEdgeData {
+                        edge_data: EdgeData {
+                            source_node_id: block_with_start.node_id,
+                            source_coordinate: *start as i64,
+                            source_strand: previous_node_strand,
+                            target_node_id: block_with_start.node_id,
+                            target_coordinate: *start as i64,
+                            target_strand: previous_node_strand,
+                        },
+                        chromosome_index: 0,
+                        phased: 0,
+                    });
+                }
+                if !Node::is_terminal(block_with_end.node_id) {
+                    healing_edges.push(AugmentedEdgeData {
+                        edge_data: EdgeData {
+                            source_node_id: block_with_end.node_id,
+                            source_coordinate: *end as i64,
+                            source_strand: previous_node_strand,
+                            target_node_id: block_with_end.node_id,
+                            target_coordinate: *end as i64,
+                            target_strand: previous_node_strand,
+                        },
+                        chromosome_index: 0,
+                        phased: 0,
+                    });
+                }
             }
 
             existing_path_position += (end - start) as i64;
@@ -313,13 +349,29 @@ fn create_new_path_from_existing(
                 )),
             );
             let next_node_strand = bool_to_strand(*unmatched_path_strands.get(i).unwrap());
-            new_path_edges.push(EdgeData {
-                source_node_id: previous_node_id,
-                source_coordinate: previous_node_coordinate,
-                source_strand: previous_node_strand,
-                target_node_id: node_id,
-                target_coordinate: 0,
-                target_strand: next_node_strand,
+            new_path_edges.push(AugmentedEdgeData {
+                edge_data: EdgeData {
+                    source_node_id: previous_node_id,
+                    source_coordinate: previous_node_coordinate,
+                    source_strand: previous_node_strand,
+                    target_node_id: node_id,
+                    target_coordinate: 0,
+                    target_strand: next_node_strand,
+                },
+                chromosome_index: 1,
+                phased: 0,
+            });
+            healing_edges.push(AugmentedEdgeData {
+                edge_data: EdgeData {
+                    source_node_id: previous_node_id,
+                    source_coordinate: previous_node_coordinate,
+                    source_strand: previous_node_strand,
+                    target_node_id: previous_node_id,
+                    target_coordinate: previous_node_coordinate,
+                    target_strand: previous_node_strand,
+                },
+                chromosome_index: 0,
+                phased: 0,
             });
             previous_node_id = node_id;
             previous_node_coordinate = segment_sequence.len() as i64;
@@ -337,34 +389,70 @@ fn create_new_path_from_existing(
             .next()
             .unwrap()
             .value;
-        new_path_edges.push(EdgeData {
-            source_node_id: block_with_start.node_id,
-            source_coordinate: block_with_start.end,
-            source_strand: block_with_start.strand,
-            target_node_id: PATH_END_NODE_ID,
-            target_coordinate: 0,
-            target_strand: Strand::Forward,
+        new_path_edges.push(AugmentedEdgeData {
+            edge_data: EdgeData {
+                source_node_id: block_with_start.node_id,
+                source_coordinate: block_with_start.end,
+                source_strand: block_with_start.strand,
+                target_node_id: PATH_END_NODE_ID,
+                target_coordinate: 0,
+                target_strand: Strand::Forward,
+            },
+            chromosome_index: 1,
+            phased: 0,
         });
     } else {
-        new_path_edges.push(EdgeData {
-            source_node_id: previous_node_id,
-            source_coordinate: previous_node_coordinate,
-            source_strand: previous_node_strand,
-            target_node_id: PATH_END_NODE_ID,
-            target_coordinate: 0,
-            target_strand: Strand::Forward,
+        new_path_edges.push(AugmentedEdgeData {
+            edge_data: EdgeData {
+                source_node_id: previous_node_id,
+                source_coordinate: previous_node_coordinate,
+                source_strand: previous_node_strand,
+                target_node_id: PATH_END_NODE_ID,
+                target_coordinate: 0,
+                target_strand: Strand::Forward,
+            },
+            chromosome_index: 1,
+            phased: 0,
+        });
+        healing_edges.push(AugmentedEdgeData {
+            edge_data: EdgeData {
+                source_node_id: previous_node_id,
+                source_coordinate: previous_node_coordinate,
+                source_strand: previous_node_strand,
+                target_node_id: previous_node_id,
+                target_coordinate: previous_node_coordinate,
+                target_strand: previous_node_strand,
+            },
+            chromosome_index: 0,
+            phased: 0,
         });
     }
 
     let block_group_id = existing_path.block_group_id;
-    let new_edge_ids = Edge::bulk_create(conn, &new_path_edges);
-    let block_group_edges = new_edge_ids
+    let new_edge_ids = Edge::bulk_create(
+        conn,
+        &new_path_edges
+            .iter()
+            .map(|edge| edge.edge_data)
+            .collect::<Vec<EdgeData>>(),
+    );
+    let healing_edge_ids = Edge::bulk_create(
+        conn,
+        &healing_edges
+            .iter()
+            .map(|edge| edge.edge_data)
+            .collect::<Vec<EdgeData>>(),
+    );
+    let all_edges = [new_path_edges, healing_edges].concat();
+    let all_edge_ids = [new_edge_ids.clone(), healing_edge_ids].concat();
+    let block_group_edges = all_edge_ids
         .iter()
-        .map(|edge_id| BlockGroupEdgeData {
+        .enumerate()
+        .map(|(i, edge_id)| BlockGroupEdgeData {
             block_group_id,
             edge_id: *edge_id,
-            chromosome_index: 0,
-            phased: 0,
+            chromosome_index: all_edges[i].chromosome_index,
+            phased: all_edges[i].phased,
         })
         .collect::<Vec<BlockGroupEdgeData>>();
     BlockGroupEdge::bulk_create(conn, &block_group_edges);

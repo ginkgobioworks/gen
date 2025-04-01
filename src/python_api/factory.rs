@@ -42,13 +42,17 @@ impl Factory {
 
             // Add edges to the dictionary
             let edges = PyDict::new(py);
-            for (src, dst, edge) in graph.all_edges() {
-                let edge_dict = PyDict::new(py);
-                edge_dict.set_item("edge_id", edge.edge_id)?;
-                edge_dict.set_item("source_strand", edge.source_strand.to_string())?;
-                edge_dict.set_item("target_strand", edge.target_strand.to_string())?;
-                edge_dict.set_item("chromosome_index", edge.chromosome_index)?;
-                edge_dict.set_item("phased", edge.phased)?;
+            for (src, dst, edge_weights) in graph.all_edges() {
+                let mut weights: Vec<_> = vec![];
+                for weight in edge_weights {
+                    let weight_dict = PyDict::new(py);
+                    weight_dict.set_item("edge_id", weight.edge_id)?;
+                    weight_dict.set_item("source_strand", weight.source_strand.to_string())?;
+                    weight_dict.set_item("target_strand", weight.target_strand.to_string())?;
+                    weight_dict.set_item("chromosome_index", weight.chromosome_index)?;
+                    weight_dict.set_item("phased", weight.phased)?;
+                    weights.push(weight_dict);
+                }
 
                 // Use PyNodeKey without block_id - #[pyclass] objects are automatically converted
                 let src_key = PyNodeKey::new(src.node_id, src.sequence_start, src.sequence_end);
@@ -56,7 +60,7 @@ impl Factory {
                 let dst_key = PyNodeKey::new(dst.node_id, dst.sequence_start, dst.sequence_end);
 
                 let edge_key = (src_key, dst_key);
-                edges.set_item(edge_key, edge_dict)?;
+                edges.set_item(edge_key, weights)?;
             }
             dict.set_item("edges", edges)?;
 
@@ -100,21 +104,25 @@ impl Factory {
             }
 
             // Add edges to the rustworkx graph
-            for (src, dst, edge) in graph.all_edges() {
+            for (src, dst, edge_weights) in graph.all_edges() {
                 // Get the rustworkx node indices
                 let src_idx = *node_map.get(&src).unwrap();
                 let dst_idx = *node_map.get(&dst).unwrap();
 
                 // Create a Python dictionary to store edge data
-                let edge_data = PyDict::new(py);
-                edge_data.set_item("edge_id", edge.edge_id)?;
-                edge_data.set_item("source_strand", edge.source_strand.to_string())?;
-                edge_data.set_item("target_strand", edge.target_strand.to_string())?;
-                edge_data.set_item("chromosome_index", edge.chromosome_index)?;
-                edge_data.set_item("phased", edge.phased)?;
+                let mut weights: Vec<_> = vec![];
+                for weight in edge_weights {
+                    let weight_dict = PyDict::new(py);
+                    weight_dict.set_item("edge_id", weight.edge_id)?;
+                    weight_dict.set_item("source_strand", weight.source_strand.to_string())?;
+                    weight_dict.set_item("target_strand", weight.target_strand.to_string())?;
+                    weight_dict.set_item("chromosome_index", weight.chromosome_index)?;
+                    weight_dict.set_item("phased", weight.phased)?;
+                    weights.push(weight_dict);
+                }
 
                 // Add the edge to the rustworkx graph
-                py_digraph.call_method1("add_edge", (src_idx, dst_idx, edge_data))?;
+                py_digraph.call_method1("add_edge", (src_idx, dst_idx, weights))?;
             }
 
             // Convert the final graph to a PyObject
@@ -152,20 +160,24 @@ impl Factory {
             }
 
             // Add edges to the networkx graph
-            for (src, dst, edge) in graph.all_edges() {
+            for (src, dst, edge_weights) in graph.all_edges() {
                 let src_key = PyNodeKey::new(src.node_id, src.sequence_start, src.sequence_end);
 
                 let dst_key = PyNodeKey::new(dst.node_id, dst.sequence_start, dst.sequence_end);
 
-                let edge_data = PyDict::new(py);
-                edge_data.set_item("edge_id", edge.edge_id)?;
-                edge_data.set_item("source_strand", edge.source_strand.to_string())?;
-                edge_data.set_item("target_strand", edge.target_strand.to_string())?;
-                edge_data.set_item("chromosome_index", edge.chromosome_index)?;
-                edge_data.set_item("phased", edge.phased)?;
+                let mut weights: Vec<_> = vec![];
+                for weight in edge_weights {
+                    let weight_dict = PyDict::new(py);
+                    weight_dict.set_item("edge_id", weight.edge_id)?;
+                    weight_dict.set_item("source_strand", weight.source_strand.to_string())?;
+                    weight_dict.set_item("target_strand", weight.target_strand.to_string())?;
+                    weight_dict.set_item("chromosome_index", weight.chromosome_index)?;
+                    weight_dict.set_item("phased", weight.phased)?;
+                    weights.push(weight_dict);
+                }
 
                 let kwargs = PyDict::new(py);
-                kwargs.set_item("attr_dict", edge_data)?;
+                kwargs.set_item("attr_dict", weights)?;
                 nx_digraph.call_method("add_edge", (src_key, dst_key), Some(&kwargs))?;
             }
 

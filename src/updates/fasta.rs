@@ -4,6 +4,7 @@ use rusqlite::{types::Value as SQLValue, Connection};
 use std::{io, str};
 
 use crate::fasta::FastaError;
+use crate::models::block_group_edge::NO_CHROMOSOME_INDEX;
 use crate::models::operations::{OperationFile, OperationInfo};
 use crate::models::{
     block_group::{BlockGroup, PathChange},
@@ -101,8 +102,9 @@ pub fn update_with_fasta(
         start: start_coordinate,
         end: end_coordinate,
         block: path_block,
-        chromosome_index: 0,
+        chromosome_index: NO_CHROMOSOME_INDEX,
         phased: 0,
+        preserve_edge: true,
     };
 
     let interval_tree = path.intervaltree(conn);

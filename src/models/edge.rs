@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, RandomState};
 use std::rc::Rc;
 
-use crate::graph::{GraphEdge, GraphNode};
+use crate::graph::{GenGraph, GraphEdge, GraphNode};
 use crate::models::block_group_edge::AugmentedEdge;
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::sequence::{cached_sequence, Sequence};
@@ -25,7 +25,7 @@ pub struct Edge {
     pub target_strand: Strand,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct EdgeData {
     pub source_node_id: i64,
     pub source_coordinate: i64,
@@ -376,7 +376,7 @@ impl Edge {
     pub fn build_graph(
         edges: &Vec<AugmentedEdge>,
         blocks: &Vec<GroupBlock>,
-    ) -> (DiGraphMap<GraphNode, GraphEdge>, HashMap<(i64, i64), Edge>) {
+    ) -> (GenGraph, HashMap<(i64, i64), Edge>) {
         let blocks_by_start = blocks
             .clone()
             .into_iter()
@@ -409,7 +409,7 @@ impl Edge {
             .map(|block| (block.id, (block.start, block.end)))
             .collect::<HashMap<i64, (i64, i64)>>();
 
-        let mut graph: DiGraphMap<GraphNode, GraphEdge> = DiGraphMap::new();
+        let mut graph: GenGraph = DiGraphMap::new();
         let mut edges_by_node_pair = HashMap::new();
         for block in blocks {
             graph.add_node(GraphNode {
@@ -434,64 +434,36 @@ impl Edge {
 
             if let Some(source_id_value) = source_id {
                 if let Some(target_id_value) = target_id {
-                    graph.add_edge(
-                        GraphNode {
-                            block_id: *source_id_value,
-                            node_id: edge.source_node_id,
-                            sequence_start: block_coordinates[source_id_value].0,
-                            sequence_end: block_coordinates[source_id_value].1,
-                        },
-                        GraphNode {
-                            block_id: *target_id_value,
-                            node_id: edge.target_node_id,
-                            sequence_start: block_coordinates[target_id_value].0,
-                            sequence_end: block_coordinates[target_id_value].1,
-                        },
-                        GraphEdge {
-                            edge_id: edge.id,
-                            source_strand: edge.source_strand,
-                            target_strand: edge.target_strand,
-                            chromosome_index: augmented_edge.chromosome_index,
-                            phased: augmented_edge.phased,
-                        },
-                    );
+                    let source_node = GraphNode {
+                        block_id: *source_id_value,
+                        node_id: edge.source_node_id,
+                        sequence_start: block_coordinates[source_id_value].0,
+                        sequence_end: block_coordinates[source_id_value].1,
+                    };
+                    let target_node = GraphNode {
+                        block_id: *target_id_value,
+                        node_id: edge.target_node_id,
+                        sequence_start: block_coordinates[target_id_value].0,
+                        sequence_end: block_coordinates[target_id_value].1,
+                    };
+                    let graph_edge = GraphEdge {
+                        edge_id: edge.id,
+                        source_strand: edge.source_strand,
+                        target_strand: edge.target_strand,
+                        chromosome_index: augmented_edge.chromosome_index,
+                        phased: augmented_edge.phased,
+                    };
+                    if let Some(existing_edges) = graph.edge_weight_mut(source_node, target_node) {
+                        existing_edges.push(graph_edge);
+                    } else {
+                        graph.add_edge(source_node, target_node, vec![graph_edge]);
+                    }
                     edges_by_node_pair.insert((*source_id_value, *target_id_value), edge.clone());
                 }
             }
         }
 
         (graph, edges_by_node_pair)
-    }
-
-    pub fn boundary_edges_from_sequences(blocks: &[GroupBlock]) -> Vec<AugmentedEdge> {
-        let node_blocks_by_id: HashMap<i64, Vec<&GroupBlock>> =
-            blocks.iter().fold(HashMap::new(), |mut acc, block| {
-                acc.entry(block.node_id)
-                    .and_modify(|blocks| blocks.push(block))
-                    .or_insert_with(|| vec![&block]);
-                acc
-            });
-        let mut boundary_edges = vec![];
-        for node_blocks in node_blocks_by_id.values() {
-            for (previous_block, next_block) in node_blocks.iter().tuple_windows() {
-                // NOTE: Most of this data is bogus, the Edge struct is just a convenient wrapper
-                // for the data we need to set up boundary edges in the block group graph
-                boundary_edges.push(AugmentedEdge {
-                    edge: Edge {
-                        id: -1,
-                        source_node_id: previous_block.node_id,
-                        source_coordinate: previous_block.end,
-                        source_strand: Strand::Forward,
-                        target_node_id: next_block.node_id,
-                        target_coordinate: next_block.start,
-                        target_strand: Strand::Forward,
-                    },
-                    chromosome_index: 0,
-                    phased: 0,
-                });
-            }
-        }
-        boundary_edges
     }
 
     pub fn is_start_edge(&self) -> bool {
@@ -618,7 +590,7 @@ mod tests {
             target_strand: Strand::Forward,
         };
 
-        let edges = vec![edge2.clone(), edge3.clone()];
+        let edges = vec![edge2, edge3];
         let edge_ids1 = Edge::bulk_create(conn, &edges);
         assert_eq!(edge_ids1.len(), 2);
         for (index, id) in edge_ids1.iter().enumerate() {
@@ -631,7 +603,7 @@ mod tests {
             assert_eq!(EdgeData::from(edge), edges[index]);
         }
 
-        let edges = vec![edge1.clone(), edge2.clone(), edge3.clone()];
+        let edges = vec![edge1, edge2, edge3];
         let edge_ids2 = Edge::bulk_create(conn, &edges);
         assert_eq!(edge_ids2[1], edge_ids1[0]);
         assert_eq!(edge_ids2[2], edge_ids1[1]);
@@ -736,13 +708,11 @@ mod tests {
 
         let edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
         let blocks = Edge::blocks_from_edges(&conn, &edges);
-        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
 
         // 4 actual sequences: 10-length ones of all A, all T, all C, all G
         // 2 terminal node blocks (start/end)
         // 6 total
         assert_eq!(blocks.len(), 6);
-        assert_eq!(boundary_edges.len(), 0);
 
         let insert_sequence = Sequence::new()
             .sequence_type("DNA")
@@ -768,13 +738,13 @@ mod tests {
             block: insert,
             chromosome_index: 0,
             phased: 0,
+            preserve_edge: true,
         };
         let tree = path.intervaltree(&conn);
         BlockGroup::insert_change(&conn, &change, &tree).unwrap();
         let mut edges = BlockGroupEdge::edges_for_block_group(&conn, block_group_id);
 
         let blocks = Edge::blocks_from_edges(&conn, &edges);
-        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
 
         // 2 10-length sequences of all C, all G
         // 1 inserted NNNN sequence
@@ -782,12 +752,10 @@ mod tests {
         // 2 terminal node blocks (start/end)
         // 9 total
         assert_eq!(blocks.len(), 9);
-        assert_eq!(boundary_edges.len(), 2);
 
         // Confirm that ordering doesn't matter
         edges.reverse();
         let blocks = Edge::blocks_from_edges(&conn, &edges);
-        let boundary_edges = Edge::boundary_edges_from_sequences(&blocks);
 
         // 2 10-length sequences of all C, all G
         // 1 inserted NNNN sequence
@@ -795,7 +763,6 @@ mod tests {
         // 2 terminal node blocks (start/end)
         // 9 total
         assert_eq!(blocks.len(), 9);
-        assert_eq!(boundary_edges.len(), 2);
     }
 
     #[test]

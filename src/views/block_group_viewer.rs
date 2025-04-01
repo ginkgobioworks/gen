@@ -1,4 +1,4 @@
-use crate::graph::{project_path, GraphEdge, GraphNode};
+use crate::graph::{project_path, GenGraph, GraphNode};
 use crate::models::node::Node;
 use crate::models::path::Path;
 use crate::models::sequence::Sequence;
@@ -247,7 +247,7 @@ impl Default for State {
 }
 
 pub struct Viewer<'a> {
-    pub block_graph: &'a DiGraphMap<GraphNode, GraphEdge>,
+    pub block_graph: &'a GenGraph,
     pub conn: &'a Connection,
     pub base_layout: BaseLayout,
     pub scaled_layout: ScaledLayout,
@@ -262,7 +262,7 @@ pub struct Viewer<'a> {
 
 impl<'a> Viewer<'a> {
     pub fn new(
-        block_graph: &'a DiGraphMap<GraphNode, GraphEdge>,
+        block_graph: &'a GenGraph,
         conn: &'a Connection,
         plot_parameters: PlotParameters,
     ) -> Viewer<'a> {
@@ -275,7 +275,7 @@ impl<'a> Viewer<'a> {
     }
 
     pub fn with_origin(
-        block_graph: &'a DiGraphMap<GraphNode, GraphEdge>,
+        block_graph: &'a GenGraph,
         conn: &'a Connection,
         plot_parameters: PlotParameters,
         origin: (Node, i64),

@@ -146,8 +146,9 @@ where
                                     path_end: end + change_seq.length,
                                     strand: Strand::Forward,
                                 },
-                                chromosome_index: 0,
+                                chromosome_index: 1,
                                 phased: 0,
+                                preserve_edge: true,
                             }
                         }
                         EditType::Deletion => PathChange {
@@ -166,8 +167,9 @@ where
                                 path_end: end,
                                 strand: Strand::Forward,
                             },
-                            chromosome_index: 0,
+                            chromosome_index: 1,
                             phased: 0,
+                            preserve_edge: true,
                         },
                     };
                     let tree = path.intervaltree(conn);

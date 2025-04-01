@@ -1,11 +1,11 @@
 use crate::graph::find_articulation_points;
-use crate::graph::{GraphEdge, GraphNode};
+use crate::graph::{GenGraph, GraphEdge, GraphNode};
 use crate::models::node::Node;
 use crate::views::block_group_viewer::PlotParameters;
 use log::{debug, info, warn};
 use petgraph::algo::toposort;
 use petgraph::graph::NodeIndex;
-use petgraph::graphmap::{DiGraphMap, GraphMap};
+use petgraph::graphmap::GraphMap;
 use petgraph::stable_graph::StableDiGraph;
 use rust_sugiyama::configure::Config;
 use std::collections::HashMap;
@@ -17,22 +17,20 @@ const MIN_CHUNK_SIZE: usize = 1e4 as usize;
 const MAX_CHUNK_SIZE: usize = 1e5 as usize;
 
 /// A graph that is compatible with the sugiyama crate.
-pub type SugiyamaGraph = StableDiGraph<GraphNode, GraphEdge, u32>;
+pub type SugiyamaGraph = StableDiGraph<GraphNode, Vec<GraphEdge>, u32>;
 
 /// Raw layout data in the format returned by the rust_sugiyama crate
 pub type RawLayout = Vec<(NodeIndex, (f64, f64))>;
 
 /// Type alias for inter-partition edges
-pub type PartitionEdge = (GraphNode, GraphNode, GraphEdge);
+pub type PartitionEdge = (GraphNode, GraphNode, Vec<GraphEdge>);
 
 /// Type alias for partial layout data
 pub type PartialLayout = (Vec<(GraphNode, (f64, f64))>, f64, f64);
 
-// find_articulation_points was moved to lib.rs
-
 /// The result of partitioning a graph into mutually exclusive subgraphs, intended for use in layout algorithms.
 /// - `parts` is vector of StableDiGraphs that make up the partition.
-///     - Node weights are GraphNode, edge weights are GraphEdge.
+///     - Node weights are GraphNode, edge weights are Vec<GraphEdge>.
 ///     - Indices are u32 for compatibility with the sugiyama crate.
 ///     - The edges are defined by the index of the nodes within the partition.
 /// - `inter_part_edges` is a hashmap of edges that cross the partition boundaries
@@ -44,7 +42,7 @@ pub struct Partition {
     pub inter_part_edges: HashMap<(usize, usize), Vec<PartitionEdge>>,
 }
 
-/// Partition a DiGraphMap<GraphNode, GraphEdge> into subgraphs, preferably at articulation points
+/// Partition a GenGraph into subgraphs, preferably at articulation points
 /// - Subgraph sizes are controlled by min_size and max_size
 /// - Algorithm:
 ///     - Perform a topological sort of the graph
@@ -55,7 +53,7 @@ pub struct Partition {
 ///        - start a new subgraph
 ///     - If the maximum part size is reached, forcibly close out the current subgraph.
 impl Partition {
-    pub fn new(graph: &DiGraphMap<GraphNode, GraphEdge>, min_size: usize, max_size: usize) -> Self {
+    pub fn new(graph: &GenGraph, min_size: usize, max_size: usize) -> Self {
         let mut subgraphs: Vec<SugiyamaGraph> = Vec::new();
         let mut current_subgraph: SugiyamaGraph = SugiyamaGraph::new();
         let mut current_subgraph_index = 0;
@@ -99,24 +97,24 @@ impl Partition {
         #[allow(clippy::type_complexity)]
         let mut partition_edges: HashMap<(usize, usize), Vec<PartitionEdge>> = HashMap::new();
 
-        for (source, target, edge) in graph.all_edges() {
+        for (source, target, edges) in graph.all_edges() {
             let (source_part_index, source_node_index) = node_to_nx.get(&source).unwrap();
             let (target_part_index, target_node_index) = node_to_nx.get(&target).unwrap();
             if source_part_index == target_part_index {
                 subgraphs[*source_part_index].add_edge(
                     *source_node_index,
                     *target_node_index,
-                    *edge,
+                    edges.clone(),
                 );
             } else {
                 partition_edges
                     .entry((*source_part_index, *target_part_index))
                     .or_default()
-                    .push((source, target, *edge));
+                    .push((source, target, edges.clone()));
             }
         }
 
-        Self {
+        Partition {
             parts: subgraphs,
             inter_part_edges: partition_edges,
         }
@@ -145,7 +143,7 @@ impl Partition {
 /// - `_partial_layouts` = hashmap of partition index to individiual subgraph layouts
 #[derive(Debug)]
 pub struct BaseLayout {
-    pub layout_graph: DiGraphMap<GraphNode, GraphEdge>,
+    pub layout_graph: GenGraph,
     pub node_positions: HashMap<GraphNode, (f64, f64)>,
     pub size: (f64, f64),
     pub partition: Partition,
@@ -153,14 +151,14 @@ pub struct BaseLayout {
     pub right_idx: usize,
     _vertex_size: fn(_id: NodeIndex<u32>, _v: &GraphNode) -> (f64, f64),
     _sugiyama_config: rust_sugiyama::configure::Config,
-    _partial_layouts: HashMap<usize, PartialLayout>, // partition index -> (layout, width, height)
+    _partial_layouts: HashMap<usize, PartialLayout>,
 }
 
 impl BaseLayout {
-    /// Create a new BaseLayout with the default origin, and default chunk sizes.
+    /// Create a new BaseLayout from a block graph.
     /// - `block_graph`: the graph to layout
     /// - Returns a new BaseLayout
-    pub fn new(block_graph: &DiGraphMap<GraphNode, GraphEdge>) -> Self {
+    pub fn new(block_graph: &GenGraph) -> Self {
         // Check if the block_graph has a starting node
         let start_node_id = Node::get_start_node().id;
         let origin = block_graph
@@ -177,10 +175,7 @@ impl BaseLayout {
     /// - `block_graph`: the graph to layout
     /// - `origin`: the origin as (node, sequence position)
     /// - Returns a new BaseLayout
-    pub fn with_origin(
-        block_graph: &DiGraphMap<GraphNode, GraphEdge>,
-        origin: (Node, i64),
-    ) -> Self {
+    pub fn with_origin(block_graph: &GenGraph, origin: (Node, i64)) -> Self {
         Self::with_origin_and_chunksize(block_graph, origin, MIN_CHUNK_SIZE, MAX_CHUNK_SIZE)
     }
 
@@ -190,7 +185,7 @@ impl BaseLayout {
     /// - `max_chunk_size`: the maximum size of a partition subgraph
     /// - Returns a new BaseLayout
     pub fn with_chunksize(
-        block_graph: &DiGraphMap<GraphNode, GraphEdge>,
+        block_graph: &GenGraph,
         min_chunk_size: usize,
         max_chunk_size: usize,
     ) -> Self {
@@ -209,7 +204,7 @@ impl BaseLayout {
     /// - `max_chunk_size`: the maximum size of a partition subgraph
     /// - Returns a new BaseLayout
     pub fn with_origin_and_chunksize(
-        block_graph: &DiGraphMap<GraphNode, GraphEdge>,
+        block_graph: &GenGraph,
         origin: (Node, i64),
         min_chunk_size: usize,
         max_chunk_size: usize,
@@ -320,7 +315,7 @@ impl BaseLayout {
         // Add dummy nodes to tie into the next partition, unless we're at one of the boundaries
         if partition_index < self.partition.parts.len() - 1 {
             // Adds edges and nodes for each partition edge that departs here
-            for (source, target, edge) in self
+            for (source, target, edges) in self
                 .partition
                 .inter_part_edges
                 .get(&(partition_index, partition_index + 1))
@@ -339,7 +334,7 @@ impl BaseLayout {
                     .find(|&idx| subgraph.node_weight(idx).unwrap() == target)
                     .unwrap_or_else(|| subgraph.add_node(*target));
 
-                subgraph.add_edge(source_idx, dummy_idx, *edge);
+                subgraph.add_edge(source_idx, dummy_idx, edges.clone());
             }
         }
 
@@ -483,28 +478,28 @@ impl BaseLayout {
         // - inter-partition edges
         // This does require converting from the stablegraph format to graphmap format
         let subgraph = self.partition.parts[next_idx].clone();
-        let subgraph_map: DiGraphMap<GraphNode, GraphEdge> = GraphMap::from_graph(subgraph.into());
+        let subgraph_map: GenGraph = GraphMap::from_graph(subgraph.into());
         self.layout_graph.extend(subgraph_map.all_edges());
 
         // The inter-partition edges are not included in the subgraph, so we add them separately
         if rightwards {
-            for (source, target, edge) in self
+            for (source, target, edges) in self
                 .partition
                 .inter_part_edges
                 .get(&(self.right_idx, next_idx))
                 .unwrap()
             {
-                self.layout_graph.add_edge(*source, *target, *edge);
+                self.layout_graph.add_edge(*source, *target, edges.clone());
                 self.right_idx = next_idx;
             }
         } else {
-            for (source, target, edge) in self
+            for (source, target, edges) in self
                 .partition
                 .inter_part_edges
                 .get(&(next_idx, self.left_idx))
                 .unwrap()
             {
-                self.layout_graph.add_edge(*source, *target, *edge);
+                self.layout_graph.add_edge(*source, *target, edges.clone());
                 self.left_idx = next_idx;
             }
         }
@@ -674,10 +669,7 @@ mod tests {
     use itertools::Itertools;
     use petgraph::graphmap::DiGraphMap;
 
-    fn make_test_graph(
-        edges: Vec<(i32, i32)>,
-        nodes: Option<Vec<GraphNode>>,
-    ) -> DiGraphMap<GraphNode, GraphEdge> {
+    fn make_test_graph(edges: Vec<(i32, i32)>, nodes: Option<Vec<GraphNode>>) -> GenGraph {
         // Create default nodes if none provided
         let nodes = nodes.unwrap_or_else(|| {
             edges
@@ -698,13 +690,13 @@ mod tests {
             (
                 *nodes.iter().find(|gn| gn.block_id == *s as i64).unwrap(),
                 *nodes.iter().find(|gn| gn.block_id == *t as i64).unwrap(),
-                GraphEdge {
+                vec![GraphEdge {
                     edge_id: 0,
                     source_strand: Strand::Forward,
                     target_strand: Strand::Forward,
                     chromosome_index: 0,
                     phased: 0,
-                },
+                }],
             )
         }))
     }

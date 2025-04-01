@@ -134,6 +134,7 @@ fn prepare_change(
     block_sequence: String,
     sequence_length: i64,
     node_id: i64,
+    preserve_edge: bool,
 ) -> PathChange {
     // TODO: new sequence may not be real and be <DEL> or some sort. Handle these.
     let new_block = PathBlock {
@@ -155,6 +156,7 @@ fn prepare_change(
         block: new_block,
         chromosome_index,
         phased,
+        preserve_edge,
     }
 }
 
@@ -168,6 +170,7 @@ struct VcfEntry {
     alt_seq: String,
     chromosome_index: i64,
     phased: i64,
+    preserve_reference: bool,
 }
 
 #[derive(Error, Debug, PartialEq)]
@@ -264,7 +267,13 @@ pub fn update_with_vcf<'a>(
                 coordinate_frame,
             );
             let sample_bg_id = sample_bg_id.expect("can't find sample bg....check this out more");
-
+            let has_ref = genotype.iter().any(|gt| {
+                if let Some(gt) = gt {
+                    gt.allele == 0
+                } else {
+                    false
+                }
+            });
             for (chromosome_index, genotype) in genotype.iter().enumerate() {
                 if let Some(gt) = genotype {
                     let allele_accession = accession_name
@@ -289,8 +298,8 @@ pub fn update_with_vcf<'a>(
                         if !alt_seq.is_empty() && alt_seq != "*" && alt_seq.len() != ref_seq.len() {
                             if is_cnv {
                                 // move past the common regions
-                                ref_start += ref_seq.len() as i64;
-                                alt_seq = alt_seq[ref_seq.len()..].to_string();
+                                // ref_start += ref_seq.len() as i64;
+                                // alt_seq = alt_seq[ref_seq.len()..].to_string();
                             } else {
                                 ref_start += 1;
                                 alt_seq = alt_seq[1..].to_string();
@@ -318,6 +327,7 @@ pub fn update_with_vcf<'a>(
                             alt_seq,
                             chromosome_index: chromosome_index as i64,
                             phased,
+                            preserve_reference: has_ref,
                         });
                     } else if let Some(ref_accession) = allele_accession {
                         let sample_path =
@@ -356,6 +366,10 @@ pub fn update_with_vcf<'a>(
                 let genotype = sample.get(&header, "GT");
                 if genotype.is_some() {
                     if let Value::Genotype(genotypes) = genotype.unwrap().unwrap().unwrap() {
+                        // what needs to be done is when it is a cnv, we need to check that ref_start is the same for all variants
+                        // and calculate is_ref for each variant at the same ref_start. So we need to have 2 end list of of variants
+                        // here that is passed to vcf_entry that knows about ref_start.
+                        let has_ref = genotypes.iter().any(|gt| matches!(gt, Ok((Some(0), _))));
                         for (chromosome_index, gt) in genotypes.iter().enumerate() {
                             if gt.is_ok() {
                                 let (allele, phasing) = gt.unwrap();
@@ -391,8 +405,8 @@ pub fn update_with_vcf<'a>(
                                             && alt_seq.len() != ref_seq.len()
                                         {
                                             if is_cnv {
-                                                ref_start += ref_seq.len() as i64;
-                                                alt_seq = alt_seq[ref_seq.len()..].to_string();
+                                                // ref_start += ref_seq.len() as i64;
+                                                // alt_seq = alt_seq[ref_seq.len()..].to_string();
                                             } else {
                                                 ref_start += 1;
                                                 alt_seq = alt_seq[1..].to_string();
@@ -425,6 +439,7 @@ pub fn update_with_vcf<'a>(
                                             alt_seq,
                                             chromosome_index: chromosome_index as i64,
                                             phased,
+                                            preserve_reference: has_ref,
                                         });
                                     } else if let Some(ref_accession) = allele_accession {
                                         let sample_path = PathCache::lookup(
@@ -491,6 +506,7 @@ pub fn update_with_vcf<'a>(
                 sequence_string.clone(),
                 sequence_string.len() as i64,
                 node_id,
+                vcf_entry.preserve_reference,
             );
             changes
                 .entry((vcf_entry.path, vcf_entry.sample_name))
@@ -615,28 +631,67 @@ mod tests {
             BlockGroup::get_all_sequences(conn, 1, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
-        // A homozygous set of variants should only return 1 sequence
-        // TODO: resolve this case
-        // assert_eq!(
-        //     BlockGroup::get_all_sequences(conn, 2),
-        //     HashSet::from_iter(vec!["ATCATCGATAGAGATCGATCGGGAACACACAGAGA".to_string()])
-        // );
-        // Blockgroup 3 belongs to the `G1` genotype and has no changes
-        let test_bg = BlockGroup::query(
-            conn,
-            "select * from block_groups where sample_name = ?1",
-            rusqlite::params!(SQLValue::from("G1".to_string())),
-        );
+        // `G1` genotype has no changes
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, test_bg[0].id, false),
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, "G1").id, false),
             HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
         );
-        // This individual is homozygous for the first variant and does not contain the second
+        // `foo` is homozygous for the first variant and does not contain the second
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 4, false),
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, "foo").id, false),
+            HashSet::from_iter(vec!["ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string(),])
+        );
+    }
+
+    #[test]
+    fn test_update_fasta_with_complex_vcf() {
+        setup_gen_dir();
+        let vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/vcfs/complex.vcf");
+        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            None,
+            false,
+            conn,
+            op_conn,
+        )
+        .unwrap();
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, 1, false),
+            HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
+        );
+        // `bar` sample has the refrence + a deletion of the C
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, "bar").id, false),
             HashSet::from_iter(vec![
                 "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
-                "ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+                "ATCGATCGATGATCGATCGGGAACACACAGAGA".to_string()
+            ])
+        );
+        // `baz` sample has a deletion of CG and an insertion of A
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, "baz").id, false),
+            HashSet::from_iter(vec![
+                "ATCGATCGATATCGATCGGGAACACACAGAGA".to_string(),
+                "ATCGATCGATCAGATCGATCGGGAACACACAGAGA".to_string(),
             ])
         );
     }
@@ -763,21 +818,16 @@ mod tests {
         )
         .unwrap();
 
-        let missing_allele_bg = BlockGroup::query(
-            conn,
-            "select * from block_groups where sample_name = ?1",
-            rusqlite::params!(SQLValue::from("unknown".to_string())),
-        );
-
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, missing_allele_bg[0].id, false),
+            BlockGroup::get_all_sequences(
+                conn,
+                get_sample_bg(conn, &collection, "unknown").id,
+                false
+            ),
             HashSet::from_iter(
-                [
-                    "ATCGATCGATCGATCGATCGGGAACACACAGAGA",
-                    "ATCGATCGATAGAGATCGATCGGGAACACACAGAGA",
-                ]
-                .iter()
-                .map(|v| v.to_string())
+                ["ATCGATCGATAGACGATCGATCGGGAACACACAGAGA",]
+                    .iter()
+                    .map(|v| v.to_string())
             )
         );
     }
@@ -817,14 +867,11 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            BlockGroup::get_all_sequences(conn, 2, false),
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, "foo").id, false),
             HashSet::from_iter(
-                [
-                    "ATCGATCGATCGATCGATCGGGAACACACAGAGA",
-                    "ATCATCGATCGATCGATCGGGAACACACAGAGA",
-                ]
-                .iter()
-                .map(|v| v.to_string())
+                ["ATCATCGATCGATCGATCGGGAACACACAGAGA",]
+                    .iter()
+                    .map(|v| v.to_string())
             )
         );
     }
@@ -864,14 +911,13 @@ mod tests {
 
         // TODO: Fix this once pruning works correctly. The issue currently is we prune away the boundary edge
         // and only see a single path through the graph.
-        // assert_eq!(
-        //
-        //     BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, "foo").id, true),
-        //     HashSet::from_iter(vec![
-        //         "ATCGATCGATCGGATCGGGAACACACAGAGA".to_string(),
-        //         "ATCGATCGATCGGATCATCATCGGGAACACACAGAGA".to_string()
-        //     ])
-        // );
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, "foo").id, true),
+            HashSet::from_iter(vec![
+                "ATCGATCGATCGGATCGGGAACACACAGAGA".to_string(),
+                "ATCGATCGATCGATCATCATCGATCGGGAACACACAGAGA".to_string()
+            ])
+        );
     }
 
     #[test]

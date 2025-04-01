@@ -6,7 +6,7 @@ use crate::models::operations::{OperationFile, OperationInfo};
 use crate::models::sample::Sample;
 use crate::models::{
     block_group::BlockGroup,
-    block_group_edge::{BlockGroupEdge, BlockGroupEdgeData},
+    block_group_edge::{BlockGroupEdge, BlockGroupEdgeData, NO_CHROMOSOME_INDEX},
     collection::Collection,
     edge::{Edge, EdgeData},
     node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID},
@@ -247,7 +247,7 @@ pub fn import_gfa<'a>(
                 .map(|id| BlockGroupEdgeData {
                     block_group_id: block_group.id,
                     edge_id: *id,
-                    chromosome_index: 0,
+                    chromosome_index: NO_CHROMOSOME_INDEX,
                     phased: 0,
                 })
                 .collect::<Vec<BlockGroupEdgeData>>(),
@@ -255,7 +255,7 @@ pub fn import_gfa<'a>(
         Path::create(conn, path_name, block_group.id, &path_edge_ids);
     }
 
-    for (walk_index, input_walk) in (1..).zip(&gfa.walk) {
+    for input_walk in &gfa.walk {
         let path_name = &input_walk.sample_id;
         let mut source_node_id = PATH_START_NODE_ID;
         let mut source_coordinate = 0;
@@ -296,7 +296,7 @@ pub fn import_gfa<'a>(
                 .map(|id| BlockGroupEdgeData {
                     block_group_id: block_group.id,
                     edge_id: *id,
-                    chromosome_index: walk_index,
+                    chromosome_index: NO_CHROMOSOME_INDEX,
                     phased: 0,
                 })
                 .collect::<Vec<BlockGroupEdgeData>>(),
@@ -304,7 +304,6 @@ pub fn import_gfa<'a>(
         Path::create(conn, path_name, block_group.id, &path_edge_ids);
     }
 
-    let mut chromosome_index = gfa.paths.len() + gfa.walk.len();
     // make any block group edges not in paths or walks
     BlockGroupEdge::bulk_create(
         conn,
@@ -312,11 +311,10 @@ pub fn import_gfa<'a>(
             .iter()
             .filter_map(|id| {
                 if !created_blockgroup_edges.contains(id) {
-                    chromosome_index += 1;
                     Some(BlockGroupEdgeData {
                         block_group_id: block_group.id,
                         edge_id: *id,
-                        chromosome_index: chromosome_index as i64,
+                        chromosome_index: NO_CHROMOSOME_INDEX,
                         phased: 0,
                     })
                 } else {
@@ -335,8 +333,8 @@ pub fn import_gfa<'a>(
     for node in graph.nodes() {
         undirected_graph.add_node(node);
     }
-    for (src, dst, weight) in graph.all_edges() {
-        undirected_graph.add_edge(src, dst, *weight);
+    for (src, dst, weights) in graph.all_edges() {
+        undirected_graph.add_edge(src, dst, weights[0]);
     }
     let connected_components = kosaraju_scc(&undirected_graph);
     let mut new_edges = vec![];
@@ -407,7 +405,7 @@ pub fn import_gfa<'a>(
             .map(|id| BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id: *id,
-                chromosome_index: 0,
+                chromosome_index: NO_CHROMOSOME_INDEX,
                 phased: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>(),

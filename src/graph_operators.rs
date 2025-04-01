@@ -574,14 +574,38 @@ mod tests {
             4,
             Strand::Forward,
         );
+        let ref_heal_1 = Edge::create(
+            conn,
+            insert_start_node_id,
+            6,
+            Strand::Forward,
+            insert_start_node_id,
+            6,
+            Strand::Forward,
+        );
+        let ref_heal_2 = Edge::create(
+            conn,
+            insert_end_node_id,
+            4,
+            Strand::Forward,
+            insert_end_node_id,
+            4,
+            Strand::Forward,
+        );
 
-        let edge_ids = [edge_into_insert.id, edge_out_of_insert.id];
+        let edge_ids = [
+            edge_into_insert.id,
+            edge_out_of_insert.id,
+            ref_heal_1.id,
+            ref_heal_2.id,
+        ];
         let block_group_edges = edge_ids
             .iter()
-            .map(|edge_id| BlockGroupEdgeData {
+            .enumerate()
+            .map(|(i, edge_id)| BlockGroupEdgeData {
                 block_group_id: block_group1_id,
                 edge_id: *edge_id,
-                chromosome_index: 0,
+                chromosome_index: if i < 2 { 1 } else { 0 },
                 phased: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();

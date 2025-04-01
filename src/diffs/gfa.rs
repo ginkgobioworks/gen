@@ -246,7 +246,7 @@ mod tests {
     use crate::imports::gfa::import_gfa;
     use crate::models::{
         block_group::BlockGroup,
-        block_group_edge::{BlockGroupEdge, BlockGroupEdgeData},
+        block_group_edge::{BlockGroupEdge, BlockGroupEdgeData, NO_CHROMOSOME_INDEX},
         collection::Collection,
         edge::Edge,
         metadata,
@@ -316,7 +316,7 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id,
-                chromosome_index: 0,
+                chromosome_index: NO_CHROMOSOME_INDEX,
                 phased: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
@@ -358,7 +358,7 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: child_block_group.id,
                 edge_id,
-                chromosome_index: 0,
+                chromosome_index: NO_CHROMOSOME_INDEX,
                 phased: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
@@ -423,7 +423,7 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: grandchild_block_group.id,
                 edge_id,
-                chromosome_index: 0,
+                chromosome_index: NO_CHROMOSOME_INDEX,
                 phased: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
@@ -546,7 +546,7 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id,
-                chromosome_index: 0,
+                chromosome_index: NO_CHROMOSOME_INDEX,
                 phased: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
@@ -637,7 +637,7 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id,
-                chromosome_index: 0,
+                chromosome_index: NO_CHROMOSOME_INDEX,
                 phased: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
@@ -730,7 +730,7 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id,
-                chromosome_index: 0,
+                chromosome_index: NO_CHROMOSOME_INDEX,
                 phased: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
@@ -786,7 +786,7 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: block_group2.id,
                 edge_id,
-                chromosome_index: 0,
+                chromosome_index: NO_CHROMOSOME_INDEX,
                 phased: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
@@ -880,7 +880,7 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: block_group.id,
                 edge_id,
-                chromosome_index: 0,
+                chromosome_index: NO_CHROMOSOME_INDEX,
                 phased: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
@@ -936,7 +936,7 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: block_group2.id,
                 edge_id,
-                chromosome_index: 0,
+                chromosome_index: NO_CHROMOSOME_INDEX,
                 phased: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();
@@ -1057,7 +1057,7 @@ mod tests {
             .map(|&edge_id| BlockGroupEdgeData {
                 block_group_id: child_block_group.id,
                 edge_id,
-                chromosome_index: 0,
+                chromosome_index: NO_CHROMOSOME_INDEX,
                 phased: 0,
             })
             .collect::<Vec<BlockGroupEdgeData>>();

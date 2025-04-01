@@ -6,6 +6,8 @@ use rusqlite::{Connection, Row};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+pub static NO_CHROMOSOME_INDEX: i64 = -1;
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct BlockGroupEdge {
     pub id: i64,
@@ -86,22 +88,20 @@ impl BlockGroupEdge {
             .into_iter()
             .map(|block_group_edge| block_group_edge.edge_id)
             .collect::<Vec<i64>>();
-        let chromosome_index_by_edge_id = block_group_edges
-            .clone()
-            .into_iter()
-            .map(|block_group_edge| (block_group_edge.edge_id, block_group_edge.chromosome_index))
-            .collect::<HashMap<i64, i64>>();
-        let phased_by_edge_id = block_group_edges
-            .into_iter()
-            .map(|block_group_edge| (block_group_edge.edge_id, block_group_edge.phased))
-            .collect::<HashMap<i64, i64>>();
         let edges = Edge::bulk_load(conn, &edge_ids);
-        edges
+        let edge_map = edges
+            .iter()
+            .map(|edge| (edge.id, edge))
+            .collect::<HashMap<i64, &Edge>>();
+        block_group_edges
             .into_iter()
-            .map(|edge| AugmentedEdge {
-                edge: edge.clone(),
-                chromosome_index: *chromosome_index_by_edge_id.get(&edge.id).unwrap(),
-                phased: *phased_by_edge_id.get(&edge.id).unwrap(),
+            .map(|bge| {
+                let edge_info = *edge_map.get(&bge.edge_id).unwrap();
+                AugmentedEdge {
+                    edge: edge_info.clone(),
+                    chromosome_index: bge.chromosome_index,
+                    phased: bge.phased,
+                }
             })
             .collect()
     }
