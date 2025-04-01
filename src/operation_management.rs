@@ -251,6 +251,26 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
         }
     }
 
+    let existing_edges = Edge::bulk_load(
+        conn,
+        &previous_edges.clone().into_iter().collect::<Vec<_>>(),
+    );
+    let mut new_nodes = vec![];
+    for edge in existing_edges.iter() {
+        if !previous_nodes.contains(&edge.source_node_id) && !Node::is_terminal(edge.source_node_id)
+        {
+            previous_nodes.insert(edge.source_node_id);
+            new_nodes.push(edge.source_node_id);
+        }
+        if !previous_nodes.contains(&edge.target_node_id) && !Node::is_terminal(edge.target_node_id)
+        {
+            previous_nodes.insert(edge.target_node_id);
+            new_nodes.push(edge.target_node_id);
+        }
+    }
+    for node in Node::get_nodes(conn, &new_nodes) {
+        previous_sequences.insert(node.sequence_hash.clone());
+    }
     let s = DependencyModels {
         sequences: Sequence::sequences_by_hash(
             conn,
