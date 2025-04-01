@@ -6,9 +6,7 @@ use crate::graph::{
     GenGraph, GraphNode,
 };
 use crate::models::accession::{Accession, AccessionEdge, AccessionEdgeData, AccessionPath};
-use crate::models::block_group_edge::{
-    AugmentedEdgeData, BlockGroupEdge, BlockGroupEdgeData, NO_CHROMOSOME_INDEX,
-};
+use crate::models::block_group_edge::{AugmentedEdgeData, BlockGroupEdge, BlockGroupEdgeData};
 use crate::models::edge::{Edge, EdgeData, GroupBlock};
 use crate::models::node::{Node, PATH_END_NODE_ID, PATH_START_NODE_ID};
 use crate::models::path::{Path, PathBlock, PathData};
@@ -1122,7 +1120,10 @@ impl Query for BlockGroup {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{collection::Collection, node::Node, sample::Sample, sequence::Sequence};
+    use crate::models::{
+        block_group_edge::NO_CHROMOSOME_INDEX, collection::Collection, node::Node, sample::Sample,
+        sequence::Sequence,
+    };
     use crate::test_helpers::{get_connection, interval_tree_verify, setup_block_group};
     use core::ops::Range;
 

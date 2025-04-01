@@ -8,7 +8,6 @@ use std::path::PathBuf;
 use crate::gfa::{path_line, write_links, write_segments, Link, Path as GFAPath, Segment};
 use crate::models::{
     block_group::{BlockGroup, NodeIntervalBlock},
-    block_group_edge::NO_CHROMOSOME_INDEX,
     path::Path,
     sample::Sample,
 };
@@ -247,7 +246,7 @@ mod tests {
     use crate::imports::gfa::import_gfa;
     use crate::models::{
         block_group::BlockGroup,
-        block_group_edge::{BlockGroupEdge, BlockGroupEdgeData},
+        block_group_edge::{BlockGroupEdge, BlockGroupEdgeData, NO_CHROMOSOME_INDEX},
         collection::Collection,
         edge::Edge,
         metadata,
