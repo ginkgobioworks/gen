@@ -465,8 +465,6 @@ pub fn update_with_vcf<'a>(
             }
         }
 
-        println!("vcf_entries: {:?}", vcf_entries);
-
         for vcf_entry in vcf_entries {
             // * indicates this allele is removed by another deletion in the sample
             if vcf_entry.alt_seq == "*" {
@@ -642,6 +640,59 @@ mod tests {
         assert_eq!(
             BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, "foo").id, false),
             HashSet::from_iter(vec!["ATCATCGATCGATCGATCGGGAACACACAGAGA".to_string(),])
+        );
+    }
+
+    #[test]
+    fn test_update_fasta_with_complex_vcf() {
+        setup_gen_dir();
+        let vcf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/vcfs/complex.vcf");
+        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            None,
+            false,
+            conn,
+            op_conn,
+        )
+        .unwrap();
+        update_with_vcf(
+            &vcf_path.to_str().unwrap().to_string(),
+            &collection,
+            "".to_string(),
+            "".to_string(),
+            conn,
+            op_conn,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, 1, false),
+            HashSet::from_iter(vec!["ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string()])
+        );
+        // `bar` sample has the refrence + a deletion of the C
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, "bar").id, false),
+            HashSet::from_iter(vec![
+                "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+                "ATCGATCGATGATCGATCGGGAACACACAGAGA".to_string()
+            ])
+        );
+        // `baz` sample has a deletion of CG and an insertion of A
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, get_sample_bg(conn, &collection, "baz").id, false),
+            HashSet::from_iter(vec![
+                "ATCGATCGATATCGATCGGGAACACACAGAGA".to_string(),
+                "ATCGATCGATCAGATCGATCGGGAACACACAGAGA".to_string(),
+            ])
         );
     }
 

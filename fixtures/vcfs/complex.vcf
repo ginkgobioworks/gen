@@ -1,0 +1,11 @@
+##fileformat=VCFv4.1
+##filedate=Tue Sep  4 13:12:57 2018
+##reference=simple.fa
+##contig=<ID=m123,length=34>
+##phasing=none
+##INFO=<ID=TYPE,Number=A,Type=String,Description="The type of allele, either snp, mnp, ins, del, or complex.">
+##filter="QUAL > 1"
+##FILTER=<ID=PASS,Description="All filters passed">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	bar	baz
+m123	10	.	TCG	TG,T,TCAG	2216.6	.	TYPE=ins	GT	0/1	2/3
