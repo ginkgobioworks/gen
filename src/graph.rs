@@ -1583,7 +1583,7 @@ mod tests {
     }
 
     #[cfg(test)]
-    mod test_connect_all_boundary_edges {
+    mod boundary_edges {
         use crate::models::node::PATH_END_NODE_ID;
 
         use super::super::*;
@@ -1671,7 +1671,7 @@ mod tests {
                     block_id: -1,
                     node_id: PATH_END_NODE_ID,
                     sequence_start: 0,
-                    sequence_end: 00,
+                    sequence_end: 0,
                 },
                 vec![GraphEdge {
                     edge_id: 0,
@@ -1696,8 +1696,44 @@ mod tests {
             let outgoing_edges: Vec<_> = graph
                 .edges_directed(orphan_node, Direction::Outgoing)
                 .collect();
-            assert!(!incoming_edges.is_empty());
-            assert!(!outgoing_edges.is_empty());
+            assert_eq!(
+                incoming_edges,
+                vec![(
+                    GraphNode {
+                        block_id: -1,
+                        node_id: 10,
+                        sequence_start: 0,
+                        sequence_end: 10
+                    },
+                    orphan_node,
+                    &vec![GraphEdge {
+                        edge_id: -1,
+                        source_strand: Strand::Forward,
+                        target_strand: Strand::Forward,
+                        chromosome_index: -1,
+                        phased: 0
+                    }]
+                )]
+            );
+            assert_eq!(
+                outgoing_edges,
+                vec![(
+                    orphan_node,
+                    GraphNode {
+                        block_id: -1,
+                        node_id: 10,
+                        sequence_start: 20,
+                        sequence_end: 30
+                    },
+                    &vec![GraphEdge {
+                        edge_id: -1,
+                        source_strand: Strand::Forward,
+                        target_strand: Strand::Forward,
+                        chromosome_index: -1,
+                        phased: 0
+                    }]
+                )]
+            );
         }
     }
 }
