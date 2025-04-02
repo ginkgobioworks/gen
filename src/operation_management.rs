@@ -251,6 +251,26 @@ pub fn get_changeset_dependencies(conn: &Connection, mut changes: &[u8]) -> Vec<
         }
     }
 
+    let existing_edges = Edge::bulk_load(
+        conn,
+        &previous_edges.clone().into_iter().collect::<Vec<_>>(),
+    );
+    let mut new_nodes = vec![];
+    for edge in existing_edges.iter() {
+        if !previous_nodes.contains(&edge.source_node_id) && !Node::is_terminal(edge.source_node_id)
+        {
+            previous_nodes.insert(edge.source_node_id);
+            new_nodes.push(edge.source_node_id);
+        }
+        if !previous_nodes.contains(&edge.target_node_id) && !Node::is_terminal(edge.target_node_id)
+        {
+            previous_nodes.insert(edge.target_node_id);
+            new_nodes.push(edge.target_node_id);
+        }
+    }
+    for node in Node::get_nodes(conn, &new_nodes) {
+        previous_sequences.insert(node.sequence_hash.clone());
+    }
     let s = DependencyModels {
         sequences: Sequence::sequences_by_hash(
             conn,
@@ -1504,6 +1524,57 @@ mod tests {
     use crate::updates::vcf::update_with_vcf;
     use rusqlite::types::Value;
     use std::path::{Path, PathBuf};
+
+    #[cfg(test)]
+    mod changeset_dependencies {
+        use super::*;
+
+        #[test]
+        fn test_tracks_nodes_and_sequences_from_previous_block_group_edges() {
+            setup_gen_dir();
+            let conn = &get_connection(None);
+            let db_uuid = &metadata::get_db_uuid(conn);
+            let op_conn = &get_operation_connection(None);
+            setup_db(op_conn, db_uuid);
+
+            let (bg_id, _path_id) = setup_block_group(conn);
+            let old_edges = BlockGroupEdge::edges_for_block_group(conn, bg_id);
+
+            let mut session = start_operation(conn);
+            // make a blockgroup with an edge from our parent blockgroup
+            let _ = Sample::create(conn, "new").unwrap();
+            let new_bg = BlockGroup::create(conn, "test", Some("new"), "new-bg");
+            let shared_edge = old_edges[0].edge.clone();
+            BlockGroupEdge::bulk_create(
+                conn,
+                &[BlockGroupEdgeData {
+                    block_group_id: new_bg.id,
+                    edge_id: shared_edge.id,
+                    chromosome_index: 0,
+                    phased: 0,
+                }],
+            );
+            let operation = end_operation(
+                conn,
+                op_conn,
+                &mut session,
+                &OperationInfo {
+                    files: vec![],
+                    description: "test".to_string(),
+                },
+                "test",
+                None,
+            )
+            .unwrap();
+
+            let dependencies = load_changeset_dependencies(&operation);
+            assert_eq!(dependencies.nodes[0].id, shared_edge.target_node_id);
+            assert_eq!(dependencies.nodes.len(), 1);
+            let nodes = Node::get_nodes(conn, &[shared_edge.target_node_id]);
+            assert_eq!(dependencies.sequences[0].hash, nodes[0].sequence_hash);
+            assert_eq!(dependencies.sequences.len(), 1);
+        }
+    }
 
     #[cfg(test)]
     mod merge {
