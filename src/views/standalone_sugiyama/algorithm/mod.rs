@@ -53,6 +53,8 @@ pub struct Vertex {
     pub(crate) shift: f64,
     pub(crate) sink: NodeIndex,
     pub(crate) block_max_vertex_width: f64,
+    pub(crate) x: i32,
+    pub(crate) y: i32,
 }
 
 impl Vertex {
@@ -71,6 +73,8 @@ impl Default for Vertex {
             id: 0,
             size: (0.0, 0.0),
             rank: 0,
+            x: 0,
+            y: 0,
             pos: 0,
             low: 0,
             lim: 0,
@@ -257,23 +261,54 @@ fn execute_phase_3(
         current_rank_top_offset += max_height;
     }
 
-    let mut v = x_coordinates.iter().collect::<Vec<_>>();
-    v.sort_by(|a, b| a.0.index().cmp(&b.0.index()));
-    // format to NodeIndex: (x, y), width, height
-    (
-        x_coordinates
-            .into_iter()
-            // Remove the filter to keep dummy nodes
-            .map(|(v, x)| {
-                (
-                    graph[v].id,
-                    (x, *rank_to_y_offset.get(&graph[v].rank).unwrap()),
-                )
-            })
-            .collect::<Vec<_>>(),
-        width,
-        height,
-    )
+    let coordinates = x_coordinates
+        .iter()
+        .filter(|&(v, _)| !graph[*v].is_dummy)
+        // calculate y coordinate
+        .map(|&(v, x)| {
+            (
+                graph[v].id,
+                (x, *rank_to_y_offset.get(&graph[v].rank).unwrap()),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    // Collect edge to dummy path coordinate mappings
+    let mut edge_coordinates = Vec::new();
+
+    let dummy_coordinates: HashMap<_, _> = x_coordinates
+        .iter()
+        .filter(|&(v, _)| graph[*v].is_dummy)
+        .map(|&(v, x)| (v, (x, *rank_to_y_offset.get(&graph[v].rank).unwrap())))
+        .collect();
+
+    let regular_nodes = graph.node_indices()
+        .filter(|&n| !graph[n].is_dummy)
+        .collect::<Vec<_>>();
+
+    for &source in &regular_nodes {
+        // DFS to find paths to other regular nodes through dummy nodes
+        for mut neighbor in graph.neighbors_directed(source, petgraph::Direction::Outgoing) {
+            let mut dummy_path = Vec::new();
+            
+            // Follow path through dummy nodes
+            while graph[neighbor].is_dummy {
+                dummy_path.push(*dummy_coordinates.get(&neighbor).unwrap());
+                let next_nodes = graph.neighbors_directed(neighbor, petgraph::Direction::Outgoing)
+                    .collect::<Vec<_>>();
+                neighbor = next_nodes[0];
+            }
+            
+            // Since we exited the loop, we reached a regular node
+            if !dummy_path.is_empty() {
+                edge_coordinates.push(
+                    ((graph[source].id, graph[neighbor].id), dummy_path)
+                );
+            }
+        }
+    }
+
+    (coordinates, edge_coordinates, width, height)
 }
 
 pub fn slack(graph: &StableDiGraph<Vertex, Edge>, edge: EdgeIndex, minimum_length: i32) -> i32 {
@@ -323,17 +358,12 @@ fn print_to_console(
 }
 
 /// Build a layout that preserves dummy nodes and uses integer coordinates.
-/// Returns a tuple containing:
-/// - Vec of (node_id/dummy_index, (x,y)) coordinates
-/// - width of the layout
-/// - height of the layout
+/// Modifies the graph in place and returns it, adding dummy nodes and setting the coordinates.
 ///
-/// For regular nodes, the node_id is used.
-/// For dummy nodes, the NodeIndex value is used as the identifier.
 pub fn build_integer_layout_with_dummies(
     mut graph: StableDiGraph<Vertex, Edge>,
     config: &Config,
-) -> (Vec<(usize, (i32, i32))>, usize, usize) {
+) -> StableDiGraph<Vertex, Edge> {
     info!(target: "layouting", "Start building layout (with dummies)");
     info!(target: "layouting", "Configuration is: {:?}", config);
 
@@ -373,26 +403,16 @@ pub fn build_integer_layout_with_dummies(
         rank_to_y_offset.insert(rank as i32, rank as i32);
     }
 
-    // Create final coordinates list
-    let mut nodes_with_coords: Vec<_> = x_coords
-        .iter()
-        .map(|(node, x)| {
-            let y = rank_to_y_offset[&graph[*node].rank];
-            let id = if graph[*node].is_dummy {
-                node.index()
-            } else {
-                graph[*node].id
-            };
-            (id, (*x, y))
-        })
-        .collect();
-
-    // Sort by y-coordinate (rank) then x-coordinate
-    nodes_with_coords.sort_by(|a, b| a.1 .1.cmp(&b.1 .1).then(a.1 .0.cmp(&b.1 .0)));
+    // Store coordinates in the graph vertices
+    for (node, x) in x_coords {
+        let y = rank_to_y_offset[&graph[node].rank];
+        graph[node].x = x;
+        graph[node].y = y;
+    }
 
     // Calculate dimensions
-    let width = *x_coords.values().max().unwrap_or(&0) as usize + 1;
-    let height = *rank_to_y_offset.values().max().unwrap_or(&0) as usize + 1;
+    //let width = *x_coords.values().max().unwrap_or(&0) as usize + 1;
+    //let height = *rank_to_y_offset.values().max().unwrap_or(&0) as usize + 1;
 
-    (nodes_with_coords, width, height)
+    graph
 }

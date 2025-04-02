@@ -6,25 +6,23 @@ mod standalone_sugiyama_tests {
     use crate::views::standalone_sugiyama::configure::{Config, CrossingMinimization, RankingType};
     use petgraph::stable_graph::StableDiGraph;
 
-    fn make_ascii_grid(
-        graph: StableDiGraph<Vertex, Edge>,
-        coords: Vec<(usize, (i32, i32))>,
-    ) -> Vec<Vec<char>> {
+    fn make_ascii_grid(graph: StableDiGraph<Vertex, Edge>) -> Vec<Vec<char>> {
         // Calculate width and height from coordinates
-        let (width, height) = coords.iter().fold((0, 0), |(max_x, max_y), (_, (x, y))| {
-            (max_x.max(*x as usize), max_y.max(*y as usize))
+        let (width, height) = graph.node_weights().fold((0, 0), |(max_x, max_y), vertex| {
+            (max_x.max(vertex.x as usize), max_y.max(vertex.y as usize))
         });
 
         let mut grid = vec![vec![' '; width + 1]; height + 1];
 
         // Place nodes and dummy nodes
-        for (id, (x, y)) in coords {
-            let x = x as usize;
-            let y = y as usize;
-            if id >= graph.node_count() {
+        for node in graph.node_indices() {
+            let vertex = &graph[node];
+            let x = vertex.x as usize;
+            let y = vertex.y as usize;
+            if vertex.is_dummy {
                 grid[y][x] = '+';
             } else {
-                grid[y][x] = (id as u8 + b'0') as char;
+                grid[y][x] = (vertex.id as u8 + b'0') as char;
             }
         }
 
@@ -107,13 +105,14 @@ mod standalone_sugiyama_tests {
         };
 
         // Build the layout
-        let (coords, width, height) = build_integer_layout_with_dummies(graph.clone(), &config);
-
+        let graph = build_integer_layout_with_dummies(graph.clone(), &config);
+        let coords: Vec<(usize, (i32, i32))> = graph.node_weights().map(|v| (v.id, (v.x, v.y))).collect();
+        
         assert_eq!(coords.len(), 12); // 10 nodes + 2 dummy nodes
 
         // Print a simple ASCII visualization
         println!("\nASCII Visualization (1x1 nodes with spacing of 1):");
-        let ascii_grid = make_ascii_grid(graph, coords.clone());
+        let ascii_grid = make_ascii_grid(graph);
         for row in ascii_grid.clone() {
             println!("  {}", row.iter().collect::<String>());
         }
@@ -130,7 +129,67 @@ mod standalone_sugiyama_tests {
         );
 
         assert_eq!(ascii_grid, ref_grid);
-        assert_eq!(width, ref_width);
-        assert_eq!(height, ref_height);
+
+    }
+
+
+    #[test]
+    fn test_deletion() {
+        let edges = [
+            (0 ,1),
+            (1, 2),
+            (1, 3),
+            (2, 3),
+            (3, 4),
+        ];
+
+        let mut graph = StableDiGraph::new();
+        let mut vertices = Vec::new();
+
+        for i in 0..5 {
+            let v = graph.add_node(Vertex::new(i, (1.0, 1.0)));
+            vertices.push(v);
+        }
+
+        for (from, to) in edges {
+            graph.add_edge(vertices[from], vertices[to], Edge::default());
+        }
+
+        let config = Config {
+            minimum_length: 1,
+            ranking_type: RankingType::MinimizeEdgeLength,
+            c_minimization: CrossingMinimization::Barycenter,
+            transpose: true,
+            dummy_vertices: true,
+            dummy_size: 0.0,
+            ..Default::default()
+        };
+
+        // Build the layout
+        let graph = build_integer_layout_with_dummies(graph.clone(), &config);
+        let coords: Vec<(usize, (i32, i32))> = graph.node_weights().map(|v| (v.id, (v.x, v.y))).collect();
+        
+        //assert_eq!(coords.len(), 12); // 10 nodes + 2 dummy nodes
+
+        // Print a simple ASCII visualization
+        println!("\nASCII Visualization (1x1 nodes with spacing of 1):");
+        let ascii_grid = make_ascii_grid(graph);
+        for row in ascii_grid.clone() {
+            println!("  {}", row.iter().collect::<String>());
+        }
+
+        // Confirm that the ascii grid is correct
+        let (ref_grid, ref_width, ref_height) = parse_ascii_grid(
+            "
+              0    
+          2    1   
+          + 6 5 4 3
+          +   8 7  
+              9 
+        ",
+        );
+
+        assert_eq!(ascii_grid, ref_grid);
+
     }
 }
