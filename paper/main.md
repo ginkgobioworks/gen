@@ -43,7 +43,7 @@ Fundamentally, Gen's data model is similar to most graph models where sequences 
 connecting sequences in various orientations. Gen expands on this common model by defining an edge as a connection
 between positions and strands within nodes. This enables Gen to model changes in an append-only mode, where changes to
 the graph require only addition of data. This is a significant advantage, as the traditional model requires splitting
-nodes into sub-nodes when changes are made, introducing computational overhead for many operations (@fig:graph_model).
+nodes into sub-nodes when changes are made, introducing overhead for many operations (@fig:graph_model).
 
 ![**Overview of Graph data model**\
 **a.** Traditional graph where sequences are encoded as nodes and edges connect two nodes together.
@@ -70,11 +70,12 @@ from the start coordinate of the region being deleted to the end coordinate of t
 The first 2 rows of edges correspond to the addition of the TG sequence and the 3rd edge corresponds to the deletion.
 ](graph_updates/final.svg){#fig:graph_updates}
 
-For modeling real world data, such as chromosomes, Gen represents a contig using one directed 
-graph of nodes and edges. This grouping is termed a Block Group and a join table between Block Groups and Edges is used 
-to record all the edges in a block group. Because of the additive nature of insertions, replacements, and deletions, 
-block groups can only grow over time. The block group represents all possible sequences that can be generated from the 
-graph.
+For a set of sequences, such as a reference genome of multiple chromosomes, Gen represents a contig using one directed 
+graph of nodes and edges. Each set of nodes and edges per contig is termed a Block Group and a join table between 
+Block Groups and Edges is used to record all the edges in a block group. Because of the additive nature of insertions, 
+replacements, and deletions, block groups can only grow over time. The block group represents all possible sequences 
+that can be generated from a chromosome's graph. Edges between block groups can exist, which can serve to model events 
+such as translocations.
 
 ## Graph Traversal
 
@@ -178,21 +179,17 @@ their sequences using a GUI and leverage Gen for tracking of work and graph base
 
 ## Sample Lineage
 
-Gen represents lineage across updates and other operations using samples. For instance, importing a fasta file into a
-new collection creates the null sample with block groups for each contig. If we then update that collection with a vcf
-file, gen creates new samples specified in the vcf, and any new sample in the vcf is created as a child of the null
-sample. Gen copies any graph data created by the fasta import in the null sample over to each child sample before
-applying the updates specified for each sample.
+Gen represents lineage across updates and other operations using samples. A sample is a simple text identifier for a 
+set of block groups. The null sample is used to represent non-sample data, such as a reference genome or proteome. 
+For example, importing the human reference genome will create a set of block groups under the null sample. If sample 
+data from vcfs is then added, new samples will be created and derived from the corresponding contigs belonging to the 
+null sample. If nested changed are made, an explicit parent sample can be specified to support iterative engineering.
 
-Using samples seems to be the best fit for tracking lineage, instead of say updating block groups with new information
-within an existing sample. A sample can be used to capture the two main use cases for gen operations: Intended edits,
-and observed variations. An intended edit can be represented by updating an existing sample using say a fasta file plus
-a region and coordinates. That operation would capture the integration of a cassette, and create a new sample with a
-path that represents the updated sequence. That new sample would be "virtual" in the sense that it doesn't exist in the
-real world, but is treated by gen as separate from any real world samples, which seems appropriate. Observed variations
-can be represented by updating an existing sample using say a vcf file. That operation will create new samples, each of
-which represents variations observed during sequencing. In this way, gen spans both intended and unintended genetic
-changes, and can be used to track changes across repeated cycles of development and testing.
+A common use of samples is for tracking intended engineered and observed variation. This addresses a common problem 
+in genetic engineering where only the intended modification is tracked and background variation is not. A sample can 
+be created with the intended engineering, and then updated with any additional mutations when needed. In this way, 
+gen spans both intended and unintended genetic changes, and can be used to track changes across repeated cycles of 
+development and testing.
 
 ## Pooling
 
@@ -216,12 +213,11 @@ and individual operations can be applied across branches, similar to the git che
 ](operations_view/final.svg){#fig:operations_view}
 
 A set of operations can be collected into a patch, which is analogous to the git patch which represents a diff of how
-the codebase is changed (@fig:dot_example). However, due to the purely 
-additive data model of
-Gen, diffs are much simpler to create as there are no rewrites. Patches are stored as a gzip file and can be shared to
-distribute changes. Viewing of patches is possible via the patch-view command, which will render a dot graph of changes
-within the patch. By commiting these patches and changes into git, this workflow enables many features common to
-software development such as code review and continuous integration testing.
+the codebase is changed (@fig:dot_example). However, due to the purely additive data model of Gen, diffs are much 
+simpler to create as there are no rewrites. Patches are stored as a gzip file and can be shared to distribute changes. 
+Viewing of patches is possible via the patch-view command, which will render a dot graph of changes within the patch. 
+By commiting these patches and changes into git, this workflow enables many features common to software development 
+such as code review and continuous integration testing.
 
 ![**Changes to a sample created by patch-view and viewed in GraphViz.**\
 *a.* A simple basepair change, a sequence swap, and a deletion are shown. A dashed line indicates the path along the
@@ -229,17 +225,23 @@ reference sequence whereas a solid line indicates paths adding sequences from ot
 **b.** Viewing a combinatorial assembly of 6 parts across two
 segments.](dot_example/final.svg){#fig:dot_example}
 
+## Viewing Operations and Graphs
+
+Demo of the view ui and operations editing/etc.
+
 ## Translating coordinate schemes
 
 Annotations can be propagated through the graph structure. Thus, annotations on the reference genome can be translated
 into the coordinates of new samples. Coordinates are translated with the following rules:
 
 - If the start and end of the annotation range on the reference map to valid coordinates on the sample sequence, gen
-  translates the entire annotation to the later sample. Gen does this even if there is a gap in the middle of the later
-  sequence that doesn't correspond to anything in the reference sequence, say if a subsequence were replaced.
-- If say the start of the range translates to a valid coordinate on the later sample, but the end does not (say because
-  a replacement wiped out the stretch of the reference sequence that contained the end), gen truncates the translated
-  annotation range to only include the stretch of sequence that the reference shares with the later sample.
+  translates the entire annotation to the later sample.
+- If the start and end positions are not present on the child sequence, the annotation is truncated to only include 
+  the shared positions.
+
+Annotations may also be translated using node identifiers instead of contig names, which we believe may be useful 
+for overlaying annotations in graph vizualization software. Currently, BED and GFF formats are supported for 
+propagation and translation.
 
 ## Exports
 
@@ -285,13 +287,14 @@ for importing the reference human genome and updating it with variant data from 
 Table: my caption {#tbl:test}
 
 | Task                                                                          | Time  | Storage |
-| ----------------------------------------------------------------------------- | ----- | ------- |
+|-------------------------------------------------------------------------------| ----- | ------- |
 | Importing GrCh38 (shallow)                                                    | 7s    | 496kb   |
 | Importing GrCh38 (full)                                                       | 49s   | 3.0 Gb  |
 | Adding variants from chr22 of 1000 genomes project (HG00096 sample)           | 7.7s  | 21.8 Mb |
 | Adding variants from chr22 of 1000 genomes project (HG00097 sample)           | 7.2s  | 21.7 Mb |
 | Adding variants from chr22 of 1000 genomes project (HG00096 + HG00097 sample) | 14.9s | 32.6 Mb |
-| Translating xxx from A to B (gff coordinate example)                          | xxxs  | yyy Mb  |
+| Propagating xxx from A to B (gff coordinate example)                          | xxxs  | yyy Mb  |
+| Translating GenCode xxx for chr22                                             | xxxs  | yyy Mb  |
 | Export of GFA stuff                                                           | xxxs  | yyy Mb  |
 
 Shallow imports of data record only minimal information and do not store the genome sequence. This allows the database
@@ -301,10 +304,6 @@ collaborating on large files as it enables a shallow working copy to be used and
 For updating with variant data, the size of each vcf file was approximately 17.1 Mb. With addition of many samples
 within the same graph can lead to improved data compression as variants shared between samples require less data to be
 created.
-
-translating annotations
-
-data export time
 
 # Discussion
 
