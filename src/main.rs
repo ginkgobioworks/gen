@@ -11,6 +11,7 @@ use gen::exports::fasta::export_fasta;
 use gen::exports::genbank::export_genbank;
 use gen::exports::gfa::export_gfa;
 use gen::fasta::FastaError;
+use gen::genbank::GenBankError;
 use gen::get_connection;
 use gen::graph_operators::{derive_chunks, get_path, make_stitch};
 use gen::imports::fasta::import_fasta;
@@ -608,11 +609,16 @@ fn main() {
                     }
                 }
             } else if let Some(gb) = gb {
-                let f = File::open(gb).unwrap();
-                let _ = import_genbank(
+                let mut reader: Box<dyn std::io::Read> = if gb.ends_with(".gz") {
+                    let file = File::open(gb.clone()).unwrap();
+                    Box::new(flate2::read::GzDecoder::new(file))
+                } else {
+                    Box::new(File::open(gb.clone()).unwrap())
+                };
+                match import_genbank(
                     &conn,
                     &operation_conn,
-                    &f,
+                    &mut reader,
                     name.deref(),
                     sample.as_deref(),
                     OperationInfo {
@@ -622,8 +628,14 @@ fn main() {
                         }],
                         description: "GenBank Import".to_string(),
                     },
-                );
-                println!("Genbank imported.");
+                ) {
+                    Ok(_) => println!("GenBank Imported."),
+                    Err(err) => {
+                        conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
+                        operation_conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
+                        panic!("Import failed: {err:?}");
+                    }
+                }
             } else if region_name.is_some() && parts.is_some() && library.is_some() {
                 import_library(
                     &conn,
