@@ -322,6 +322,9 @@ enum Commands {
         /// The name of the GenBank file to export to
         #[arg(long)]
         gb: Option<String>,
+        /// The max node size for gfa export
+        #[arg(long)]
+        node_max: Option<i64>,
     },
     /// Configure default options
     #[command(arg_required_else_help(true))]
@@ -1031,6 +1034,7 @@ fn main() {
             gfa,
             sample,
             fasta,
+            node_max,
         }) => {
             let name = &name
                 .clone()
@@ -1038,7 +1042,13 @@ fn main() {
             conn.execute("BEGIN TRANSACTION", []).unwrap();
             operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
             if let Some(gfa_path) = gfa {
-                export_gfa(&conn, name, &PathBuf::from(gfa_path), sample.clone());
+                export_gfa(
+                    &conn,
+                    name,
+                    &PathBuf::from(gfa_path),
+                    sample.clone(),
+                    *node_max,
+                );
             } else if let Some(fasta_path) = fasta {
                 export_fasta(
                     &conn,
