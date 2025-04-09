@@ -57,6 +57,7 @@ pub fn view_block_group(
 
     let mut block_graph;
     let mut block_group_id: Option<i64> = None;
+    let mut focus_zone = FocusZone::Sidebar;
 
     if let Some(name) = name {
         // Get the block group for two cases: with and without a sample
@@ -81,6 +82,7 @@ pub fn view_block_group(
         block_group_id = Some(block_group.id);
         block_graph = BlockGroup::get_graph(conn, block_group.id);
         explorer_state.selected_block_group_id = Some(block_group.id);
+        focus_zone = FocusZone::Canvas;
     } else {
         block_graph = BlockGroup::get_empty_graph();
     }
@@ -111,9 +113,6 @@ pub fn view_block_group(
     let mut show_panel = false;
     let show_sidebar = true;
     let mut tui_layout_change = false;
-
-    // Focus management
-    let mut focus_zone = FocusZone::Canvas;
 
     // Track the last selected block group to detect changes
     let mut last_selected_block_group_id = block_group_id;
