@@ -16,6 +16,11 @@
 //!
 //! See the submodules for each phase for more details on the implementation
 //! and references used.
+
+// Suppress clippy::type_complexity warnings, as this is a graph layout algorithm
+// that inherently deals with complex types and data structures.
+#![allow(clippy::type_complexity)]
+
 use std::collections::{BTreeMap, HashMap};
 
 use log::{debug, info};
@@ -36,6 +41,23 @@ pub use p2_reduce_crossings::{insert_dummy_vertices, ordering, remove_dummy_vert
 pub use p3_calculate_coordinates::{
     align_to_smallest_width_layout, calculate_relative_coords, create_layouts, VDir,
 };
+
+
+
+#[derive(Debug)]
+pub struct LayoutResult {
+    /// Coordinates for each node (node ID and position)
+    pub node_coordinates: Vec<(NodeIndex, (f64, f64))>,
+    
+    /// Coordinates for edges with dummy points (source-target nodes and path of positions)
+    pub edge_coordinates: Vec<(NodeIndex, NodeIndex), Vec<(f64,f64)>>,
+    
+    /// Width of the layout
+    pub width: f64,
+    
+    /// Height of the layout
+    pub height: f64,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vertex {
@@ -164,10 +186,11 @@ fn build_layout(
     );
 
     let layout = execute_phase_3(&mut graph, layers);
-    debug!(target: "layouting", "Coordinates: {:?}\nwidth: {}, height:{}",
-        layout.0,
-        layout.1,
-        layout.2
+    debug!(target: "layouting", "Node coordinates: {:?}\nEdge coordinates: {:?}\nwidth: {}, height:{}",
+        layout.node_coordinates,
+        layout.edge_coordinates,
+        layout.width,
+        layout.height
     );
     layout
 }
@@ -216,7 +239,7 @@ fn execute_phase_2(
 fn execute_phase_3(
     graph: &mut StableDiGraph<Vertex, Edge>,
     mut layers: Vec<Vec<NodeIndex>>,
-) -> (Vec<(usize, (f64, f64))>, f64, f64) {
+) -> LayoutResult {
     info!(target: "layouting", "Executing phase 3: Coordinate Calculation");
     for n in graph.node_indices().collect::<Vec<_>>() {
         if graph[n].is_dummy {
@@ -308,7 +331,12 @@ fn execute_phase_3(
         }
     }
 
-    (coordinates, edge_coordinates, width, height)
+    LayoutResult {
+        node_coordinates: coordinates,
+        edge_coordinates,
+        width,
+        height,
+    }
 }
 
 pub fn slack(graph: &StableDiGraph<Vertex, Edge>, edge: EdgeIndex, minimum_length: i32) -> i32 {
@@ -409,10 +437,6 @@ pub fn build_integer_layout_with_dummies(
         graph[node].x = x;
         graph[node].y = y;
     }
-
-    // Calculate dimensions
-    //let width = *x_coords.values().max().unwrap_or(&0) as usize + 1;
-    //let height = *rank_to_y_offset.values().max().unwrap_or(&0) as usize + 1;
 
     graph
 }
