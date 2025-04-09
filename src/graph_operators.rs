@@ -687,6 +687,7 @@ mod tests {
             3,
             5,
             fasta_update_path.to_str().unwrap(),
+            false,
         );
 
         let _ = update_with_fasta(
@@ -699,6 +700,7 @@ mod tests {
             15,
             20,
             fasta_update_path.to_str().unwrap(),
+            false,
         );
 
         let original_block_groups = Sample::get_block_groups(conn, collection, None);
@@ -802,6 +804,7 @@ mod tests {
             3,
             5,
             fasta_update_path.to_str().unwrap(),
+            false,
         );
 
         let _ = update_with_fasta(
@@ -814,6 +817,7 @@ mod tests {
             15,
             20,
             fasta_update_path.to_str().unwrap(),
+            false,
         );
 
         let original_block_groups = Sample::get_block_groups(conn, collection, None);

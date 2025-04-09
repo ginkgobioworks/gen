@@ -170,6 +170,9 @@ enum Commands {
         /// The end coordinate for the region to add the library to
         #[arg(short, long)]
         end: Option<i64>,
+        /// For fasta updates, do not update the sample's reference path if there is a single fasta entry
+        #[arg(long, action)]
+        no_reference_path_update: bool,
         /// If a new entity is found, create it as a normal import
         #[arg(long, action, alias = "cm")]
         create_missing: bool,
@@ -690,6 +693,7 @@ fn main() {
             region_name,
             start,
             end,
+            no_reference_path_update,
             coordinate_frame,
             create_missing,
             gfa,
@@ -721,11 +725,14 @@ fn main() {
                     &operation_conn,
                     name,
                     sample.clone().as_deref(),
-                    &new_sample.clone().unwrap(),
-                    &region_name.clone().unwrap(),
-                    start.unwrap(),
-                    end.unwrap(),
+                    &new_sample
+                        .clone()
+                        .expect("new-sample flag must be provided."),
+                    &region_name.clone().expect("region-name must be provided."),
+                    start.expect("start flag must be provided."),
+                    end.expect("end flag must be provided."),
                     fasta_path,
+                    *no_reference_path_update,
                 )
                 .unwrap();
             } else if let Some(vcf_path) = vcf {

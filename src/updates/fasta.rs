@@ -1,7 +1,7 @@
 use noodles::fasta;
 use rusqlite;
 use rusqlite::{types::Value as SQLValue, Connection};
-use std::{io, str};
+use std::str;
 
 use crate::fasta::FastaError;
 use crate::models::block_group_edge::NO_CHROMOSOME_INDEX;
@@ -31,6 +31,7 @@ pub fn update_with_fasta(
     start_coordinate: i64,
     end_coordinate: i64,
     fasta_file_path: &str,
+    disable_reference_path_update: bool,
 ) -> Result<Operation, FastaError> {
     let mut session = operation_management::start_operation(conn);
 
@@ -59,78 +60,89 @@ pub fn update_with_fasta(
     }
 
     let path = BlockGroup::get_current_path(conn, new_block_group_id);
+    let interval_tree = path.intervaltree(conn);
 
     // Assuming just one entry in the fasta file
-    let record = fasta_reader.records().next().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidData, "No records found in fasta file")
-    })??;
+    let mut first_node = None;
+    let mut change_count = 0;
+    for (index, result) in fasta_reader.records().enumerate() {
+        let record = result?;
 
-    let sequence = str::from_utf8(record.sequence().as_ref())
-        .unwrap()
-        .to_string();
-    let seq = Sequence::new()
-        .sequence_type("DNA")
-        .sequence(&sequence)
-        .save(conn);
-    let node_id = Node::create(
-        conn,
-        &seq.hash,
-        calculate_hash(&format!(
-            "{path_id}:{ref_start}-{ref_end}->{sequence_hash}",
-            path_id = path.id,
-            ref_start = 0,
-            ref_end = seq.length,
-            sequence_hash = seq.hash
-        )),
-    );
+        let sequence = str::from_utf8(record.sequence().as_ref())
+            .unwrap()
+            .to_string();
+        let seq = Sequence::new()
+            .sequence_type("DNA")
+            .sequence(&sequence)
+            .save(conn);
+        let node_id = Node::create(
+            conn,
+            &seq.hash,
+            calculate_hash(&format!(
+                "{path_id}:{ref_start}-{ref_end}->{sequence_hash}",
+                path_id = path.id,
+                ref_start = 0,
+                ref_end = seq.length,
+                sequence_hash = seq.hash
+            )),
+        );
 
-    let path_block = PathBlock {
-        id: -1,
-        node_id,
-        block_sequence: sequence,
-        sequence_start: 0,
-        sequence_end: seq.length,
-        path_start: start_coordinate,
-        path_end: end_coordinate,
-        strand: Strand::Forward,
-    };
+        let path_block = PathBlock {
+            id: -1,
+            node_id,
+            block_sequence: sequence,
+            sequence_start: 0,
+            sequence_end: seq.length,
+            path_start: start_coordinate,
+            path_end: end_coordinate,
+            strand: Strand::Forward,
+        };
 
-    let path_change = PathChange {
-        block_group_id: new_block_group_id,
-        path: path.clone(),
-        path_accession: None,
-        start: start_coordinate,
-        end: end_coordinate,
-        block: path_block,
-        chromosome_index: NO_CHROMOSOME_INDEX,
-        phased: 0,
-        preserve_edge: true,
-    };
+        let path_change = PathChange {
+            block_group_id: new_block_group_id,
+            path: path.clone(),
+            path_accession: None,
+            start: start_coordinate,
+            end: end_coordinate,
+            block: path_block,
+            chromosome_index: NO_CHROMOSOME_INDEX,
+            phased: 0,
+            preserve_edge: true,
+        };
+        BlockGroup::insert_change(conn, &path_change, &interval_tree).unwrap();
+        if index == 0 {
+            first_node = Some(node_id);
+        } else if first_node.is_some() {
+            first_node = None;
+        }
+        change_count += 1;
+    }
 
-    let interval_tree = path.intervaltree(conn);
-    BlockGroup::insert_change(conn, &path_change, &interval_tree).unwrap();
+    if !disable_reference_path_update {
+        if let Some(node_id) = first_node {
+            let edge_to_new_node = Edge::query(
+                conn,
+                "select * from edges where target_node_id = ?1",
+                rusqlite::params!(SQLValue::from(node_id)),
+            )[0]
+            .clone();
+            let edge_from_new_node = Edge::query(
+                conn,
+                "select * from edges where source_node_id = ?1",
+                rusqlite::params!(SQLValue::from(node_id)),
+            )[0]
+            .clone();
+            path.new_path_with(
+                conn,
+                start_coordinate,
+                end_coordinate,
+                &edge_to_new_node,
+                &edge_from_new_node,
+            );
+        }
+    }
 
-    let edge_to_new_node = Edge::query(
-        conn,
-        "select * from edges where target_node_id = ?1",
-        rusqlite::params!(SQLValue::from(node_id)),
-    )[0]
-    .clone();
-    let edge_from_new_node = Edge::query(
-        conn,
-        "select * from edges where source_node_id = ?1",
-        rusqlite::params!(SQLValue::from(node_id)),
-    )[0]
-    .clone();
-    let new_path = path.new_path_with(
-        conn,
-        start_coordinate,
-        end_coordinate,
-        &edge_to_new_node,
-        &edge_from_new_node,
-    );
-
-    let summary_str = format!(" {}: 1 change", new_path.name);
+    let summary_str = format!("{change_count} sequences inserted");
     let op = operation_management::end_operation(
         conn,
         operation_conn,
@@ -158,7 +170,9 @@ mod tests {
     use super::*;
     use crate::imports::fasta::import_fasta;
     use crate::models::{metadata, operations::setup_db};
-    use crate::test_helpers::{get_connection, get_operation_connection, setup_gen_dir};
+    use crate::test_helpers::{
+        get_connection, get_operation_connection, get_sample_bg, setup_gen_dir,
+    };
     use std::collections::HashSet;
     use std::path::PathBuf;
 
@@ -200,11 +214,136 @@ mod tests {
             2,
             5,
             fasta_update_path.to_str().unwrap(),
+            false,
         );
 
         let expected_sequences = vec![
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
             "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+        ];
+        let block_groups = BlockGroup::query(
+            conn,
+            "select * from block_groups where collection_name = ?1 AND sample_name = ?2;",
+            rusqlite::params!(
+                SQLValue::from(collection),
+                SQLValue::from("child sample".to_string()),
+            ),
+        );
+        assert_eq!(block_groups.len(), 1);
+        assert_eq!(
+            BlockGroup::get_all_sequences(conn, block_groups[0].id, false),
+            HashSet::from_iter(expected_sequences),
+        );
+    }
+
+    #[test]
+    fn test_disable_reference_path_update() {
+        // This tests if we stop updating the reference path if explicitly asked for when there
+        // is a single insert occurring
+        setup_gen_dir();
+        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
+        let fasta_update_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/aaaaaaaa.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            None,
+            false,
+            conn,
+            op_conn,
+        )
+        .unwrap();
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            &collection,
+            None,
+            "child sample",
+            "m123",
+            2,
+            5,
+            fasta_update_path.to_str().unwrap(),
+            false,
+        );
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            &collection,
+            None,
+            "other sample",
+            "m123",
+            2,
+            5,
+            fasta_update_path.to_str().unwrap(),
+            true,
+        );
+
+        let child_blockgroup = get_sample_bg(conn, &collection, "child sample").id;
+        let other_blockgroup = get_sample_bg(conn, &collection, "other sample").id;
+        let child_path = BlockGroup::get_current_path(conn, child_blockgroup);
+        let other_path = BlockGroup::get_current_path(conn, other_blockgroup);
+        assert_eq!(
+            child_path.sequence(conn),
+            "ATAAAAAAAATCGATCGATCGATCGGGAACACACAGAGA"
+        );
+        assert_eq!(
+            other_path.sequence(conn),
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA"
+        );
+    }
+
+    #[test]
+    fn test_update_with_multiple_entries() {
+        /*
+        Graph after fasta update:
+           /-> GGGG --\
+        AT ----> CGA ------> TCGATCGATCGATCGGGAACACACAGAGA
+           \-> CCCC --/
+        */
+        setup_gen_dir();
+        let fasta_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/simple.fa");
+        let fasta_update_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/fastas/multiple.fa");
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let collection = "test".to_string();
+
+        import_fasta(
+            &fasta_path.to_str().unwrap().to_string(),
+            &collection,
+            None,
+            false,
+            conn,
+            op_conn,
+        )
+        .unwrap();
+        let _ = update_with_fasta(
+            conn,
+            op_conn,
+            &collection,
+            None,
+            "child sample",
+            "m123",
+            2,
+            5,
+            fasta_update_path.to_str().unwrap(),
+            false,
+        );
+
+        let expected_sequences = vec![
+            "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATGGGGTCGATCGATCGATCGGGAACACACAGAGA".to_string(),
+            "ATCCCCTCGATCGATCGATCGGGAACACACAGAGA".to_string(),
         ];
         let block_groups = BlockGroup::query(
             conn,
@@ -262,6 +401,7 @@ mod tests {
             2,
             5,
             fasta_update1_path.to_str().unwrap(),
+            false,
         );
         // Second fasta update replacing part of the first update sequence
         let _ = update_with_fasta(
@@ -274,6 +414,7 @@ mod tests {
             4,
             6,
             fasta_update2_path.to_str().unwrap(),
+            false,
         );
         let expected_sequences = vec![
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
@@ -336,6 +477,7 @@ mod tests {
             2,
             5,
             fasta_update1_path.to_str().unwrap(),
+            false,
         );
         // Second fasta update replacing parts of both the original and first update sequences
         let _ = update_with_fasta(
@@ -348,6 +490,7 @@ mod tests {
             1,
             6,
             fasta_update2_path.to_str().unwrap(),
+            false,
         );
         let expected_sequences = vec![
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
@@ -416,6 +559,7 @@ mod tests {
             2,
             5,
             fasta_update1_path.to_str().unwrap(),
+            false,
         );
         // Second fasta update replacing parts of both the original and first update sequences
         let _ = update_with_fasta(
@@ -428,6 +572,7 @@ mod tests {
             1,
             12,
             fasta_update2_path.to_str().unwrap(),
+            false,
         );
         let expected_sequences = vec![
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
@@ -490,6 +635,7 @@ mod tests {
             2,
             5,
             fasta_update1_path.to_str().unwrap(),
+            false,
         );
         // Second fasta update replacing parts of both the original and first update sequences
         let _ = update_with_fasta(
@@ -502,6 +648,7 @@ mod tests {
             6,
             12,
             fasta_update2_path.to_str().unwrap(),
+            false,
         );
         let expected_sequences = vec![
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
@@ -562,6 +709,7 @@ mod tests {
             2,
             5,
             fasta_update_path.to_str().unwrap(),
+            false,
         );
         // Same fasta second time
         let _ = update_with_fasta(
@@ -574,6 +722,7 @@ mod tests {
             4,
             6,
             fasta_update_path.to_str().unwrap(),
+            false,
         );
         let expected_sequences = vec![
             "ATCGATCGATCGATCGATCGGGAACACACAGAGA".to_string(),
