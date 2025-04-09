@@ -125,6 +125,7 @@ mod tests {
             2,
             5,
             fasta_update_path.to_str().unwrap(),
+            false,
         );
 
         let tmp_dir = tempfile::tempdir().unwrap().into_path();

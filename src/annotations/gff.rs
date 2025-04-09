@@ -136,6 +136,7 @@ mod tests {
             15,
             25,
             fasta_update_path.to_str().unwrap(),
+            false,
         );
 
         let temp_dir = tempdir().expect("Couldn't get handle to temp directory");
