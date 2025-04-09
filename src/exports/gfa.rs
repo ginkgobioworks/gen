@@ -98,37 +98,9 @@ pub fn export_gfa(
     }
 
     let mut links = BTreeSet::new();
-    let mut added_links = HashSet::new();
     for (source, target, edge_info) in graph.all_edges() {
         if !Node::is_terminal(source.node_id) && !Node::is_terminal(target.node_id) {
             let source_segment = if let Some(splits) = split_segments.get(&source.node_id) {
-                if !added_links.contains(&source.node_id) {
-                    for ((src_start, src_end), (dst_start, dst_end)) in
-                        splits.iter().tuple_windows()
-                    {
-                        let left = Segment {
-                            sequence: "".to_string(),
-                            node_id: source.node_id,
-                            sequence_start: *src_start,
-                            sequence_end: *src_end,
-                            strand: Strand::Forward,
-                        };
-                        let right = Segment {
-                            sequence: "".to_string(),
-                            node_id: source.node_id,
-                            sequence_start: *dst_start,
-                            sequence_end: *dst_end,
-                            strand: Strand::Forward,
-                        };
-                        links.insert(Link {
-                            source_segment_id: left.segment_id(),
-                            source_strand: edge_info[0].source_strand,
-                            target_segment_id: right.segment_id(),
-                            target_strand: edge_info[0].target_strand,
-                        });
-                    }
-                    added_links.insert(source.node_id);
-                }
                 let last_split = splits.last().unwrap();
                 Segment {
                     sequence: "".to_string(),
@@ -148,33 +120,6 @@ pub fn export_gfa(
             };
 
             let target_segment = if let Some(splits) = split_segments.get(&target.node_id) {
-                if !added_links.contains(&target.node_id) {
-                    for ((src_start, src_end), (dst_start, dst_end)) in
-                        splits.iter().tuple_windows()
-                    {
-                        let left = Segment {
-                            sequence: "".to_string(),
-                            node_id: target.node_id,
-                            sequence_start: *src_start,
-                            sequence_end: *src_end,
-                            strand: Strand::Forward,
-                        };
-                        let right = Segment {
-                            sequence: "".to_string(),
-                            node_id: target.node_id,
-                            sequence_start: *dst_start,
-                            sequence_end: *dst_end,
-                            strand: Strand::Forward,
-                        };
-                        links.insert(Link {
-                            source_segment_id: left.segment_id(),
-                            source_strand: edge_info[0].source_strand,
-                            target_segment_id: right.segment_id(),
-                            target_strand: edge_info[0].target_strand,
-                        });
-                    }
-                    added_links.insert(target.node_id);
-                }
                 let first_split = splits.first().unwrap();
                 Segment {
                     sequence: "".to_string(),
@@ -201,6 +146,32 @@ pub fn export_gfa(
             });
         }
     }
+
+    for (node_id, splits) in split_segments.iter() {
+        for ((src_start, src_end), (dst_start, dst_end)) in splits.iter().tuple_windows() {
+            let left = Segment {
+                sequence: "".to_string(),
+                node_id: *node_id,
+                sequence_start: *src_start,
+                sequence_end: *src_end,
+                strand: Strand::Forward,
+            };
+            let right = Segment {
+                sequence: "".to_string(),
+                node_id: *node_id,
+                sequence_start: *dst_start,
+                sequence_end: *dst_end,
+                strand: Strand::Forward,
+            };
+            links.insert(Link {
+                source_segment_id: left.segment_id(),
+                source_strand: Strand::Forward,
+                target_segment_id: right.segment_id(),
+                target_strand: Strand::Forward,
+            });
+        }
+    }
+
     let paths = get_paths(conn, collection_name, sample_name, &graph, &split_segments);
     write_segments(&mut writer, &segments.iter().collect::<Vec<&Segment>>());
     write_links(&mut writer, &links.iter().collect::<Vec<&Link>>());
