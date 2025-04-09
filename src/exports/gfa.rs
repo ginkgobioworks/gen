@@ -16,9 +16,9 @@ pub fn export_gfa(
     collection_name: &str,
     filename: &PathBuf,
     sample_name: Option<String>,
-    max_size: Option<i64>,
+    max_size: impl Into<Option<i64>>,
 ) {
-    let chunk_size = max_size.unwrap_or(i64::MAX);
+    let chunk_size = max_size.into().unwrap_or(i64::MAX);
     // General note about how we encode segment IDs.  The node ID and the start coordinate in the
     // sequence are all that's needed, because the end coordinate can be inferred from the length of
     // the segment's sequence.  So the segment ID is of the form <node ID>.<start coordinate>
@@ -430,6 +430,53 @@ mod tests {
         let paths = Path::query_for_collection(conn, "test collection 2");
         assert_eq!(paths.len(), 1);
         assert_eq!(paths[0].sequence(conn), "AAAATTTTGGGGCCCC");
+    }
+
+    #[test]
+    fn test_splits_nodes() {
+        setup_gen_dir();
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let (bg_id, _path) = setup_block_group(conn);
+        let all_sequences = BlockGroup::get_all_sequences(conn, bg_id, false);
+
+        let temp_dir = tempdir().expect("Couldn't get handle to temp directory");
+        let gfa_path = PathBuf::from(temp_dir.path()).join("split.gfa");
+
+        export_gfa(conn, "test", &gfa_path, None, 5);
+
+        let _ = import_gfa(&gfa_path, "test collection 2", None, conn, op_conn);
+
+        let block_group2 = Collection::get_block_groups(conn, "test collection 2")
+            .pop()
+            .unwrap();
+        let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id, false);
+
+        assert_eq!(all_sequences, all_sequences2);
+
+        let graph = BlockGroup::get_graph(conn, block_group2.id);
+        let graph_nodes = graph
+            .nodes()
+            .filter_map(|node| {
+                if Node::is_terminal(node.node_id) {
+                    None
+                } else {
+                    Some(node.node_id)
+                }
+            })
+            .collect::<Vec<_>>();
+        let node_sequences = Node::get_sequences_by_node_ids(conn, &graph_nodes);
+        assert!(node_sequences.len() > 1);
+        for sequence in node_sequences.values() {
+            assert!(
+                sequence.length <= 5,
+                "Sequence length {l} > 5",
+                l = sequence.length
+            );
+        }
     }
 
     #[test]
