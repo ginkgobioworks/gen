@@ -1,4 +1,7 @@
-use crate::models::{block_group::BlockGroup, node::Node, path::Path, traits::Query};
+use crate::graph::{GenGraph, GraphNode};
+use crate::models::{
+    block_group::BlockGroup, node::Node, node::PATH_START_NODE_ID, path::Path, traits::Query,
+};
 use crate::progress_bar::{get_handler, get_time_elapsed_bar};
 use crate::views::block_group_viewer::{PlotParameters, Viewer};
 use crate::views::collection::{CollectionExplorer, CollectionExplorerState, FocusZone};
@@ -21,9 +24,20 @@ use std::time::{Duration, Instant};
 // Frequency by which we check for external updates to the db
 const REFRESH_INTERVAL: u64 = 3; // seconds
 
+fn get_empty_graph() -> GenGraph {
+    let mut g = GenGraph::new();
+    g.add_node(GraphNode {
+        block_id: -1,
+        node_id: PATH_START_NODE_ID,
+        sequence_start: 0,
+        sequence_end: 0,
+    });
+    g
+}
+
 pub fn view_block_group(
     conn: &Connection,
-    name: &str,
+    name: Option<String>,
     sample_name: Option<String>,
     collection_name: &str,
     position: Option<String>, // Node ID and offset
@@ -31,27 +45,6 @@ pub fn view_block_group(
     let progress_bar = get_handler();
     let bar = progress_bar.add(get_time_elapsed_bar());
     let _ = progress_bar.println("Loading block group");
-
-    // Get the block group for two cases: with and without a sample
-    let block_group = if let Some(ref sample_name) = sample_name {
-        BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name = ?2 AND name = ?3", 
-                        params![collection_name, sample_name, name])
-    } else {
-        // modified version:
-        BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null AND name = ?2", params![collection_name, name])
-    };
-
-    if block_group.is_err() {
-        panic!(
-            "No block group found with name {} and sample {:?} in collection {} ",
-            name,
-            sample_name.clone().unwrap_or_else(|| "null".to_string()),
-            collection_name
-        );
-    }
-
-    let block_group = block_group.unwrap();
-    let block_group_id = block_group.id;
 
     // Get the node object corresponding to the position given by the user
     let origin = if let Some(position_str) = position {
@@ -68,12 +61,51 @@ pub fn view_block_group(
     } else {
         None
     };
+
+    // Create explorer and its state that persists across frames
+    let mut explorer = CollectionExplorer::new(conn, collection_name);
+    let mut explorer_state = CollectionExplorerState::new();
+    if let Some(ref s) = sample_name {
+        explorer_state.toggle_sample(s);
+    }
+
+    let mut block_graph;
+    let mut block_group_id: Option<i64> = None;
+    let mut focus_zone = FocusZone::Sidebar;
+
+    if let Some(name) = name {
+        // Get the block group for two cases: with and without a sample
+        let block_group = if let Some(ref sample_name) = sample_name {
+            BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name = ?2 AND name = ?3", 
+                            params![collection_name, sample_name, name])
+        } else {
+            // modified version:
+            BlockGroup::get(conn, "select * from block_groups where collection_name = ?1 AND sample_name is null AND name = ?2", params![collection_name, name])
+        };
+
+        if block_group.is_err() {
+            panic!(
+                "No block group found with name {:?} and sample {:?} in collection {} ",
+                name,
+                sample_name.clone().unwrap_or_else(|| "null".to_string()),
+                collection_name
+            );
+        }
+
+        let block_group = block_group.unwrap();
+        block_group_id = Some(block_group.id);
+        block_graph = BlockGroup::get_graph(conn, block_group.id);
+        explorer_state.selected_block_group_id = Some(block_group.id);
+        focus_zone = FocusZone::Canvas;
+    } else {
+        block_graph = get_empty_graph();
+    }
+
     bar.finish();
 
     // Create the viewer and the initial graph
     let bar = progress_bar.add(get_time_elapsed_bar());
     let _ = progress_bar.println("Pre-computing layout in chunks");
-    let mut block_graph = BlockGroup::get_graph(conn, block_group_id);
 
     let mut viewer = if let Some(origin) = origin {
         Viewer::with_origin(&block_graph, conn, PlotParameters::default(), origin)
@@ -96,19 +128,8 @@ pub fn view_block_group(
     let show_sidebar = true;
     let mut tui_layout_change = false;
 
-    // Focus management
-    let mut focus_zone = FocusZone::Canvas;
-
-    // Create explorer and its state that persists across frames
-    let mut explorer = CollectionExplorer::new(conn, collection_name);
-    let mut explorer_state =
-        CollectionExplorerState::with_selected_block_group(Some(block_group_id));
-    if let Some(ref s) = sample_name {
-        explorer_state.toggle_sample(s);
-    }
-
     // Track the last selected block group to detect changes
-    let mut last_selected_block_group_id = Some(block_group_id);
+    let mut last_selected_block_group_id = block_group_id;
     // Track if we're loading a new block group
     let mut is_loading = false;
     let mut last_refresh = Instant::now();

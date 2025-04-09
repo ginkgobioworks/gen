@@ -181,11 +181,11 @@ enum Commands {
         gfa: Option<String>,
     },
     /// Show a visual representation of a graph in the terminal
-    #[command(arg_required_else_help(true))]
+    #[command()]
     View {
         /// The name of the graph to view
         #[clap(index = 1)]
-        graph: String,
+        graph: Option<String>,
         /// View the graph for a specific sample
         #[arg(short, long)]
         sample: Option<String>,
@@ -673,7 +673,7 @@ fn main() {
             // view_block_group is a long-running operation that manages its own transactions
             view_block_group(
                 &conn,
-                graph,
+                graph.clone(),
                 sample.clone(),
                 collection_name,
                 position.clone(),

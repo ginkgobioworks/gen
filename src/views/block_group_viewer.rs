@@ -631,8 +631,9 @@ impl<'a> Viewer<'a> {
                     self.state.selected_block = Some(origin);
                 }
                 self.state.world = self.compute_bounding_box();
-                self.center_on_block(self.state.selected_block.unwrap())
-                    .unwrap();
+                if let Some(center_block) = self.state.selected_block {
+                    self.center_on_block(center_block).unwrap();
+                }
                 self.state.first_render = false;
             }
         }
