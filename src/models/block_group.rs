@@ -355,17 +355,6 @@ impl BlockGroup {
         graph
     }
 
-    pub fn get_empty_graph() -> GenGraph {
-        let mut g = GenGraph::new();
-        g.add_node(GraphNode {
-            block_id: -1,
-            node_id: PATH_START_NODE_ID,
-            sequence_start: 0,
-            sequence_end: 0,
-        });
-        g
-    }
-
     pub fn prune_graph(graph: &mut GenGraph) {
         // Prunes a graph by removing edges on the same chromosome_index. This means if 2 edges are
         // both "chromosome index 0", we keep the newer one (newer known by the higher edge id).

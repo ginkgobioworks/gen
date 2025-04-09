@@ -1,4 +1,7 @@
-use crate::models::{block_group::BlockGroup, node::Node, path::Path, traits::Query};
+use crate::graph::{GenGraph, GraphNode};
+use crate::models::{
+    block_group::BlockGroup, node::Node, node::PATH_START_NODE_ID, path::Path, traits::Query,
+};
 use crate::progress_bar::{get_handler, get_time_elapsed_bar};
 use crate::views::block_group_viewer::{PlotParameters, Viewer};
 use crate::views::collection::{CollectionExplorer, CollectionExplorerState, FocusZone};
@@ -20,6 +23,17 @@ use std::time::{Duration, Instant};
 
 // Frequency by which we check for external updates to the db
 const REFRESH_INTERVAL: u64 = 3; // seconds
+
+fn get_empty_graph() -> GenGraph {
+    let mut g = GenGraph::new();
+    g.add_node(GraphNode {
+        block_id: -1,
+        node_id: PATH_START_NODE_ID,
+        sequence_start: 0,
+        sequence_end: 0,
+    });
+    g
+}
 
 pub fn view_block_group(
     conn: &Connection,
@@ -84,7 +98,7 @@ pub fn view_block_group(
         explorer_state.selected_block_group_id = Some(block_group.id);
         focus_zone = FocusZone::Canvas;
     } else {
-        block_graph = BlockGroup::get_empty_graph();
+        block_graph = get_empty_graph();
     }
 
     bar.finish();
