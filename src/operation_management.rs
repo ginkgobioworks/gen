@@ -46,10 +46,24 @@ pub enum OperationError {
     NoChanges,
     #[error("Operation Already Exists")]
     OperationExists,
+    #[error("Operation {0} Does Not Exist")]
+    NoOperation(String),
     #[error("SQL Error: {0}")]
     SQLError(String),
     #[error("SQLite Error: {0}")]
     SqliteError(#[from] SQLError),
+}
+
+#[derive(Debug, PartialEq, Error)]
+pub enum MergeError {
+    #[error("SQL Error: {0}")]
+    SQLError(String),
+    #[error("SQLite Error: {0}")]
+    SqliteError(#[from] SQLError),
+    #[error("Operation Error: {0}")]
+    OperationError(#[from] OperationError),
+    #[error("Invalid Branch: {0}")]
+    InvalidBranch(String),
 }
 
 #[derive(Debug, Error)]
@@ -937,10 +951,10 @@ pub fn apply<'a>(
     operation_conn: &Connection,
     op_hash: &str,
     force_hash: impl Into<Option<&'a str>>,
-) -> Operation {
+) -> Result<Operation, OperationError> {
     let mut session = start_operation(conn);
     let operation = Operation::get_by_hash(operation_conn, op_hash)
-        .unwrap_or_else(|_| panic!("Hash {op_hash} does not exist."));
+        .map_err(|_err| OperationError::NoOperation(op_hash.to_string()))?;
     let changeset = load_changeset(&operation);
     let input: &mut dyn Read = &mut changeset.as_slice();
     let mut iter = ChangesetIter::start_strm(&input).unwrap();
@@ -961,7 +975,6 @@ pub fn apply<'a>(
         &format!("Applied changeset {full_op_hash}."),
         force_hash,
     )
-    .unwrap()
 }
 
 pub fn merge<'a>(
@@ -971,13 +984,13 @@ pub fn merge<'a>(
     source_branch: i64,
     other_branch: i64,
     force_hash: impl Into<Option<&'a str>>,
-) -> Vec<Operation> {
+) -> Result<Vec<Operation>, MergeError> {
     let mut new_operations: Vec<Operation> = vec![];
     let hash_prefix = force_hash.into();
     let current_branch =
         OperationState::get_current_branch(operation_conn, db_uuid).expect("No current branch.");
     if source_branch != current_branch {
-        panic!("Unable to merge branch. Source branch and current branch must match. Checkout the branch you wish to merge into.");
+        return Err(MergeError::InvalidBranch("Source branch and current branch must match. Checkout the branch you wish to merge into.".to_string()));
     }
     let current_operations = Branch::get_operations(operation_conn, source_branch);
     let other_operations = Branch::get_operations(operation_conn, other_branch);
@@ -994,14 +1007,14 @@ pub fn merge<'a>(
                     operation_conn,
                     &operation.hash,
                     format!("{hash}-{index}").as_str(),
-                )
+                )?
             } else {
-                apply(conn, operation_conn, &operation.hash, None)
+                apply(conn, operation_conn, &operation.hash, None)?
             };
             new_operations.push(new_op);
         }
     }
-    new_operations
+    Ok(new_operations)
 }
 
 pub fn move_to(conn: &Connection, operation_conn: &Connection, operation: &Operation) {
@@ -1652,6 +1665,7 @@ mod tests {
                 branch_2.id,
                 "merge-test",
             )
+            .unwrap()
             .iter()
             .map(|op| op.hash.clone())
             .collect::<Vec<String>>();
@@ -2181,7 +2195,7 @@ mod tests {
         );
 
         // apply changes from branch-1, it will be operation id 2
-        apply(conn, operation_conn, &op_2.hash, None);
+        apply(conn, operation_conn, &op_2.hash, None).unwrap();
 
         let foo_bg_id = BlockGroup::get_id(conn, &collection, Some("foo"), "m123");
         let patch_2_seqs = HashSet::from_iter(vec!["ATCATCGATCGAGATCGGGAACACACAGAGA".to_string()]);
