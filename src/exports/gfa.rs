@@ -4,6 +4,7 @@ use crate::models::{
     block_group::BlockGroup, block_group_edge::BlockGroupEdge, collection::Collection, edge::Edge,
     node::Node, path::Path, sample::Sample, strand::Strand,
 };
+use itertools::Itertools;
 use rusqlite::Connection;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::File;
@@ -15,7 +16,9 @@ pub fn export_gfa(
     collection_name: &str,
     filename: &PathBuf,
     sample_name: Option<String>,
+    max_size: impl Into<Option<i64>>,
 ) {
+    let chunk_size = max_size.into().unwrap_or(i64::MAX);
     // General note about how we encode segment IDs.  The node ID and the start coordinate in the
     // sequence are all that's needed, because the end coordinate can be inferred from the length of
     // the segment's sequence.  So the segment ID is of the form <node ID>.<start coordinate>
@@ -52,36 +55,85 @@ pub fn export_gfa(
     let mut writer = BufWriter::new(file);
 
     let mut segments = BTreeSet::new();
+    let mut split_segments = HashMap::new();
     for block in &blocks {
         if !Node::is_terminal(block.node_id) {
-            segments.insert(Segment {
-                sequence: block.sequence(),
-                node_id: block.node_id,
-                sequence_start: block.start,
-                sequence_end: block.end,
-                // NOTE: We can't easily get the value for strand, but it doesn't matter
-                // because this value is only used for writing segments
-                strand: Strand::Forward,
-            });
+            if block.end - block.start > chunk_size {
+                let mut sub_segments = vec![];
+                let block_sequence = block.sequence();
+                for (index, sub_start) in (block.start..block.end)
+                    .step_by(chunk_size as usize)
+                    .enumerate()
+                {
+                    let sub_end = (sub_start + chunk_size).min(block.end);
+                    let seq_start = index as i64 * chunk_size;
+                    let seq_end =
+                        ((index as i64 + 1) * chunk_size).min(block_sequence.len() as i64);
+                    segments.insert(Segment {
+                        sequence: block_sequence[seq_start as usize..seq_end as usize].to_string(),
+                        node_id: block.node_id,
+                        sequence_start: sub_start,
+                        sequence_end: sub_end,
+                        // NOTE: We can't easily get the value for strand, but it doesn't matter
+                        // because this value is only used for writing segments
+                        strand: Strand::Forward,
+                    });
+                    sub_segments.push((sub_start, sub_end));
+                }
+                split_segments.insert(block.node_id, sub_segments);
+            } else {
+                segments.insert(Segment {
+                    sequence: block.sequence(),
+                    node_id: block.node_id,
+                    sequence_start: block.start,
+                    sequence_end: block.end,
+                    // NOTE: We can't easily get the value for strand, but it doesn't matter
+                    // because this value is only used for writing segments
+                    strand: Strand::Forward,
+                });
+            }
         }
     }
 
     let mut links = BTreeSet::new();
     for (source, target, edge_info) in graph.all_edges() {
         if !Node::is_terminal(source.node_id) && !Node::is_terminal(target.node_id) {
-            let source_segment = Segment {
-                sequence: "".to_string(),
-                node_id: source.node_id,
-                sequence_start: source.sequence_start,
-                sequence_end: source.sequence_end,
-                strand: edge_info[0].source_strand,
+            let source_segment = if let Some(splits) = split_segments.get(&source.node_id) {
+                let last_split = splits.last().unwrap();
+                Segment {
+                    sequence: "".to_string(),
+                    node_id: source.node_id,
+                    sequence_start: last_split.0,
+                    sequence_end: last_split.1,
+                    strand: edge_info[0].source_strand,
+                }
+            } else {
+                Segment {
+                    sequence: "".to_string(),
+                    node_id: source.node_id,
+                    sequence_start: source.sequence_start,
+                    sequence_end: source.sequence_end,
+                    strand: edge_info[0].source_strand,
+                }
             };
-            let target_segment = Segment {
-                sequence: "".to_string(),
-                node_id: target.node_id,
-                sequence_start: target.sequence_start,
-                sequence_end: target.sequence_end,
-                strand: edge_info[0].target_strand,
+
+            let target_segment = if let Some(splits) = split_segments.get(&target.node_id) {
+                let first_split = splits.first().unwrap();
+                Segment {
+                    sequence: "".to_string(),
+                    node_id: target.node_id,
+                    sequence_start: first_split.0,
+                    sequence_end: first_split.1,
+                    strand: edge_info[0].source_strand,
+                }
+            } else {
+                Segment {
+                    sequence: "".to_string(),
+                    node_id: target.node_id,
+                    sequence_start: target.sequence_start,
+                    sequence_end: target.sequence_end,
+                    strand: edge_info[0].target_strand,
+                }
             };
 
             links.insert(Link {
@@ -92,7 +144,33 @@ pub fn export_gfa(
             });
         }
     }
-    let paths = get_paths(conn, collection_name, sample_name, &graph);
+
+    for (node_id, splits) in split_segments.iter() {
+        for ((src_start, src_end), (dst_start, dst_end)) in splits.iter().tuple_windows() {
+            let left = Segment {
+                sequence: "".to_string(),
+                node_id: *node_id,
+                sequence_start: *src_start,
+                sequence_end: *src_end,
+                strand: Strand::Forward,
+            };
+            let right = Segment {
+                sequence: "".to_string(),
+                node_id: *node_id,
+                sequence_start: *dst_start,
+                sequence_end: *dst_end,
+                strand: Strand::Forward,
+            };
+            links.insert(Link {
+                source_segment_id: left.segment_id(),
+                source_strand: Strand::Forward,
+                target_segment_id: right.segment_id(),
+                target_strand: Strand::Forward,
+            });
+        }
+    }
+
+    let paths = get_paths(conn, collection_name, sample_name, &graph, &split_segments);
     write_segments(&mut writer, &segments.iter().collect::<Vec<&Segment>>());
     write_links(&mut writer, &links.iter().collect::<Vec<&Link>>());
     write_paths(&mut writer, paths);
@@ -103,6 +181,7 @@ fn get_paths(
     collection_name: &str,
     sample_name: Option<String>,
     graph: &GenGraph,
+    split_segments: &HashMap<i64, Vec<(i64, i64)>>,
 ) -> HashMap<String, Vec<(String, Strand)>> {
     let paths = Path::query_for_collection_and_sample(conn, collection_name, sample_name);
 
@@ -127,19 +206,34 @@ fn get_paths(
                     .iter()
                     .filter_map(|(node, strand)| {
                         if !Node::is_terminal(node.node_id) {
-                            Some((
-                                format!(
-                                    "{id}.{ss}.{se}",
-                                    id = node.node_id,
-                                    ss = node.sequence_start,
-                                    se = node.sequence_end
-                                ),
-                                *strand,
-                            ))
+                            if let Some(splits) = split_segments.get(&node.node_id) {
+                                Some(
+                                    splits
+                                        .iter()
+                                        .map(|(start, end)| {
+                                            (
+                                                format!("{id}.{start}.{end}", id = node.node_id),
+                                                *strand,
+                                            )
+                                        })
+                                        .collect::<Vec<_>>(),
+                                )
+                            } else {
+                                Some(vec![(
+                                    format!(
+                                        "{id}.{ss}.{se}",
+                                        id = node.node_id,
+                                        ss = node.sequence_start,
+                                        se = node.sequence_end
+                                    ),
+                                    *strand,
+                                )])
+                            }
                         } else {
                             None
                         }
                     })
+                    .flatten()
                     .collect::<Vec<_>>(),
             );
         } else {
@@ -320,7 +414,7 @@ mod tests {
         let mut gfa_path = PathBuf::from(temp_dir.path());
         gfa_path.push("intermediate.gfa");
 
-        export_gfa(conn, collection_name, &gfa_path, None);
+        export_gfa(conn, collection_name, &gfa_path, None, None);
         // NOTE: Not directly checking file contents because segments are written in random order
         let _ = import_gfa(&gfa_path, "test collection 2", None, conn, op_conn);
 
@@ -334,6 +428,53 @@ mod tests {
         let paths = Path::query_for_collection(conn, "test collection 2");
         assert_eq!(paths.len(), 1);
         assert_eq!(paths[0].sequence(conn), "AAAATTTTGGGGCCCC");
+    }
+
+    #[test]
+    fn test_splits_nodes() {
+        setup_gen_dir();
+        let conn = &get_connection(None);
+        let db_uuid = metadata::get_db_uuid(conn);
+        let op_conn = &get_operation_connection(None);
+        setup_db(op_conn, &db_uuid);
+
+        let (bg_id, _path) = setup_block_group(conn);
+        let all_sequences = BlockGroup::get_all_sequences(conn, bg_id, false);
+
+        let temp_dir = tempdir().expect("Couldn't get handle to temp directory");
+        let gfa_path = PathBuf::from(temp_dir.path()).join("split.gfa");
+
+        export_gfa(conn, "test", &gfa_path, None, 5);
+
+        let _ = import_gfa(&gfa_path, "test collection 2", None, conn, op_conn);
+
+        let block_group2 = Collection::get_block_groups(conn, "test collection 2")
+            .pop()
+            .unwrap();
+        let all_sequences2 = BlockGroup::get_all_sequences(conn, block_group2.id, false);
+
+        assert_eq!(all_sequences, all_sequences2);
+
+        let graph = BlockGroup::get_graph(conn, block_group2.id);
+        let graph_nodes = graph
+            .nodes()
+            .filter_map(|node| {
+                if Node::is_terminal(node.node_id) {
+                    None
+                } else {
+                    Some(node.node_id)
+                }
+            })
+            .collect::<Vec<_>>();
+        let node_sequences = Node::get_sequences_by_node_ids(conn, &graph_nodes);
+        assert!(node_sequences.len() > 1);
+        for sequence in node_sequences.values() {
+            assert!(
+                sequence.length <= 5,
+                "Sequence length {l} > 5",
+                l = sequence.length
+            );
+        }
     }
 
     #[test]
@@ -355,7 +496,7 @@ mod tests {
         let mut gfa_path = PathBuf::from(temp_dir.path());
         gfa_path.push("intermediate.gfa");
 
-        export_gfa(conn, &collection_name, &gfa_path, None);
+        export_gfa(conn, &collection_name, &gfa_path, None, None);
         let _ = import_gfa(&gfa_path, "test collection 2", None, conn, op_conn);
 
         let block_group2 = Collection::get_block_groups(conn, "test collection 2")
@@ -385,7 +526,7 @@ mod tests {
         let mut gfa_path = PathBuf::from(temp_dir.path());
         gfa_path.push("intermediate.gfa");
 
-        export_gfa(conn, &collection_name, &gfa_path, None);
+        export_gfa(conn, &collection_name, &gfa_path, None, None);
         let _ = import_gfa(&gfa_path, "anderson promoters 2", None, conn, op_conn);
 
         let block_group2 = Collection::get_block_groups(conn, "anderson promoters 2")
@@ -415,7 +556,7 @@ mod tests {
         let mut gfa_path = PathBuf::from(temp_dir.path());
         gfa_path.push("intermediate.gfa");
 
-        export_gfa(conn, &collection_name, &gfa_path, None);
+        export_gfa(conn, &collection_name, &gfa_path, None, None);
         let _ = import_gfa(&gfa_path, "test collection 2", None, conn, op_conn);
 
         let block_group2 = Collection::get_block_groups(conn, "test collection 2")
@@ -504,7 +645,7 @@ mod tests {
         let temp_dir = tempdir().expect("Couldn't get handle to temp directory");
         let mut gfa_path = PathBuf::from(temp_dir.path());
         gfa_path.push("intermediate.gfa");
-        export_gfa(conn, "test", &gfa_path, None);
+        export_gfa(conn, "test", &gfa_path, None, None);
         let _ = import_gfa(&gfa_path, "test collection 2", None, conn, op_conn);
 
         let block_group2 = Collection::get_block_groups(conn, "test collection 2")
