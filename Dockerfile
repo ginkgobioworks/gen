@@ -1,7 +1,6 @@
 FROM rust:bullseye
 
-RUN apt-get update
-RUN apt-get install -y libclang-dev
+RUN apt-get update && apt-get install -y libclang-dev
 
 WORKDIR gen
 
