@@ -984,6 +984,8 @@ fn main() {
                     .unwrap_or_else(|| panic!("Unable to find branch {branch_name}."));
                 let current_branch = OperationState::get_current_branch(&operation_conn, &db_uuid)
                     .expect("Unable to find current branch.");
+                conn.execute("BEGIN TRANSACTION", []).unwrap();
+                operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
                 match operation_management::merge(
                     &conn,
                     &operation_conn,
@@ -1032,6 +1034,8 @@ fn main() {
             operation_conn.execute("END TRANSACTION", []).unwrap();
         }
         Some(Commands::Apply { hash }) => {
+            conn.execute("BEGIN TRANSACTION", []).unwrap();
+            operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
             match operation_management::apply(&conn, &operation_conn, hash, None) {
                 Ok(_) => println!("Operation applied"),
                 Err(_) => {
