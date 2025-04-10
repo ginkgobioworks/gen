@@ -67,10 +67,8 @@ pub fn export_gfa(
                 {
                     let sub_end = (sub_start + chunk_size).min(block.end);
                     let seq_start = index as i64 * chunk_size;
-                    let mut seq_end = (index as i64 + 1) * chunk_size;
-                    if seq_end as usize > block_sequence.len() {
-                        seq_end = block_sequence.len() as i64;
-                    }
+                    let seq_end =
+                        ((index as i64 + 1) * chunk_size).min(block_sequence.len() as i64);
                     segments.insert(Segment {
                         sequence: block_sequence[seq_start as usize..seq_end as usize].to_string(),
                         node_id: block.node_id,
