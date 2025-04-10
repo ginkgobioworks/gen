@@ -10,6 +10,26 @@ class TestChannelRouter(unittest.TestCase):
         self.B = [1, 0, 0, 2, 4, 3]  # Bottom pins
         self.router = ChannelRouter(self.T, self.B)
     
+    def find_vertical_jogs(self, router, net_id, column=None):
+        """Helper function to find vertical jog segments for a specific net at a given column.
+        
+        Args:
+            router: ChannelRouter instance
+            net_id: Net ID to search for
+            column: Column to search in, defaults to router.current_column
+            
+        Returns:
+            List of vertical segment tuples ((x1, y1), (x2, y2)) for the specified net at the specified column
+        """
+        if column is None:
+            column = router.current_column
+            
+        # Find segments with the same x coordinate for both points and different y coordinates
+        return [
+            seg for seg in router.segments[net_id] 
+            if seg[0][0] == column and seg[1][0] == column and seg[0][1] != seg[1][1]
+        ]
+    
     def test_initialization(self):
         """Test that the router initializes correctly"""
         self.setUp()
@@ -383,7 +403,7 @@ class TestChannelRouter(unittest.TestCase):
         router.Y[1] = {2, 5} # Change Net 1 tracks
         jog_pattern4 = [(1, (2, 5))] 
         n_freed4, dist_rank4, jog_len4 = router.evaluate_jogs(jog_pattern4)
-        # Expected n_freed = 1 (base). Net 1 not finished (single jog implies contiguity check passes, but it shouldn't finish based on Y[1])
+        # Expected n_freed = 1 (base). Net 1 not finished (single jog implies contiguity check passes, but it shouldn't finish based on Y[net]
         # However, the current logic for 'finishing' seems to only check `test_contiguous` on the *jog pattern* itself, not if the jogs cover Y[net]
         # Let's assume current logic: n_freed = 1 + 1 = 2
         # Expected remaining split net: Net 2 {1, 5}. Distances: 0. Rank = [0]
@@ -397,6 +417,334 @@ class TestChannelRouter(unittest.TestCase):
         self.assertEqual(n_freed4, 2) # 1 base + 1 finished
         self.assertEqual(dist_rank4, [0]) # Net 2 is remaining split {1, 5} -> dist 0
         self.assertEqual(jog_len4, 3) # 5-2
+
+    def test_jog_track(self):
+        """Test the jog_track functionality for moving tracks vertically"""
+        T = [1, 0, 0, 0, 0]
+        B = [1, 0, 0, 0, 0]
+        router = ChannelRouter(T, B, initial_channel_width=7, minimum_jog_length=1)
+        router.current_column = 1 # Column where jogs happen
+        net1 = 1
+
+        # Scenario setup:
+        # Net 1 on track 2
+        # Track 4 occupied horizontally by Net 2
+        # Vertical segment from track 5 to 7 (blocks upward movement past 4)
+        router.Y = {1: {2}, 2: {4}, 3: {}}
+        router.all_nets = {1, 2, 3} # Ensure get_net_for_track works
+        # Add a dummy horizontal segment for net 1 to exist
+        # Add a vertical segment for Net 3 (blocks tracks 5, 6, 7)
+        router.segments = {1: [((0, 2), (1, 2))], 2: [((0, 4), (1, 4))], 3: [((1, 5), (1, 7))]} 
+        
+        # Test 1: Jog 'up' from track 2 towards track 6
+        # Path: 3 (empty), 4 (horizontal occupied), 5 (vertical occupied)
+        # Loop i=3: marker=3.
+        # Loop i=4: horizontal occupied -> continue. marker still 3.
+        # Loop i=5: vertical occupied -> break. marker is 3.
+        # Jog distance |3 - 2| = 1 >= min_jog_length (1). Success.
+        new_track1 = router.jog_track(track=2, goal=6)
+        self.assertEqual(new_track1, 3) # Should end up on track 3
+        self.assertNotIn(2, router.Y[net1])
+        self.assertIn(3, router.Y[net1]) # Should now occupy track 3
+        self.assertIn(((1, 2), (1, 3)), router.segments[net1]) # Jog segment added
+        # Reset state for next test (undo jog)
+        router.Y = {1: {2}, 2: {4}, 3: {}} 
+        router.segments[1] = [((0, 2), (1, 2))]
+
+        # Test 2: Jog 'down' from track 4 (Net 2) towards track 1
+        # Path: 3 (empty), 2 (occupied by Net 1), 1 (empty/goal)
+        # Should stop at track 1. marker=1
+        # Jog distance |1 - 4| = 3 >= min_jog_length (1). Success.
+        net2 = 2
+        track4 = 4
+        router.Y = {1: {2}, 2: {4}, 3: {}} # Ensure net1 is on track 2
+        router.segments = {1: [((0, 2), (1, 2))], 2: [((0, 4), (1, 4))], 3: [((1, 5), (1, 7))]} 
+        new_track2 = router.jog_track(track=track4, goal=1)
+        self.assertEqual(new_track2, 1) # Should end up on track 1
+        self.assertNotIn(track4, router.Y[net2])
+        self.assertIn(1, router.Y[net2])
+        self.assertIn(((1, 4), (1, 1)), router.segments[net2]) # Segment is (start_track, end_track)
+        # Reset state
+        router.Y = {1: {2}, 2: {4}, 3: {}}
+        router.segments = {1: [((0, 2), (1, 2))], 2: [((0, 4), (1, 4))], 3: [((1, 5), (1, 7))]} 
+
+        # Test 3: Jog 'up' blocked immediately by vertical
+        # Jog track 4 ('up', goal=7). Path: 5 (vertical occupied). Stop. marker=4. Jog=0. Fail.
+        new_track3 = router.jog_track(track=4, goal=7)
+        self.assertIsNone(new_track3)
+        self.assertIn(4, router.Y[2]) # State unchanged
+        self.assertEqual(len(router.segments[2]), 1) # No segment added
+
+        # Test 4: Jog too short (minimum_jog_length = 2)
+        router.minimum_jog_length = 2
+        # Jog track 2 ('up', goal=3). Path: 3 (empty). Stop. marker=3. Jog=|3-2|=1. Fail.
+        new_track4 = router.jog_track(track=2, goal=3)
+        self.assertIsNone(new_track4)
+        self.assertIn(2, router.Y[1])
+        self.assertEqual(len(router.segments[1]), 1) # No segment added
+        router.minimum_jog_length = 1 # Reset for other tests if needed
+        
+        # Test 5: Jog 'down' where goal is blocked by horizontal
+        # Jog track 4 ('down', goal=2). Path: 3 (empty), 2 (occupied). Goal is 2.
+        # Range is range(3, 1, -1) -> i=3. vertical[3] False. horizontal[3] False. marker=3.
+        # i=2. vertical[2] False. horizontal[2] True. Continue.
+        # loop ends. Marker is 3. Jog=|3-4|=1. Success.
+        new_track5 = router.jog_track(track=4, goal=2)
+        self.assertEqual(new_track5, 3)
+        self.assertIn(3, router.Y[2])
+        self.assertNotIn(4, router.Y[2])
+        self.assertIn(((1, 4), (1, 3)), router.segments[2])
+
+    def test_compress_split_net(self):
+        """Test the compress_split_net functionality"""
+        T = [1, 0, 0, 0, 0]
+        B = [1, 0, 0, 0, 0]
+        router = ChannelRouter(T, B, initial_channel_width=7, minimum_jog_length=1)
+        router.current_column = 1
+        net_id = 1
+
+        # Scenario 1: Lower track jogs up, upper track blocked by vertical
+        # Net 1 (split) on {2, 6}
+        # Net 2 (horizontal obstruction) on {4}
+        # Net 3 (vertical obstruction) from 5 to 7
+        router.Y = {1: {2, 6}, 2: {4}, 3: {}} 
+        router.all_nets = {1, 2, 3}
+        router.segments = {
+            1: [((0, 2), (1, 2)), ((0, 6), (1, 6))], # Initial horizontal segments for Net 1
+            2: [((0, 4), (1, 4))], 
+            3: [((1, 5), (1, 7))]  # Vertical obstruction
+        }
+
+        router.compress_split_net(net_id)
+
+        # Expected: 
+        # Jog low (2->6): marker=3. Jog=1. Success. Y={1:{3, 6}}. Seg=((1,2),(1,3)).
+        # Jog high (6->3): marker=6 (blocked by vertical at 5). Jog=0. Fail.
+        self.assertEqual(router.Y[net_id], {3, 6}) # Track 2 moved to 3, track 6 stayed
+        
+        # Check segments using helper function
+        vertical_jogs = self.find_vertical_jogs(router, net_id)
+        self.assertIn(((1, 2), (1, 3)), vertical_jogs) # Check the specific vertical jog is present
+        self.assertEqual(len(vertical_jogs), 1) # Ensure only ONE vertical jog was added
+
+        # --- Reset for Scenario 2 ---
+        router = ChannelRouter(T, B, initial_channel_width=7, minimum_jog_length=1)
+        router.current_column = 1
+        net_id = 1
+
+        # Scenario 2: Both tracks jog towards middle
+        # Net 1 (split) on {2, 6}
+        # Net 2 (horizontal obstruction) on {4}
+        # No vertical obstruction this time
+        router.Y = {1: {2, 6}, 2: {4}, 3: {}}
+        router.all_nets = {1, 2, 3}
+        router.segments = {
+            1: [((0, 2), (1, 2)), ((0, 6), (1, 6))], 
+            2: [((0, 4), (1, 4))], 
+            3: []
+        }
+        
+        router.compress_split_net(net_id)
+
+        # Expected:
+        # Jog low (2->5): Succeeded. Y={1:{5, 6}}.
+        # Jog high (6->5): Failed (blocked by first jog result).
+        self.assertEqual(router.Y[net_id], {5, 6}) # Track 2->5, Track 6 stayed
+        
+        # Check segments using helper function
+        vertical_jogs_s2 = self.find_vertical_jogs(router, net_id)
+        self.assertIn(((1, 2), (1, 5)), vertical_jogs_s2) # Check the specific vertical jog is present
+        self.assertEqual(len(vertical_jogs_s2), 1) # Ensure only ONE vertical jog was added
+
+    def test_occupied_cells(self):
+        """Test the occupied_cells property"""
+        T = [1, 0, 0]
+        B = [2, 0, 0]
+        router = ChannelRouter(T, B, initial_channel_width=4)
+        router.current_column = 1
+
+        # Setup: Net 1 active on track 2, Net 2 active on track 4
+        # Vertical segment for Net 3 from track 1 to 3
+        router.Y = {1: {2}, 2: {4}, 3: {}} 
+        router.all_nets = {1, 2, 3}
+        router.segments = {1: [((0, 2), (1, 2))], 2: [((0, 4), (1, 4))], 3: [((1, 1), (1, 3))]} 
+        
+        horizontal_layer, vertical_layer = router.occupied_cells
+        
+        self.assertEqual(horizontal_layer, [False, False, True, False, True, False])
+        self.assertEqual(vertical_layer, [False, True, True, True, False, False])
+        
+    def test_get_net_for_track(self):
+        """Test the get_net_for_track helper method"""
+        self.setUp()
+        # Assign tracks to nets, make sure to also set the channel_width if we're going this manual route
+        self.router.channel_width = 3
+        self.router.Y[1].add(1)
+        self.router.Y[2].add(3)
+
+        # Test finding assigned tracks
+        self.assertEqual(self.router.get_net_for_track(1), 1)
+        self.assertEqual(self.router.get_net_for_track(3), 2)
+        
+        # Test finding an unassigned track
+        with self.assertRaises(ValueError):
+            self.router.get_net_for_track(2) # Track 2 is not assigned
+        with self.assertRaises(ValueError):
+            self.router.get_net_for_track(self.router.channel_width + 1) # Out of bounds
+
+    def test_pin_status(self):
+        """Test the pin_status method for checking unrouted pins"""
+        # Use a simple T/B for specific pin checks, width 3 (y_top=4)
+        T = [0, 1, 0, 1, 9]
+        B = [0, 2, 2, 0, 9]
+        router = ChannelRouter(T, B, initial_channel_width=3)
+        router.all_nets = {1, 2, 3, 9}
+
+        # Case 1: Column 1 - Pin T=1, Pin B=2, No verticals
+        router.current_column = 1
+        router.segments = {net: [] for net in router.all_nets} # Clear segments
+        self.assertTrue(router.pin_status('T'), "Col 1: Top pin exists, no vertical")
+        self.assertTrue(router.pin_status('B'), "Col 1: Bottom pin exists, no vertical")
+
+        # Case 2: Column 1 - Add vertical reaching top (Net 3: 1->4)
+        router.segments[3] = [((1, 1), (1, 4))] 
+        self.assertFalse(router.pin_status('T'), "Col 1: Top pin blocked by vertical to y_top")
+        self.assertTrue(router.pin_status('B'), "Col 1: Bottom pin unaffected")
+
+        # Case 3: Column 1 - Change vertical to reach bottom (Net 3: 0->2)
+        router.segments[3] = [((1, 0), (1, 2))] 
+        self.assertTrue(router.pin_status('T'), "Col 1: Top pin unaffected")
+        self.assertFalse(router.pin_status('B'), "Col 1: Bottom pin blocked by vertical from 0")
+
+        # Case 4: Column 1 - Vertical doesn't block T or B (Net 3: 1->2)
+        router.segments[3] = [((1, 1), (1, 2))] 
+        self.assertTrue(router.pin_status('T'), "Col 1: Top pin unblocked (vertical 1->2)")
+        self.assertTrue(router.pin_status('B'), "Col 1: Bottom pin unblocked (vertical 1->2)")
+
+        # Case 5: Column 2 - Pin T=0, Pin B=2
+        router.current_column = 2
+        router.segments = {net: [] for net in router.all_nets} # Clear segments
+        self.assertFalse(router.pin_status('T'), "Col 2: No top pin")
+        self.assertTrue(router.pin_status('B'), "Col 2: Bottom pin exists, no vertical")
+
+        # Case 6: Column 3 - Pin T=1, Pin B=0
+        router.current_column = 3
+        router.segments = {net: [] for net in router.all_nets} # Clear segments
+        self.assertTrue(router.pin_status('T'), "Col 3: Top pin exists, no vertical")
+        self.assertFalse(router.pin_status('B'), "Col 3: No bottom pin")
+        
+        # Case 7: Column 4 - Both pins exist (Net 9), vertical blocks both
+        router.current_column = 4
+        router.segments[9] = [((4, 0), (4, 4))] # Vertical Net 9 from bottom to top
+        self.assertFalse(router.pin_status('T'), "Col 4: Top pin blocked by vertical 0->4")
+        self.assertFalse(router.pin_status('B'), "Col 4: Bottom pin blocked by vertical 0->4")
+
+    def test_collapse_split_nets(self):
+        """Test the collapse_split_nets method logic"""
+        # Setup: width=5 (y_top=6). Net 1 finishes, Net 2 continues.
+        T = [0, 1, 0, 0, 2, 0]
+        B = [0, 1, 0, 0, 2, 0]
+        router = ChannelRouter(T, B, initial_channel_width=5)
+        router.current_column = 2 # Column where collapse happens
+
+        # Manually set active tracks for split nets at col 2
+        # Net 1 (split {2, 4}, no future pins -> can be finished)
+        # Net 2 (split {1, 5}, has future pins -> cannot be finished)
+        # Net 3 (unsplit {3})
+        router.Y = {1: {2, 4}, 2: {1, 5}, 3: {3}} 
+        router.all_nets = {1, 2, 3}
+        # Add dummy horizontal segments representing active state before collapse
+        router.segments = {
+            1: [((0, 2), (2, 2)), ((0, 4), (2, 4))], 
+            2: [((0, 1), (2, 1)), ((0, 5), (2, 5))], 
+            3: [((0, 3), (2, 3))]
+        }
+        
+        # Expected possible jogs: [(1, (2, 4)), (2, (1, 5))]
+        # Possible combinations (no overlaps): 
+        #   combo1 = [(1, (2, 4))] -> score: n_freed=1(base)+1(finishes)=2, dist_rank=[0](Net 2{1,5}), len=2 -> (2, [0], 2)
+        #   combo2 = [(2, (1, 5))] -> score: n_freed=1(base)=1, dist_rank=[1](Net 1{2,4}), len=4 -> (1, [1], 4)
+        #   combo3 = [(1, (2, 4)), (2, (1, 5))] -> OVERLAPS (5 > 2)! Invalid combination.
+        # Best pattern should be combo1 based on n_freed.
+        
+        router.collapse_split_nets()
+
+        # Verify Y state: Track 2 released from Net 1. Net 2 unchanged.
+        self.assertEqual(router.Y[1], {4}) # Net 1 should only have track 4 left
+        self.assertEqual(router.Y[2], {1, 5}) # Net 2 should be unchanged
+        self.assertEqual(router.Y[3], {3}) # Net 3 unaffected
+
+        # Verify segments using helper function
+        col = router.current_column
+        vertical_jogs_net1 = self.find_vertical_jogs(router, 1, col)
+        vertical_jogs_net2 = self.find_vertical_jogs(router, 2, col)
+        vertical_jogs_net3 = self.find_vertical_jogs(router, 3, col)
+        
+        self.assertIn(((col, 2), (col, 4)), vertical_jogs_net1)
+        self.assertEqual(len(vertical_jogs_net1), 1)
+        
+        self.assertEqual(len(vertical_jogs_net2), 0)
+        
+        self.assertEqual(len(vertical_jogs_net3), 0) # No jogs for Net 3
+
+        # --- Scenario 1 from user request ---
+        # Tracks [3,4,3,2,1,2,1] -> width=7. Expect j3 & j1a.
+        T_sc1 = [0]*8 # Ensure next_pin is None for all nets
+        B_sc1 = [0]*8
+        router_sc1 = ChannelRouter(T_sc1, B_sc1, initial_channel_width=7)
+        router_sc1.current_column = 1
+        router_sc1.Y = {3: {1, 3}, 4: {2}, 2: {4, 6}, 1: {5, 7}}
+        router_sc1.all_nets = {1, 2, 3, 4}
+        router_sc1.segments = { # Dummy segments to represent active state
+            3: [((0,1),(1,1)), ((0,3),(1,3))], 4: [((0,2),(1,2))], 
+            2: [((0,4),(1,4)), ((0,6),(1,6))], 1: [((0,5),(1,5)), ((0,7),(1,7))]
+        }
+
+        router_sc1.collapse_split_nets()
+
+        # Expected Y: Net 3 collapses (1 released), Net 1 collapses (5 released). Net 2 unchanged.
+        self.assertEqual(router_sc1.Y, {3: {3}, 4: {2}, 2: {4, 6}, 1: {7}})
+        col_sc1 = router_sc1.current_column
+        
+        # Check added vertical jogs using helper function
+        vj_sc1_n3 = self.find_vertical_jogs(router_sc1, 3, col_sc1)
+        vj_sc1_n4 = self.find_vertical_jogs(router_sc1, 4, col_sc1)
+        vj_sc1_n2 = self.find_vertical_jogs(router_sc1, 2, col_sc1)
+        vj_sc1_n1 = self.find_vertical_jogs(router_sc1, 1, col_sc1)
+        
+        self.assertEqual(len(vj_sc1_n3), 1, "Scenario1: Net 3 should have 1 jog")
+        self.assertIn(((col_sc1, 1), (col_sc1, 3)), vj_sc1_n3)
+        self.assertEqual(len(vj_sc1_n4), 0, "Scenario1: Net 4 should have 0 jogs")
+        self.assertEqual(len(vj_sc1_n2), 0, "Scenario1: Net 2 should have 0 jogs")
+        self.assertEqual(len(vj_sc1_n1), 1, "Scenario1: Net 1 should have 1 jog")
+        self.assertIn(((col_sc1, 5), (col_sc1, 7)), vj_sc1_n1)
+        
+        # --- Scenario 2 from user request ---
+        # Tracks [1,0,0,0,2,1,2] -> width=7. Expect j1 due to length.
+        T_sc2 = [0]*8 # Ensure next_pin is None for all nets
+        B_sc2 = [0]*8
+        router_sc2 = ChannelRouter(T_sc2, B_sc2, initial_channel_width=7)
+        router_sc2.current_column = 1
+        router_sc2.Y = {1: {1, 6}, 2: {5, 7}}
+        router_sc2.all_nets = {1, 2}
+        router_sc2.segments = { # Dummy segments to represent active state
+            1: [((0,1),(1,1)), ((0,6),(1,6))], 
+            2: [((0,5),(1,5)), ((0,7),(1,7))]
+        }
+        
+        router_sc2.collapse_split_nets()
+
+        # Expected Y: Net 1 collapses (1 released). Net 2 unchanged.
+        self.assertEqual(router_sc2.Y, {1: {6}, 2: {5, 7}})
+        col_sc2 = router_sc2.current_column
+        
+        # Check added vertical jogs using helper function
+        vj_sc2_n1 = self.find_vertical_jogs(router_sc2, 1, col_sc2)
+        vj_sc2_n2 = self.find_vertical_jogs(router_sc2, 2, col_sc2)
+        
+        self.assertEqual(len(vj_sc2_n1), 1, "Scenario2: Net 1 should have 1 jog")
+        self.assertIn(((col_sc2, 1), (col_sc2, 6)), vj_sc2_n1)
+        self.assertEqual(len(vj_sc2_n2), 0, "Scenario2: Net 2 should have 0 jogs")
 
 
 if __name__ == '__main__':

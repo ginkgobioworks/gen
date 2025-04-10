@@ -1097,7 +1097,8 @@ def _draw_original_nodes(
     for node, (x, y) in router.original_positions.items():
         gy, gx = coord_to_grid(x, y)
         if 0 <= gy < len(grid) and 0 <= gx < len(grid[0]):  # Check bounds
-            grid[gy][gx] = f'\033[38;5;55m\033[48;5;183m{node}\033[0m'  # Very dark purple foreground, light purple background
+            #grid[gy][gx] = f'\033[38;5;55m\033[48;5;183m{node}\033[0m'  # Very dark purple foreground, light purple background
+            grid[gy][gx] = f'\033[38;5;183m\033[48;5;55m{node}\033[0m'  # Light purple foreground, very dark purple background
 
 def _draw_terminals(
     grid: List[List[str]],

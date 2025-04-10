@@ -288,6 +288,8 @@ class ChannelRouter:
 
     def collapse_split_nets(self):
         all_jogs = self.possible_jogs()
+        if len(all_jogs) == 0:
+            return
         combinations = self.combinatorial_search(all_jogs)
 
         # Now we test all combinations of jogs to find the pattern that creates the most empty tracks
@@ -448,46 +450,41 @@ class ChannelRouter:
         x = self.current_column
 
         if side == 'T':
-            vertical_ends = [y2 for y1, y2 in self.active_verticals]
-            return self.T[x] != 0 and max(vertical_ends) < self.y_top
+            vertical_ends = [y2 for y1, y2 in self.active_verticals if y2 == self.y_top]
+            return self.T[x] != 0 and vertical_ends == []
         elif side == 'B':
-            vertical_starts = [y1 for y1, y2 in self.active_verticals]
-            return self.B[x] != 0 and min(vertical_starts) > 1
+            vertical_starts = [y1 for y1, y2 in self.active_verticals if y1 == 0]
+            return self.B[x] != 0 and vertical_starts == []
         else:
             raise ValueError("Invalid side (only 'T' or 'B' are allowed)")
-        
+
+    @property 
     def occupied_cells(self):
         # Returns two lists representing the occupied cells on the horizontal and vertical layers of the current column
         x = self.current_column
-        horizontal_layer = [y in self.active_tracks for y in range(1, self.channel_width + 1)]
+        horizontal_layer = [y in self.active_tracks for y in range(0, self.y_top+1)]
 
-        vertical_layer = [False] * (self.channel_width + 1)
+        vertical_layer = [False] * (self.channel_width + 2)
         for (y1, y2) in self.active_verticals:
             for y in range(y1, y2+1):
                 vertical_layer[y] = True
-
         return horizontal_layer, vertical_layer
 
-    def jog_track(self, track, direction, goal):
-        # Jog a track in the specified direction as far as possible towards the goal
-        # direction is either 'up' or 'down'
-        # Returns the new track position if successful, None otherwise
-        
-        vertical_layer, horizontal_layer = self.occupied_cells()
-        
-        if direction == 'up':
-            step = 1
-            start = track + 1
-            end = goal
-            range_func = range
-        else:  # down
-            step = -1
-            start = track - 1
-            end = goal
-            range_func = lambda a, b: range(a, b, -1)
-            
+    def jog_track(self, track, goal):
+        # Jog a track as far as possible towards the goal
+        # Returns the new track number if successful, None otherwise
+        if goal > track:
+            tracks = range(track, goal+1)
+        elif goal < track:
+            tracks = range(track, goal-1, -1)
+        else:
+            return track
+
+        # Simple array that indicates which cells in the column are occupied
+        horizontal_layer, vertical_layer = self.occupied_cells
+
         marker = track
-        for i in range_func(start, end):
+        for i in tracks:
             # If the vertical layer is occupied we have to stop the search
             if vertical_layer[i]:
                 break
@@ -496,7 +493,7 @@ class ChannelRouter:
                 continue
             # If we made it this far, we can record the index of this iteration in the marker variable
             marker = i
-            
+
         if abs(marker - track) >= self.minimum_jog_length:
             x = self.current_column
             net = self.get_net_for_track(track)
@@ -523,17 +520,13 @@ class ChannelRouter:
         
         # 1) Jog the lowest track up as far as possible
         low_track, goal = tracks[0], tracks[1]
-        self.jog_track(low_track, 'up', goal)
+        self.jog_track(low_track, goal)
 
         # 2) Jog the highest track down as far as possible
-        # Y() has been updated by the operations above, so we regenerate the ranking,
-        # this time in reverse 
-        tracks = sorted(list(self.Y[net]), reverse=True)
-        low_track, goal = tracks[0], tracks[1]
-        self.jog_track(low_track, 'down', goal)
-
-    def shift_track(self, track, direction):
-        pass
+        # Y() may have been updated by the operations above, so we regenerate the ranking
+        tracks = sorted(list(self.Y[net]))
+        high_track, goal = tracks[-1], tracks[-2]
+        self.jog_track(high_track, goal)
 
     def route(self):
         assert self.current_column == 0, "This channel has already been routed"
@@ -555,30 +548,38 @@ class ChannelRouter:
             unsplit_nets = [net for net in self.all_nets if len(self.Y[net]) == 1]
             track_distances  = [] 
             for net in unsplit_nets:
-                track = self.Y[net][0]
-                if self.classify_net(net) == 'rising':
-                    track_distances.append((track, self.y_top - track, 'up'))
-                elif self.classify_net(net) == 'falling':
-                    track_distances.append((track, track - 1, 'down'))
+                assert len(self.Y[net]) == 1
+                track = next(iter(self.Y[net])) # 
+                goal = self.channel_width if self.classify_net(net) == 'rising' else 1
+                distance = abs(track - goal)
+                track_distances.append((distance, track, goal))
 
             # Sort by distance to the target edge
-            track_distances.sort(key=lambda x: x[1], reverse=True)
-            for track, _, direction in track_distances:
-                self.shift_track(track, direction)
-
+            track_distances.sort(key=lambda x: x[0], reverse=True)
+            for _, track, goal in track_distances:
+                self.jog_track(track, goal)
 
             # 5) Widen the channel if needed and reattempt to connect the pins
             x = self.current_column
             if self.pin_status('T'):
                 net = self.T[x]
                 new_track = self.widen_channel('T')
-                self.segments[net].append(((x, new_track), (x, self.y_top)))
+                self.segments[net].append(((x, new_track), (x, self.channel_width)))
                 self.Y[net].add(new_track)
             if self.pin_status('B'):
                 net = self.B[x]
                 new_track = self.widen_channel('B')
                 self.segments[net].append(((x, 0), (x, new_track)))
                 self.Y[net].add(new_track)
+
+            # 6) Extend to the next column if needed
+            # Do not extend any nets that have just one track assigned tot them
+            # and do not have any pins coming up.
+            for net, tracks in self.Y.items():
+                if len(tracks) == 1 and self.next_pin(net) is None:
+                    self.Y[net] = {}
+                else:
+                    self.extend_net(net)
             
             # We're done if there are no more pins to route
             if not self.next_pin() and len(self.active_tracks) == 0:
@@ -586,8 +587,17 @@ class ChannelRouter:
 
             self.current_column += 1
 
+    def extend_net(self, net):
+        # Extend a net to the next column by finding a segment that has a point in the current column, at the right track
+        # and then extending that segment to the next column if the segment is horizontal, or by creating a new segment
+        # if the segment is vertical.
+        pass
+  
 
-
+if __name__ == "__main__":
+    router = ChannelRouter([1, 0, 2, 0, 3, 4, 0, 5], [0, 1, 0, 2, 4, 3, 0, 5])
+    router.route()
+    print(router.segments)
 
             
 
