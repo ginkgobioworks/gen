@@ -692,9 +692,23 @@ class ChannelRouter:
 
     def plot(self, highlight_points=[], highlight_segments=[]):
         if not self.gui:
-            raise ValueError("Set gui=True in the constructor to import matplotlib and enable plotting.")
-        
-        import matplotlib.pyplot as plt
+            # If GUI is disabled, print the text graph and return
+            text_graph = self.render_text_graph()
+            print("\nText-based Graph Visualization:")
+            print(text_graph)
+            return
+
+        # If GUI is enabled, proceed with Matplotlib plotting
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            print("Matplotlib not found. Cannot generate GUI plot.")
+            # Optionally, fall back to text graph here as well
+            # text_graph = self.render_text_graph()
+            # print("\nText-based Graph Visualization:")
+            # print(text_graph)
+            return
+
         fig, ax = plt.subplots(figsize=(12, 8))
         
         # Generate distinct colors
@@ -775,7 +789,7 @@ class ChannelRouter:
 
         # Add edges (which also adds nodes)
         for p1, p2 in segments:
-            G.add_edge(p1, p2)
+            G.add_edge(p1, p2, net=net)
 
         # Simplify the graph by removing collinear points
         while True:
@@ -800,7 +814,8 @@ class ChannelRouter:
                     if (y2 - y1) * (x3 - x2) == (y3 - y2) * (x2 - x1):
                         # Collinear: remove the intermediate node and connect neighbors
                         G.remove_node(p2)
-                        G.add_edge(p1, p3)
+                        # Ensure the new edge carries the net attribute
+                        G.add_edge(p1, p3, net=net)
                         simplified = True
                         # Break and restart the loop since the graph structure changed
                         break 
@@ -808,7 +823,147 @@ class ChannelRouter:
             if not simplified:
                 break # Exit loop if no simplifications were made in this pass
         
+        # Add net attribute to all nodes in the final simplified graph
+        for node in G.nodes():
+            G.nodes[node]['net'] = net
+            
         return G
+
+    def generate_combined_graph(self):
+        """
+        Generates a combined graph of all nets.
+        """
+        combined_graph = nx.Graph()
+        for net in self.all_nets:
+            net_graph = self.generate_net_graph(net)
+            # Add nodes and edges, preserving attributes.
+            # If nodes/edges already exist, attributes might be updated,
+            # but in this simplified graph context, nodes should be unique to nets
+            # except potentially at pin locations (which are simplified away usually).
+            for node, data in net_graph.nodes(data=True):
+                if node not in combined_graph:
+                    combined_graph.add_node(node, **data)
+                else:
+                    # If a node exists (e.g., shared pin), handle potential attribute merging if necessary
+                    # For now, assume last write wins or attributes are compatible.
+                    combined_graph.nodes[node].update(data) 
+            for u, v, data in net_graph.edges(data=True):
+                combined_graph.add_edge(u, v, **data)
+                
+        return combined_graph
+
+    def initialize_grid(self):
+        """
+        Initializes a 2D grid representing the channel layout.
+        Rows correspond to tracks (0 to y_top), columns to channel length.
+        """
+        # Grid dimensions: height = channel_width + 2, width = channel_length
+        # Initialize with spaces
+        grid_height = self.y_top + 1 # 0 to y_top inclusive
+        grid_width = self.channel_length
+        # Initialize with spaces. Note: y-axis (rows) first, then x-axis (columns)
+        grid = [[' ' for _ in range(grid_width)] for _ in range(grid_height)]
+        return grid
+
+    def _get_node_orientation(self, graph, node):
+        """
+        Determines the orientation of neighbors relative to a given node.
+        Returns a tuple (north, south, east, west) of booleans.
+        """
+        x, y = node
+        neighbors = graph.neighbors(node)
+        north, south, east, west = False, False, False, False
+        for neighbor in neighbors:
+            nx, ny = neighbor
+            if ny > y: north = True
+            if ny < y: south = True
+            if nx > x: east = True
+            if nx < x: west = True
+        return (north, south, east, west)
+
+    BOX_CHARS = {
+        # N S E W
+        (False, False, False, False): ' ', # Should not happen in connected graph
+        # Straights
+        (True,  True,  False, False): '│',
+        (False, False, True,  True ): '─',
+        # Corners
+        (True,  False, True,  False): '└',
+        (True,  False, False, True ): '┘',
+        (False, True,  True,  False): '┌',
+        (False, True,  False, True ): '┐',
+        # T-junctions
+        (True,  True,  True,  False): '├',
+        (True,  True,  False, True ): '┤',
+        (True,  False, True,  True ): '┴',
+        (False, True,  True,  True ): '┬',
+        # Cross
+        (True,  True,  True,  True ): '┼',
+        # Ends (should match straights if node degree is 1)
+        (True,  False, False, False): '│', # End pointing North
+        (False, True,  False, False): '│', # End pointing South
+        (False, False, True,  False): '─', # End pointing East
+        (False, False, False, True ): '─', # End pointing West
+    }
+
+    def render_text_graph(self):
+        """
+        Generates a text-based representation of the routed channel.
+        """
+        graph = self.generate_combined_graph()
+        grid = self.initialize_grid()
+        grid_height = len(grid)
+        grid_width = len(grid[0]) if grid_height > 0 else 0
+
+        # 1. Draw horizontal edges first
+        for u, v in graph.edges():
+            x1, y1 = u
+            x2, y2 = v
+
+            # Ensure coordinates are within grid bounds
+            if not (0 <= y1 < grid_height and 0 <= x1 < grid_width and \
+                    0 <= y2 < grid_height and 0 <= x2 < grid_width):
+                continue
+
+            if y1 == y2: # Horizontal segment
+                char = '─'
+                for x in range(min(x1, x2) + 1, max(x1, x2)):
+                     if 0 <= x < grid_width:
+                        grid[y1][x] = char
+
+        # 2. Draw vertical edges (can overwrite horizontal)
+        for u, v in graph.edges():
+            x1, y1 = u
+            x2, y2 = v
+
+            # Ensure coordinates are within grid bounds (redundant check, but safe)
+            if not (0 <= y1 < grid_height and 0 <= x1 < grid_width and \
+                    0 <= y2 < grid_height and 0 <= x2 < grid_width):
+                continue
+
+            if x1 == x2: # Vertical segment
+                char = '│'
+                for y in range(min(y1, y2) + 1, max(y1, y2)):
+                    if 0 <= y < grid_height:
+                         grid[y][x1] = char
+
+        # 3. Draw nodes (intersections/corners/ends) - this overwrites ends of edges
+        for node in graph.nodes():
+            x, y = node
+             # Ensure node coordinates are within grid bounds
+            if not (0 <= y < grid_height and 0 <= x < grid_width):
+                # print(f"Warning: Node {node} out of bounds") # Optional warning
+                continue
+
+            orientation = self._get_node_orientation(graph, node)
+            char = self.BOX_CHARS.get(orientation, '?') # Default to ? if orientation invalid
+            grid[y][x] = char
+
+        # 4. Format grid to string (reverse rows for intuitive printing)
+        output_lines = []
+        for row in reversed(grid):
+            output_lines.append("".join(row))
+        return "\n".join(output_lines)
 
 
 def random_pins(N, M):
@@ -832,7 +987,7 @@ if __name__ == '__main__':
 
     router = ChannelRouter(random_pins(5, 15), 
                            random_pins(5, 15),
-                           gui=True)
+                           gui=False)
 
     router.route_and_retry()
     router.plot()
