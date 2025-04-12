@@ -171,7 +171,7 @@ class ChannelRouter:
         # (b) as close as possible to the middle of the channel
         # If the track x is selected, then the old tracks x, x+1, ... will be moved up to x+1, x+2, ...
 
-        middle = round(self.channel_width / 2)
+        middle = round(self.channel_width / 2) + 1 # +1 because tracks are indexed from 1 to channel_width
 
         if len(self.column_segments) == 0:
             min_start = 1
@@ -179,7 +179,7 @@ class ChannelRouter:
         else:
             min_start = min(self.column_segments, key=lambda x: x[0])[0]
             max_end = max(self.column_segments, key=lambda x: x[1])[1]
-
+    
         if side == 'B':
             # Moving upwards from the bottom: the start of the first vertical, or the middle, whichever comes first
             new_track = min(min_start, middle)
@@ -191,17 +191,19 @@ class ChannelRouter:
         else:
             raise ValueError("Invalid side (only 'T', 'B', or None are allowed)")
 
+        assert new_track > 0
+
         self.channel_width = self.channel_width + 1
 
         # Update the active assignments for all tracks above the midline,
         # starting from the top down so we don't overwrite any existing assignments
-        for track in range(len(self.track_nets)-1, new_track-1, -1):
+        for track in range(self.y_top-1, new_track-1, -1):
             # Assign the current net to the track above it, which we just freed up
             net = self.track_nets[track]
             if net is not None:
                 self.claim_track(track + 1, net)
                 self.release_track(track)
-
+                
         # Update the stored segments
         for net, net_segments in self.segments.items():
             for i, ((x1, y1), (x2, y2)) in enumerate(net_segments):
@@ -216,14 +218,12 @@ class ChannelRouter:
                     # Make sure that the segment is facing the conventional direction
                     assert y1 <= y2
 
-                    if y1 >= new_track and y2 >= new_track:
+                    if y1 >= new_track:
                         self.segments[net][i] = ((x1, y1 + 1), (x2, y2 + 1))
-                    elif min(y1, y2) < new_track and max(y1, y2) >= new_track:
+                    elif y1 < new_track and y2 >= new_track:
                         self.segments[net][i] = ((x1, y1), (x2, y2 + 1))
                     else:
                         pass
-
-        # I don't think this is needed, we can just check if the pins are free or not
 
         # Return the id (y-coordinate) of the new track that was created
         return new_track
@@ -461,7 +461,7 @@ class ChannelRouter:
         # Returns True if there is an unrouted pin on the given side, in the current column
         # This is determined by checking that no segment leaves the channel in that spot
         x = self.current_column
-        if x >= self.channel_length:
+        if x >= len(self.T):
             return False
 
         if side == 'T':
@@ -524,11 +524,14 @@ class ChannelRouter:
         self.jog_track(high_track, goal)
 
     def route(self):
-        # Allow for extension beyond the channel length        
-        max_extension = 100
-        while self.current_column < self.channel_length + max_extension:
+        # The algorithm will dynamically extend the channel as needed,
+        # but we don't want it to extend indefinitely. This is in case
+        # the channel is blocked by a net that cannot be routed.
+        max_length = self.channel_length + 1000
+
+        while self.channel_length < max_length:
             # 1) Connect the pins
-            if self.current_column < self.channel_length:
+            if self.current_column < len(self.T):
                 self.connect_pins()
                 self.check_violations("after connecting pins")
 
@@ -556,7 +559,9 @@ class ChannelRouter:
                 elif self.classify_net(net) == 'falling':
                     goal = 1
                 else:
-                    goal = round(self.channel_width/2) + 1
+                    # Do not try to jog to the middle without good reason (e.g. split nets)
+                    # Otherwise you end up having to go back and forth between the middle and the edge
+                    continue
 
                 if track == goal:
                     continue
@@ -600,6 +605,7 @@ class ChannelRouter:
                 break
 
             self.current_column += 1
+            self.channel_length = max(self.channel_length, self.current_column+1)
 
     def route_and_retry(self, tries_left=10):
         if tries_left == 0:
@@ -654,6 +660,11 @@ class ChannelRouter:
         return list(zip(points, points[1:]))
 
     def check_violations(self, message=None):
+        # Tracks should stay within the channel
+        for net, tracks in self.Y.items():
+            for track in tracks:
+                assert 1 <= track <= self.channel_width, f"Track {track} is out of bounds for net {net}"
+
         # Flatten the segments into sets of points
         net_points = {net: set() for net in self.all_nets}
         net_unit_segments = {net: set() for net in self.all_nets}
@@ -815,13 +826,14 @@ def random_pins(N, M):
 
 if __name__ == '__main__':
     #router = ChannelRouter([1, 0, 2, 0, 3, 4, 0, 5], [0, 5, 0, 2, 4, 3, 1, 5], minimum_jog_length=1)
-    #router = ChannelRouter([1, 0, 2, 0, 3, 4, 0, 5], [0, 1, 0, 2, 4, 3, 0, 5])
+    #router = ChannelRouter([1, 0, 2, 0, 3, 4, 0, 5], [0, 1, 0, 2, 4, 3, 0, 5], gui=True)
     #router = ChannelRouter([1, 0, 2, 0, 3, 4, 0, 5], [0, 5, 0, 2, 4, 3, 1, 5], minimum_jog_length=1)
-    #router = ChannelRouter([1, 0, 1, 0, 2, 2, 2, 5], [0, 1, 0, 2, 2, 2, 0, 5])
+    router = ChannelRouter([1, 0, 1, 0, 2, 2, 2, 5], [0, 1, 0, 2, 2, 2, 0, 5], gui=True)
 
-    router = ChannelRouter(random_pins(10, 50), 
-                           random_pins(10, 50),
+    router = ChannelRouter(random_pins(5, 15), 
+                           random_pins(5, 15),
                            gui=True)
+
     router.route_and_retry()
     router.plot()
 

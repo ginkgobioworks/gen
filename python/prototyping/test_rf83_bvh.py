@@ -115,7 +115,7 @@ class TestChannelRouter(unittest.TestCase):
         self.assertEqual(self.router.channel_width, original_width + 1)
         
         # Middle track should be returned
-        self.assertEqual(middle, round(original_width / 2))
+        self.assertEqual(middle, round(original_width / 2) + 1)
         
     def test_claim_track(self):
         """Test claiming an available track"""
