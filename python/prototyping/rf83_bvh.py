@@ -788,8 +788,8 @@ class ChannelRouter:
             return G # Return an empty graph if the net has no segments
 
         # Add edges (which also adds nodes)
-        for p1, p2 in segments:
-            G.add_edge(p1, p2, net=net)
+        for (x1, y1), (x2, y2) in segments:
+            G.add_edge((y1*2, x1), (y2*2, x2), net=net)
 
         # Simplify the graph by removing collinear points
         while True:
@@ -859,8 +859,8 @@ class ChannelRouter:
         """
         # Grid dimensions: height = channel_width + 2, width = channel_length
         # Initialize with spaces
-        grid_height = self.y_top + 1 # 0 to y_top inclusive
-        grid_width = self.channel_length
+        grid_width = (self.y_top + 1 )*2# 0 to y_top inclusive
+        grid_height = self.channel_length
         # Initialize with spaces. Note: y-axis (rows) first, then x-axis (columns)
         grid = [[' ' for _ in range(grid_width)] for _ in range(grid_height)]
         return grid
@@ -991,6 +991,8 @@ if __name__ == '__main__':
 
     router.route_and_retry()
     router.plot()
+
+
 
             
 
