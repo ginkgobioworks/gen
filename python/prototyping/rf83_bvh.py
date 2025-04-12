@@ -1,16 +1,17 @@
 #! /usr/bin/env python3
 import itertools
-
+import networkx as nx
 
 
 class ChannelRouter:
-    def __init__(self, T, B, initial_channel_width = None, minimum_jog_length = 1, steady_net_constant = 10):
+    def __init__(self, T, B, initial_channel_width = None, minimum_jog_length = 1, steady_net_constant = 10, gui = False):
         self.T = T
         self.B = B
         assert len(T) == len(B)
         self.minimum_jog_length = minimum_jog_length
         self.steady_net_constant = steady_net_constant
-
+        self.gui = gui
+      
         if initial_channel_width is None:
             self.initial_channel_width = self.compute_density()
         else:
@@ -30,22 +31,40 @@ class ChannelRouter:
         # Combined list of segments per net (defined as (x1, y1), (x2, y2))
         self.segments = dict((net, []) for net in self.all_nets)
 
-        # Keep track of wether or not we need to widen the channel, which happens at the end of each iteration
-        self.needs_widening = False
+        # Whether the routing was successful
+        self.success = False
+
+    def reset(self, initial_channel_width=None, minimum_jog_length=None, steady_net_constant=None):
+        # Use stored initial parameters if not overridden
+        if initial_channel_width:
+            self.initial_channel_width = initial_channel_width
+        if minimum_jog_length:
+            self.minimum_jog_length = minimum_jog_length
+        if steady_net_constant:
+            self.steady_net_constant = steady_net_constant
+
+        self.channel_length = len(self.T)
+        self.current_column = 0
+        self.Y = dict((i, set()) for i in self.all_nets)
+
+ 
 
     # The pins themselves are located in the row above and below the channel,
     # so by definition tracks are indexed from 1 to channel_width (inclusive)
     @property
     def y_top(self):
         return self.channel_width + 1
-    
+
     @property
-    def active_tracks(self):
-        # Flatten Y to the collection of all tracks that are currently occupied
-        return [track for net in self.all_nets for track in self.Y[net]]
-    
+    def track_nets(self):
+        y_list = [None] * (self.channel_width + 2)
+        for net, tracks in self.Y.items():
+            for t in tracks:
+                y_list[t] = net
+        return y_list
+
     @property
-    def active_verticals(self):
+    def column_segments(self):
         # Return a list of all vertical segments in the current column
         x = self.current_column
         all_segments = [segment for net in self.all_nets for segment in self.segments[net]]
@@ -54,36 +73,17 @@ class ChannelRouter:
     
     def claim_track(self, track, net):
         # Activate a track for a net
-        assert track not in self.active_tracks, "Track is already occupied"
-        # Already save it as a segment, so we don't forget where the track started
-        # Because we don't know where it will end, we save it as a segment with equal start and end points.
-        # This way code that relies on segments defined by two points will still work.
-        x = self.current_column
-        self.segments[net].append(((x, track), (x, track))) 
-        # Add it to the Y variable that tracks active tracks per net
+        assert self.track_nets[track] is None, f"Track {track} is already occupied: Y: {self.Y}"
         self.Y[net].add(track)
 
     def release_track(self, track):
         # Deactivate a track
-        assert track in self.active_tracks, "Track is not occupied"
+        assert self.track_nets[track] is not None, "Track is not occupied"
         # Find the net that was using this track
         nets = [net for net in self.all_nets if track in self.Y[net]]
         assert len(nets) == 1, "Multiple nets claimed his track"
         net = nets[0]
-
-        # When we claim a track, we save the start point in the form of a pair of identical coordinates.
-        # Now, we need to find that segment and update it to have the new end point.
-        x = self.current_column 
-        for i, ((x1, y1), (x2, y2)) in enumerate(self.segments[net]):
-            # Find the 0-length segment in the current track
-            if (x1, y1) == (x2, y2) and y1 == track:
-                self.segments[net][i] = ((x1, y1), (x, track))
-                break
-
-        # Remove the track from the Y variable
         self.Y[net].remove(track)
-
-    
 
     def next_pin(self, net=None, side=None):
         if net:
@@ -158,10 +158,7 @@ class ChannelRouter:
 
         # Loop through the tracks until either an empty track or track with same net is found
         for track in track_range:
-            # Check if that track is currently actively asigned to a net
-            if track not in self.active_tracks:
-                return track
-            elif track in self.Y[net]:
+            if self.track_nets[track] is None or self.track_nets[track] == net:
                 return track
             
         # If no track is found, return None so that we know to widen the channel
@@ -176,13 +173,12 @@ class ChannelRouter:
 
         middle = round(self.channel_width / 2)
 
-        verticals = self.active_verticals
-        if len(verticals) == 0:
+        if len(self.column_segments) == 0:
             min_start = 1
             max_end = self.channel_width + 1
         else:
-            min_start = min(verticals, key=lambda x: x[0])[0]
-            max_end = max(verticals, key=lambda x: x[1])[1]
+            min_start = min(self.column_segments, key=lambda x: x[0])[0]
+            max_end = max(self.column_segments, key=lambda x: x[1])[1]
 
         if side == 'B':
             # Moving upwards from the bottom: the start of the first vertical, or the middle, whichever comes first
@@ -199,13 +195,12 @@ class ChannelRouter:
 
         # Update the active assignments for all tracks above the midline,
         # starting from the top down so we don't overwrite any existing assignments
-        for net in self.all_nets:
-            update_tracks = [track for track in self.Y[net] if track >= new_track]
-            for track in sorted(update_tracks, reverse=True):
-                # Release the track
-                self.release_track(track)
-                # Claim the track above it
+        for track in range(len(self.track_nets)-1, new_track-1, -1):
+            # Assign the current net to the track above it, which we just freed up
+            net = self.track_nets[track]
+            if net is not None:
                 self.claim_track(track + 1, net)
+                self.release_track(track)
 
         # Update the stored segments
         for net, net_segments in self.segments.items():
@@ -219,17 +214,15 @@ class ChannelRouter:
                 # 3. The segment is entirely below the middle
                 if x1 == x2:
                     # Make sure that the segment is facing the conventional direction
-                    assert y1 < y2
+                    assert y1 <= y2
 
                     if y1 >= new_track and y2 >= new_track:
                         self.segments[net][i] = ((x1, y1 + 1), (x2, y2 + 1))
-                    elif y1 < new_track and y2 > new_track:
+                    elif min(y1, y2) < new_track and max(y1, y2) >= new_track:
                         self.segments[net][i] = ((x1, y1), (x2, y2 + 1))
                     else:
                         pass
 
-        # Don't forget to reset the flag (here or in the calling function)
-        self.needs_widening = False
         # I don't think this is needed, we can just check if the pins are free or not
 
         # Return the id (y-coordinate) of the new track that was created
@@ -242,52 +235,72 @@ class ChannelRouter:
         # Special case: 
         #     if there are no empty tracks, and net Ti = Bi =/=0 is a net which has connections in this column only, 
         #     then run a vertical wire from top to bottom of this column
+        active_tracks = sum(1 for n in self.track_nets if n is not None) 
         if (top_net != 0 and bottom_net != 0
             and top_net == bottom_net
-            and len(self.active_tracks) == self.channel_width
+            and active_tracks == self.channel_width
             and self.segments[top_net] == []
             and self.next_pin(top_net) is None):
             vertical_segment = ((self.current_column, 0), (self.current_column, self.y_top))
             self.segments[top_net].append(vertical_segment)
+
         
         # Create the segments for both the top and bottom pins, but wait to actually commit them until we know
         # they don't overlap with each other, in which case we only keep the shortest segment.
-        new_segments = [] # [(net,(y1, y2), ...]
+        new_vertical_segments = [] # [(net,(y1, y2), ...]
         if top_net != 0:
-            track = self.nearest_track(top_net, 'T')
+            track = self.nearest_track(top_net, side='T')
             if track is not None:
-                new_segments.append((top_net, (track, self.y_top)))
-            else:
-                self.needs_widening = True
+                new_vertical_segments.append((top_net, (track, self.y_top)))
 
         if bottom_net != 0:
-            track = self.nearest_track(bottom_net, 'B')
+            track = self.nearest_track(bottom_net, side='B')
             if track is not None:
-                new_segments.append((bottom_net, (0, track)))
-            else:
-                self.needs_widening = True
+                new_vertical_segments.append((bottom_net, (0, track)))
 
         # Now we need to check if the segments overlap with each other, in which case we only keep the shortest segment.
-        if len(new_segments) > 1:
-            top_segment, bottom_segment = new_segments
-            if min(top_segment[1]) < max(bottom_segment[1]):
+        # The other pin will be connected when the channel is widened.
+        if len(new_vertical_segments) > 1:
+            top_segment, bottom_segment = new_vertical_segments
+            
+            if min(top_segment[1]) <= max(bottom_segment[1]):
                 top_len = top_segment[1][1] - top_segment[1][0]
                 bottom_len = bottom_segment[1][1] - bottom_segment[1][0]
                 if top_len > bottom_len:
-                    new_segments = [bottom_segment]
+                    new_vertical_segments = [bottom_segment]
                 else:
-                    new_segments = [top_segment]
+                    new_vertical_segments = [top_segment]
 
         # Now we can commit the segments to the net
-        for net, (y1, y2) in new_segments:
+        for net, (y1, y2) in new_vertical_segments:
             track = y2 if y1 == 0 else y1
             x = self.current_column
             assert track >= 1 and track <= self.channel_width
             self.Y[net].add(track)
+            assert y2 > y1
             self.segments[net].append(((x, y1), (x, y2)))
 
     def collapse_split_nets(self):
         all_jogs = self.possible_jogs()
+
+        # Filter out jogs that would overlap with existing vertical segments
+        filtered_jogs = []
+        existing_verticals = self.column_segments
+        
+        for net, (y1, y2) in all_jogs:
+            # Check if this potential jog overlaps with any existing vertical segments
+            overlaps = False
+            for v_y1, v_y2 in existing_verticals:
+                if max(y1, v_y1) < min(y2, v_y2):
+                    overlaps = True
+                    break
+            
+            if not overlaps:
+                filtered_jogs.append((net, (y1, y2)))
+        
+        # Use the filtered list for further processing
+        all_jogs = filtered_jogs
+
         if len(all_jogs) == 0:
             return
         combinations = self.combinatorial_search(all_jogs)
@@ -448,67 +461,49 @@ class ChannelRouter:
         # Returns True if there is an unrouted pin on the given side, in the current column
         # This is determined by checking that no segment leaves the channel in that spot
         x = self.current_column
+        if x >= self.channel_length:
+            return False
 
         if side == 'T':
-            vertical_ends = [y2 for y1, y2 in self.active_verticals if y2 == self.y_top]
+            vertical_ends = [y2 for y1, y2 in self.column_segments if y2 == self.y_top]
             return self.T[x] != 0 and vertical_ends == []
         elif side == 'B':
-            vertical_starts = [y1 for y1, y2 in self.active_verticals if y1 == 0]
+            vertical_starts = [y1 for y1, y2 in self.column_segments if y1 == 0]
             return self.B[x] != 0 and vertical_starts == []
         else:
             raise ValueError("Invalid side (only 'T' or 'B' are allowed)")
-
-    @property 
-    def occupied_cells(self):
-        # Returns two lists representing the occupied cells on the horizontal and vertical layers of the current column
-        x = self.current_column
-        horizontal_layer = [y in self.active_tracks for y in range(0, self.y_top+1)]
-
-        vertical_layer = [False] * (self.channel_width + 2)
-        for (y1, y2) in self.active_verticals:
-            for y in range(y1, y2+1):
-                vertical_layer[y] = True
-        return horizontal_layer, vertical_layer
-
+    
     def jog_track(self, track, goal):
         # Jog a track as far as possible towards the goal
         # Returns the new track number if successful, None otherwise
         if goal > track:
-            tracks = range(track, goal+1)
+            tracks = range(track+1, goal+1)
         elif goal < track:
-            tracks = range(track, goal-1, -1)
+            tracks = range(track-1, goal-1, -1)
         else:
             return track
 
-        # Simple array that indicates which cells in the column are occupied
-        horizontal_layer, vertical_layer = self.occupied_cells
-
         marker = track
         for i in tracks:
-            # If the vertical layer is occupied we have to stop the search
-            if vertical_layer[i]:
+            # If the vertical layer is occupied, we have to stop the search
+            if any(y1 <= i <= y2 for y1, y2 in self.column_segments):
                 break
             # If the horizontal layer is occupied we can jump over it
-            if horizontal_layer[i]:
+            if self.track_nets[i] is not None:
                 continue
             # If we made it this far, we can record the index of this iteration in the marker variable
             marker = i
 
         if abs(marker - track) >= self.minimum_jog_length:
             x = self.current_column
-            net = self.get_net_for_track(track)
-            self.segments[net].append(((x, track), (x, marker)))
+            y1, y2 = min(track, marker), max(track, marker)
+            net = self.track_nets[track]
+            self.segments[net].append(((x, y1), (x, y2)))
             self.release_track(track)
             self.claim_track(marker, net)
             return marker
+  
         return None
-        
-    def get_net_for_track(self, track):
-        # Helper function to find which net owns a given track
-        for net in self.all_nets:
-            if track in self.Y[net]:
-                return net
-        raise ValueError(f"Track {track} not found in any net")
         
     def compress_split_net(self, net):
         # For split nets that weren't collapsed, try to move the tracks closer to each other:
@@ -529,28 +524,43 @@ class ChannelRouter:
         self.jog_track(high_track, goal)
 
     def route(self):
-        assert self.current_column == 0, "This channel has already been routed"
         # Allow for extension beyond the channel length        
         max_extension = 100
         while self.current_column < self.channel_length + max_extension:
             # 1) Connect the pins
             if self.current_column < self.channel_length:
                 self.connect_pins()
+                self.check_violations("after connecting pins")
+
             # 2) Collapse split nets to free up tracks
             self.collapse_split_nets()
+            self.check_violations("after collapsing split nets")
 
             # 3) Compress split nets to narrow their range
             split_nets = [net for net in self.all_nets if len(self.Y[net]) > 1]
             for net in split_nets:
                 self.compress_split_net(net)
+                self.check_violations(f"after compressing split net {net}")
 
             # 4) Add jogs to raise rising nets and lower falling nets
             unsplit_nets = [net for net in self.all_nets if len(self.Y[net]) == 1]
+            # Filter out the nets that don't have a pin coming up
+            nets_to_jog = [net for net in unsplit_nets if self.next_pin(net) is not None]
+
             track_distances  = [] 
-            for net in unsplit_nets:
+            for net in nets_to_jog:
                 assert len(self.Y[net]) == 1
-                track = next(iter(self.Y[net])) # 
-                goal = self.channel_width if self.classify_net(net) == 'rising' else 1
+                track = next(iter(self.Y[net])) # How you get the only element from a set
+                if self.classify_net(net) == 'rising':
+                    goal = self.channel_width
+                elif self.classify_net(net) == 'falling':
+                    goal = 1
+                else:
+                    goal = round(self.channel_width/2) + 1
+
+                if track == goal:
+                    continue
+
                 distance = abs(track - goal)
                 track_distances.append((distance, track, goal))
 
@@ -558,19 +568,22 @@ class ChannelRouter:
             track_distances.sort(key=lambda x: x[0], reverse=True)
             for _, track, goal in track_distances:
                 self.jog_track(track, goal)
+                self.check_violations(f"after jogging track {track} to {goal}")
 
             # 5) Widen the channel if needed and reattempt to connect the pins
             x = self.current_column
             if self.pin_status('T'):
                 net = self.T[x]
                 new_track = self.widen_channel('T')
-                self.segments[net].append(((x, new_track), (x, self.channel_width)))
+                self.segments[net].append(((x, new_track), (x, self.channel_width+1)))
                 self.Y[net].add(new_track)
+                self.check_violations(f"after widening channel for a top pin")
             if self.pin_status('B'):
                 net = self.B[x]
                 new_track = self.widen_channel('B')
                 self.segments[net].append(((x, 0), (x, new_track)))
                 self.Y[net].add(new_track)
+                self.check_violations(f"after widening channel for a bottom pin")
 
             # 6) Extend to the next column if needed
             # Do not extend any nets that have just one track assigned tot them
@@ -580,24 +593,237 @@ class ChannelRouter:
                     self.Y[net] = {}
                 else:
                     self.extend_net(net)
-            
-            # We're done if there are no more pins to route
-            if not self.next_pin() and len(self.active_tracks) == 0:
+            self.check_violations(f"after extending nets")
+
+            # We're done if there are no more pins to route and no tracks are active
+            if not self.next_pin() and all(n is None for n in self.track_nets):
                 break
 
             self.current_column += 1
 
-    def extend_net(self, net):
-        # Extend a net to the next column by finding a segment that has a point in the current column, at the right track
-        # and then extending that segment to the next column if the segment is horizontal, or by creating a new segment
-        # if the segment is vertical.
-        pass
-  
+    def route_and_retry(self, tries_left=10):
+        if tries_left == 0:
+            print(f"Failed to route: T = {self.T}, B = {self.B}")
+            print(f"  initial_channel_width = {self.initial_channel_width}")
+            print(f"  minimum_jog_length = {self.minimum_jog_length}")
+            raise ValueError("Failed to route the edges")
 
-if __name__ == "__main__":
-    router = ChannelRouter([1, 0, 2, 0, 3, 4, 0, 5], [0, 1, 0, 2, 4, 3, 0, 5])
-    router.route()
-    print(router.segments)
+        # 1) Optimize the initial channel width
+        try:
+            output = self.route()
+        except ValueError as e:
+            print(e)
+            print(f"Retrying with a wider channel... {tries_left} tries left")
+            self.reset(initial_channel_width=self.initial_channel_width + 1)
+            self.route_and_retry(tries_left-1)
+
+        # 2) Optimize the minimum jog length, this is mostly aesthetic and shouldn't hold up the routing
+        if tries_left < 3:
+            print(f"Not trying to optimize the minimum jog length anymore (mostly aesthetic)")
+            self.success = True
+            return
+
+        # The mininum jog length ideally is about 1/4 of the final channel width
+        ideal_minimum_jog_length = max(1, self.channel_width // 4)
+        if ideal_minimum_jog_length < self.minimum_jog_length:
+            print(f"Retrying with a smaller minimum jog length ({ideal_minimum_jog_length})... {tries_left} tries left")
+            self.reset(minimum_jog_length=ideal_minimum_jog_length)
+            # We may have to increase the initial channel width as well, hence the recursive call
+            self.route_and_retry(tries_left-1)
+
+        self.success = True
+        
+    def extend_net(self, net):
+        # Other approach: add new segments in every case
+        x = self.current_column
+        for track in self.Y[net]:
+            self.segments[net].append(((x, track), (x+1, track)))
+
+    def get_unit_segments(self, segment):
+        # Return a list of unit segments that make up the given segment
+        ((x1,y1), (x2,y2)) = segment
+        if x1 == x2:
+            y_min, y_max = sorted([y1, y2])
+            points = [(x1, y) for y in range(y_min, y_max+1)]
+        elif y1 == y2:
+            x_min, x_max = sorted([x1, x2])
+            points = [(x, y1) for x in range(x_min, x_max+1)]
+        else:
+            raise ValueError(f"Segment {segment} is not rectilinear")
+
+        return list(zip(points, points[1:]))
+
+    def check_violations(self, message=None):
+        # Flatten the segments into sets of points
+        net_points = {net: set() for net in self.all_nets}
+        net_unit_segments = {net: set() for net in self.all_nets}
+        for net, segments in self.segments.items():
+            for p1, p2 in segments:
+                net_points[net].add(p1)
+                net_points[net].add(p2)
+                net_unit_segments[net].update(self.get_unit_segments((p1, p2)))
+
+        # Check for intersections between all pairs of nets
+        collisions = []
+        for n1, n2 in itertools.combinations(net_points.keys(), 2):
+            points = list(net_points[n1].intersection(net_points[n2]))
+            unit_segments = list(net_unit_segments[n1].intersection(net_unit_segments[n2]))
+            if points or unit_segments:
+                collisions.append((n1, n2, points, unit_segments))
+
+        if collisions and self.gui:
+            for n1, n2, points, unit_segments in collisions:
+                print(f"Collision between nets {n1} and {n2}: {message}")
+                self.plot(highlight_points=points, highlight_segments=unit_segments)
+            raise AssertionError(f"Constraint violation(s) detected. Current column {self.current_column}; {message}")
+        
+        return False
+
+    def plot(self, highlight_points=[], highlight_segments=[]):
+        if not self.gui:
+            raise ValueError("Set gui=True in the constructor to import matplotlib and enable plotting.")
+        
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(figsize=(12, 8))
+        
+        # Generate distinct colors
+        # Use sorted list for consistent color assignment across runs
+        sorted_nets = sorted(list(self.all_nets))
+        colors = {}
+        for i, net in enumerate(sorted_nets):
+            colors[net] = plt.cm.tab10(i % 10)
+
+        max_x = self.channel_length # Initialize max_x
+
+        # Plot simplified graph edges for each net
+        for net in self.all_nets:
+            G = self.generate_net_graph(net)
+            color = colors[net]
+            ax.plot([], [], color=color, label=f"Net {net}") # Legend entry
+
+            for p1, p2 in G.edges():
+                x1, y1 = p1
+                x2, y2 = p2
+                ax.plot([x1, x2], [y1, y2], color=color, linewidth=2, zorder=2) # Plot simplified segment
+                # Update max_x based on plotted coordinates
+                max_x = max(max_x, x1, x2)
+            
+            # Add dots at the nodes (vertices of the simplified graph)
+            for x, y in G.nodes():
+                ax.plot(x, y, 'o', color=color, markersize=5, zorder=3)
+        
+        # Add pin markers
+        for i, (top_pin, bottom_pin) in enumerate(zip(self.T, self.B)):
+            if top_pin != 0 and top_pin in colors: # Check if pin net exists and has a color
+                ax.plot(i, self.y_top, 'v', color=colors[top_pin], markersize=8, zorder=4)
+            if bottom_pin != 0 and bottom_pin in colors: # Check if pin net exists and has a color
+                ax.plot(i, 0, '^', color=colors[bottom_pin], markersize=8, zorder=4)
+        
+        # Highlight points
+        for (x, y) in highlight_points:
+            ax.plot(x, y, 'o', color='red', fillstyle='none', markersize=16, zorder=5)
+            ax.plot(x, y, 'o', color='red', fillstyle='none', markersize=24, zorder=5) 
+        
+        # Highlight segments (same as original plot)
+        for (x1, y1), (x2, y2) in highlight_segments:
+            ax.plot([x1, x2], [y1, y2], color='red', linewidth=4, alpha=0.3, zorder=5)
+            # Update max_x based on highlight segments
+            max_x = max(max_x, x1, x2)
+
+        ax.set_xlim(-0.5, max_x + 0.5)
+        ax.set_ylim(-0.5, self.y_top + 0.5)
+        
+        ax.grid(True, linestyle='--', alpha=0.7, zorder=0)
+        ax.set_xticks(range(int(max_x) + 2)) 
+        ax.set_yticks(range(self.y_top + 1))
+        
+        ax.set_xlabel('Column')
+        ax.set_ylabel('Track')
+        ax.set_title('Channel Router')
+        
+        # Add legend
+        ax.legend(title='Nets')
+        
+        plt.tight_layout()
+        plt.show()
+        return fig, ax
+
+    def generate_net_graph(self, net):
+        """
+        Generates a simplified networkx graph for a given net based on its segments.
+        Removes collinear intermediate points while preserving bends and endpoints.
+        """
+        if net not in self.segments:
+            raise ValueError(f"Net {net} not found in segments.")
+
+        G = nx.Graph()
+        segments = self.segments[net]
+
+        if not segments:
+            return G # Return an empty graph if the net has no segments
+
+        # Add edges (which also adds nodes)
+        for p1, p2 in segments:
+            G.add_edge(p1, p2)
+
+        # Simplify the graph by removing collinear points
+        while True:
+            simplified = False
+            nodes_to_process = list(G.nodes()) # Process a copy as the graph changes
+
+            for node in nodes_to_process:
+                # Check if node still exists and has degree 2 (potential intermediate point)
+                if node in G and G.degree(node) == 2:
+                    neighbors = list(G.neighbors(node))
+                    p1, p3 = neighbors[0], neighbors[1]
+                    p2 = node
+
+                    # Check for collinearity
+                    # Points (x1, y1), (x2, y2), (x3, y3) are collinear if
+                    # (y2 - y1) * (x3 - x2) == (y3 - y2) * (x2 - x1)
+                    x1, y1 = p1
+                    x2, y2 = p2
+                    x3, y3 = p3
+
+                    # Handle potential division by zero for vertical/horizontal lines implicitly
+                    if (y2 - y1) * (x3 - x2) == (y3 - y2) * (x2 - x1):
+                        # Collinear: remove the intermediate node and connect neighbors
+                        G.remove_node(p2)
+                        G.add_edge(p1, p3)
+                        simplified = True
+                        # Break and restart the loop since the graph structure changed
+                        break 
+            
+            if not simplified:
+                break # Exit loop if no simplifications were made in this pass
+        
+        return G
+
+
+def random_pins(N, M):
+    import random
+    pins = list(range(N+1))
+    pins.extend(random.choices(pins, k = M - N))
+    random.shuffle(pins)
+    # Add spacing between pins
+    pins_spaced = []
+    for pin in pins:
+        pins_spaced.extend([pin, 0])
+    pins_spaced.pop()
+    return pins_spaced
+
+
+if __name__ == '__main__':
+    #router = ChannelRouter([1, 0, 2, 0, 3, 4, 0, 5], [0, 5, 0, 2, 4, 3, 1, 5], minimum_jog_length=1)
+    #router = ChannelRouter([1, 0, 2, 0, 3, 4, 0, 5], [0, 1, 0, 2, 4, 3, 0, 5])
+    #router = ChannelRouter([1, 0, 2, 0, 3, 4, 0, 5], [0, 5, 0, 2, 4, 3, 1, 5], minimum_jog_length=1)
+    #router = ChannelRouter([1, 0, 1, 0, 2, 2, 2, 5], [0, 1, 0, 2, 2, 2, 0, 5])
+
+    router = ChannelRouter(random_pins(10, 50), 
+                           random_pins(10, 50),
+                           gui=True)
+    router.route_and_retry()
+    router.plot()
 
             
 
