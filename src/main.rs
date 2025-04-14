@@ -1024,10 +1024,10 @@ fn main() {
                 None,
             ) {
                 Ok(_) => println!("Merge successful"),
-                Err(_) => {
+                Err(details) => {
                     conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
                     operation_conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
-                    panic!("Merge failed.");
+                    panic!("Merge failed: {details}");
                 }
             }
             conn.execute("END TRANSACTION", []).unwrap();

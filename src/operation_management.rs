@@ -992,6 +992,11 @@ pub fn merge<'a>(
     if source_branch != current_branch {
         return Err(MergeError::InvalidBranch("Source branch and current branch must match. Checkout the branch you wish to merge into.".to_string()));
     }
+    if other_branch == current_branch {
+        return Err(MergeError::InvalidBranch(
+            "Target branch to merge is the currently checked out branch.".to_string(),
+        ));
+    }
     let current_operations = Branch::get_operations(operation_conn, source_branch);
     let other_operations = Branch::get_operations(operation_conn, other_branch);
     let first_different_op = other_operations
