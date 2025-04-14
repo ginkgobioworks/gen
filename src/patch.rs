@@ -105,6 +105,9 @@ pub fn apply_patches(conn: &Connection, op_conn: &Connection, patches: &[Operati
                 println!("Successfully applied operation.");
             }
             Err(e) => match e {
+                OperationError::NoOperation(details) => {
+                    println!("Operation with hash {details} does not exist")
+                }
                 OperationError::OperationExists => println!("Operation already applied. Skipping."),
                 OperationError::NoChanges => {
                     println!("No new changes present in operation. Skipping.")

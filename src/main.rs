@@ -270,6 +270,13 @@ enum Commands {
         #[clap(index = 1)]
         branch_name: Option<String>,
     },
+    /// Merge branches
+    #[command(arg_required_else_help(true))]
+    Merge {
+        /// The branch name to merge
+        #[clap(index = 1)]
+        branch_name: Option<String>,
+    },
     /// Migrate a database to a given operation
     #[command(arg_required_else_help(true))]
     Checkout {
@@ -977,20 +984,68 @@ fn main() {
                     .unwrap_or_else(|| panic!("Unable to find branch {branch_name}."));
                 let current_branch = OperationState::get_current_branch(&operation_conn, &db_uuid)
                     .expect("Unable to find current branch.");
-                operation_management::merge(
+                conn.execute("BEGIN TRANSACTION", []).unwrap();
+                operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
+                match operation_management::merge(
                     &conn,
                     &operation_conn,
                     &db_uuid,
                     current_branch,
                     other_branch.id,
                     None,
-                );
+                ) {
+                    Ok(_) => println!("Merge successful"),
+                    Err(_) => {
+                        conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
+                        operation_conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
+                        panic!("Merge failed.");
+                    }
+                }
+                conn.execute("END TRANSACTION", []).unwrap();
+                operation_conn.execute("END TRANSACTION", []).unwrap();
             } else {
                 println!("No options selected.");
             }
         }
+        Some(Commands::Merge { branch_name }) => {
+            let branch_name = branch_name.clone().expect("Branch name must be provided.");
+            let other_branch = Branch::get_by_name(&operation_conn, &db_uuid, &branch_name)
+                .unwrap_or_else(|| panic!("Unable to find branch {branch_name}."));
+            let current_branch = OperationState::get_current_branch(&operation_conn, &db_uuid)
+                .expect("Unable to find current branch.");
+            conn.execute("BEGIN TRANSACTION", []).unwrap();
+            operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
+            match operation_management::merge(
+                &conn,
+                &operation_conn,
+                &db_uuid,
+                current_branch,
+                other_branch.id,
+                None,
+            ) {
+                Ok(_) => println!("Merge successful"),
+                Err(details) => {
+                    conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
+                    operation_conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
+                    panic!("Merge failed: {details}");
+                }
+            }
+            conn.execute("END TRANSACTION", []).unwrap();
+            operation_conn.execute("END TRANSACTION", []).unwrap();
+        }
         Some(Commands::Apply { hash }) => {
-            operation_management::apply(&conn, &operation_conn, hash, None);
+            conn.execute("BEGIN TRANSACTION", []).unwrap();
+            operation_conn.execute("BEGIN TRANSACTION", []).unwrap();
+            match operation_management::apply(&conn, &operation_conn, hash, None) {
+                Ok(_) => println!("Operation applied"),
+                Err(_) => {
+                    conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
+                    operation_conn.execute("ROLLBACK TRANSACTION;", []).unwrap();
+                    panic!("Apply failed.");
+                }
+            }
+            conn.execute("END TRANSACTION", []).unwrap();
+            operation_conn.execute("END TRANSACTION", []).unwrap();
         }
         Some(Commands::Checkout { branch, hash }) => {
             if let Some(name) = branch.clone() {
