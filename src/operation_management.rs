@@ -82,6 +82,8 @@ pub enum RemoteOperationError {
     RemoteBranchAhead,
     #[error("IO Error: {0}")]
     IOError(#[from] std::io::Error),
+    #[error("SQLite Error: {0}")]
+    RemoteSqlError(#[from] rusqlite::Error),
 }
 
 pub enum FileMode {
@@ -1521,6 +1523,105 @@ pub fn push(operation_conn: &Connection, db_uuid: &str) -> Result<(), RemoteOper
                 transfer_file(&parent_dir_str, &remote_url, &filename, true)?;
             }
         }
+        Ok(())
+    } else {
+        Err(RemoteOperationError::RemoteUrlNotSet)
+    }
+}
+
+fn apply_remote_changeset(
+    remote_op_conn: &Connection,
+    op_conn: &Connection,
+    conn: &Connection,
+    db_uuid: &str,
+    operation_hash: &str,
+    remote_url: &str,
+    gen_dir: &str,
+) -> Result<(), RemoteOperationError> {
+    let operation = Operation::get_by_hash(remote_op_conn, operation_hash)?;
+    Operation::create(op_conn, db_uuid, &operation.change_type, &operation.hash)?;
+
+    let changeset_file = format!(".gen/{}/changeset/{}.cs", db_uuid, operation_hash);
+    let changeset_dep_file = format!(".gen/{}/changeset/{}.dep", db_uuid, operation_hash);
+    transfer_file(gen_dir, remote_url, &changeset_file, false);
+    transfer_file(gen_dir, remote_url, &changeset_dep_file, false);
+
+    apply(conn, op_conn, operation_hash, None);
+
+    Ok(())
+}
+
+// Pulls the current state of the remote repo down to the local copy
+pub fn pull(operation_conn: &Connection, db_uuid: &str) -> Result<(), RemoteOperationError> {
+    let mut stmt = operation_conn
+        .prepare("select remote_url from defaults where id = 1;")
+        .unwrap();
+    let row: Option<String> = stmt.query_row((), |row| row.get(0)).unwrap();
+    if let Some(remote_url) = row {
+        let mut remote_op_db_path = tempdir().unwrap().into_path();
+        let remote_op_db_dir = remote_op_db_path.to_str().unwrap().to_string();
+        let remote_op_conn = if file_exists(&remote_url, ".gen/gen.db")? {
+            transfer_file(&remote_op_db_dir, &remote_url, ".gen/gen.db", false)?;
+
+            remote_op_db_path.push(".gen");
+            remote_op_db_path.push("gen.db");
+            Some(get_operation_connection(Some(remote_op_db_path)))
+        } else {
+            None
+        };
+
+        let current_branch_id =
+            OperationState::get_current_branch(operation_conn, db_uuid).unwrap();
+        let remote_branch_operations = if let Some(ref remote_op_conn) = remote_op_conn {
+            let branch = Branch::get_by_id(remote_op_conn, current_branch_id);
+            if let Some(_branch) = branch {
+                Branch::get_operations(remote_op_conn, current_branch_id)
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        };
+        let local_branch_operations = Branch::get_operations(operation_conn, current_branch_id);
+
+        let remote_op_hashes = remote_branch_operations
+            .iter()
+            .map(|op| op.hash.clone())
+            .collect::<HashSet<String>>();
+        let local_op_hashes = local_branch_operations
+            .iter()
+            .map(|op| op.hash.clone())
+            .collect::<HashSet<String>>();
+        let leading_remote_ops = remote_op_hashes
+            .difference(&local_op_hashes)
+            .collect::<Vec<&String>>();
+        if leading_remote_ops.is_empty() {
+            return Ok(());
+        }
+
+        let mut stmt = operation_conn
+            .prepare("select db_name from defaults where id = 1;")
+            .unwrap();
+        let row: Option<String> = stmt.query_row((), |row| row.get(0)).unwrap();
+        let db_name = if let Some(row) = row {
+            row
+        } else {
+            "default".to_string()
+        };
+
+        let gen_dir = get_gen_dir().unwrap();
+        let parent_dir = FilePath::new(&gen_dir).parent().unwrap();
+        let parent_dir_str = parent_dir.to_str().unwrap().to_string();
+
+        let filenames = generate_file_manifest(operation_conn, remote_op_conn.as_ref(), db_name)?;
+        for filename in filenames {
+            if filename.starts_with("/") {
+                println!("Skipping since it is an absolute path: {}", filename);
+            } else {
+                transfer_file(&parent_dir_str, &remote_url, &filename, true)?;
+            }
+        }
+
         Ok(())
     } else {
         Err(RemoteOperationError::RemoteUrlNotSet)
