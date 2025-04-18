@@ -1,17 +1,19 @@
 #! /usr/bin/env python3
-import itertools
+from itertools import combinations, product, chain
 import networkx as nx
+from networkx.algorithms import bipartite
 
 
-class ChannelRouter:
-    def __init__(self, T, B, initial_channel_width = None, minimum_jog_length = 1, steady_net_constant = 10, gui = False):
+class Router:
+    def __init__(self, T, B, initial_channel_width = None, minimum_jog_length = 1, steady_net_constant = 10):
         self.T = T
         self.B = B
         assert len(T) == len(B)
         self.minimum_jog_length = minimum_jog_length
         self.steady_net_constant = steady_net_constant
-        self.gui = gui
-      
+
+        self.channel_length = len(T)
+
         if initial_channel_width is None:
             self.initial_channel_width = self.compute_density()
         else:
@@ -19,22 +21,17 @@ class ChannelRouter:
             self.initial_channel_width = initial_channel_width
         
         self.channel_width = self.initial_channel_width
-        self.channel_length = len(T)
         self.current_column = 0
+        
+        nets = set(self.T).union(set(self.B))
+        self.Y = dict((i, set()) for i in nets if i != 0)
 
-        # Filter out 0 from all_nets as it represents empty pins
-        self.all_nets = set(net for net in set(T + B) if net != 0)
+        # Graph to contain the final routing and intermediate segments
+        self.G = nx.Graph()
+        # note: we are using the presence or absence of a node to indicate a wire terminal,
+        # so you can't pre-add nodes for the terminals
 
-        # Tracks currently occupied by each net
-        self.Y = dict((i, set()) for i in self.all_nets)
-
-        # Combined list of segments per net (defined as (x1, y1), (x2, y2))
-        self.segments = dict((net, []) for net in self.all_nets)
-
-        # Whether the routing was successful
-        self.success = False
-
-    def reset(self, initial_channel_width=None, minimum_jog_length=None, steady_net_constant=None):
+    def reset(self, initial_channel_width=None, minimum_jog_length=None, steady_net_constant=None, T=None, B=None):
         # Use stored initial parameters if not overridden
         if initial_channel_width:
             self.initial_channel_width = initial_channel_width
@@ -42,48 +39,333 @@ class ChannelRouter:
             self.minimum_jog_length = minimum_jog_length
         if steady_net_constant:
             self.steady_net_constant = steady_net_constant
+        if T is not None:
+            self.T = T
+        if B is not None:
+            self.B = B
 
         self.channel_length = len(self.T)
         self.current_column = 0
-        self.Y = dict((i, set()) for i in self.all_nets)
+        nets = set(self.T).union(set(self.B)).difference({0})
+        self.Y = dict((i, set()) for i in nets) 
+        self.G = nx.Graph()
 
- 
+    def create_terminals(self, edges):
+        """
+        Finds maximal bicliques in the input bipartite graph.
+        Stores results in self.bicliques and self.node_to_bicliques.
 
-    # The pins themselves are located in the row above and below the channel,
-    # so by definition tracks are indexed from 1 to channel_width (inclusive)
+        Implementation will be based on maximal biclique enumeration algorithms.
+
+        Args:
+            edges: A list of tuples (source, target) representing the edges
+                   of the *bipartite* input graph.
+
+        Raises:
+            ValueError: If the input graph is not bipartite.
+            nx.NetworkXError: If partitions cannot be determined.
+        """
+        # 1. Build the graph
+        B = nx.Graph()
+        B.add_edges_from(edges)
+        all_nodes = set(B.nodes())
+
+        # 2. Verify bipartiteness and get partitions
+        if not bipartite.is_bipartite(B):
+            raise ValueError("Input graph for create_terminals must be bipartite.")
+        
+        try:
+            # Use bipartite.sets which handles disconnected graphs
+            partitions = list(bipartite.sets(B))
+            if len(partitions) != 2:
+                # This case should ideally be caught by is_bipartite,
+                # but handle defensively (e.g., graph with nodes but no edges)
+                if B.number_of_edges() == 0:
+                    U, V = set(B.nodes()), set()
+                    # Or handle based on node naming convention if possible?
+                    # For now, assume nodes might belong to either partition if disconnected
+                    print("Warning: Input graph has no edges. Proceeding with empty bicliques.")
+                else:
+                  raise nx.NetworkXError("Could not determine exactly two partitions.")
+            else:
+               U, V = partitions[0], partitions[1]
+        except Exception as e:
+             raise nx.NetworkXError(f"Error determining bipartite partitions: {e}") from e
+
+        # Ensure U and V cover all nodes, handle potential isolated nodes if necessary
+        found_nodes = U.union(V)
+        if found_nodes != all_nodes:
+             # This might happen if bipartite.sets misses isolated nodes
+             # Add them to a default partition (e.g., U) or handle as needed
+             missing_nodes = all_nodes - found_nodes
+             print(f"Warning: Nodes {missing_nodes} not found in partitions, adding to U.")
+             U.update(missing_nodes)
+             # Re-initialize all_nodes based on combined partitions if necessary
+             all_nodes = U.union(V)
+
+        # 3. Initialize result storage
+        self.bicliques = [] # List to store tuples: (list_of_U_nodes, list_of_V_nodes)
+        self.node_to_bicliques = {node: [] for node in all_nodes}
+
+        # 4. Placeholder for Core Algorithm Implementation
+        #    (e.g., based on MBEA/iMBEA from the paper https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-15-110)
+        #    This part will involve recursive calls or iterative expansion.
+        #    It needs access to B, U, V, self.bicliques, self.node_to_bicliques
+        
+        # Example recursive function structure (to be implemented):
+        # def _find_bicliques_recursive(potential_U, potential_V, candidates):
+        #     # Pruning logic
+        #     # Maximality checks
+        #     # Branching/Recursive calls
+        #     # Add maximal bicliques found to self.bicliques
+        #     # Update self.node_to_bicliques
+        #     pass
+
+        # Initial call to the recursive function would start here
+        # _find_bicliques_recursive(set(), set(), initial_candidates)
+        print("Placeholder: Core biclique finding algorithm needs implementation.")
+
+        # 5. Post-processing (if needed)
+        #    e.g., update node_to_bicliques map based on found bicliques
+        #    (This might be handled within the recursive function)
+        biclique_counter = 0
+        temp_node_map = {node: [] for node in all_nodes}
+        for idx, (L, R) in enumerate(self.bicliques):
+             for node in L:
+                 temp_node_map[node].append(idx)
+             for node in R:
+                 temp_node_map[node].append(idx)
+        self.node_to_bicliques = temp_node_map
+
+    # Getters
+    # -------
     @property
-    def y_top(self):
-        return self.channel_width + 1
-
-    @property
-    def track_nets(self):
-        y_list = [None] * (self.channel_width + 2)
-        for net, tracks in self.Y.items():
-            for t in tracks:
-                y_list[t] = net
-        return y_list
-
-    @property
-    def column_segments(self):
-        # Return a list of all vertical segments in the current column
-        x = self.current_column
-        all_segments = [segment for net in self.all_nets for segment in self.segments[net]]
-        verticals = [(y1, y2) for (x1, y1), (x2, y2) in all_segments if x1 == x and x2 == x]
-        return verticals
+    def all_tracks(self):
+        return set(range(1, self.channel_width + 1))
     
-    def claim_track(self, track, net):
-        # Activate a track for a net
-        assert self.track_nets[track] is None, f"Track {track} is already occupied: Y: {self.Y}"
-        self.Y[net].add(track)
+    @property
+    def occupied_tracks(self):
+        return set.union(*self.Y.values())
+    
+    @property
+    def free_tracks(self):
+        return self.all_tracks - self.occupied_tracks
+    
+    @property
+    def split_nets(self):
+        return sorted(set([net for net, tracks in self.Y.items() if len(tracks) > 1]))
+    
+    @property
+    def vertical_wiring(self):
+        return [(y1, y2, net) for ((x1, y1), (x2, y2), net) in self.G.edges(data='net')
+                if x1 == x2 and x1 == self.current_column]
 
-    def release_track(self, track):
-        # Deactivate a track
-        assert self.track_nets[track] is not None, "Track is not occupied"
-        # Find the net that was using this track
-        nets = [net for net in self.all_nets if track in self.Y[net]]
-        assert len(nets) == 1, "Multiple nets claimed his track"
-        net = nets[0]
-        self.Y[net].remove(track)
+    @property
+    def pins(self):
+        # Get the nets of any unrouted pins in the current column
+        # Returns a tuple (top, bottom) where top and bottom may be int or None
+        x = self.current_column
+        if x >= self.channel_length:
+            return (None, None)
+        y_t, y_b = self.channel_width + 1, 0
+
+        top_net = self.T[x] if self.T[x] > 0 else None
+        bottom_net = self.B[x] if self.B[x] > 0 else None
+
+        top = top_net if not self.G.has_node((x, y_t)) else None
+        bottom = bottom_net if not self.G.has_node((x, y_b)) else None
+        
+        return (top, bottom)
+    
+    @property
+    def finished(self):
+        return not self.next_pin() and len(self.occupied_tracks) == 0
+
+    
+    # Generic methods
+    # ---------------
+    def powerset(self, elements, exclude_empty=False):
+        # Full combinatorial search with all combinations from length 0 to len(elements)
+        # (includes the empty set)
+        for n in range(1 if exclude_empty else 0, len(elements) + 1):
+            for combo in combinations(elements, n):
+                yield combo
+
+    def overlaps(self, pairs):
+        """
+        Tests for overlaps between any pairs in a list of pairs.
+        """
+        if len(pairs) == 1:
+            return False
+        
+        # Each pair is a tuple of (start, stop), sort them by start
+        pairs = sorted(pairs, key=lambda x: x[0])
+
+        # Check for overlaps
+        for (_, stop1), (start2, _) in zip(pairs, pairs[1:]):
+            # An overlap occurs if the next segment starts before the previous one ends
+            if stop1 >= start2: #somewhat controversial
+                return True
+        return False
+    
+    def contiguous(self, pairs):
+        """
+        Tests if the given pairs of segments are contiguous.
+        """
+        if len(pairs) == 1:
+            return True
+        
+        # Each pair is a tuple of (start, stop), sort them by start
+        pairs = sorted(pairs, key=lambda x: x[0])
+
+        # Check if the pairs are contiguous
+        for (_, stop1), (start2, _) in zip(pairs, pairs[1:]):
+            if stop1 != start2:
+                return False
+        return True
+    
+    def colinear(self, p1, p2, p3):
+        """
+        Tests if the points, given as 3 tuples (x, y), are collinear.
+        """
+        x1, y1 = p1
+        x2, y2 = p2
+        x3, y3 = p3
+        return (y2 - y1) * (x3 - x2) == (y3 - y2) * (x2 - x1)
+    
+    # Keeping this here for reference when porting this to Rust
+    # def rename_node(self, old_node, new_node):
+    #     """
+    #     Rename a node in the graph by replacing it with a new node with the same attributes. 
+    #     """
+    #     attributes = self.G.nodes[old_node]
+    #     self.G.add_node(new_node, **attributes)
+    #     for (x1, y1), (x2, y2), edge_attr in self.G.edges(old_node, data=True):
+    #         if (x1, y1) == old_node:
+    #             self.G.add_edge(new_node, (x2, y2), **edge_attr)
+    #         else:
+    #             self.G.add_edge((x1, y1), new_node, **edge_attr)
+    #     # Removing the old node also removes all edges connected to it
+    #     self.G.remove_node(old_node)
+
+    def _get_node_orientation(self):
+        for node in self.G.nodes():
+            x, y = node
+            neighbors = self.G.neighbors(node)
+            north, south, east, west = False, False, False, False
+            for neighbor in neighbors:
+                nx, ny = neighbor
+                # Use Router's coordinate system (y increases upwards)
+                if ny > y: north = True
+                if ny < y: south = True
+                # Use Router's coordinate system (x increases rightwards)
+                if nx > x: east = True
+                if nx < x: west = True
+            # Store the orientation in the node attribute
+            self.G.nodes[node]['ports'] = (north, south, east, west)
+
+    def _simplify(self):
+        """
+        Simplifies the graph by building a new graph, using the pre-calculated 
+        'ports' attribute (node orientation N, S, E, W) on the original graph nodes
+        to identify and contract segments.
+        """
+        # Assumes self.get_node_orientation() has been called beforehand 
+        # to populate the 'ports' attribute on self.G nodes.
+        if not self.G or self.G.number_of_edges() == 0:
+            return
+
+        simplified_G = nx.Graph()
+        processed_segments = set()
+
+        # Define straight orientations
+        STRAIGHT_VERTICAL = (True, True, False, False)
+        STRAIGHT_HORIZONTAL = (False, False, True, True)
+
+        # 1. Identify and add all critical nodes (non-straight) using the 'ports' attribute
+        critical_nodes = set()
+        original_nodes = list(self.G.nodes()) # Still need a stable list to iterate over
+        for node in original_nodes:
+            # Access the pre-calculated orientation from the node attribute
+            orientation = self.G.nodes[node].get('ports', (False, False, False, False)) 
+            
+            if orientation not in [STRAIGHT_HORIZONTAL, STRAIGHT_VERTICAL]:
+                critical_nodes.add(node)
+                # Add critical node and copy its attributes (including 'ports')
+                simplified_G.add_node(node, **self.G.nodes[node]) 
+        
+        # Handle case where graph might be a single loop of straight segments
+        if not critical_nodes and self.G.number_of_nodes() > 0:
+            start_node = original_nodes[0] 
+            critical_nodes.add(start_node)
+            simplified_G.add_node(start_node, **self.G.nodes[start_node])
+
+        # 2. Iterate through critical nodes and trace segments using the 'ports' attribute
+        for start_node in critical_nodes:
+            for neighbor in list(self.G.neighbors(start_node)):
+                
+                if neighbor in critical_nodes:
+                    # Direct connection
+                    segment_endpoints = tuple(sorted((start_node, neighbor)))
+                    if segment_endpoints not in processed_segments:
+                        net_attr = self.G.edges[start_node, neighbor].get('net')
+                        if not simplified_G.has_edge(start_node, neighbor):
+                            simplified_G.add_edge(start_node, neighbor, net=net_attr)
+                        processed_segments.add(segment_endpoints)
+                else:
+                    # Start of a straight segment
+                    prev = start_node
+                    curr = neighbor
+                    segment_net = self.G.edges[prev, curr].get('net')
+                    
+                    while True:
+                        # Use stored 'ports' attribute
+                        curr_orientation = self.G.nodes[curr].get('ports', (False, False, False, False))
+                        
+                        if curr_orientation in [STRAIGHT_HORIZONTAL, STRAIGHT_VERTICAL]:
+                            neighbors = list(self.G.neighbors(curr)) 
+                            if len(neighbors) != 2: 
+                                end_node = curr
+                                break
+                            next_node = neighbors[0] if neighbors[1] == prev else neighbors[1]
+                            
+                            next_net = self.G.edges[curr, next_node].get('net')
+                            if next_net != segment_net:
+                                end_node = curr 
+                                break 
+
+                            prev = curr
+                            curr = next_node
+                            if curr in critical_nodes: 
+                                end_node = curr
+                                break
+                        else:
+                            end_node = curr 
+                            break
+                    
+                    # Add simplified edge
+                    if end_node in critical_nodes:
+                        segment_endpoints = tuple(sorted((start_node, end_node)))
+                        if segment_endpoints not in processed_segments:
+                             if not simplified_G.has_edge(start_node, end_node):
+                                simplified_G.add_edge(start_node, end_node, net=segment_net)
+                             processed_segments.add(segment_endpoints)
+                    elif end_node not in simplified_G:
+                        simplified_G.add_node(end_node)
+
+        # Replace the old graph with the simplified one
+        self.G = simplified_G
+
+
+    # Specialized methods
+    # --------------------
+    def track_to_net(self, track):
+        if track in self.occupied_tracks:
+            return next(k for k,v in self.Y.items() if track in v)
+        elif track in self.free_tracks:
+            return None
+        else:
+            raise ValueError(f"There is no track {track} in the channel")
 
     def next_pin(self, net=None, side=None):
         if net:
@@ -106,19 +388,18 @@ class ChannelRouter:
         next_top = self.next_pin(net, 'T') # k in the paper
         next_bottom = self.next_pin(net, 'B')
 
-        if next_top and (not next_bottom or next_bottom > next_top + self.steady_net_constant):
+        if next_top and (not next_bottom or (next_bottom >= next_top + self.steady_net_constant)):
             return 'rising'
-        elif next_bottom and (not next_top or next_top > next_bottom + self.steady_net_constant):
+        elif next_bottom and (not next_top or (next_top >= next_bottom + self.steady_net_constant)):
             return 'falling'
         else:
             return 'steady'
             
     def compute_density(self):
         max_density = 0
-        max_column = len(self.T) - 1  # T and B have the same length
         
         # Check density at each possible column position
-        for alpha in range(max_column + 1):
+        for alpha in range(self.channel_length):
             crossing_nets = set()
             
             # Find nets with pins to the left of position e
@@ -131,7 +412,7 @@ class ChannelRouter:
             
             # Find nets with pins to the right of position e
             right_nets = set()
-            for i in range(alpha, max_column + 1):
+            for i in range(alpha, self.channel_length):
                 if self.T[i] != 0:
                     right_nets.add(self.T[i])
                 if self.B[i] != 0:
@@ -145,283 +426,164 @@ class ChannelRouter:
                 max_density = density
         
         return max_density
-    
-    def nearest_track(self, net, side):
-        # Returns the nearest available track to the top or bottom of the channel.
-        # Available means either occupied by the given net, or not occupied at all.
-        assert side in ['T', 'B'], "Invalid side (only 'T' or 'B' are allowed)"
-
-        track_range = range(1, self.channel_width + 1)
-        # Reverse the range if we're starting from the top down
-        if side == 'T':
-            track_range = track_range[::-1]
-
-        # Loop through the tracks until either an empty track or track with same net is found
-        for track in track_range:
-            if self.track_nets[track] is None or self.track_nets[track] == net:
-                return track
-            
-        # If no track is found, return None so that we know to widen the channel
-        return None
         
-        
-    def widen_channel(self, side=None):
-        # Returns a new track which must be 
-        # (a) reachable from the top or bottom
-        # (b) as close as possible to the middle of the channel
-        # If the track x is selected, then the old tracks x, x+1, ... will be moved up to x+1, x+2, ...
+    # Step 1: Make feasible top and bottom connections in minimal manner
+    # ------------------------------------------------------------------
+    def add_vertical_wire(self, net, from_track, to_track):
+        # Ensure that y1 < y2:
+        y1 = min(from_track, to_track)
+        y2 = max(from_track, to_track)
+        self.G.add_edge((self.current_column, y1), (self.current_column, y2), net=net)
 
-        middle = round(self.channel_width / 2) + 1 # +1 because tracks are indexed from 1 to channel_width
-
-        if len(self.column_segments) == 0:
-            min_start = 1
-            max_end = self.channel_width + 1
-        else:
-            min_start = min(self.column_segments, key=lambda x: x[0])[0]
-            max_end = max(self.column_segments, key=lambda x: x[1])[1]
-    
-        if side == 'B':
-            # Moving upwards from the bottom: the start of the first vertical, or the middle, whichever comes first
-            new_track = min(min_start, middle)
-        elif side == 'T':
-            # Moving downwards from the top: the end of the last vertical (exclusive), or the middle, whichever comes first
-            new_track = max(max_end + 1, middle)
-        elif side == None:
-            new_track = middle
-        else:
-            raise ValueError("Invalid side (only 'T', 'B', or None are allowed)")
-
-        assert new_track > 0
-
-        self.channel_width = self.channel_width + 1
-
-        # Update the active assignments for all tracks above the midline,
-        # starting from the top down so we don't overwrite any existing assignments
-        for track in range(self.y_top-1, new_track-1, -1):
-            # Assign the current net to the track above it, which we just freed up
-            net = self.track_nets[track]
-            if net is not None:
-                self.claim_track(track + 1, net)
-                self.release_track(track)
-                
-        # Update the stored segments
-        for net, net_segments in self.segments.items():
-            for i, ((x1, y1), (x2, y2)) in enumerate(net_segments):
-                # Horizontal tracks are either entirely above or below the middle:
-                if y1 == y2 and y1 >= new_track:
-                    self.segments[net][i] = ((x1, y1 + 1), (x2, y2 + 1))
-                # For vertical tracks, we have three scenarios:
-                # 1. The segment is entirely above the middle
-                # 2. The segment is crossing the middle
-                # 3. The segment is entirely below the middle
-                if x1 == x2:
-                    # Make sure that the segment is facing the conventional direction
-                    assert y1 <= y2
-
-                    if y1 >= new_track:
-                        self.segments[net][i] = ((x1, y1 + 1), (x2, y2 + 1))
-                    elif y1 < new_track and y2 >= new_track:
-                        self.segments[net][i] = ((x1, y1), (x2, y2 + 1))
-                    else:
-                        pass
-
-        # Return the id (y-coordinate) of the new track that was created
-        return new_track
-    
     def connect_pins(self):
         top_net = self.T[self.current_column]
         bottom_net = self.B[self.current_column]
+        y1 = 0
+        y2 = self.channel_width + 1
 
         # Special case: 
         #     if there are no empty tracks, and net Ti = Bi =/=0 is a net which has connections in this column only, 
         #     then run a vertical wire from top to bottom of this column
-        active_tracks = sum(1 for n in self.track_nets if n is not None) 
         if (top_net != 0 and bottom_net != 0
             and top_net == bottom_net
-            and active_tracks == self.channel_width
-            and self.segments[top_net] == []
+            and len(self.occupied_tracks) == self.channel_width
+            and self.Y[top_net] == set()
             and self.next_pin(top_net) is None):
-            vertical_segment = ((self.current_column, 0), (self.current_column, self.y_top))
-            self.segments[top_net].append(vertical_segment)
 
+            # Vertical wire from bottom to top
+            self.add_vertical_wire(top_net, y1, y2)
+            return 
         
-        # Create the segments for both the top and bottom pins, but wait to actually commit them until we know
-        # they don't overlap with each other, in which case we only keep the shortest segment.
-        new_vertical_segments = [] # [(net,(y1, y2), ...]
-        if top_net != 0:
-            track = self.nearest_track(top_net, side='T')
-            if track is not None:
-                new_vertical_segments.append((top_net, (track, self.y_top)))
-
+        # Find the nearest track for the top and/or bottom pins
         if bottom_net != 0:
-            track = self.nearest_track(bottom_net, side='B')
-            if track is not None:
-                new_vertical_segments.append((bottom_net, (0, track)))
+            possible_tracks = self.free_tracks.union(self.Y[bottom_net])
+            bottom_track = min(possible_tracks) if possible_tracks else None
+        if top_net != 0:
+            possible_tracks = self.free_tracks.union(self.Y[top_net])
+            top_track = max(possible_tracks) if possible_tracks else None
 
-        # Now we need to check if the segments overlap with each other, in which case we only keep the shortest segment.
-        # The other pin will be connected when the channel is widened.
-        if len(new_vertical_segments) > 1:
-            top_segment, bottom_segment = new_vertical_segments
-            
-            if min(top_segment[1]) <= max(bottom_segment[1]):
-                top_len = top_segment[1][1] - top_segment[1][0]
-                bottom_len = bottom_segment[1][1] - bottom_segment[1][0]
-                if top_len > bottom_len:
-                    new_vertical_segments = [bottom_segment]
+        # If there is overlap, only keep the shortest vertical wire,
+        # the other pin will be connected when the channel is widened.
+        if bottom_net != 0 and top_net != 0 and bottom_track is not None and top_track is not None:
+            # Check if the same net is connecting top and bottom
+            if top_net == bottom_net:
+                # Same net (T[i] == B[i] != 0): Allow overlap 
+                self.Y[bottom_net].add(bottom_track) # bottom_net == top_net
+                self.Y[top_net].add(top_track)
+                self.add_vertical_wire(bottom_net, 0, bottom_track)
+                self.add_vertical_wire(top_net, top_track, self.channel_width + 1)
+            else:
+                # Different nets:
+                if bottom_track < top_track:
+                    self.Y[bottom_net].add(bottom_track)
+                    self.Y[top_net].add(top_track)
+                    self.add_vertical_wire(bottom_net, 0, bottom_track)
+                    self.add_vertical_wire(top_net, top_track, self.channel_width + 1)
                 else:
-                    new_vertical_segments = [top_segment]
+                    # Overlap, only keep the shortest vertical wire
+                    # Compare vertical distances: bottom pin vs top pin
+                    if bottom_track < (self.channel_width + 1 - top_track):
+                        # Bottom connection is shorter
+                        self.Y[bottom_net].add(bottom_track)
+                        self.add_vertical_wire(bottom_net, 0, bottom_track)
+                    else:
+                        # Top connection is shorter or equal
+                        self.Y[top_net].add(top_track)
+                        self.add_vertical_wire(top_net, top_track, self.channel_width + 1)
 
-        # Now we can commit the segments to the net
-        for net, (y1, y2) in new_vertical_segments:
-            track = y2 if y1 == 0 else y1
-            x = self.current_column
-            assert track >= 1 and track <= self.channel_width
-            self.Y[net].add(track)
-            assert y2 > y1
-            self.segments[net].append(((x, y1), (x, y2)))
+        elif bottom_net != 0 and bottom_track is not None:
+            self.Y[bottom_net].add(bottom_track)
+            self.add_vertical_wire(bottom_net, 0, bottom_track)
+        elif top_net != 0 and top_track is not None:
+            self.Y[top_net].add(top_track)
+            self.add_vertical_wire(top_net, top_track, self.channel_width + 1)
 
-    def collapse_split_nets(self):
-        all_jogs = self.possible_jogs()
-
-        # Filter out jogs that would overlap with existing vertical segments
-        filtered_jogs = []
-        existing_verticals = self.column_segments
+    # Step 2: Free as many tracks as possible by collapsing split nets
+    # ----------------------------------------------------------------
+    def generate_jog_patterns(self):
+        # Generate all possible jog patterns for the current column
+        # Returns a pattern as a list of jogs, grouped by the net they belong to:
+        # [((track1, track2), (track3, track4), ...), ((track5, track6), (track7, track8), ...), ...]
+        # (This also includes empty groups to keep the distinction between nets)
         
-        for net, (y1, y2) in all_jogs:
-            # Check if this potential jog overlaps with any existing vertical segments
-            overlaps = False
-            for v_y1, v_y2 in existing_verticals:
-                if max(y1, v_y1) < min(y2, v_y2):
-                    overlaps = True
-                    break
-            
-            if not overlaps:
-                filtered_jogs.append((net, (y1, y2)))
-        
-        # Use the filtered list for further processing
-        all_jogs = filtered_jogs
+        jogs = []
+        for net in sorted(self.split_nets):
+            # Generate all possible jogs for this net (non-overlapping)
+            track_list = sorted(self.Y[net])
+            net_jogs = tuple(zip(track_list, track_list[1:]))
+            jogs.append(net_jogs)
 
-        if len(all_jogs) == 0:
-            return
-        combinations = self.combinatorial_search(all_jogs)
+        # To build the patterns we take the cartesian product of the power sets of each net
+        patterns = []
+        for pattern in product(*(self.powerset(net_jogs, exclude_empty=True) for net_jogs in jogs)):
+            if self.validate_jog_pattern(pattern):
+                patterns.append(pattern)
+        return patterns
 
-        # Now we test all combinations of jogs to find the pattern that creates the most empty tracks
+    def validate_jog_pattern(self, pattern):
+        # Pattern is a list of jogs, grouped by net:
+        # [((track1, track2), (track3, track4), ...), ((track5, track6), (track7, track8), ...), ...]
+        # Check if the jogs in the pattern are valid by testing for overlaps
+        # between the jogs of different nets. This is a two-step combination:
+        # 1) each net is checked against all other nets
+        # 2) all jogs from one net are checked against all jogs from the other net
+        # Returns True if valid, False otherwise 
 
-        # (The paper mentions making the distinction between same net vs different net, as well as including
-        #  existing verticals in that column. We should see the outcome of same net overlaps get recapitulated 
-        #  by the combinatorial search, so I don't think we need to make that distinction.)
-
-        best_pattern = None
-        best_score = [0, [], self.channel_width] # This will always lose
-        for combo in combinations:
-            # Check for any overlaps between the jogs
-            pairs = [pair for _, pair in combo]
-            if self.test_overlaps(pairs):
-                continue
-
-            score = self.evaluate_jogs(combo)
-            if self.compare_scores(score, best_score):
-                best_score = score
-                best_pattern = combo                
-
-        for net, pair in best_pattern:
-            # Add a vertical segment to the net and free up one of the tracks
-            x = self.current_column
-            y1, y2 = pair
-            self.segments[net].append(((x, y1), (x, y2)))
-            self.release_track(y1)
-    
-
-    def possible_jogs(self):
-        # Returned as a list of (net, (track1, track2), ...), ...]
-        # Split nets have more than one track currently active
-        nets_to_jog = [net for net in self.all_nets if len(self.Y[net]) > 1]
-        
-        all_jogs = [] # [(net, (track1, track2), ...), ...]
-        for net in nets_to_jog:
-            # For each split net, we may have more than one jog to choose from
-            tracks = sorted(list(self.Y[net]))
-            for a, b in zip(tracks, tracks[1:]):
-                all_jogs.append((net, (a, b)))
-        return all_jogs
-    
-    def combinatorial_search(self, elements):
-        # Full combinatorial search with all combinations from length 1 to len(elements)
-        for n in range(1, len(elements) + 1):
-            for combo in itertools.combinations(elements, n):
-                yield combo
-
-    def test_overlaps(self, pairs):
-        if len(pairs) == 1:
-            return False
-        
-        # Each pair is a tuple of (start, stop), sort them by start
-        pairs = sorted(pairs, key=lambda x: x[0])
-
-        # Check for overlaps
-        for (_, stop1), (start2, _) in zip(pairs, pairs[1:]):
-            # An overlap occurs if the next segment starts before the previous one ends
-            if stop1 > start2:
-                return True
-        return False
-    
-    def test_contiguous(self, pairs):
-        if len(pairs) == 1:
-            return True
-        
-        # Each pair is a tuple of (start, stop), sort them by start
-        pairs = sorted(pairs, key=lambda x: x[0])
-
-        # Check if the pairs are contiguous
-        for (_, stop1), (start2, _) in zip(pairs, pairs[1:]):
-            if stop1 != start2:
-                return False
+        for net1_jogs, net2_jogs in combinations(pattern, 2):
+            # Empty groups cause the product to be empty, which is valid
+            for j1, j2 in product(net1_jogs, net2_jogs):
+                low1, high1 = j1
+                low2, high2 = j2
+                assert low1 < high1 and low2 < high2
+                if not (high1 < low2 or high2 < low1):
+                    return False
         return True
     
-    def evaluate_jogs(self, jog_pattern):
-        # jog_pattern is a list of (net, (track1, track2))
+    def evaluate_jogs(self, pattern):
+        # pattern is a list of lists of tuples (track1,track2) grouped by net
         # Returns a score as 3 values:
         # 1. Number of tracks freed
         # 2. Outermost split net distance from edge
         # 3. Sum of jog lengths
 
-        # 1) Maximize the number of new empty tracks created by the jogs
+        # 1) Number of new empty tracks created by the jogs (higher is better)
         # From the paper: "a pattern [of jogs] will free up one track for every jog it contains, 
         # plus one additional track for every net it finishes"
-
-        n_freed = len(jog_pattern)
+        all_jogs = list(chain(*pattern))
+        n_freed = len(all_jogs)
 
         # The only nets we can finish are the split nets that are still being routed, but don't have an upcoming pin
-        almost_finished_nets = [net for net in self.all_nets if (self.next_pin(net) is None) and (len(self.Y[net]) > 1)]
-        
-        jogs_by_net = {net: [] for net in self.all_nets}
-        for (net, pair) in jog_pattern:
-            jogs_by_net[net].append(pair)
-
-        pattern_tracks = []
-        for net, track_pairs in jogs_by_net.items():
-            # Flatten the list of pairs into a single set of tracks
-            tracks = {track for jog in track_pairs for track in jog}
-            pattern_tracks.extend(tracks) # Cumulate the tracks for use in step 2
-
-            # Exclude the jog patterns that themselves are split
-            # ([(1, 2),(3, 4)] is split, but [(1, 2), (2, 3)] is not)
-            if not self.test_contiguous(track_pairs):
+        almost_finished_nets = [net for net, tracks in self.Y.items() 
+                                if (self.next_pin(net) is None) and (len(tracks) > 1)]
+        all_jogs = []
+        for group in pattern:
+            if len(group) == 0:
                 continue
 
-            # Confirm that we cover all the tracks for that net,
-            # and that there are no pins coming up anymore.
-            if self.Y[net] == tracks and self.next_pin(net) is None:
-                n_freed += 1
+            # Flatten the jogs into a single list for use in step 2
+            all_jogs.extend(group)
 
+            # If the jogs for that net are not contiguous, it won't fully close out the net
+            # so we don't count it.
+            if not self.contiguous(group):
+                continue
+
+            # Test if there's a net for which we've just freed all the tracks
+            # and that there are no pins coming up anymore.
+            for net in almost_finished_nets:
+                if self.Y[net].issubset(chain(*group)):
+                    n_freed += 1
+                    break
+
+        
         # 2) Maximize the distance of the outermost split net from the edge
         # Find all split nets that would not be joined by the jogs
         # Then find the outermost track of each of those nets
         # Then take the minimum distance of those outermost tracks from the edge
-        split_nets = [net for net in self.all_nets if len(self.Y[net]) > 1]
         net_distances = []
-        for net in split_nets:
-            dangling_tracks = [track for track in self.Y[net] if track not in pattern_tracks]
+        all_tracks = set(chain(*all_jogs))
+        for net in self.split_nets:
+            dangling_tracks = self.Y[net].difference(all_tracks)
             if not dangling_tracks:
                 continue
             distance_from_bottom = min(dangling_tracks) - 1
@@ -432,7 +594,7 @@ class ChannelRouter:
         distance_ranking = sorted(net_distances) 
 
         # 3) Minimize the total length of the jogs
-        jog_length_sum = sum(y2 - y1 for _, (y1, y2) in jog_pattern)
+        jog_length_sum = sum(y2 - y1 for (y1, y2) in all_jogs)
         
         return n_freed, distance_ranking, jog_length_sum
     
@@ -456,26 +618,74 @@ class ChannelRouter:
         
         # Maximize the total length of the jogs
         return jog_length_sum1 > jog_length_sum2
-    
-    def pin_status(self, side):
-        # Returns True if there is an unrouted pin on the given side, in the current column
-        # This is determined by checking that no segment leaves the channel in that spot
-        x = self.current_column
-        if x >= len(self.T):
-            return False
 
-        if side == 'T':
-            vertical_ends = [y2 for y1, y2 in self.column_segments if y2 == self.y_top]
-            return self.T[x] != 0 and vertical_ends == []
-        elif side == 'B':
-            vertical_starts = [y1 for y1, y2 in self.column_segments if y1 == 0]
-            return self.B[x] != 0 and vertical_starts == []
-        else:
-            raise ValueError("Invalid side (only 'T' or 'B' are allowed)")
-    
-    def jog_track(self, track, goal):
-        # Jog a track as far as possible towards the goal
-        # Returns the new track number if successful, None otherwise
+    def collapse_split_nets(self):
+        # Finds an optimal pattern of jogs between tracks holding split nets
+        if len(self.split_nets) == 0:
+            return
+        
+        # Generate all legal jog combinations for the current column
+        jog_patterns = self.generate_jog_patterns()
+        if len(jog_patterns) == 0:
+            return
+
+        # Filter out any jog pattern that would overlap with an existing vertical
+        # wire from a DIFFERENT net in this column.
+        filtered_patterns = []
+        existing_verticals = []  # tuples: (y_low, y_high, net)
+        for (x1, y1), (x2, y2), data in self.G.edges(data=True):
+            if x1 == x2 == self.current_column:
+                existing_verticals.append((min(y1, y2), max(y1, y2), data.get('net')))
+
+        for pattern in jog_patterns:
+            valid = True
+            for idx, group in enumerate(pattern):
+                net = self.split_nets[idx]  # group corresponds to this net
+                for y1, y2 in group:
+                    jog_pair = (min(y1, y2), max(y1, y2))
+                    for v_y1, v_y2, v_net in existing_verticals:
+                        if v_net != net and self.overlaps([jog_pair, (v_y1, v_y2)]):
+                            valid = False
+                            break
+                    if not valid:
+                        break
+                if not valid:
+                    break
+            if valid:
+                filtered_patterns.append(pattern)
+
+        jog_patterns = filtered_patterns
+        if len(jog_patterns) == 0:
+            return
+
+        # Test all combinations of jogs to find the pattern that creates the most empty tracks
+        best_pattern = None
+        # The score is a tuple of 3 values (#tracks freed and tiebreakers)
+        best_score = [0, [], self.channel_width] # This will always lose
+        for combo in jog_patterns:
+            score = self.evaluate_jogs(combo)
+            if self.compare_scores(score, best_score):
+                best_score = score
+                best_pattern = combo                
+
+        if best_pattern is None:
+            print("No valid patterns found: ", jog_patterns)
+            return
+
+        # The groups are still in the same order as the split nets (which stays sorted)
+        for (net, group) in zip(self.split_nets, best_pattern):
+            # Add a vertical segment to the net and free up one of the tracks
+            for y1, y2 in group:
+                self.add_vertical_wire(net, y1, y2)
+                self.Y[net].remove(y1)
+            # If the net is closed, y2 will be removed in a later step
+            
+    # Step 3: Add jogs to reduce the range of split nets
+    # --------------------------------------------------
+    def scout(self, net, track, goal):
+        # Find the closest reachable track in the direction of the goal (another track on the same net, or an empty track).
+        # Assumes that there are not other tracks of the same net in the way
+        # Returns the position of that track number if successful, or the original track if not.
         if goal > track:
             tracks = range(track+1, goal+1)
         elif goal < track:
@@ -483,28 +693,33 @@ class ChannelRouter:
         else:
             return track
 
+        # We scan the tracks in the direction of a conductor on the same net,
+        # and keep a marker of the last reachable track.
         marker = track
         for i in tracks:
-            # If the vertical layer is occupied, we have to stop the search
-            if any(y1 <= i <= y2 for y1, y2 in self.column_segments):
+            # If the vertical layer is occupied, we have to stop the search.
+            if any(min(y1, y2) <= i <= max(y1, y2) for y1, y2, _ in self.vertical_wiring):
                 break
-            # If the horizontal layer is occupied we can jump over it
-            if self.track_nets[i] is not None:
+
+            # If the horizontal layer is occupied we can jump over it but not land there 
+            if i in self.occupied_tracks and i not in self.Y[net]:
                 continue
+
             # If we made it this far, we can record the index of this iteration in the marker variable
             marker = i
 
-        if abs(marker - track) >= self.minimum_jog_length:
-            x = self.current_column
-            y1, y2 = min(track, marker), max(track, marker)
-            net = self.track_nets[track]
-            self.segments[net].append(((x, y1), (x, y2)))
-            self.release_track(track)
-            self.claim_track(marker, net)
-            return marker
-  
-        return None
-        
+        return marker
+    
+    def jog(self, net, track, goal):
+        # Jog the net from track to as close as possible to goal
+        destination = self.scout(net, track, goal)
+
+        if destination != track:
+            self.Y[net].remove(track)
+            self.Y[net].add(destination)
+            self.add_vertical_wire(net, track, destination)
+        return destination
+
     def compress_split_net(self, net):
         # For split nets that weren't collapsed, try to move the tracks closer to each other:
         #  - jog the lowest track up as far as possible 
@@ -513,386 +728,348 @@ class ChannelRouter:
 
         tracks = sorted(list(self.Y[net]))
         
-        # 1) Jog the lowest track up as far as possible
+        # 1) Attempt to jog the lowest track up as far as possible 
         low_track, goal = tracks[0], tracks[1]
-        self.jog_track(low_track, goal)
+        low_marker = self.scout(net, low_track, goal)
 
-        # 2) Jog the highest track down as far as possible
-        # Y() may have been updated by the operations above, so we regenerate the ranking
-        tracks = sorted(list(self.Y[net]))
+        # 2) Attempt to jog the highest track down as far as possible
         high_track, goal = tracks[-1], tracks[-2]
-        self.jog_track(high_track, goal)
+        high_marker = self.scout(net, high_track, goal)
+
+        # 3) Actually move the tracks if the jog is long enough. Do this after the two attempts 
+        # above so that we don't invalidate the markers by moving the tracks.
+        # High track
+        if abs(high_marker - high_track) >= self.minimum_jog_length:
+            self.jog(net, high_track, high_marker)
+
+        # Low track
+        if abs(low_marker - low_track) >= self.minimum_jog_length:
+            self.jog(net, low_track, low_marker)
+
+    # Step 4: Add jogs to raise rising nets and lower falling nets
+    # ------------------------------------------------------------
+    def push_unsplit_nets(self):
+        x = self.current_column
+        # We look specifically for nets that are not split and have a pin coming up
+        upcoming_pins = set(self.T[x:] + self.B[x:])
+        nets_to_jog = [net for net in upcoming_pins 
+                       if net != 0 
+                       and len(self.Y[net]) == 1 ]
+                
+        # Determine where to push the nets to
+        track_distances  = [] 
+        for net in nets_to_jog:
+            try:
+                track = next(iter(self.Y[net]))
+            except StopIteration:
+                print("No tracks found for net: ", net)
+                continue
+            if self.classify_net(net) == 'rising':
+                goal = self.channel_width
+            elif self.classify_net(net) == 'falling':
+                goal = 1
+            else:
+                continue
+            # Record the achievable distance to the goal track
+            destination = self.scout(net, track, goal)    
+            distance = abs(track - destination)
+            if distance >= self.minimum_jog_length:
+                track_distances.append((distance, net, track, goal))
+
+        # Execute longer jogs first
+        track_distances.sort(key=lambda x: x[0], reverse=True)
+        for _, net, track, goal in track_distances:
+            destination = self.jog(net, track, goal)
+
+
+    # Step 5: Widen channel if needed to make previously not feasible top or bottom connections
+    # -----------------------------------------------------------------------------------------
+    def widen_channel(self, from_side=None):
+        # Inserts a new track which must be: 
+        # (a) reachable from the top or bottom
+        # (b) as close as possible to the middle of the channel
+        # If the track x is selected, then the old tracks x, x+1, ... will be moved up to x+1, x+2, ...
+        # Note: we are assuming that this function is only called when there is no space left on the channel
+
+        x = self.current_column
+        mid_track = round(self.channel_width / 2) + 1 # +1 because tracks are indexed from 1 to channel_width
+
+        # Find a position for the new track that is as close to the middle as possible,
+        # and that is accessible from the pins without violating a vertical constraint.
+        if not self.vertical_wiring:
+            min_start = 1
+            max_end = self.channel_width + 1
+        else:
+            min_start = min(self.vertical_wiring, key=lambda x: x[0])[0] # y1
+            max_end = max(self.vertical_wiring, key=lambda x: x[1])[1]# y2
+    
+        if from_side == 'B':
+            # Moving upwards from the bottom: the start of the first vertical wire, 
+            # or the middle, whichever comes first
+            new_track = min(min_start, mid_track)
+        elif from_side == 'T':
+            # Moving downwards from the top: the end of the last vertical wire,
+            # or the middle, whichever comes first
+            new_track = max(max_end + 1, mid_track)
+        elif from_side == None:
+            new_track = mid_track
+        else:
+            raise ValueError("Invalid side (only 'T', 'B', or None are allowed)")
+
+        self.channel_width = self.channel_width + 1
+
+        # Update the active assignments for all tracks above the new track,
+        # starting from the top down so we don't overwrite any existing assignments
+        Y_new = {net: set() for net in self.Y.keys()}
+        for net, tracks in self.Y.items():
+            for track in tracks:
+                if track >= new_track:
+                    Y_new[net].add(track + 1)
+                else:
+                    Y_new[net].add(track)
+        self.Y = Y_new
+                
+        # Update the graph by moving up any nodes that are now above the new track
+        # This information is stored in the label of the node, so a move operation becomes a rename operation
+        nx.relabel_nodes(self.G, lambda node: (node[0], node[1] + 1) if node[1] >= new_track else node, copy=False)
+
+    def extend_nets(self):
+        # Only extend nets that either are split or have a pin coming up
+        for net, tracks in self.Y.items():
+            if len(tracks) == 1 and self.next_pin(net) is None:
+                # Clear the Y dict entry for this net
+                self.Y[net] = set()
+            else:
+                # Update the graph for each track
+                for track in tracks:
+                    self.G.add_edge((self.current_column, track),
+                                    (self.current_column+1, track),
+                                    net=net)
+                                    
+        # Update the channel length if needed
+        self.channel_length = max(self.channel_length, self.current_column+1)
 
     def route(self):
+        # Route the nets, returns the final graph
+
         # The algorithm will dynamically extend the channel as needed,
         # but we don't want it to extend indefinitely. This is in case
         # the channel is blocked by a net that cannot be routed.
-        max_length = self.channel_length + 1000
+        max_length = self.channel_length * 1.5
 
-        while self.channel_length < max_length:
+        while not self.finished:
+            x = self.current_column
             # 1) Connect the pins
-            if self.current_column < len(self.T):
+            if x < self.channel_length:
                 self.connect_pins()
-                self.check_violations("after connecting pins")
 
             # 2) Collapse split nets to free up tracks
             self.collapse_split_nets()
-            self.check_violations("after collapsing split nets")
 
-            # 3) Compress split nets to narrow their range
-            split_nets = [net for net in self.all_nets if len(self.Y[net]) > 1]
-            for net in split_nets:
+            # 3) Compress remaining split nets to narrow their range
+            for net in self.split_nets:
                 self.compress_split_net(net)
-                self.check_violations(f"after compressing split net {net}")
 
             # 4) Add jogs to raise rising nets and lower falling nets
-            unsplit_nets = [net for net in self.all_nets if len(self.Y[net]) == 1]
-            # Filter out the nets that don't have a pin coming up
-            nets_to_jog = [net for net in unsplit_nets if self.next_pin(net) is not None]
+            # We look specifically for nets that are not split and have a pin coming up
+            self.push_unsplit_nets()
 
-            track_distances  = [] 
-            for net in nets_to_jog:
-                assert len(self.Y[net]) == 1
-                track = next(iter(self.Y[net])) # How you get the only element from a set
-                if self.classify_net(net) == 'rising':
-                    goal = self.channel_width
-                elif self.classify_net(net) == 'falling':
-                    goal = 1
-                else:
-                    # Do not try to jog to the middle without good reason (e.g. split nets)
-                    # Otherwise you end up having to go back and forth between the middle and the edge
-                    continue
+            # 5) Widen the channel if we were not able to route pins earlier because of space constraints
+            top_net, bottom_net= self.pins
+            if top_net is not None:
+                self.widen_channel(from_side='T')
+                self.connect_pins()
+            if bottom_net is not None:
+                self.widen_channel(from_side='B')
+                self.connect_pins()
 
-                if track == goal:
-                    continue
+            # 6) Extend nets to the next column and advance the column pointer
+            self.extend_nets()
+            self.current_column += 1
 
-                distance = abs(track - goal)
-                track_distances.append((distance, track, goal))
-
-            # Sort by distance to the target edge
-            track_distances.sort(key=lambda x: x[0], reverse=True)
-            for _, track, goal in track_distances:
-                self.jog_track(track, goal)
-                self.check_violations(f"after jogging track {track} to {goal}")
-
-            # 5) Widen the channel if needed and reattempt to connect the pins
-            x = self.current_column
-            if self.pin_status('T'):
-                net = self.T[x]
-                new_track = self.widen_channel('T')
-                self.segments[net].append(((x, new_track), (x, self.channel_width+1)))
-                self.Y[net].add(new_track)
-                self.check_violations(f"after widening channel for a top pin")
-            if self.pin_status('B'):
-                net = self.B[x]
-                new_track = self.widen_channel('B')
-                self.segments[net].append(((x, 0), (x, new_track)))
-                self.Y[net].add(new_track)
-                self.check_violations(f"after widening channel for a bottom pin")
-
-            # 6) Extend to the next column if needed
-            # Do not extend any nets that have just one track assigned tot them
-            # and do not have any pins coming up.
-            for net, tracks in self.Y.items():
-                if len(tracks) == 1 and self.next_pin(net) is None:
-                    self.Y[net] = {}
-                else:
-                    self.extend_net(net)
-            self.check_violations(f"after extending nets")
-
-            # We're done if there are no more pins to route and no tracks are active
-            if not self.next_pin() and all(n is None for n in self.track_nets):
+            # Failsafe: if we keep extending the channel without making progress,
+            # we'll stop anyway
+            if self.channel_length >= max_length:
                 break
 
-            self.current_column += 1
-            self.channel_length = max(self.channel_length, self.current_column+1)
+        # Store how each node is oriented with respect to its neighbors
+        self._get_node_orientation()
+
+        # Simplify the graph to remove any redundant edges
+        self._simplify()
+        
+        return self.G
 
     def route_and_retry(self, tries_left=10):
+        # If routing fails, try again with a wider channel:
+        # (the other parameters tend to be the problem and make the output worse when deviating from the defaults)
         if tries_left == 0:
             print(f"Failed to route: T = {self.T}, B = {self.B}")
             print(f"  initial_channel_width = {self.initial_channel_width}")
             print(f"  minimum_jog_length = {self.minimum_jog_length}")
             raise ValueError("Failed to route the edges")
 
-        # 1) Optimize the initial channel width
         try:
-            output = self.route()
+            return self.route()
         except ValueError as e:
             print(e)
             print(f"Retrying with a wider channel... {tries_left} tries left")
+            # Increase the initial channel width and try again
             self.reset(initial_channel_width=self.initial_channel_width + 1)
-            self.route_and_retry(tries_left-1)
-
-        # 2) Optimize the minimum jog length, this is mostly aesthetic and shouldn't hold up the routing
-        if tries_left < 3:
-            print(f"Not trying to optimize the minimum jog length anymore (mostly aesthetic)")
-            self.success = True
-            return
-
-        # The mininum jog length ideally is about 1/4 of the final channel width
-        ideal_minimum_jog_length = max(1, self.channel_width // 4)
-        if ideal_minimum_jog_length < self.minimum_jog_length:
-            print(f"Retrying with a smaller minimum jog length ({ideal_minimum_jog_length})... {tries_left} tries left")
-            self.reset(minimum_jog_length=ideal_minimum_jog_length)
-            # We may have to increase the initial channel width as well, hence the recursive call
-            self.route_and_retry(tries_left-1)
-
-        self.success = True
+            return self.route_and_retry(tries_left-1)
         
-    def extend_net(self, net):
-        # Other approach: add new segments in every case
-        x = self.current_column
-        for track in self.Y[net]:
-            self.segments[net].append(((x, track), (x+1, track)))
 
-    def get_unit_segments(self, segment):
-        # Return a list of unit segments that make up the given segment
-        ((x1,y1), (x2,y2)) = segment
-        if x1 == x2:
-            y_min, y_max = sorted([y1, y2])
-            points = [(x1, y) for y in range(y_min, y_max+1)]
-        elif y1 == y2:
-            x_min, x_max = sorted([x1, x2])
-            points = [(x, y1) for x in range(x_min, x_max+1)]
-        else:
-            raise ValueError(f"Segment {segment} is not rectilinear")
+    
 
-        return list(zip(points, points[1:]))
+    
 
-    def check_violations(self, message=None):
-        # Tracks should stay within the channel
-        for net, tracks in self.Y.items():
-            for track in tracks:
-                assert 1 <= track <= self.channel_width, f"Track {track} is out of bounds for net {net}"
-
-        # Flatten the segments into sets of points
-        net_points = {net: set() for net in self.all_nets}
-        net_unit_segments = {net: set() for net in self.all_nets}
-        for net, segments in self.segments.items():
-            for p1, p2 in segments:
-                net_points[net].add(p1)
-                net_points[net].add(p2)
-                net_unit_segments[net].update(self.get_unit_segments((p1, p2)))
-
-        # Check for intersections between all pairs of nets
-        collisions = []
-        for n1, n2 in itertools.combinations(net_points.keys(), 2):
-            points = list(net_points[n1].intersection(net_points[n2]))
-            unit_segments = list(net_unit_segments[n1].intersection(net_unit_segments[n2]))
-            if points or unit_segments:
-                collisions.append((n1, n2, points, unit_segments))
-
-        if collisions and self.gui:
-            for n1, n2, points, unit_segments in collisions:
-                print(f"Collision between nets {n1} and {n2}: {message}")
-                self.plot(highlight_points=points, highlight_segments=unit_segments)
-            raise AssertionError(f"Constraint violation(s) detected. Current column {self.current_column}; {message}")
-        
-        return False
-
-    def plot(self, highlight_points=[], highlight_segments=[]):
-        if not self.gui:
-            # If GUI is disabled, print the text graph and return
-            text_graph = self.render_text_graph()
-            print("\nText-based Graph Visualization:")
-            print(text_graph)
-            return
-
-        # If GUI is enabled, proceed with Matplotlib plotting
-        try:
-            import matplotlib.pyplot as plt
-        except ImportError:
-            print("Matplotlib not found. Cannot generate GUI plot.")
-            # Optionally, fall back to text graph here as well
-            # text_graph = self.render_text_graph()
-            # print("\nText-based Graph Visualization:")
-            # print(text_graph)
-            return
-
-        fig, ax = plt.subplots(figsize=(12, 8))
-        
-        # Generate distinct colors
-        # Use sorted list for consistent color assignment across runs
-        sorted_nets = sorted(list(self.all_nets))
-        colors = {}
-        for i, net in enumerate(sorted_nets):
-            colors[net] = plt.cm.tab10(i % 10)
-
-        max_x = self.channel_length # Initialize max_x
-
-        # Plot simplified graph edges for each net
-        for net in self.all_nets:
-            G = self.generate_net_graph(net)
-            color = colors[net]
-            ax.plot([], [], color=color, label=f"Net {net}") # Legend entry
-
-            for p1, p2 in G.edges():
-                x1, y1 = p1
-                x2, y2 = p2
-                ax.plot([x1, x2], [y1, y2], color=color, linewidth=2, zorder=2) # Plot simplified segment
-                # Update max_x based on plotted coordinates
-                max_x = max(max_x, x1, x2)
-            
-            # Add dots at the nodes (vertices of the simplified graph)
-            for x, y in G.nodes():
-                ax.plot(x, y, 'o', color=color, markersize=5, zorder=3)
-        
-        # Add pin markers
-        for i, (top_pin, bottom_pin) in enumerate(zip(self.T, self.B)):
-            if top_pin != 0 and top_pin in colors: # Check if pin net exists and has a color
-                ax.plot(i, self.y_top, 'v', color=colors[top_pin], markersize=8, zorder=4)
-            if bottom_pin != 0 and bottom_pin in colors: # Check if pin net exists and has a color
-                ax.plot(i, 0, '^', color=colors[bottom_pin], markersize=8, zorder=4)
-        
-        # Highlight points
-        for (x, y) in highlight_points:
-            ax.plot(x, y, 'o', color='red', fillstyle='none', markersize=16, zorder=5)
-            ax.plot(x, y, 'o', color='red', fillstyle='none', markersize=24, zorder=5) 
-        
-        # Highlight segments (same as original plot)
-        for (x1, y1), (x2, y2) in highlight_segments:
-            ax.plot([x1, x2], [y1, y2], color='red', linewidth=4, alpha=0.3, zorder=5)
-            # Update max_x based on highlight segments
-            max_x = max(max_x, x1, x2)
-
-        ax.set_xlim(-0.5, max_x + 0.5)
-        ax.set_ylim(-0.5, self.y_top + 0.5)
-        
-        ax.grid(True, linestyle='--', alpha=0.7, zorder=0)
-        ax.set_xticks(range(int(max_x) + 2)) 
-        ax.set_yticks(range(self.y_top + 1))
-        
-        ax.set_xlabel('Column')
-        ax.set_ylabel('Track')
-        ax.set_title('Channel Router')
-        
-        # Add legend
-        ax.legend(title='Nets')
-        
-        plt.tight_layout()
-        plt.show()
-        return fig, ax
-
-    def generate_net_graph(self, net):
-        """
-        Generates a simplified networkx graph for a given net based on its segments.
-        Removes collinear intermediate points while preserving bends and endpoints.
-        """
-        if net not in self.segments:
-            raise ValueError(f"Net {net} not found in segments.")
-
-        G = nx.Graph()
-        segments = self.segments[net]
-
-        if not segments:
-            return G # Return an empty graph if the net has no segments
-
-        # Add edges (which also adds nodes)
-        for (x1, y1), (x2, y2) in segments:
-            G.add_edge((y1*2, x1), (y2*2, x2), net=net)
-
-        # Simplify the graph by removing collinear points
-        while True:
-            simplified = False
-            nodes_to_process = list(G.nodes()) # Process a copy as the graph changes
-
-            for node in nodes_to_process:
-                # Check if node still exists and has degree 2 (potential intermediate point)
-                if node in G and G.degree(node) == 2:
-                    neighbors = list(G.neighbors(node))
-                    p1, p3 = neighbors[0], neighbors[1]
-                    p2 = node
-
-                    # Check for collinearity
-                    # Points (x1, y1), (x2, y2), (x3, y3) are collinear if
-                    # (y2 - y1) * (x3 - x2) == (y3 - y2) * (x2 - x1)
-                    x1, y1 = p1
-                    x2, y2 = p2
-                    x3, y3 = p3
-
-                    # Handle potential division by zero for vertical/horizontal lines implicitly
-                    if (y2 - y1) * (x3 - x2) == (y3 - y2) * (x2 - x1):
-                        # Collinear: remove the intermediate node and connect neighbors
-                        G.remove_node(p2)
-                        # Ensure the new edge carries the net attribute
-                        G.add_edge(p1, p3, net=net)
-                        simplified = True
-                        # Break and restart the loop since the graph structure changed
-                        break 
-            
-            if not simplified:
-                break # Exit loop if no simplifications were made in this pass
-        
-        # Add net attribute to all nodes in the final simplified graph
-        for node in G.nodes():
-            G.nodes[node]['net'] = net
-            
-        return G
-
-    def generate_combined_graph(self):
-        """
-        Generates a combined graph of all nets.
-        """
-        combined_graph = nx.Graph()
-        for net in self.all_nets:
-            net_graph = self.generate_net_graph(net)
-            # Add nodes and edges, preserving attributes.
-            # If nodes/edges already exist, attributes might be updated,
-            # but in this simplified graph context, nodes should be unique to nets
-            # except potentially at pin locations (which are simplified away usually).
-            for node, data in net_graph.nodes(data=True):
-                if node not in combined_graph:
-                    combined_graph.add_node(node, **data)
-                else:
-                    # If a node exists (e.g., shared pin), handle potential attribute merging if necessary
-                    # For now, assume last write wins or attributes are compatible.
-                    combined_graph.nodes[node].update(data) 
-            for u, v, data in net_graph.edges(data=True):
-                combined_graph.add_edge(u, v, **data)
-                
-        return combined_graph
+class Plotter:
+    def __init__(self, G, hscale=2, vscale=1):
+        # Transform the graph from the router's coordinate system to the plotter's
+        # - transposed (left-to-right instead of top-to-bottom)
+        # - scaled (hscale, vscale)
+        self.G = nx.relabel_nodes(G, lambda xy: (xy[1] * hscale, xy[0] * vscale), copy=True)
+        self.grid = self.initialize_grid()
 
     def initialize_grid(self):
-        """
-        Initializes a 2D grid representing the channel layout.
-        Rows correspond to tracks (0 to y_top), columns to channel length.
-        """
-        # Grid dimensions: height = channel_width + 2, width = channel_length
+        # Grid dimensions: graph bounding box
+        min_x = min([node[0] for node in self.G.nodes()] + [0,])
+        max_x = max([node[0] for node in self.G.nodes()])
+        min_y = min([node[1] for node in self.G.nodes()] + [0])
+        max_y = max([node[1] for node in self.G.nodes()])
+
         # Initialize with spaces
-        grid_width = (self.y_top + 1 )*2# 0 to y_top inclusive
-        grid_height = self.channel_length
-        # Initialize with spaces. Note: y-axis (rows) first, then x-axis (columns)
+        grid_width = (max_x - min_x + 1)
+        grid_height = (max_y - min_y + 1)
+
         grid = [[' ' for _ in range(grid_width)] for _ in range(grid_height)]
         return grid
 
-    def _get_node_orientation(self, graph, node):
-        """
-        Determines the orientation of neighbors relative to a given node.
-        Returns a tuple (north, south, east, west) of booleans.
-        """
-        x, y = node
-        neighbors = graph.neighbors(node)
-        north, south, east, west = False, False, False, False
-        for neighbor in neighbors:
-            nx, ny = neighbor
-            if ny > y: north = True
-            if ny < y: south = True
-            if nx > x: east = True
-            if nx < x: west = True
-        return (north, south, east, west)
+    def render_text_graph(self):
+        grid_height = len(self.grid)
+        grid_width = len(self.grid[0]) if grid_height > 0 else 0
+
+        # Determine graph bounds for the grid
+        # Note: self.G might already be transposed from the original router graph
+        min_x = min((node[0] for node in self.G.nodes()), default=0)
+        max_x = max((node[0] for node in self.G.nodes()), default=0)
+        min_y = min((node[1] for node in self.G.nodes()), default=0)
+        # max_y is implicitly handled by grid_height = max_y - min_y + 1
+
+        # 1. Draw horizontal edges first
+        for u, v in self.G.edges():
+            # Graph coordinates
+            x1, y1 = u
+            x2, y2 = v
+
+            # Map to grid coordinates (adjusting for min_x, min_y)
+            grid_x1, grid_y1 = x1 - min_x, y1 - min_y
+            grid_x2, grid_y2 = x2 - min_x, y2 - min_y
+
+            # Ensure coordinates are within grid bounds
+            if not (0 <= grid_y1 < grid_height and 0 <= grid_x1 < grid_width and \
+                    0 <= grid_y2 < grid_height and 0 <= grid_x2 < grid_width):
+                continue
+
+            if y1 == y2: # Horizontal segment
+                char = '─'
+                # Iterate over grid columns
+                for grid_x in range(min(grid_x1, grid_x2) + 1, max(grid_x1, grid_x2)):
+                     if 0 <= grid_x < grid_width:
+                        self.grid[grid_y1][grid_x] = char # Use grid_y1
+
+        # 2. Draw vertical edges (can overwrite horizontal)
+        for u, v in self.G.edges():
+            # Graph coordinates
+            x1, y1 = u
+            x2, y2 = v
+
+            # Map to grid coordinates
+            grid_x1, grid_y1 = x1 - min_x, y1 - min_y
+            grid_x2, grid_y2 = x2 - min_x, y2 - min_y
+
+            if x1 == x2: # Vertical segment
+                # Iterate over grid rows
+                for grid_y in range(min(grid_y1, grid_y2) + 1, max(grid_y1, grid_y2)):
+                    if 0 <= grid_y < grid_height:
+                         self.grid[grid_y][grid_x1] = '│' # Use grid_x1
+
+        # 3. Draw nodes (intersections/corners/ends) - this overwrites ends of edges
+        for node in self.G.nodes():
+            x, y = node
+            grid_x, grid_y = x - min_x, y - min_y
+
+             # Ensure node coordinates are within grid bounds
+            if not (0 <= grid_y < grid_height and 0 <= grid_x < grid_width):
+                print(f"Warning: Node {node} (mapped to grid {grid_x, grid_y}) out of bounds")
+                continue
+
+            # Retrieve pre-calculated orientation from node attribute
+            original_ports = self.G.nodes[node].get('ports', (False, False, False, False)) 
+
+            # Transpose the ports to match the plotter's coordinate system
+            # Original (N, S, E, W) maps to Plotter (E, W, N, S)
+            N, S, E, W = original_ports
+            plotter_orientation = (E, W, N, S) 
+
+            char = self.BOX_CHARS.get(plotter_orientation, '?')
+            self.grid[grid_y][grid_x] = char
+
+        # 4. Prepare Net Labels for Boundaries
+        left_labels = {}
+        right_labels = {}
+        for u, v, data in self.G.edges(data=True):
+            net = str(data.get('net', '?')) # Get net ID as string
+            ux, uy = u
+            vx, vy = v
+
+            # Map graph y to grid y coordinate
+            grid_uy = uy - min_y
+            grid_vy = vy - min_y
+
+            # Check against graph boundaries (min_x, max_x)
+            if ux == min_x and 0 <= grid_uy < grid_height: left_labels[grid_uy] = net
+            if vx == min_x and 0 <= grid_vy < grid_height: left_labels[grid_vy] = net
+            if ux == max_x and 0 <= grid_uy < grid_height: right_labels[grid_uy] = net
+            if vx == max_x and 0 <= grid_vy < grid_height: right_labels[grid_vy] = net
+
+        max_left_len = max(len(s) for s in left_labels.values()) if left_labels else 0
+        max_right_len = max(len(s) for s in right_labels.values()) if right_labels else 0
+
+        # 5. Format grid to string with labels (reverse rows for intuitive printing)
+        output_lines = []
+        # Iterate through grid rows from top (index 0) to bottom
+        for i, row in enumerate(self.grid):
+            # grid row i corresponds to graph y = i + min_y
+            current_grid_y = i
+            left_label = left_labels.get(current_grid_y, "")
+            right_label = right_labels.get(current_grid_y, "")
+            # Pad labels
+            padded_left = f"{left_label:<{max_left_len}}"
+            padded_right = f"{right_label:<{max_right_len}}" # Pad right label as well
+
+            line = "".join(row)
+            # Add labels only if they exist, otherwise add padding of spaces
+            left_part = f"{padded_left} " if max_left_len > 0 else ""
+            right_part = f" {padded_right}" if max_right_len > 0 else ""
+
+            output_lines.append(f"{left_part}{line}{right_part}")
+
+        # Return lines, joining top-to-bottom which means reversing the list built from iterating grid 0..height-1
+        return "\n".join(reversed(output_lines))
 
     BOX_CHARS = {
         # N S E W
-        (False, False, False, False): ' ', # Should not happen in connected graph
+        (False, False, False, False): '?', # Should not happen in connected graph
         # Straights
-        (True,  True,  False, False): '│',
-        (False, False, True,  True ): '─',
+        (True,  True,  False, False): 'x',#'│', # Should not be left over after simplification
+        (False, False, True,  True ): 'x',#'─', # Should not be left over after simplification
         # Corners
-        (True,  False, True,  False): '└',
-        (True,  False, False, True ): '┘',
-        (False, True,  True,  False): '┌',
-        (False, True,  False, True ): '┐',
-        # T-junctions
+        (True,  False, True,  False): '╰',
+        (True,  False, False, True ): '╯',
+        (False, True,  True,  False): '╭',
+        (False, True,  False, True ): '╮',
+       # T-junctions
         (True,  True,  True,  False): '├',
         (True,  True,  False, True ): '┤',
         (True,  False, True,  True ): '┴',
@@ -906,64 +1083,9 @@ class ChannelRouter:
         (False, False, False, True ): '─', # End pointing West
     }
 
-    def render_text_graph(self):
-        """
-        Generates a text-based representation of the routed channel.
-        """
-        graph = self.generate_combined_graph()
-        grid = self.initialize_grid()
-        grid_height = len(grid)
-        grid_width = len(grid[0]) if grid_height > 0 else 0
+     
+ 
 
-        # 1. Draw horizontal edges first
-        for u, v in graph.edges():
-            x1, y1 = u
-            x2, y2 = v
-
-            # Ensure coordinates are within grid bounds
-            if not (0 <= y1 < grid_height and 0 <= x1 < grid_width and \
-                    0 <= y2 < grid_height and 0 <= x2 < grid_width):
-                continue
-
-            if y1 == y2: # Horizontal segment
-                char = '─'
-                for x in range(min(x1, x2) + 1, max(x1, x2)):
-                     if 0 <= x < grid_width:
-                        grid[y1][x] = char
-
-        # 2. Draw vertical edges (can overwrite horizontal)
-        for u, v in graph.edges():
-            x1, y1 = u
-            x2, y2 = v
-
-            # Ensure coordinates are within grid bounds (redundant check, but safe)
-            if not (0 <= y1 < grid_height and 0 <= x1 < grid_width and \
-                    0 <= y2 < grid_height and 0 <= x2 < grid_width):
-                continue
-
-            if x1 == x2: # Vertical segment
-                char = '│'
-                for y in range(min(y1, y2) + 1, max(y1, y2)):
-                    if 0 <= y < grid_height:
-                         grid[y][x1] = char
-
-        # 3. Draw nodes (intersections/corners/ends) - this overwrites ends of edges
-        for node in graph.nodes():
-            x, y = node
-             # Ensure node coordinates are within grid bounds
-            if not (0 <= y < grid_height and 0 <= x < grid_width):
-                # print(f"Warning: Node {node} out of bounds") # Optional warning
-                continue
-
-            orientation = self._get_node_orientation(graph, node)
-            char = self.BOX_CHARS.get(orientation, '?') # Default to ? if orientation invalid
-            grid[y][x] = char
-
-        # 4. Format grid to string (reverse rows for intuitive printing)
-        output_lines = []
-        for row in reversed(grid):
-            output_lines.append("".join(row))
-        return "\n".join(output_lines)
 
 
 def random_pins(N, M):
@@ -980,20 +1102,28 @@ def random_pins(N, M):
 
 
 if __name__ == '__main__':
-    #router = ChannelRouter([1, 0, 2, 0, 3, 4, 0, 5], [0, 5, 0, 2, 4, 3, 1, 5], minimum_jog_length=1)
-    #router = ChannelRouter([1, 0, 2, 0, 3, 4, 0, 5], [0, 1, 0, 2, 4, 3, 0, 5], gui=True)
-    #router = ChannelRouter([1, 0, 2, 0, 3, 4, 0, 5], [0, 5, 0, 2, 4, 3, 1, 5], minimum_jog_length=1)
-    router = ChannelRouter([1, 0, 1, 0, 2, 2, 2, 5], [0, 1, 0, 2, 2, 2, 0, 5], gui=True)
+    import random
 
-    router = ChannelRouter(random_pins(5, 15), 
-                           random_pins(5, 15),
-                           gui=False)
+    # Set random seed for reproducibility
+    random.seed(42)
 
-    router.route_and_retry()
-    router.plot()
+    with open('outputs_v2.txt', 'w') as f:
+        for i in range(10):
+            L = random_pins(10, 15)
+            R = random_pins(10, 15)
+            router = Router(L, R)
+            G = router.route()
+            output = Plotter(G).render_text_graph()
+            f.write(output)
+            f.write('\n')
+
+            print(output)
+            print('='*60)
 
 
 
+
+    
             
 
 

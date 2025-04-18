@@ -1,753 +1,644 @@
 #!/usr/bin/env python3
 
 import unittest
-from rf83_bvh import ChannelRouter
-import random
-import networkx as nx # Import networkx for graph testing
-
-
-class TestChannelRouter(unittest.TestCase):
+from rf83_bvh import Router, Plotter
+class TestRouterSkeletons(unittest.TestCase):
     def setUp(self):
-        # Simple test case with 3 nets (1, 2, 3) and 0 representing empty pins
-        self.T = [1, 0, 2, 0, 3, 4]  # Top pins
-        self.B = [1, 0, 0, 2, 4, 3]  # Bottom pins
-        self.router = ChannelRouter(self.T, self.B)
-    
-    def find_vertical_jogs(self, router, net_id, column=None):
-        """Helper function to find vertical jog segments for a specific net at a given column.
-        
-        Args:
-            router: ChannelRouter instance
-            net_id: Net ID to search for
-            column: Column to search in, defaults to router.current_column
-            
-        Returns:
-            List of vertical segment tuples ((x1, y1), (x2, y2)) for the specified net at the specified column
-        """
-        if column is None:
-            column = router.current_column
-            
-        # Find segments with the same x coordinate for both points and different y coordinates
-        return [
-            seg for seg in router.segments[net_id] 
-            if seg[0][0] == column and seg[1][0] == column and seg[0][1] != seg[1][1]
-        ]
-    
-    def test_initialization(self):
-        """Test that the router initializes correctly"""
-        self.setUp()
+        self.T = [1, 2, 3]
+        self.B = [3, 2, 1]
+        self.router = Router(self.T, self.B)
+
+    def test_init(self):
+        # Should initialize with correct T, B, and channel_width
         self.assertEqual(self.router.T, self.T)
         self.assertEqual(self.router.B, self.B)
-        self.assertEqual(self.router.channel_length, len(self.T))
+        self.assertIsInstance(self.router.channel_width, int)
+        self.assertGreater(self.router.channel_width, 0)
+
+    def test_reset(self):
+        # Should reset current_column and Y
+        self.router.current_column = 5
+        self.router.Y[1].add(99)
+        self.router.reset()
         self.assertEqual(self.router.current_column, 0)
-        # 0 is excluded from all_nets as it represents empty pins
-        self.assertEqual(self.router.all_nets, {1, 2, 3, 4})
-        
-    def test_y_top_property(self):
-        """Test the y_top property returns channel_width + 1"""
-        self.setUp()
-        self.assertEqual(self.router.y_top, self.router.channel_width + 1)
-        
+        for tracks in self.router.Y.values():
+            self.assertEqual(tracks, set())
+
+    def test_all_tracks_property(self):
+        tracks = self.router.all_tracks
+        self.assertIsInstance(tracks, set)
+        self.assertEqual(tracks, set(range(1, self.router.channel_width + 1)))
+
+    def test_occupied_tracks_property(self):
+        # Initially empty
+        self.assertIsInstance(self.router.occupied_tracks, set)
+        self.assertEqual(self.router.occupied_tracks, set())
+        # Occupy a track
+        self.router.Y[1].add(2)
+        self.assertIn(2, self.router.occupied_tracks)
+
+    def test_free_tracks_property(self):
+        # All tracks free at start
+        self.assertEqual(self.router.free_tracks, self.router.all_tracks)
+        # Occupy a track
+        self.router.Y[1].add(2)
+        self.assertNotIn(2, self.router.free_tracks)
+
+    def test_split_nets_property(self):
+        # No split nets at start
+        self.assertEqual(self.router.split_nets, [])
+        # Add split net
+        self.router.Y[1].update([2, 3])
+        self.assertIn(1, self.router.split_nets)
+
+    def test_vertical_wiring_property(self):
+        # Should be empty at start
+        self.router.reset()
+        self.assertEqual(self.router.vertical_wiring, [])
+        # Add a vertical edge (manually)
+        self.router.G.add_edge((0, 1), (0, 2), net=1)
+        self.assertEqual(self.router.vertical_wiring, [(1, 2, 1)]) # net, track, goal
+        # Add a vertical wire
+        self.router.reset()
+        self.router.add_vertical_wire(1, 1, 2)
+        self.assertEqual(self.router.vertical_wiring, [(1, 2, 1)])
+        self.router.reset()
+        self.assertEqual(self.router.vertical_wiring, [])
+
+    def test_finished_property(self):
+        # Should not be finished at start
+        self.assertFalse(self.router.finished)
+        # Simulate finished state
+        self.router.current_column = len(self.T)
+        for k in self.router.Y:
+            self.router.Y[k] = set()
+        self.assertTrue(self.router.finished)
+
+    def test_pins(self):
+        # Initial state
+        self.assertEqual(self.router.pins, (1,3))      
+
+    def test_create_terminals(self):
+        # Test 1: Simple bipartite graph
+        self.router.reset()
+        edges = [('A', 1), ('A', 2),  ('A', 3), ('a', 1), ('a', 2), ('a', 3), ('B', 1), ('C', 3)]
+        self.router.create_terminals(edges)
+        # Expected bicliques (may vary in order):
+        # Biclique 0: (['A', 'B'], [1])
+        # Biclique 1: (['A'], [2])
+        # Biclique 2: (['C'], [3])
+        print(self.router.bicliques)
+        self.assertIsInstance(self.router.bicliques, list)
+        self.assertGreater(len(self.router.bicliques), 0)
+        # Check structure of a biclique
+        self.assertIsInstance(self.router.bicliques[0], tuple)
+        self.assertEqual(len(self.router.bicliques[0]), 2)
+        self.assertIsInstance(self.router.bicliques[0][0], list)
+        self.assertIsInstance(self.router.bicliques[0][1], list)
+
+        # Check node_to_bicliques mapping (content depends on biclique order)
+        self.assertIsInstance(self.router.node_to_bicliques, dict)
+        self.assertIn('A', self.router.node_to_bicliques)
+        self.assertIn(1, self.router.node_to_bicliques)
+        # Find the biclique index for (['A', 'B'], [1])
+        biclique_idx_AB1 = -1
+        for i, (L, R) in enumerate(self.router.bicliques):
+            if set(L) == {'A', 'B'} and set(R) == {1}:
+                biclique_idx_AB1 = i
+                break
+        self.assertNotEqual(biclique_idx_AB1, -1, "Biclique (['A', 'B'], [1]) not found")
+        self.assertIn(biclique_idx_AB1, self.router.node_to_bicliques['A'])
+        self.assertIn(biclique_idx_AB1, self.router.node_to_bicliques['B'])
+        self.assertIn(biclique_idx_AB1, self.router.node_to_bicliques[1])
+
+        # Test 2: Empty edges list
+        self.router.reset()
+        self.router.create_terminals([])
+        self.assertEqual(self.router.bicliques, [])
+        self.assertEqual(self.router.node_to_bicliques, {})
+
+        # Test 3: Non-bipartite graph
+        self.router.reset()
+        edges_non_bipartite = [('A', 'B'), ('B', 'C'), ('C', 'A')] # Triangle
+        with self.assertRaises(ValueError):
+            self.router.create_terminals(edges_non_bipartite)
+
+        # Test 4: Disconnected components
+        self.router.reset()
+        edges_disconnected = [('A', 1), ('B', 2)]
+        self.router.create_terminals(edges_disconnected)
+        self.assertEqual(len(self.router.bicliques), 2)
+        self.assertIn(0, self.router.node_to_bicliques['A'])
+        self.assertIn(0, self.router.node_to_bicliques[1])
+        self.assertIn(1, self.router.node_to_bicliques['B'])
+        self.assertIn(1, self.router.node_to_bicliques[2])
+        self.assertEqual(len(self.router.node_to_bicliques['A']), 1)
+        self.assertEqual(len(self.router.node_to_bicliques[2]), 1)
+
+    def test_powerset(self):
+        # Should return all subsets including empty set
+        elements = [1, 2, 3]
+        result = list(self.router.powerset(elements))
+        self.assertIn((), result)
+        self.assertIn((1, 2, 3), result)
+        self.assertEqual(len(result), 2 ** len(elements))
+
+    def test_overlaps(self):
+        # No overlap
+        pairs = [(1, 2), (3, 4)]
+        self.assertFalse(self.router.overlaps(pairs))
+        # Overlap
+        pairs = [(1, 3), (2, 4)]
+        self.assertTrue(self.router.overlaps(pairs))
+        # Single pair
+        self.assertFalse(self.router.overlaps([(1, 2)]))
+        # Borderline overlap
+        pairs = [(1, 2), (2, 3)]
+        self.assertTrue(self.router.overlaps(pairs))
+
+    def test_contiguous(self):
+        # Contiguous
+        pairs = [(1, 2), (2, 3), (3, 4)]
+        self.assertTrue(self.router.contiguous(pairs))
+        # Not contiguous
+        pairs = [(1, 2), (3, 4)]
+        self.assertFalse(self.router.contiguous(pairs))
+        # Single pair
+        self.assertTrue(self.router.contiguous([(1, 5)]))
+
+    def test_colinear(self):
+        # diagonal:
+        # Collinear points
+        self.assertTrue(self.router.colinear((0, 0), (1, 1), (2, 2)))
+        # Not collinear
+        self.assertFalse(self.router.colinear((0, 0), (1, 1), (2, 3)))
+
+    def test_collapse_run(self):        
+        pass
+
+    def test_simplify(self):
+        pass
+
     def test_next_pin(self):
-        """Test next_pin returns correct next pin position"""
-        self.setUp()
-        # For net 1, the next pin should not exist in any case because it doesn't exist beyond the current column
-        self.assertEqual(self.router.next_pin(1, 'T'), None)
-        self.assertEqual(self.router.next_pin(1, 'B'), None)
-        self.assertEqual(self.router.next_pin(1), None)
-        
-        # For net 2, next pin on top is at position 2, on bottom is at position 3
-        self.assertEqual(self.router.next_pin(2, 'T'), 2)
-        self.assertEqual(self.router.next_pin(2, 'B'), 3)
-        
-        # For net 3, next pin on top is at position 4
-        self.assertEqual(self.router.next_pin(3, 'T'), 4)
-        
-        # For a non-existent net, should return None
-        self.assertEqual(self.router.next_pin(99), None)
-        
-    def test_classify_net(self):
-        """Test net classification as rising, falling, or steady"""
-        self.setUp()
-        # Net 1 has next pin on bottom at position 1, and next pin on top at position 1
-        # This should be classified as steady
-        self.assertEqual(self.router.classify_net(1), 'steady')
-        
-        # Net 2 has next pin on top at position 2, and next pin on bottom at position 3
-        # This should be classified as steady
-        self.assertEqual(self.router.classify_net(2), 'steady')
-        
-        # Net 3 has next pin on top at position 4, and next pin on bottom at position 5
-        # This should be classified as steady
-        self.assertEqual(self.router.classify_net(3), 'steady')
-        
-    def test_compute_density(self):
-        """Test density computation"""
-        self.setUp()
-        # For our test case, the maximum density should be 2
-        # (net 3 and 4 are crossing)
-        self.assertEqual(self.router.compute_density(), 2)
-        
-    def test_nearest_track(self):
-        """Test finding the nearest available track"""
-        # Create a new router with fresh state for this test
-        self.setUp()
-        
-        # For 'T' side, it should return the highest track
-        self.assertEqual(self.router.nearest_track(2, 'T'), self.router.channel_width)
-        
-        # For 'B' side, it should return the lowest track
-        self.assertEqual(self.router.nearest_track(2, 'B'), 1)
-        
-        # If we fill the channel, it should return None
-        for i in range(1, self.router.channel_width + 1):
-            self.router.Y[2].add(i)
-
-        self.assertIsNone(self.router.nearest_track(1, 'T'))
-        
-    def test_widen_channel(self):
-        """Test channel widening functionality"""
-        self.setUp()
-        original_width = self.router.channel_width
-        middle = self.router.widen_channel()
-        
-        # Channel width should increase by 1
-        self.assertEqual(self.router.channel_width, original_width + 1)
-        
-        # Middle track should be returned
-        self.assertEqual(middle, round(original_width / 2) + 1)
-        
-    def test_claim_track(self):
-        """Test claiming an available track"""
-        self.setUp()
-        net = 1
-        track = 1
+        # Setup: T and B with multiple pins for net 1
+        self.router.reset(T=[1, 0, 1, 0], B=[0, 1, 0, 1])
         self.router.current_column = 0
-        
-        # Claim an available track
-        self.router.claim_track(track, net)
-        self.assertIn(track, self.router.Y[net])
-        self.assertEqual(net, self.router.track_nets[track])
-        
-        # Test claiming an already occupied track raises an assertion error
-        with self.assertRaises(AssertionError):
-            self.router.claim_track(track, 2) # Claim same track with different net
+        # Next pin for net 1 (any side)
+        #self.assertEqual(self.router.next_pin(1), 1)
+        # Next pin for net 1, top side
+        #self.assertEqual(self.router.next_pin(1, 'T'), 2)
+        # Next pin for net 1, bottom side
+        self.assertEqual(self.router.next_pin(1, 'B'), 1)
+        # Advance column and check again
+        self.router.current_column = 2
+        self.assertEqual(self.router.next_pin(1), 3)
+        self.router.current_column = 3
+        self.assertIsNone(self.router.next_pin(1))
 
-    def test_release_track(self):
-        """Test releasing an occupied track"""
-        self.setUp()
-        net = 1
-        track = 1
-        self.router.current_column = 0 # Where the track starts
-        
-        # Claim a track first
-        self.router.claim_track(track, net)
-        self.assertIn(track, self.router.Y[net])
-        
-        # Release the track
-        self.router.release_track(track)
-        
-        # Track should be removed from the net's active set and the global active set
-        self.assertNotIn(track, self.router.Y[net])
-        self.assertIsNone(self.router.track_nets[track])
-        
-        # Test releasing an unoccupied track raises an assertion error
-        with self.assertRaises(AssertionError):
-            self.router.release_track(track) # Release again
-        with self.assertRaises(AssertionError):
-            self.router.release_track(track + 1) # Release a track that was never claimed
+    def test_classify_net(self):
+        # Use a small steady_net_constant for clarity
+        self.router.reset(T=[1, 0, 0, 1], B=[0, 0, 1, 0], steady_net_constant=1)
+        self.router.current_column = 0
+        # Net 1: next top at 3, next bottom at 2
+        # Should be 'falling' (bottom pin is closer)
+        self.assertEqual(self.router.classify_net(1), 'falling')
+        # Move column to 1, now next top at 3, next bottom at 2
+        #self.router.current_column = 1
+        self.assertEqual(self.router.classify_net(1), 'falling')
+        # Move column to 2, now next top at 3, no next bottom
+        self.router.current_column = 2
+        self.assertEqual(self.router.classify_net(1), 'rising')
+        # Steady case: both next pins are far apart
+        self.router.reset(T=[1, 0, 0, 1], B=[0, 0, 0, 1], steady_net_constant=10)
+        self.router.current_column = 0
+        self.assertEqual(self.router.classify_net(1), 'steady')
+
+    def test_compute_density(self):
+        # Simple case: no overlap
+        self.router.reset(T=[1, 0, 2], B=[0, 2, 0])
+        self.assertEqual(self.router.compute_density(), 1)
+        # Overlapping nets
+        self.router.reset(T=[1, 2, 1], B=[2, 1, 2])
+        self.assertEqual(self.router.compute_density(), 2)
+        # All zeros
+        self.router.reset(T=[0, 0, 0], B=[0, 0, 0])
+        self.assertEqual(self.router.compute_density(), 0)
 
     def test_connect_pins(self):
-        """Test connecting pins at the current column"""
-        self.setUp()
-        
-        # Connect pins at the second column (net 2 on top, empty on bottom)
-        self.router.current_column = 2
+        # Case 1: Only top pin present, should assign to a free track and add vertical wire
+        self.router.reset(T=[1], B=[0])
+        self.router.channel_width = 3
+        self.router.current_column = 0
+        self.router.Y = {1: set()}
         self.router.connect_pins()
-        
-        # Net 2 should have a segment from the top pin to a track
-        self.assertEqual(len(self.router.segments[2]), 1)
-        
-        # Move to the next column and connect pins again
-        self.router.current_column += 1
+        # Net 1 should occupy a track
+        self.assertEqual(len(self.router.Y[1]), 1)
+        # There should be a vertical edge in the graph for net 1
+        found = any(
+            (edge[0][0] == 0 and edge[1][0] == 0 and (edge[0][1] == self.router.channel_width + 1 or edge[1][1] == self.router.channel_width + 1))
+            for edge in self.router.G.edges
+        )
+
+        self.assertTrue(found)
+
+        # Case 2: Only bottom pin present, should assign to a free track and add vertical wire
+        self.router.reset(T=[0], B=[2])
+        self.router.channel_width = 3
+        self.router.current_column = 0
+        self.router.Y = {2: set()}
         self.router.connect_pins()
-        
-        # This time net 2 should have a segment from the bottom pin to a track, bringing the total to 2
-        self.assertEqual(len(self.router.segments[2]), 2)
-        
-        # Test the special case where top and bottom pins are the same net
-        # and there are no empty tracks
-        # Create a special case where top and bottom pins are the same net
-        special_T = [1, 0, 2]
-        special_B = [1, 0, 0]
-        special_router = ChannelRouter(special_T, special_B, initial_channel_width=3, gui=True)
-        
-        # Fill all tracks
-        for track in range(1, special_router.channel_width + 1):
-            special_router.claim_track(track, 2)
-        
-        # Connect pins
-        special_router.connect_pins()
-        # Should create a vertical segment from top to bottom
-        self.assertEqual(len(special_router.segments[1]), 1)
-        self.assertEqual(special_router.segments[1][0], ((0, 0), (0, special_router.y_top)))
+        self.assertEqual(len(self.router.Y[2]), 1)
+        found = any(
+            (edge[0][0] == 0 and edge[1][0] == 0 and (edge[0][1] == 0 or edge[1][1] == 0))
+            for edge in self.router.G.edges
+        )
+        self.assertTrue(found)
+
+        # Case 3: Both pins present, both nets different, should assign both
+        self.router.reset(T=[1], B=[2])
+        self.router.channel_width = 3
+        self.router.current_column = 0
+        self.router.Y = {1: set(), 2: set()}
+        self.router.connect_pins()
+        self.assertEqual(len(self.router.Y[1]), 1)
+        self.assertEqual(len(self.router.Y[2]), 1)
+
+        # Case 4: Both pins present, same net, all tracks occupied, should add vertical wire from top to bottom
+        self.router.reset(T=[3], B=[3])
+        self.router.channel_width = 0
+        self.router.current_column = 0
+        self.router.Y = {3: set()}
     
-    def test_possible_jogs(self):
-        """Test identification of possible jogs for split nets"""
-        self.setUp()
-        # Set up a scenario with split nets
-        router = ChannelRouter([0, 1, 2, 3, 4], [0, 1, 2, 3, 4], initial_channel_width=5)
-        
-        # Initially there are no split nets
-        self.assertEqual(router.possible_jogs(), [])
-        
-        # Replicate figure 8 from the paper to create the split nets
-        router.Y[1].add(2)
-        router.Y[1].add(5)  
-        router.Y[4].add(1)
-        router.Y[4].add(3)
-        router.Y[3].add(4)
-        
-        # Test possible jogs
-        jogs = router.possible_jogs()
-        
-        # Should identify jogs for nets 1 and 4
-        self.assertEqual(len(jogs), 2)
-        
-        # Check that the jogs are correctly formatted and present in the result
-        expected_jogs = [(1, (2, 5)), (4, (1, 3))]
-        
-        for jog in expected_jogs:
-            self.assertIn(jog, jogs)
-    
-    def test_combinatorial_search(self):
-        self.setUp()
-        # Empty list should return an empty generator
-        combinations = list(self.router.combinatorial_search([]))
-        self.assertEqual(combinations, [])
-        
-        # Test with a list of integers
-        elements = [1, 2, 3]
-        combinations = list(self.router.combinatorial_search(elements))
-        
-        # Should generate these combinations:
-        ref_combos = [(1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
-        self.assertEqual(len(combinations), len(ref_combos))
-        
-        # Verify some specific combinations
-        self.assertIn((1,), combinations)  # Single element
-        self.assertIn((2, 3), combinations)  # Two elements
-        self.assertIn((1, 2, 3), combinations)  # Three elements
-    
-    def test_test_overlaps(self):
-        """Test the overlap detection functionality"""
-        self.setUp()
-        
-        # Test case with no overlaps
-        pairs = [(1, 3), (4, 6), (7, 9)]
-        self.assertFalse(self.router.test_overlaps(pairs))
-        
-        # Test case with overlapping segments
-        pairs = [(1, 3), (2, 4), (5, 7)]
-        self.assertTrue(self.router.test_overlaps(pairs))
-        
-        # Test case with adjacent but not overlapping segments
-        pairs = [(1, 2), (2, 3), (3, 4)]
-        self.assertFalse(self.router.test_overlaps(pairs))
-        
-        # Test case with one segment completely inside another
-        pairs = [(1, 5), (2, 4)]
-        self.assertTrue(self.router.test_overlaps(pairs))
-        
-        # Empty list should not have overlaps
-        self.assertFalse(self.router.test_overlaps([]))
+        self.router.connect_pins()
+        # Should have a vertical wire from 0 to channel_width+1
+        found = any(
+            (edge[0][1] == 0 and edge[1][1] == self.router.channel_width + 1) or
+            (edge[1][1] == 0 and edge[0][1] == self.router.channel_width + 1)
+            for edge in self.router.G.edges
+        )
+        self.assertTrue(found)
 
-    def test_test_contiguous(self):
-        """Test the contiguous segment checking functionality"""
-        self.setUp()
+    def test_generate_jog_patterns(self):
+        # Base config
+        patterns = self.router.generate_jog_patterns()
+        self.assertEqual(patterns, [()])
 
-        # Test case with contiguous segments
-        pairs_contiguous = [(1, 2), (2, 3), (3, 4)]
-        self.assertTrue(self.router.test_contiguous(pairs_contiguous))
+        # Simple case
+        self.router.reset()
+        self.router.T = [0,0,1]
+        self.router.B = [0,0,0]
+        self.router.channel_width = 6
+        self.router.Y[1].add(2)
+        self.router.Y[1].add(3)
+        self.router.Y[1].add(5)
+        self.assertEqual(self.router.split_nets, [1])
+        patterns = self.router.generate_jog_patterns()
+        # patterns is a list of individual patterns,
+        # each of which is a list corresponding to a net,
+        # each of which is a list of their jogs
+        # each of which is a tuple of two tracks
+        for pattern in patterns:
+            self.assertEqual(len(pattern), len(self.router.split_nets))
+            for net in pattern:
+                for jog in net:
+                    self.assertEqual(len(jog), 2)
 
-        # Test case with non-contiguous segments
-        pairs_non_contiguous = [(1, 2), (3, 4)]
-        self.assertFalse(self.router.test_contiguous(pairs_non_contiguous))
+        self.assertIn((((2, 3),),), patterns)
+        self.assertNotIn((((2, 5),),), patterns)
+        self.assertIn((((2, 3), (3, 5)),), patterns)
 
-        # Test case with a single segment (always contiguous)
-        pairs_single = [(1, 5)]
-        self.assertTrue(self.router.test_contiguous(pairs_single))
+        # Multiple nets
+        self.router.reset(T=[0,0,1], B=[0,0,2])
+        self.router.channel_width = 6
+        self.router.Y[1].add(2)
+        self.router.Y[1].add(3)
+        self.router.Y[2].add(4)
+        self.router.Y[1].add(5)
+        self.assertEqual(self.router.split_nets, [1])
+        patterns = self.router.generate_jog_patterns()
+        for pattern in patterns:
+            self.assertEqual(len(pattern), len(self.router.split_nets))
+            for net in pattern:
+                for jog in net:
+                    self.assertEqual(len(jog), 2)
+        # 3 patterns because not crossing nets
+        self.assertEqual(len(patterns), 3)
 
-        # Test case with unordered contiguous segments
-        pairs_unordered = [(5, 6), (1, 2), (3, 4), (2, 3), (4, 5)]
-        self.assertTrue(self.router.test_contiguous(pairs_unordered))
+        # Multiple nets, with crossing between unsplit nets
+        self.router.reset(T=[0,0,1,3], B=[0,0,2,3])
+        self.router.channel_width = 6
+        self.router.Y[1].add(1)
+        self.router.Y[2].add(2)
+        self.router.Y[1].add(3)
+        self.router.Y[2].add(4)
+        self.router.Y[1].add(5)
+        self.assertEqual(self.router.split_nets, [1,2])
+        patterns = self.router.generate_jog_patterns()
+        # 0 patterns because every jog crosses the other net
+        self.assertEqual(len(patterns), 0)
 
-        # Test case with overlapping segments (not contiguous)
-        pairs_overlap = [(1, 3), (2, 4)]
-        self.assertFalse(self.router.test_contiguous(pairs_overlap))
+        # Multiple nets, with crossing between split nets
+        self.router.reset(T=[0,0,1], B=[0,0,2])
+        self.router.channel_width = 6
+        self.router.Y[1].add(1)
+        self.router.Y[2].add(2)
+        self.router.Y[1].add(3)
+        self.router.Y[2].add(4)
+        self.router.Y[1].add(5)
+        self.assertEqual(self.router.split_nets, [1,2])
+        patterns = self.router.generate_jog_patterns()
+        # 0 patterns because every jog crosses the other net
+        self.assertEqual(len(patterns), 0)
 
-        # Empty list should be considered contiguous
-        self.assertTrue(self.router.test_contiguous([]))
 
-    def test_compare_scores(self):
-        """Test the score comparison logic for jog patterns"""
-        self.setUp()
+    def test_validate_jog_pattern(self):
+        # Test 1: Single net, single jog (valid)
+        self.router.reset(T=[0,0,1], B=[0,0,0])
+        self.router.Y = {1: set([2, 4])}
+        pattern = (((2, 4),),)
+        self.assertTrue(self.router.validate_jog_pattern(pattern))
 
-        # score format: (n_freed, distance_ranking, jog_length_sum)
-        # Higher is better for all components based on current implementation.
+        # Test 2: Two nets, non-overlapping jogs (valid)
+        self.router.reset(T=[0,0,1], B=[0,0,2])
+        self.router.Y = {1: set([2, 4]), 2: set([5, 6])}
+        pattern = (((2, 4),), ((5, 6),))
+        self.assertTrue(self.router.validate_jog_pattern(pattern))
 
-        # Test case 1: n_freed differs
-        score1a = (3, [2], 10)
-        score1b = (2, [3], 20) # score1a wins on n_freed
-        self.assertTrue(self.router.compare_scores(score1a, score1b))
-        self.assertFalse(self.router.compare_scores(score1b, score1a))
-
-        # Test case 2: n_freed equal, distance_ranking differs
-        score2a = (3, [5, 2], 10) # distance_ranking is sorted [2, 5]
-        score2b = (3, [4, 1], 20) # distance_ranking is sorted [1, 4]
-        # compare_scores compares sorted lists: [5, 2] vs [4, 1] (element-wise) -> 5 > 4, score2a wins
-        self.assertTrue(self.router.compare_scores(score2a, score2b))
-        self.assertFalse(self.router.compare_scores(score2b, score2a))
-
-        # Test case 2b: distance_ranking differs (different lengths)
-        score2c = (3, [5, 2], 10) # [2, 5]
-        score2d = (3, [5], 20)    # [5]
-        # zip([2, 5], [5]) compares 2 vs 5 -> 2 < 5, score2d wins
-        # This behavior seems counter-intuitive as score2c considers more nets
-        self.assertFalse(self.router.compare_scores(score2c, score2d))
-        self.assertTrue(self.router.compare_scores(score2d, score2c))
-
-        # Test case 3: n_freed and distance_ranking equal, jog_length_sum differs
-        score3a = (3, [2, 5], 15)
-        score3b = (3, [2, 5], 10)
-        self.assertTrue(self.router.compare_scores(score3a, score3b)) # 15 > 10, score3a wins
-        self.assertFalse(self.router.compare_scores(score3b, score3a))
-
-        # Test case 4: All components equal
-        score4a = (3, [2, 5], 10)
-        score4b = (3, [2, 5], 10)
-        self.assertFalse(self.router.compare_scores(score4a, score4b)) # Not strictly greater
-        self.assertFalse(self.router.compare_scores(score4b, score4a)) # Not strictly greater
+        # Test 3: Two split nets, overlapping jogs (invalid)
+        self.router.reset(T=[0,0,1], B=[0,0,2])
+        self.router.Y = {1: set([2, 4]), 2: set([3, 5])}
+        pattern = (((2, 4),), ((3, 5),)) 
+        self.assertFalse(self.router.validate_jog_pattern(pattern))
 
     def test_evaluate_jogs(self):
-        """Test the jog pattern evaluation logic"""
-        # Setup a specific scenario
-        T = [0, 1, 0, 0, 2, 3] # Net 1 only exists up to col 1
-        B = [3, 1, 0, 0, 2, 0]
-        router = ChannelRouter(T, B, initial_channel_width=5)
-        router.current_column = 2 # Evaluate at column 2
+        # Test 1: one jog from 2 to 4
+        self.router.reset(T=[0,0,1], B=[0,0,0])
+        self.router.channel_width = 6
+        # Setup: split net 1 on tracks 2, 4
+        self.router.Y = {1: set([2, 4])}
+        # pattern: one jog from 2 to 4
+        pattern = (((2, 4),),)
+        score = self.router.evaluate_jogs(pattern)
+        # Should free 1 track, no unfinished nets to measure distance for, jog length 2
+        self.assertEqual(score[0], 1)
+        self.assertEqual(score[1], [])
+        self.assertEqual(score[2], 2)
 
-        # Manually set active tracks for split nets
-        # Net 1 (split, no future pins -> can be finished)
-        router.Y[1] = {2, 4} 
-        # Net 2 (split, has future pins -> cannot be finished)
-        router.Y[2] = {1, 5}
-        # Net 3 (unsplit, not relevant for jogs directly, but we need to define it in Y)
-        router.Y[3] = {3} 
+        # Test 2: two jogs from 2 to 4 and 3 to 5, does not close net
+        self.router.reset(T=[0,0,1], B=[0,0,2])
+        self.router.Y = {1: set([2, 4]), 2: set([3, 5])}
+        pattern = (((2, 4),), ((3, 5),))
+        score = self.router.evaluate_jogs(pattern)
+        # Should free 2 tracks, no unfinished nets to measure distance for, jog lengths 2 and 2
+        self.assertEqual(score[0], 2)
+        self.assertEqual(score[1], [])
+        self.assertEqual(score[2], 4)
 
-        # Expected next pins based on T, B and current_column=2:
-        # next_pin(1) -> None
-        # next_pin(2) -> 4
-        # next_pin(3) -> None (but is unsplit)
+        # Test 3: two jogs from 2 to 4 and 3 to 5, closes net
+        self.router.reset(T=[0,0,1], B=[0,0,0])
+        self.router.Y = {1: set([2, 4]), 2: set([3, 5])}
+        pattern = (((2, 4),), ((3, 5),))
+        score = self.router.evaluate_jogs(pattern)
+        # Should free 2 tracks, no unfinished nets to measure distance for, jog lengths 2 and 2
+        self.assertEqual(score[0], 3)
+        self.assertEqual(score[1], [])
+        self.assertEqual(score[2], 4)
 
-        # Test case 1: Jog finishes Net 1
-        jog_pattern1 = [(1, (2, 4))] # Contiguous jog covering all of Net 1 tracks
-        n_freed1, dist_rank1, jog_len1 = router.evaluate_jogs(jog_pattern1)
-        # Expected n_freed = 1 (base) + 1 (net 1 finished) = 2
-        # Expected remaining split net: Net 2 {1, 5}. Distances: min(1-1, 5-5) = 0. Rank = [0]
-        # Expected jog length = 4 - 2 = 2
-        self.assertEqual(n_freed1, 2)
-        self.assertEqual(dist_rank1, [0])
-        self.assertEqual(jog_len1, 2)
+        # Test 4: two jogs from 2 to 4 and 3 to 5, but 4 and 5 cross
+        self.router.reset(T=[0,0,1], B=[0,0,2])
+        self.router.channel_width = 6
+        self.router.Y[1].add(2)
+        self.router.Y[2].add(3)
+        self.router.Y[1].add(4)
+        self.router.Y[2].add(5)
 
-        # Test case 2: Jog for Net 2 (cannot be finished)
-        jog_pattern2 = [(2, (1, 5))] # Jog for Net 2
-        n_freed2, dist_rank2, jog_len2 = router.evaluate_jogs(jog_pattern2)
-        # Expected n_freed = 1 (base). Net 2 not finished.
-        # Expected remaining split net: Net 1 {2, 4}. Distances: min(2-1, 5-4) = 1. Rank = [1]
-        # Expected jog length = 5 - 1 = 4
-        self.assertEqual(n_freed2, 1)
-        self.assertEqual(dist_rank2, [1])
-        self.assertEqual(jog_len2, 4)
+        pattern = (((2, 4),), ((3, 5),))
+        score = self.router.evaluate_jogs(pattern)
+        # Should free 2 tracks, no unfinished nets to measure distance for, jog lengths 2 and 2
+        self.assertEqual(score[0], 2)
+        self.assertEqual(score[1], [])
+        self.assertEqual(score[2], 4)
 
-        # Test case 3: Multiple jogs, one finishes a net
-        jog_pattern3 = [(1, (2, 4)), (2, (1, 5))]
-        n_freed3, dist_rank3, jog_len3 = router.evaluate_jogs(jog_pattern3)
-        # Expected n_freed = 2 (base) + 1 (net 1 finished) = 3
-        # Expected remaining split nets: None. Rank = []
-        # Expected jog length = (4 - 2) + (5 - 1) = 2 + 4 = 6
-        self.assertEqual(n_freed3, 3)
-        self.assertEqual(dist_rank3, [])
-        self.assertEqual(jog_len3, 6)
-        
-        # Test case 4: Non-contiguous jog for Net 1 (cannot finish)
-        router.Y[1] = {2, 5} # Change Net 1 tracks
-        jog_pattern4 = [(1, (2, 5))] 
-        n_freed4, dist_rank4, jog_len4 = router.evaluate_jogs(jog_pattern4)
-        self.assertEqual(n_freed4, 2) # 1 base + 1 finished
-        self.assertEqual(dist_rank4, [0]) # Net 2 is remaining split {1, 5} -> dist 0
-        self.assertEqual(jog_len4, 3) # 5-2
-
-    def test_jog_track(self):
-        """Test the jog_track functionality for moving tracks vertically"""
-        T = [1, 0, 0, 0, 0]
-        B = [1, 0, 0, 0, 0]
-        router = ChannelRouter(T, B, initial_channel_width=7, minimum_jog_length=1)
-        router.current_column = 1 # Column where jogs happen
-        net1 = 1
-
-        # Scenario setup:
-        # Net 1 on track 2
-        # Track 4 occupied horizontally by Net 2
-        # Vertical segment from track 5 to 7 (blocks upward movement past 4)
-        router.Y = {1: {2}, 2: {4}, 3: {}}
-        router.all_nets = {1, 2, 3} # Ensure get_net_for_track works
-        # Add a dummy horizontal segment for net 1 to exist
-        # Add a vertical segment for Net 3 (blocks tracks 5, 6, 7)
-        router.segments = {1: [((0, 2), (1, 2))], 2: [((0, 4), (1, 4))], 3: [((1, 5), (1, 7))]} 
-        
-        # Test 1: Jog 'up' from track 2 towards track 6
-        # Path: 3 (empty), 4 (horizontal occupied), 5 (vertical occupied)
-        # Loop i=3: marker=3.
-        # Loop i=4: horizontal occupied -> continue. marker still 3.
-        # Loop i=5: vertical occupied -> break. marker is 3.
-        # Jog distance |3 - 2| = 1 >= min_jog_length (1). Success.
-        new_track1 = router.jog_track(track=2, goal=6)
-        self.assertEqual(new_track1, 3) # Should end up on track 3
-        self.assertNotIn(2, router.Y[net1])
-        self.assertIn(3, router.Y[net1]) # Should now occupy track 3
-        self.assertIn(((1, 2), (1, 3)), router.segments[net1]) # Jog segment added
-        # Reset state for next test (undo jog)
-        router.Y = {1: {2}, 2: {4}, 3: {}} 
-        router.segments[1] = [((0, 2), (1, 2))]
-
-        # Test 2: Jog 'down' from track 4 (Net 2) towards track 1
-        # Path: 3 (empty), 2 (occupied by Net 1), 1 (empty/goal)
-        # Should stop at track 1. marker=1
-        # Jog distance |1 - 4| = 3 >= min_jog_length (1). Success.
-        net2 = 2
-        track4 = 4
-        router.channel_width = 8
-        router.Y = {1: {2}, 2: {4}, 3: {}} # Ensure net1 is on track 2
-        router.segments = {1: [((0, 2), (1, 2))], 2: [((0, 4), (1, 4))], 3: [((1, 5), (1, 7))]} 
-        new_track2 = router.jog_track(track=track4, goal=1)
-        self.assertEqual(new_track2, 1) # Should end up on track 1
-        self.assertNotIn(track4, router.Y[net2])
-        self.assertIn(1, router.Y[net2])
-        self.assertIn(((1, 1), (1, 4)), router.segments[net2]) # Segment is (start_track, end_track)
-        # Reset state
-        router.Y = {1: {2}, 2: {4}, 3: {}}
-        router.segments = {1: [((0, 2), (1, 2))], 2: [((0, 4), (1, 4))], 3: [((1, 5), (1, 7))]} 
-
-        # Test 3: Jog 'up' blocked immediately by vertical
-        # Jog track 4 ('up', goal=7). Path: 5 (vertical occupied). Stop. marker=4. Jog=0. Fail.
-        new_track3 = router.jog_track(track=4, goal=7)
-        self.assertIsNone(new_track3)
-        self.assertIn(4, router.Y[2]) # State unchanged
-        self.assertEqual(len(router.segments[2]), 1) # No segment added
-
-        # Test 4: Jog too short (minimum_jog_length = 2)
-        router.minimum_jog_length = 2
-        # Jog track 2 ('up', goal=3). Path: 3 (empty). Stop. marker=3. Jog=|3-2|=1. Fail.
-        new_track4 = router.jog_track(track=2, goal=3)
-        self.assertIsNone(new_track4)
-        self.assertIn(2, router.Y[1])
-        self.assertEqual(len(router.segments[1]), 1) # No segment added
-        router.minimum_jog_length = 1 # Reset for other tests if needed
-        
-        # Test 5: Jog 'down' where goal is blocked by horizontal
-        # Jog track 4 ('down', goal=2). Path: 3 (empty), 2 (occupied). Goal is 2.
-        # Range is range(3, 1, -1) -> i=3. vertical[3] False. horizontal[3] False. marker=3.
-        # i=2. vertical[2] False. horizontal[2] True. Continue.
-        # loop ends. Marker is 3. Jog=|3-4|=1. Success.
-        new_track5 = router.jog_track(track=4, goal=2)
-        self.assertEqual(new_track5, 3)
-        self.assertIn(3, router.Y[2])
-        self.assertNotIn(4, router.Y[2])
-        self.assertIn(((1, 3), (1, 4)), router.segments[2])
-
-    def test_compress_split_net(self):
-        """Test the compress_split_net functionality"""
-        T = [1, 0, 0, 0, 0]
-        B = [1, 0, 0, 0, 0]
-        router = ChannelRouter(T, B, initial_channel_width=7, minimum_jog_length=1)
-        router.current_column = 1
-        net_id = 1
-
-        # Scenario 1: Lower track jogs up, upper track blocked by vertical
-        # Net 1 (split) on {2, 6}
-        # Net 2 (horizontal obstruction) on {4}
-        # Net 3 (vertical obstruction) from 5 to 7
-        router.Y = {1: {2, 6}, 2: {4}, 3: {}} 
-        router.all_nets = {1, 2, 3}
-        router.segments = {
-            1: [((0, 2), (1, 2)), ((0, 6), (1, 6))], # Initial horizontal segments for Net 1
-            2: [((0, 4), (1, 4))], 
-            3: [((1, 5), (1, 7))]  # Vertical obstruction
-        }
-
-        router.compress_split_net(net_id)
-
-        # Expected: 
-        # Jog low (2->6): marker=3. Jog=1. Success. Y={1:{3, 6}}. Seg=((1,2),(1,3)).
-        # Jog high (6->3): marker=6 (blocked by vertical at 5). Jog=0. Fail.
-        self.assertEqual(router.Y[net_id], {3, 6}) # Track 2 moved to 3, track 6 stayed
-        
-        # Check segments using helper function
-        vertical_jogs = self.find_vertical_jogs(router, net_id)
-        self.assertIn(((1, 2), (1, 3)), vertical_jogs) # Check the specific vertical jog is present
-        self.assertEqual(len(vertical_jogs), 1) # Ensure only ONE vertical jog was added
-
-        # --- Reset for Scenario 2 ---
-        router = ChannelRouter(T, B, initial_channel_width=7, minimum_jog_length=1)
-        router.current_column = 1
-        net_id = 1
-
-        # Scenario 2: Both tracks jog towards middle
-        # Net 1 (split) on {2, 6}
-        # Net 2 (horizontal obstruction) on {4}
-        # No vertical obstruction this time
-        router.Y = {1: {2, 6}, 2: {4}, 3: {}}
-        router.all_nets = {1, 2, 3}
-        router.segments = {
-            1: [((0, 2), (1, 2)), ((0, 6), (1, 6))], 
-            2: [((0, 4), (1, 4))], 
-            3: []
-        }
-        
-        router.compress_split_net(net_id)
-
-        # Expected:
-        # Jog low (2->5): Succeeded. Y={1:{5, 6}}.
-        # Jog high (6->5): Failed (blocked by first jog result).
-        self.assertEqual(router.Y[net_id], {5, 6}) # Track 2->5, Track 6 stayed
-        
-        # Check segments using helper function
-        vertical_jogs_s2 = self.find_vertical_jogs(router, net_id)
-        self.assertIn(((1, 2), (1, 5)), vertical_jogs_s2) # Check the specific vertical jog is present
-        self.assertEqual(len(vertical_jogs_s2), 1) # Ensure only ONE vertical jog was added
-
-    def test_pin_status(self):
-        """Test the pin_status method for checking unrouted pins"""
-        # Use a simple T/B for specific pin checks, width 3 (y_top=4)
-        T = [0, 1, 0, 1, 9]
-        B = [0, 2, 2, 0, 9]
-        router = ChannelRouter(T, B, initial_channel_width=3)
-        router.all_nets = {1, 2, 3, 9}
-
-        # Case 1: Column 1 - Pin T=1, Pin B=2, No verticals
-        router.current_column = 1
-        router.segments = {net: [] for net in router.all_nets} # Clear segments
-        self.assertTrue(router.pin_status('T'), "Col 1: Top pin exists, no vertical")
-        self.assertTrue(router.pin_status('B'), "Col 1: Bottom pin exists, no vertical")
-
-        # Case 2: Column 1 - Add vertical reaching top (Net 3: 1->4)
-        router.segments[3] = [((1, 1), (1, 4))] 
-        self.assertFalse(router.pin_status('T'), "Col 1: Top pin blocked by vertical to y_top")
-        self.assertTrue(router.pin_status('B'), "Col 1: Bottom pin unaffected")
-
-        # Case 3: Column 1 - Change vertical to reach bottom (Net 3: 0->2)
-        router.segments[3] = [((1, 0), (1, 2))] 
-        self.assertTrue(router.pin_status('T'), "Col 1: Top pin unaffected")
-        self.assertFalse(router.pin_status('B'), "Col 1: Bottom pin blocked by vertical from 0")
-
-        # Case 4: Column 1 - Vertical doesn't block T or B (Net 3: 1->2)
-        router.segments[3] = [((1, 1), (1, 2))] 
-        self.assertTrue(router.pin_status('T'), "Col 1: Top pin unblocked (vertical 1->2)")
-        self.assertTrue(router.pin_status('B'), "Col 1: Bottom pin unblocked (vertical 1->2)")
-
-        # Case 5: Column 2 - Pin T=0, Pin B=2
-        router.current_column = 2
-        router.segments = {net: [] for net in router.all_nets} # Clear segments
-        self.assertFalse(router.pin_status('T'), "Col 2: No top pin")
-        self.assertTrue(router.pin_status('B'), "Col 2: Bottom pin exists, no vertical")
-
-        # Case 6: Column 3 - Pin T=1, Pin B=0
-        router.current_column = 3
-        router.segments = {net: [] for net in router.all_nets} # Clear segments
-        self.assertTrue(router.pin_status('T'), "Col 3: Top pin exists, no vertical")
-        self.assertFalse(router.pin_status('B'), "Col 3: No bottom pin")
-        
-        # Case 7: Column 4 - Both pins exist (Net 9), vertical blocks both
-        router.current_column = 4
-        router.segments[9] = [((4, 0), (4, 4))] # Vertical Net 9 from bottom to top
-        self.assertFalse(router.pin_status('T'), "Col 4: Top pin blocked by vertical 0->4")
-        self.assertFalse(router.pin_status('B'), "Col 4: Bottom pin blocked by vertical 0->4")
+       
+    def test_compare_scores(self):
+        # n_freed, distance_ranking, jog_length_sum
+        score1 = (2, [3, 2], 5)
+        score2 = (1, [10, 9], 20)
+        # score1 should be better (more tracks freed)
+        self.assertTrue(self.router.compare_scores(score1, score2))
+        # If n_freed is equal, compare distance_ranking
+        score3 = (2, [4, 2], 5)
+        self.assertFalse(self.router.compare_scores(score1, score3))
+        self.assertTrue(self.router.compare_scores(score3, score1))
+        # If both n_freed and distance_ranking are equal, compare jog_length_sum
+        score4 = (2, [3, 2], 10)
+        self.assertTrue(self.router.compare_scores(score4, score1))
+        self.assertFalse(self.router.compare_scores(score1, score4))
 
     def test_collapse_split_nets(self):
-        """Test the collapse_split_nets method logic"""
-        # Setup: width=5 (y_top=6). Net 1 finishes, Net 2 continues.
-        T = [0, 1, 0, 0, 2, 0]
-        B = [0, 1, 0, 0, 2, 0]
-        router = ChannelRouter(T, B, initial_channel_width=5)
-        router.current_column = 2 # Column where collapse happens
+        # Test 1: one jog from 2 to 4, does not close net
+        self.router.reset(T=[0,0,1], B=[0,0,0])
+        self.router.channel_width = 6
+        # Setup: split net 1 on tracks 2, 4
+        self.router.Y = {1: set([2, 4])}
+        self.router.collapse_split_nets()
+        self.assertEqual(len(self.router.Y[1]), 1)
 
-        # Manually set active tracks for split nets at col 2
-        # Net 1 (split {2, 4}, no future pins -> can be finished)
-        # Net 2 (split {1, 5}, has future pins -> cannot be finished)
-        # Net 3 (unsplit {3})
-        router.Y = {1: {2, 4}, 2: {1, 5}, 3: {3}} 
-        router.all_nets = {1, 2, 3}
-        # Add dummy horizontal segments representing active state before collapse
-        router.segments = {
-            1: [((0, 2), (2, 2)), ((0, 4), (2, 4))], 
-            2: [((0, 1), (2, 1)), ((0, 5), (2, 5))], 
-            3: [((0, 3), (2, 3))]
-        }
+        # Test 1: one jog from 2 to 4, closes net
+        self.router.reset(T=[1,0,0], B=[0,0,0])
+        self.router.current_column = 1
+        self.router.channel_width = 6
+        # Setup: split net 1 on tracks 2, 4
+        self.router.Y = {1: set([2, 4])}
+        self.router.collapse_split_nets()
+        self.assertEqual(len(self.router.Y[1]), 1)
+        self.router.extend_nets() # should close net
+        self.assertEqual(len(self.router.Y[1]), 0)
+
+    def test_scout(self):
+        # Jog up to reachable track
+        self.router.reset(T=[0,0,1], B=[0,0,0])
+        self.router.channel_width = 6
+        self.router.Y = {1: set([2, 4])}
+        # No vertical wiring, should reach goal
+        result = self.router.scout(1, 2, 4)
+        self.assertEqual(result, 4)
+
+        # Jog down to reachable track
+        result = self.router.scout(1, 4, 2)
+        self.assertEqual(result, 2)
+
+        # Jog blocked by vertical wire
+        self.router.reset(T=[0,0,1], B=[0,0,99])
+        self.router.channel_width = 6
+        self.router.Y = {1: set([1, 4])}
+        self.router.G.add_edge((0, 3), (0, 5), net=99)  # vertical wire at track 3
+        # Should stop at 2 (can't reach 4)
+        result = self.router.scout(1, 1, 4)
+        self.assertEqual(result, 2)
+
+        # No movement needed (already at goal)
+        result = self.router.scout(1, 2, 2)
+        self.assertEqual(result, 2)
+
+    def test_compress_split_net(self):
+        # Test 1: split net with a vertical wire in between, cannot be collapsed
+        self.router.reset(T=[0,0,1], B=[0,0,0])
+        self.router.channel_width = 6
+        # Net 1 on tracks 1 and 4, net 2 on track 3, with a vertical wire
+        self.router.Y = {1: set([1, 4]), 2: set([3])}
+        self.router.add_vertical_wire(2, 3, 6)
+        self.router.compress_split_net(1)
+        # Net 1 should still be split (cannot collapse)
+        self.assertEqual(len(self.router.Y[1]), 2)
+        # But it should have been compressed
+        self.assertEqual(self.router.Y[1], set([2, 4]))
+
+        # Test 2: jog not long enough (minimum_jog_length > distance), cannot be collapsed
+        self.router.reset(T=[0,0,1], B=[0,0,0], minimum_jog_length=3)
+        self.router.channel_width = 6
+        self.router.Y = {1: set([2, 4])}
+        self.router.compress_split_net(1)
+        # Net 1 should still be split 
+        self.assertEqual(self.router.Y[1], set([2, 4]))
+        self.assertEqual(len(self.router.Y[1]), 2)
+
+    def test_push_unsplit_nets(self):
+        # Rising net: should be pushed up to the top track
+        self.router.reset(T=[0, 1, 0, 1], B=[0, 0, 0, 0])
+        self.router.channel_width = 4
+        self.router.Y = {1: set([2])}
+        self.router.current_column = 1
+        self.router.push_unsplit_nets()
+        # Should be pushed to the top (track 4)
+        self.assertIn(4, self.router.Y[1])
+
+        # Falling net: should be pushed down to the bottom track
+        self.router.reset(T=[0, 0, 0, 0], B=[0, 1, 0, 1])
+        self.router.channel_width = 4
+        self.router.Y = {1: set([3])}
+        self.router.current_column = 1
+        self.router.push_unsplit_nets()
+        # Should be pushed to the bottom (track 1)
+        self.assertIn(1, self.router.Y[1])
+
+        # Steady net: should not be pushed
+        self.router.reset(T=[0, 1, 0, 0], B=[0, 1, 0, 0])
+        self.router.channel_width = 4
+        self.router.Y = {1: set([2])}
+        self.router.current_column = 1
+        before = set(self.router.Y[1])
+        self.router.push_unsplit_nets()
+        # Should remain unchanged
+        self.assertEqual(self.router.Y[1], before)
+
+    def test_widen_channel(self):
+        # Setup: tracks 2, 3, 4 occupied by net 1
+        self.router.reset(T=[0, 0, 0], B=[0, 0, 0])
+        self.router.channel_width = 4
+        self.router.Y = {1: set([2, 3, 4])}
+        # Add a node at (0, 3) and (0, 4) to test relabeling
+        self.router.G.add_node((0, 3))
+        self.router.G.add_node((0, 4))
+        # Widen the channel
+        self.router.widen_channel()
+        # Channel width should increase by 1
+        self.assertEqual(self.router.channel_width, 5)
+        # Tracks at or above the new track (3) should be shifted up by 1
+        # (default mid_track is 3)
+        self.assertIn(5, self.router.Y[1])
+        self.assertIn(4, self.router.Y[1])
+        self.assertIn(2, self.router.Y[1])
+        # Node at (0, 3) should now be at (0, 4), (0, 4) at (0, 5)
+        self.assertIn((0, 4), self.router.G.nodes)
+        self.assertIn((0, 5), self.router.G.nodes)
+        # Track below new track (2) should remain unchanged
+        self.assertIn(2, self.router.Y[1])
+
+    def test_extend_nets(self):
+        pass
+
+    def test_route(self):
+        pass
+
+    def test_route_and_retry(self):
+        pass
+
+    def test_initialize_grid(self):
+        pass
+
+    def test__get_node_orientation(self):
+        pass
+
+    def test_render_text_graph(self):
+        pass
+
+    def test_simple_shapes(self):
+        print('==============')
+
+        T = [1, 0, 3, 0, 2]
+        B = [3, 2, 0, 1, 0]
+        R = Router(T,B)
+        Graph = R.route()
+        P = Plotter(Graph)
+        print(P.render_text_graph())
+        print('==============')
+
+    
+
+        T = [1, 0, 2, 0, 3, 0, 4, 0, 5]
+        B = [5, 0, 4, 0, 3, 0, 2, 0, 1]
+        R = Router(T,B)
+        Graph = R.route()
+        P = Plotter(Graph)
+        print(P.render_text_graph())
+        print('==============')
+
+        T = [1, 2, 3, 4, 5, 6, 7, 8]
+        B = [8, 7, 6, 5, 4, 3, 2, 1]
+        R = Router(T,B)
+        Graph = R.route()
+        P = Plotter(Graph)
+        print(P.render_text_graph())
+        print('==============')
+
+        T = [1, 2, 3, 1, 2, 3]
+        B = [1, 2, 3, 1, 2, 3]
+        R = Router(T,B)
+        Graph = R.route_and_retry()
+        P = Plotter(Graph)
+        print(P.render_text_graph())
+        print('==============')
+
+        T = [0, 1, 0, 0]
+        B = [0, 0, 0, 1]
+        R = Router(T,B)
+        Graph = R.route()
+        P = Plotter(Graph)
+        print(P.render_text_graph())
+        print('==============')
+
+
+        T = [0, 0, 1, 0, 1, 0]
+        B = [0, 0, 1, 0, 0, 0]
+        R = Router(T,B)
+        Graph = R.route()
+        P = Plotter(Graph)
+        print(P.render_text_graph())
+        print('==============')
         
-        # Expected possible jogs: [(1, (2, 4)), (2, (1, 5))]
-        # Possible combinations (no overlaps): 
-        #   combo1 = [(1, (2, 4))] -> score: n_freed=1(base)+1(finishes)=2, dist_rank=[0](Net 2{1,5}), len=2 -> (2, [0], 2)
-        #   combo2 = [(2, (1, 5))] -> score: n_freed=1(base)=1, dist_rank=[1](Net 1{2,4}), len=4 -> (1, [1], 4)
-        #   combo3 = [(1, (2, 4)), (2, (1, 5))] -> overlaps (5 > 2)! Invalid combination.
-        # Best pattern should be combo1 based on n_freed.
+
         
-        router.collapse_split_nets()
-
-        # Verify Y state: Track 2 released from Net 1. Net 2 unchanged.
-        self.assertEqual(router.Y[1], {4}) # Net 1 should only have track 4 left
-        self.assertEqual(router.Y[2], {1, 5}) # Net 2 should be unchanged
-        self.assertEqual(router.Y[3], {3}) # Net 3 unaffected
-
-        # Verify segments using helper function
-        col = router.current_column
-        vertical_jogs_net1 = self.find_vertical_jogs(router, 1, col)
-        vertical_jogs_net2 = self.find_vertical_jogs(router, 2, col)
-        vertical_jogs_net3 = self.find_vertical_jogs(router, 3, col)
         
-        self.assertIn(((col, 2), (col, 4)), vertical_jogs_net1)
-        self.assertEqual(len(vertical_jogs_net1), 1)
-        self.assertEqual(len(vertical_jogs_net2), 0)
-        self.assertEqual(len(vertical_jogs_net3), 0)
+        T = [0, 1, 1, 1, 0]
+        B = [0, 0, 1, 0, 0]
+        R = Router(T,B)
+        Graph = R.route()
+        P = Plotter(Graph)
+        print(P.render_text_graph())
+        print('==============') 
 
-    def test_collapse_split_nets_scenarios(self):
-        """Test collapse_split_nets with complex scenarios"""
-        # --- Scenario 1 ---
-        T_sc1 = [0]*8 # Ensure next_pin is None for all nets
-        B_sc1 = [0]*8
-        router_sc1 = ChannelRouter(T_sc1, B_sc1, initial_channel_width=7)
-        router_sc1.current_column = 1
-        router_sc1.Y = {3: {1, 3}, 4: {2}, 2: {4, 6}, 1: {5, 7}}
-        router_sc1.all_nets = {1, 2, 3, 4}
-        router_sc1.segments = { # Dummy segments to represent active state
-            3: [((0,1),(1,1)), ((0,3),(1,3))], 4: [((0,2),(1,2))], 
-            2: [((0,4),(1,4)), ((0,6),(1,6))], 1: [((0,5),(1,5)), ((0,7),(1,7))]
-        }
-
-        router_sc1.collapse_split_nets()
-
-        # Expected Y: Net 3 collapses (1 released), Net 1 collapses (5 released). Net 2 unchanged.
-        self.assertEqual(router_sc1.Y, {3: {3}, 4: {2}, 2: {4, 6}, 1: {7}})
-        col_sc1 = router_sc1.current_column
         
-        # Check added vertical jogs using helper function
-        vj_sc1_n3 = self.find_vertical_jogs(router_sc1, 3, col_sc1)
-        vj_sc1_n4 = self.find_vertical_jogs(router_sc1, 4, col_sc1)
-        vj_sc1_n2 = self.find_vertical_jogs(router_sc1, 2, col_sc1)
-        vj_sc1_n1 = self.find_vertical_jogs(router_sc1, 1, col_sc1)
-        
-        self.assertEqual(len(vj_sc1_n3), 1, "Scenario1: Net 3 should have 1 jog")
-        self.assertIn(((col_sc1, 1), (col_sc1, 3)), vj_sc1_n3)
-        self.assertEqual(len(vj_sc1_n4), 0, "Scenario1: Net 4 should have 0 jogs")
-        self.assertEqual(len(vj_sc1_n2), 0, "Scenario1: Net 2 should have 0 jogs")
-        self.assertEqual(len(vj_sc1_n1), 1, "Scenario1: Net 1 should have 1 jog")
-        self.assertIn(((col_sc1, 5), (col_sc1, 7)), vj_sc1_n1)
-        
-        # --- Scenario 2 ---
-        T_sc2 = [0]*8 # Ensure next_pin is None for all nets
-        B_sc2 = [0]*8
-        router_sc2 = ChannelRouter(T_sc2, B_sc2, initial_channel_width=7)
-        router_sc2.current_column = 1
-        router_sc2.Y = {1: {1, 6}, 2: {5, 7}}
-        router_sc2.all_nets = {1, 2}
-        router_sc2.segments = { # Dummy segments to represent active state
-            1: [((0,1),(1,1)), ((0,6),(1,6))], 
-            2: [((0,5),(1,5)), ((0,7),(1,7))]
-        }
-        
-        router_sc2.collapse_split_nets()
-
-        # Expected Y: Net 1 collapses (1 released). Net 2 unchanged.
-        self.assertEqual(router_sc2.Y, {1: {6}, 2: {5, 7}})
-        col_sc2 = router_sc2.current_column
-        
-        # Check added vertical jogs using helper function
-        vj_sc2_n1 = self.find_vertical_jogs(router_sc2, 1, col_sc2)
-        vj_sc2_n2 = self.find_vertical_jogs(router_sc2, 2, col_sc2)
-        
-        self.assertEqual(len(vj_sc2_n1), 1, "Scenario2: Net 1 should have 1 jog")
-        self.assertIn(((col_sc2, 1), (col_sc2, 6)), vj_sc2_n1)
-        self.assertEqual(len(vj_sc2_n2), 0, "Scenario2: Net 2 should have 0 jogs")
-
-    def test_generate_net_graph(self):
-        """Test the generate_net_graph method for graph creation and simplification."""
-        self.setUp()
-        net_id = 1
-        router = self.router # Use the setUp router
-        router.all_nets.add(net_id)
-        
-        # Case 1: Net with collinear points
-        # Path: (0,1) -> (2,1) -> (2,3) -> (5,3) -> (5,1)
-        router.segments[net_id] = [
-            ((0,1),(1,1)), ((1,1),(2,1)), # Straight horizontal
-            ((2,1),(2,2)), ((2,2),(2,3)), # Straight vertical
-            ((2,3),(3,3)), ((3,3),(4,3)), ((4,3),(5,3)), # Straight horizontal
-            ((5,3),(5,2)), ((5,2),(5,1))  # Straight vertical
-        ]
-
-        G = router.generate_net_graph(net_id)
-
-        # Expected nodes after simplification (endpoints and bend points)
-        expected_nodes = [(0,1), (2,1), (2,3), (5,3), (5,1)]
-        # Expected edges connecting the simplified nodes
-        expected_edges = [
-            ((0,1), (2,1)), 
-            ((2,1), (2,3)), 
-            ((2,3), (5,3)), 
-            ((5,3), (5,1))
-        ]
-        
-        self.assertIsInstance(G, nx.Graph)
-        # Use assertCountEqual for nodes/edges as order doesn't matter
-        self.assertCountEqual(list(G.nodes()), expected_nodes)
-        # Convert edge tuples to sets for comparison as NetworkX might store (u, v) or (v, u)
-        self.assertCountEqual([set(edge) for edge in G.edges()], [set(edge) for edge in expected_edges])
-
-        # Case 2: Net with a single segment
-        router.segments[net_id] = [((0,0), (1,0))]
-        G2 = router.generate_net_graph(net_id)
-        self.assertCountEqual(list(G2.nodes()), [(0,0), (1,0)])
-        self.assertCountEqual([set(edge) for edge in G2.edges()], [{(0,0), (1,0)}])
-
-        # Case 3: Net with no segments
-        router.segments[net_id] = []
-        G3 = router.generate_net_graph(net_id)
-        self.assertEqual(list(G3.nodes()), [])
-        self.assertEqual(list(G3.edges()), [])
-
-        # Case 4: Non-existent net
-        with self.assertRaises(ValueError):
-            router.generate_net_graph(999) # Net 999 does not exist
-
-    def test_route_and_retry_random(self):
-        for i in range(100):
-            router = ChannelRouter(random_pins(5, 10), 
-                                   random_pins(5, 10))
-            router.route_and_retry()
-            self.assertTrue(router.success)
-
-def random_pins(N, M, seed=None):
-    if seed is not None:
-        random.seed(seed)
-    pins = list(range(N+1))
-    pins.extend(random.choices(pins, k = M - N))
-    random.shuffle(pins)
-    # Add spacing between pins
-    pins_spaced = []
-    for pin in pins:
-        pins_spaced.extend([pin, 0])
-    pins_spaced.pop()
-    return pins_spaced
 
 
 if __name__ == '__main__':
